@@ -1,8 +1,10 @@
 package intake
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -172,12 +174,71 @@ func parseLogs(body []byte) ([]datadogV2.HTTPLogItem, error) {
 	return items, nil
 }
 
+// parseCheckRuns decodes a check_run batch, per item.
+//
+// Two things make this more than a decodeJSONList call.
+//
+// First, datadogV1.ServiceCheck marks `tags` REQUIRED, because Datadog's
+// OpenAPI spec says so. The agent disagrees: in a captured batch from a real
+// cluster, SEVEN of twelve checks carried no tags at all — containerd.health
+// and the kubelet checks among them. The spec describes what the API
+// documents; an intake has to take what actually arrives.
+//
+// Second, decoding the batch as one unit means a single odd check discards
+// every other check beside it. Per-item decoding keeps the good ones.
 func parseCheckRuns(body []byte) ([]datadogV1.ServiceCheck, error) {
-	runs, err := decodeJSONList[datadogV1.ServiceCheck](body)
-	if err != nil {
-		return nil, fmt.Errorf("JSON check_run: %w", err)
+	var raw []json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		// Not an array: fall back to the shared decoder, which also handles a
+		// bare object as datadogpy sends it.
+		runs, err := decodeJSONList[datadogV1.ServiceCheck](body)
+		if err != nil {
+			return nil, fmt.Errorf("JSON check_run: %w", err)
+		}
+		return runs, nil
+	}
+
+	runs := make([]datadogV1.ServiceCheck, 0, len(raw))
+	var skipped int
+	for _, item := range raw {
+		var run datadogV1.ServiceCheck
+		if err := json.Unmarshal(withTags(item), &run); err != nil {
+			skipped++
+			continue
+		}
+		runs = append(runs, run)
+	}
+	if skipped > 0 {
+		log.Printf("[check_run] %d of %d checks could not be decoded and were skipped", skipped, len(raw))
 	}
 	return runs, nil
+}
+
+// withTags supplies an empty tag list when a check has none, so the generated
+// client's required-field check passes. It adds nothing that was not already
+// implied: a check with no tags has an empty tag set either way.
+//
+// Note the agent does not OMIT the key — it sends it explicitly null:
+//
+//	{"check":"containerd.health", ..., "tags": null}
+//
+// so testing for the key's presence is not enough, and a version of this that
+// did exactly that looked correct and changed nothing. The value has to be
+// inspected.
+func withTags(item json.RawMessage) json.RawMessage {
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(item, &probe); err != nil {
+		return item
+	}
+	if v, ok := probe["tags"]; ok && !bytes.Equal(bytes.TrimSpace(v), []byte("null")) {
+		return item
+	}
+	probe["tags"] = json.RawMessage(`[]`)
+	patched, err := json.Marshal(probe)
+	if err != nil {
+		return item
+	}
+	return patched
 }
 
 func parseEvents(body []byte) ([]datadogV1.EventCreateRequest, error) {
@@ -259,13 +320,28 @@ func wireTimeMillis(millis int64) time.Time {
 //
 // The agent always sends an array. Clients often do not: datadogpy posts a
 // bare object to /api/v1/check_run. Datadog's public API accepts both.
+//
+// When BOTH attempts fail, the array error is the one worth reporting for a
+// body that is visibly an array. Returning the single-object error instead
+// produces the actively misleading
+//
+//	json: cannot unmarshal array into Go value of type map[string]interface {}
+//
+// which says the payload is an array — true, and exactly what we wanted — and
+// hides the real reason the array decode failed. That message cost a while to
+// see through once; it should not do so again.
 func decodeJSONList[T any](body []byte) ([]T, error) {
 	var many []T
-	if err := json.Unmarshal(body, &many); err == nil {
+	arrayErr := json.Unmarshal(body, &many)
+	if arrayErr == nil {
 		return many, nil
 	}
+
 	var one T
 	if err := json.Unmarshal(body, &one); err != nil {
+		if bytes.HasPrefix(bytes.TrimSpace(body), []byte("[")) {
+			return nil, arrayErr
+		}
 		return nil, err
 	}
 	return []T{one}, nil

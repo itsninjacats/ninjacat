@@ -1,7 +1,6 @@
 package intake
 
 import (
-	"encoding/binary"
 	"log"
 	"net/http"
 	"strings"
@@ -211,7 +210,7 @@ func (a *Server) storeProcesses(c *gin.Context, proc *process.CollectorProc) {
 		row := storage.ProcessRow{
 			TenantID: tenant, Timestamp: now, Host: proc.HostName,
 			PID: p.Pid, State: p.State.String(), OpenFDs: p.OpenFdCount,
-			ContainerID: p.ContainerId, Tags: tagsToMap(p.Tags),
+			ContainerID: p.ContainerId, Tags: tagsToMultiMap(p.Tags),
 		}
 		// Every nested struct is a pointer and may be nil — the agent omits
 		// what it could not read.
@@ -243,22 +242,49 @@ func (a *Server) storeProcesses(c *gin.Context, proc *process.CollectorProc) {
 
 // resCollectorResponse assembles the reply the process-agent expects.
 //
-// A 16-byte header (version, encoding, type, subscriptionID, orgID int32,
-// timestamp int64 — all little-endian) followed by protobuf. The body carries
-// only the nested Header.type, which older agents insist on finding.
+// The Status field is NOT optional in practice, however much the schema says
+// it is. The agent feeds every collector reply into CheckRunner.UpdateRTStatus,
+// which indexes the statuses it gathered without first checking that it got
+// any — so a ResCollector with a nil Status makes the agent dereference nil
+// and take its whole container down with it.
+//
+// This was not theory: against an earlier version of this function a real
+// datadog-agent DaemonSet crash-looped three times in a local cluster, with
+//
+//	panic: runtime error: invalid memory address or nil pointer dereference
+//	  pkg/process/runner.(*CheckRunner).UpdateRTStatus
+//
+// ActiveClients 0 means "nobody is watching the live process view", which is
+// true — we have no such view — and keeps the agent in its normal collection
+// cadence instead of switching to real-time mode. Interval echoes the standard
+// process check interval, which is what the agent uses when the backend does
+// not ask for something different.
+//
+// Built through the generated types rather than hand-packed bytes: the frame
+// layout is the agent's contract, not ours, and EncodeMessage is the same code
+// the agent uses to read it.
 func resCollectorResponse() []byte {
-	body := []byte{
-		0x0a, 0x02, // field 1 (Header), length-delimited, length 2
-		0x08, typeResCollector,
+	out, err := process.EncodeMessage(process.Message{
+		Header: process.MessageHeader{
+			Version:  process.MessageV3,
+			Encoding: process.MessageEncodingProtobuf,
+			Type:     process.TypeResCollector,
+		},
+		Body: &process.ResCollector{
+			Header: &process.ResCollector_Header{Type: int32(process.TypeResCollector)},
+			Status: &process.CollectorStatus{ActiveClients: 0, Interval: processCheckInterval},
+		},
+	})
+	if err != nil {
+		// Encoding a constant message cannot fail in practice. If it somehow
+		// does, an empty body is still better than a panic in the handler —
+		// the agent retries, and the log says why.
+		log.Printf("[collector] cannot encode ResCollector: %v", err)
+		return nil
 	}
-
-	out := make([]byte, messageHeaderSize+len(body))
-	out[0] = messageV3
-	out[1] = messageEncodingProtobuf
-	out[2] = typeResCollector
-	out[3] = 0 // subscriptionID
-	binary.LittleEndian.PutUint32(out[4:8], 0)
-	binary.LittleEndian.PutUint64(out[8:16], uint64(time.Now().Unix()))
-	copy(out[messageHeaderSize:], body)
 	return out
 }
+
+// processCheckInterval is the cadence, in seconds, the agent is told to keep
+// for its process checks. It matches the agent's own default.
+const processCheckInterval = 10

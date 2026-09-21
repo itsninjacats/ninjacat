@@ -1,0 +1,168 @@
+# Default values for ninjacat.
+
+# Everything public hangs off this one name:
+#
+#   <domainRoot>                 the panel
+#   <prefix>.<domainRoot>        agent intake, one host per Datadog product
+#
+# Point the agent at it with DD_SITE=<domainRoot> and it composes every intake
+# hostname by itself, exactly as it does against datadoghq.com.
+domainRoot: ninjacat.ninjacats.eu
+
+nameOverride: ""
+fullnameOverride: ""
+
+imagePullSecrets: []
+
+# -----------------------------------------------------------------------------
+# External databases. The chart does not run them.
+# -----------------------------------------------------------------------------
+
+clickhouse:
+  addr: clickhouse:9000
+  database: ninjacat
+  user: ninjacat
+
+# Secret values. Either let the chart create the Secret from these, or set
+# existingSecret to a Secret you manage yourself with the same three keys:
+# DATABASE_URL, CLICKHOUSE_PASSWORD, BETTER_AUTH_SECRET.
+secrets:
+  existingSecret: ""
+  # postgres://user:password@host:5432/db
+  databaseUrl: ""
+  clickhousePassword: ""
+  # 32+ characters, high entropy: openssl rand -base64 32
+  betterAuthSecret: ""
+
+# -----------------------------------------------------------------------------
+# Go server: agent intake (:8080, public) and panel API (:8081, internal).
+# -----------------------------------------------------------------------------
+
+server:
+  image:
+    repository: ninjacat/server
+    pullPolicy: IfNotPresent
+    # Defaults to the chart appVersion.
+    tag: ""
+
+  # The intake Service is what the Ingress targets. Switch it to LoadBalancer
+  # only if agents should reach the intake without going through the Ingress.
+  intakeService:
+    type: ClusterIP
+    port: 8080
+    annotations: {}
+
+  # The panel API is never exposed: only the frontend talks to it.
+  internalService:
+    port: 8081
+
+  # Extra non-secret environment, rendered into the server ConfigMap.
+  # See CLAUDE.md for the full list (DEBUG, NINJACAT_QUERY_POOL, ...).
+  env: {}
+
+  resources: {}
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# -----------------------------------------------------------------------------
+# SvelteKit panel.
+# -----------------------------------------------------------------------------
+
+frontend:
+  image:
+    repository: ninjacat/frontend
+    pullPolicy: IfNotPresent
+    tag: ""
+
+  service:
+    port: 3000
+
+  # The URL users reach the panel at. Empty means http(s)://<domainRoot>,
+  # following ingress.tls.enabled. SvelteKit rejects form actions when this
+  # does not match the request, and better-auth uses it as its base URL.
+  origin: ""
+
+  env: {}
+
+  resources: {}
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Applies the Drizzle migrations before every install and upgrade. Runs the
+# frontend image with its second entrypoint (node migrate.js).
+migrations:
+  enabled: true
+  resources: {}
+
+# -----------------------------------------------------------------------------
+# Ingress: one for the panel, one for the intake.
+# -----------------------------------------------------------------------------
+
+ingress:
+  enabled: true
+  className: ""
+  # Applied to both Ingresses, e.g. cert-manager.io/cluster-issuer.
+  annotations: {}
+
+  tls:
+    enabled: false
+
+  frontend:
+    annotations: {}
+    # Defaults to <fullname>-frontend-tls.
+    tlsSecretName: ""
+
+  intake:
+    # Agent payloads are large; most controllers' default body limit is not.
+    # For ingress-nginx:
+    #   nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    annotations: {}
+    # Defaults to <fullname>-intake-tls.
+    tlsSecretName: ""
+    # One host per Datadog product, prefixed onto domainRoot. The list mirrors
+    # the switch in server/intake/routes.go — keep the two in sync. Explicit
+    # rather than a wildcard because several hosts are two labels deep
+    # (trace.agent., http-intake.logs.) and neither Ingress nor a wildcard
+    # certificate matches across a dot.
+    hostPrefixes:
+      - app
+      - api
+      - trace.agent
+      - http-intake.logs
+      - agent-http-intake.logs
+      - process
+      - orchestrator
+      - kubeops-intake
+      - config
+      - contlcycle-intake
+      - contimage-intake
+      - dbm-metrics-intake
+      - ndm-intake
+      - snmp-traps-intake
+      - ndmflow-intake
+      - netpath-intake
+      - resources-intake
+      - instrumentation-telemetry-intake
+      - intake.profile
+      - debugger-intake
+      - sourcemap-intake
+      - cws-intake
+      - runtime-security-http-intake.logs
+      - cspm-intake
+      - sbom-intake
+      - sds-intake
+      - agentdiscovery-intake
+      - agenthealth-intake
+      - event-management-intake
+      - softinv-intake
+      - http-synthetics
+      - data-obs-intake
+      - eudm-intake
+      - llmobs-intake
+    # Full hostnames added verbatim, e.g. Multi-Region Failover copies
+    # (app.mrf.<domainRoot>) if the agent dual-ships.
+    extraHosts: []

@@ -58,6 +58,12 @@ type WriteLogs struct{ Entries []LogRow }
 type WriteHosts struct{ Hosts []HostRow }
 type WriteProcesses struct{ Processes []ProcessRow }
 type WriteEvents struct{ Events []EventRow }
+type WriteK8sResources struct{ Resources []K8sResourceRow }
+type WriteK8sManifests struct{ Manifests []K8sManifestRow }
+type WriteK8sCluster struct{ Clusters []K8sClusterRow }
+type WriteK8sActions struct{ Actions []K8sActionRow }
+type WriteContainerEvents struct{ Events []ContainerEventRow }
+type WriteContainerImages struct{ Images []ContainerImageRow }
 
 // rowsProvider lets BatchWriter stay generic despite the concrete messages:
 // it asks the message for its rows instead of knowing the types itself.
@@ -74,6 +80,13 @@ func (m WriteLogs) rows() []Row      { return toRows(m.Entries) }
 func (m WriteHosts) rows() []Row     { return toRows(m.Hosts) }
 func (m WriteProcesses) rows() []Row { return toRows(m.Processes) }
 func (m WriteEvents) rows() []Row    { return toRows(m.Events) }
+
+func (m WriteK8sResources) rows() []Row    { return toRows(m.Resources) }
+func (m WriteK8sManifests) rows() []Row    { return toRows(m.Manifests) }
+func (m WriteK8sCluster) rows() []Row      { return toRows(m.Clusters) }
+func (m WriteK8sActions) rows() []Row      { return toRows(m.Actions) }
+func (m WriteContainerEvents) rows() []Row { return toRows(m.Events) }
+func (m WriteContainerImages) rows() []Row { return toRows(m.Images) }
 
 func toRows[T Row](items []T) []Row {
 	out := make([]Row, len(items))
@@ -102,7 +115,10 @@ type MetricPoint struct {
 	Unit       string
 	Interval   uint32
 	Value      float64
-	Tags       map[string]string
+	// Tags is key -> every value seen: Datadog tags are a multiset, and two
+	// tags may legally share a key (docs/decisions/0001-tags-are-a-multiset.md).
+	// Same shape on every row type carrying Datadog tags.
+	Tags map[string][]string
 }
 
 func (r MetricPoint) AppendTo(b driver.Batch) error {
@@ -117,7 +133,7 @@ type SketchRow struct {
 	Timestamp    time.Time
 	Metric       string
 	Host         string
-	Tags         map[string]string
+	Tags         map[string][]string
 	Count        uint64
 	Min          float64
 	Max          float64
@@ -149,7 +165,7 @@ type CheckRunRow struct {
 	Host      string
 	Status    string // OK / WARNING / CRITICAL / UNKNOWN
 	Message   string
-	Tags      map[string]string
+	Tags      map[string][]string
 }
 
 func (r CheckRunRow) AppendTo(b driver.Batch) error {
@@ -166,7 +182,7 @@ type LogRow struct {
 	Source    string
 	Status    string
 	Message   string
-	Tags      map[string]string
+	Tags      map[string][]string
 }
 
 func (r LogRow) AppendTo(b driver.Batch) error {
@@ -186,16 +202,12 @@ type HostRow struct {
 	Platform     map[string]string
 	CPU          map[string]string
 	Memory       map[string]string
-	Tags         []string
+	Tags         map[string][]string
 }
 
 func (r HostRow) AppendTo(b driver.Batch) error {
-	tags := r.Tags
-	if tags == nil {
-		tags = []string{}
-	}
 	return b.Append(r.TenantID, r.Host, r.SeenAt, r.AgentVersion, r.OS,
-		orEmpty(r.Platform), orEmpty(r.CPU), orEmpty(r.Memory), tags)
+		orEmpty(r.Platform), orEmpty(r.CPU), orEmpty(r.Memory), orEmpty(r.Tags))
 }
 
 // ProcessRow is one process from a process-agent snapshot, stored in
@@ -221,7 +233,7 @@ type ProcessRow struct {
 	State       string
 	CreateTime  time.Time
 	ContainerID string
-	Tags        map[string]string
+	Tags        map[string][]string
 }
 
 func (r ProcessRow) AppendTo(b driver.Batch) error {
@@ -250,7 +262,7 @@ type EventRow struct {
 	AggregationKey string
 	SourceTypeName string
 	DeviceName     string
-	Tags           map[string]string
+	Tags           map[string][]string
 }
 
 func (r EventRow) AppendTo(b driver.Batch) error {
@@ -259,10 +271,237 @@ func (r EventRow) AppendTo(b driver.Batch) error {
 		r.AggregationKey, r.SourceTypeName, r.DeviceName, orEmpty(r.Tags))
 }
 
+// K8sResourceRow is one Kubernetes object in one collection pass, stored in
+// ninjacat.k8s_resources — generic across every kind the orchestrator
+// collectors send (Pod, Node, Deployment, ...).
+//
+// The columns all kinds share are fields; the numbers that differ per kind
+// (restarts, updated replicas, taints...) travel in Counts, so a new kind
+// changes the intake translation, never this struct or the table.
+// k8s_resources_current is fed from this table by a materialized view, so
+// there is no separate row type or writer for it.
+type K8sResourceRow struct {
+	TenantID        string
+	CollectedAt     time.Time
+	ClusterID       string
+	ClusterName     string
+	Kind            string
+	Namespace       string
+	Name            string
+	UID             string
+	ResourceVersion string
+	OwnerKind       string
+	OwnerName       string
+	NodeName        string
+	Phase           string
+	Status          string
+	Ready           int32
+	Desired         int32
+	Available       int32
+	Counts          map[string]int64
+	Labels          map[string]string
+	Annotations     map[string]string
+	Tags            map[string][]string
+	AgentVersion    string
+	GroupID         int32
+	GroupSize       int32
+}
+
+func (r K8sResourceRow) AppendTo(b driver.Batch) error {
+	return b.Append(r.TenantID, r.CollectedAt, r.ClusterID, r.ClusterName,
+		r.Kind, r.Namespace, r.Name, r.UID, r.ResourceVersion,
+		r.OwnerKind, r.OwnerName, r.NodeName, r.Phase, r.Status,
+		r.Ready, r.Desired, r.Available, orEmpty(r.Counts),
+		orEmpty(r.Labels), orEmpty(r.Annotations), orEmpty(r.Tags),
+		r.AgentVersion, r.GroupID, r.GroupSize)
+}
+
+// K8sManifestRow is one raw object manifest in ninjacat.k8s_manifests.
+// Content is the object's own YAML or JSON, exactly as the cluster agent
+// collected it — whole documents, which is why the manifests writer runs
+// with much smaller batches than everything else.
+type K8sManifestRow struct {
+	TenantID        string
+	CollectedAt     time.Time
+	ClusterID       string
+	ClusterName     string
+	UID             string
+	Kind            string
+	APIVersion      string
+	ResourceVersion string
+	Content         string
+	ContentType     string
+	IsTerminated    uint8
+}
+
+func (r K8sManifestRow) AppendTo(b driver.Batch) error {
+	return b.Append(r.TenantID, r.CollectedAt, r.ClusterID, r.ClusterName,
+		r.UID, r.Kind, r.APIVersion, r.ResourceVersion,
+		r.Content, r.ContentType, r.IsTerminated)
+}
+
+// K8sClusterRow is one CollectorCluster summary in ninjacat.k8s_cluster:
+// capacity, allocatable and the version spread (version -> node count) of
+// kubelets and apiservers. One row per cluster per collection pass.
+type K8sClusterRow struct {
+	TenantID          string
+	CollectedAt       time.Time
+	ClusterID         string
+	ClusterName       string
+	NodeCount         uint32
+	PodCapacity       uint32
+	PodAllocatable    uint32
+	CPUCapacity       uint64
+	CPUAllocatable    uint64
+	MemoryCapacity    uint64
+	MemoryAllocatable uint64
+	KubeletVersions   map[string]uint32
+	APIServerVersions map[string]uint32
+}
+
+func (r K8sClusterRow) AppendTo(b driver.Batch) error {
+	return b.Append(r.TenantID, r.CollectedAt, r.ClusterID, r.ClusterName,
+		r.NodeCount, r.PodCapacity, r.PodAllocatable,
+		r.CPUCapacity, r.CPUAllocatable, r.MemoryCapacity, r.MemoryAllocatable,
+		orEmpty(r.KubeletVersions), orEmpty(r.APIServerVersions))
+}
+
+// K8sActionRow is one kubeactions result event in ninjacat.k8s_actions —
+// the audit record of what the cluster agent did with a remote action.
+//
+// ExtraKeys holds the names of JSON keys the intake struct did not declare:
+// the agent side of this is young, and knowing WHAT a newer agent added is
+// worth a column even when its values are not kept.
+type K8sActionRow struct {
+	TenantID          string
+	Timestamp         time.Time
+	ActionID          string
+	OrgID             int64
+	EventType         string
+	Status            string
+	ActionType        string
+	ClusterID         string
+	ClusterName       string
+	ResourceID        string
+	ResourceKind      string
+	ResourceName      string
+	ResourceNamespace string
+	RequestedBy       string
+	Message           string
+	ExtraKeys         []string
+}
+
+func (r K8sActionRow) AppendTo(b driver.Batch) error {
+	return b.Append(r.TenantID, r.Timestamp, r.ActionID, r.OrgID,
+		r.EventType, r.Status, r.ActionType,
+		r.ClusterID, r.ClusterName, r.ResourceID,
+		r.ResourceKind, r.ResourceName, r.ResourceNamespace,
+		r.RequestedBy, r.Message, orEmptySlice(r.ExtraKeys))
+}
+
+// ContainerEventRow is one lifecycle event in ninjacat.container_events —
+// the restart/OOM history.
+//
+// ExitCode and the three timestamps are POINTERS because the wire makes
+// distinctions a zero value would erase: exit 0 and "no code reported" are
+// different states (see lcExitCode on the intake side), and a missing
+// timestamp must stay missing, never become 1970. nil travels to the table's
+// Nullable columns as NULL.
+type ContainerEventRow struct {
+	TenantID      string
+	Timestamp     time.Time
+	Host          string
+	ClusterID     string
+	ObjectKind    string
+	EventType     string
+	ContainerID   string
+	ContainerName string
+	PodUID        string
+	TaskARN       string
+	Source        string
+	ExitCode      *int32
+	CreatedAt     *time.Time
+	ExitedAt      *time.Time
+	OwnerType     string
+	OwnerUID      string
+	OldState      string
+	NewState      string
+	TransitionAt  *time.Time
+}
+
+func (r ContainerEventRow) AppendTo(b driver.Batch) error {
+	return b.Append(r.TenantID, r.Timestamp, r.Host, r.ClusterID,
+		r.ObjectKind, r.EventType, r.ContainerID, r.ContainerName,
+		r.PodUID, r.TaskARN, r.Source,
+		r.ExitCode, r.CreatedAt, r.ExitedAt,
+		r.OwnerType, r.OwnerUID, r.OldState, r.NewState, r.TransitionAt)
+}
+
+// ContainerImageRow is one image sighting in ninjacat.container_images.
+//
+// The table replaces on (tenant, digest, host): the digest identifies the
+// immutable content, the host says where it sits, so Host is part of the
+// row's identity, not just context. BuiltAt and PublishedAt are pointers for
+// the same reason as ContainerEventRow's timestamps — the agent often has
+// neither, and absence must survive the trip (nil -> NULL).
+type ContainerImageRow struct {
+	TenantID    string
+	CollectedAt time.Time
+	Host        string
+
+	// ImageKey is what the table replaces on: the registry digest when there
+	// is one, the image id otherwise. IdentitySource records which, because a
+	// digestless image is a normal occurrence worth being able to ask about.
+	ImageKey       string
+	IdentitySource string // "digest" | "image_id"
+
+	ImageID      string
+	Digest       string
+	Name         string
+	ShortName    string
+	Registry     string
+	RepoTags     []string
+	RepoDigests  []string
+	SizeBytes    uint64
+	OSName       string
+	OSVersion    string
+	Architecture string
+	LayerCount   uint32
+	LayerBytes   uint64
+	BuiltAt      *time.Time
+	PublishedAt  *time.Time
+	DDTags       map[string][]string
+}
+
+func (r ContainerImageRow) AppendTo(b driver.Batch) error {
+	return b.Append(r.TenantID, r.CollectedAt, r.Host,
+		r.ImageKey, r.IdentitySource, r.ImageID, r.Digest,
+		r.Name, r.ShortName, r.Registry,
+		orEmptySlice(r.RepoTags), orEmptySlice(r.RepoDigests),
+		r.SizeBytes, r.OSName, r.OSVersion, r.Architecture,
+		r.LayerCount, r.LayerBytes, r.BuiltAt, r.PublishedAt,
+		orEmpty(r.DDTags))
+}
+
 // orEmpty guards against nil maps — the ClickHouse driver rejects them.
-func orEmpty(m map[string]string) map[string]string {
+// Generic since the Kubernetes tables brought map values beyond string
+// (Counts is int64, the cluster version spreads are uint32); the multiset tag
+// maps (map[string][]string) and the older string-to-string callers all infer
+// their types unchanged.
+func orEmpty[K comparable, V any](m map[K]V) map[K]V {
 	if m == nil {
-		return map[string]string{}
+		return map[K]V{}
 	}
 	return m
+}
+
+// orEmptySlice is the same guard for slices — the driver rejects nil there
+// too, which SketchRow handles inline. Factored out here because the
+// container rows carry several slices each and the inline form stops
+// paying its way.
+func orEmptySlice[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
 }

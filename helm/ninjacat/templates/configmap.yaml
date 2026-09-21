@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ninjacat.fullname" . }}-server
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "server") | nindent 4 }}
+data:
+  CLICKHOUSE_ADDR: {{ .Values.clickhouse.addr | quote }}
+  CLICKHOUSE_DB: {{ .Values.clickhouse.database | quote }}
+  CLICKHOUSE_USER: {{ .Values.clickhouse.user | quote }}
+  NINJACAT_ADDR: {{ printf ":%v" .Values.server.intakeService.port | quote }}
+  NINJACAT_INTERNAL_ADDR: {{ printf ":%v" .Values.server.internalService.port | quote }}
+  {{- range $k, $v := .Values.server.env }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ninjacat.fullname" . }}-frontend
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "frontend") | nindent 4 }}
+data:
+  ORIGIN: {{ include "ninjacat.origin" . | quote }}
+  PORT: {{ .Values.frontend.service.port | quote }}
+  # Cluster-internal; the browser never learns this address exists.
+  NINJACAT_INTERNAL_URL: {{ printf "http://%s-server-internal:%v" (include "ninjacat.fullname" .) .Values.server.internalService.port | quote }}
+  {{- range $k, $v := .Values.frontend.env }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}

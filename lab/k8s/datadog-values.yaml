@@ -1,0 +1,223 @@
+# Datadog agent stack pointed at NinjaCat instead of at Datadog.
+#
+# ---------------------------------------------------------------------------
+# How the agent is convinced to talk to us
+# ---------------------------------------------------------------------------
+#
+# 1. site: ninjacat.lab
+#    The agent composes every product hostname from this by itself —
+#    app.ninjacat.lab, kubeops-intake.ninjacat.lab, contlcycle-intake.ninjacat.lab
+#    and three dozen more. We never enumerate them; that is the whole reason
+#    this lab uses a site rather than per-product dd_url overrides. Those
+#    overrides do not even exist for container lifecycle, container images or
+#    the orchestrator, which are exactly the payloads being tested here.
+#
+# 2. CoreDNS sends *.ninjacat.lab to the lab's TLS proxy (scripts/coredns-patch.sh).
+#
+# 3. SSL_CERT_FILE makes the agent trust the lab CA.
+#    The agent is written in Go, and Go's crypto/x509 reads SSL_CERT_FILE. One
+#    mounted file therefore covers EVERY HTTP client inside every agent
+#    container at once — including the ones that never consult
+#    DD_SKIP_SSL_VALIDATION. That is why this is a mounted CA rather than a
+#    skip-verification flag.
+#
+#    Note this REPLACES the system trust store for those clients rather than
+#    adding to it. Acceptable here because the lab is sealed and the agent has
+#    nowhere else to go; it would be wrong in a real deployment, where the CA
+#    should be appended to the system bundle instead.
+#
+#    DD_SKIP_SSL_VALIDATION stays on as a belt-and-braces second line, for any
+#    component that might build a client with its own pool.
+
+datadog:
+  apiKey: "PLACEHOLDER_REPLACED_BY_UP_SH"
+  site: ninjacat.lab
+  clusterName: ninjacat-lab
+
+  # kind's kubelet serves a self-signed certificate the agent has no reason to
+  # trust. Unrelated to our own CA — this is the agent talking to Kubernetes,
+  # not to NinjaCat.
+  kubelet:
+    tlsVerify: false
+
+  # Everything we actually want to see arriving.
+  logs:
+    enabled: true
+    containerCollectAll: true
+  processAgent:
+    enabled: true
+    processCollection: true
+    containerCollection: true
+  orchestratorExplorer:
+    enabled: true
+  containerLifecycle:
+    enabled: true
+  containerImageCollection:
+    enabled: true
+
+  # Off on purpose: heavy, needs privileges kind does not hand out freely, and
+  # traces are explicitly out of scope for this round.
+  apm:
+    portEnabled: false
+  networkMonitoring:
+    enabled: false
+  securityAgent:
+    compliance:
+      enabled: false
+    runtime:
+      enabled: false
+  remoteConfiguration:
+    enabled: false
+
+  # The chart bundles the Datadog Operator as a subchart and installs it by
+  # default. This lab installs the agent directly, so the operator is pure
+  # overhead on a host that has about 5 GB to spare.
+  operator:
+    enabled: false
+
+  env:
+    - name: SSL_CERT_FILE
+      value: /etc/ninjacat-ca/ca.crt
+    - name: DD_SKIP_SSL_VALIDATION
+      value: "true"
+    # The agent would otherwise spend the whole lab retrying a telemetry
+    # endpoint we do not implement, drowning the interesting logs.
+    - name: DD_INVENTORIES_ENABLED
+      value: "false"
+
+
+# The CA volume belongs under `agents`, NOT under `datadog`.
+#
+# `datadog.volumes` is not a key this chart defines, so putting it there is
+# silently ignored — which is worse than an error: `datadog.env` DOES exist,
+# so SSL_CERT_FILE reached five containers while the file it names reached
+# one. Four containers would have been left pointing at a path that does not
+# exist, trusting nothing at all. Rendering the chart before installing is
+# what caught it.
+#
+# `agents.volumeMounts` is documented as applying to ALL containers of the
+# agent pod, which is exactly the scope SSL_CERT_FILE has.
+
+# The cluster agent is the one that sends orchestrator collections — the pods,
+# nodes, deployments and the rest that land in ninjacat.k8s_resources. It needs
+# the same CA, mounted separately: it is its own Deployment, not part of the
+# node DaemonSet.
+  # ---------------------------------------------------------------------------
+  # Trimming the apiserver histograms, IN THE AGENT
+  # ---------------------------------------------------------------------------
+  #
+  # kube_apiserver_metrics scrapes the API server's own Prometheus endpoint and
+  # forwards everything: 12,616 metric samples per run on this lab, and
+  # kube_apiserver alone accounted for 77.6% of every point in the database —
+  # 4.8 GiB a day from a single node running ten pods.
+  #
+  # The cause is histogram cardinality, not traffic. apiserver_request_duration_
+  # seconds is tagged with verb x resource x subresource x scope x group x le,
+  # a cartesian product: that one metric produced 544k distinct series in 24
+  # minutes, at 1.09 points per series — series that exist for one scrape and
+  # are never seen again. The 1-minute rollup cannot reduce that, because there
+  # is never more than one point in a bucket to reduce.
+  #
+  # Only the HISTOGRAM families are dropped. The counters and gauges from the
+  # same endpoint still arrive, and they are the ones worth looking at daily:
+  # apiserver_request_total (request and error rate by verb and resource),
+  # current_inflight_requests (saturation), dropped_requests_total and the
+  # workqueue_* family (controllers falling behind).
+  #
+  # This is filtered HERE, in the agent, and deliberately NOT in NinjaCat's
+  # writer. Dropping or rewriting what an agent sent would make NinjaCat a lossy
+  # approximation of Datadog rather than a replacement for it — the operator
+  # asked for this data by configuring the check, and an intake's job is to
+  # store what arrives. Datadog puts this same knob in this same place.
+  #
+  # Delete this block to get the full firehose back, on purpose.
+  # Suppress the shipped auto_conf.yaml for this integration.
+  #
+  # Without this, the confd file below does NOT replace the bundled
+  # autodiscovery config — it runs ALONGSIDE it. Measured: the filtered
+  # instance reported 1,833 samples a run while the untouched auto_conf
+  # instance kept reporting 12,834, so the filter appeared to do nothing to
+  # the database while working perfectly in isolation.
+  ignoreAutoConfig:
+    - kube_apiserver_metrics
+
+  confd:
+    kube_apiserver_metrics.yaml: |-
+      ad_identifiers:
+        - kube-apiserver
+      init_config:
+      instances:
+        - possible_prometheus_urls:
+            - https://%%host%%:6443/metrics
+            - https://%%host%%:8443/metrics
+          bearer_token_auth: true
+          tls_verify: false
+          scheme: https
+          # ignore_metrics, NOT exclude_metrics. This check predates the
+          # OpenMetrics v2 option name; the v2 spelling is accepted by the YAML
+          # parser, loaded without complaint, and silently filters nothing —
+          # the check still reported 12,834 samples a run with it in place.
+          # Wildcards are fnmatch and match anywhere in the name.
+          ignore_metrics:
+            - '*apiserver_request_duration_seconds*'
+            - '*etcd_request_duration_seconds*'
+            - '*watch_events_sizes*'
+            - '*admission_controller_admission_duration_seconds*'
+            - '*apiserver_response_sizes*'
+            - '*apiserver_request_slo_duration_seconds*'
+
+clusterAgent:
+  enabled: true
+  replicas: 1
+  env:
+    - name: SSL_CERT_FILE
+      value: /etc/ninjacat-ca/ca.crt
+    - name: DD_SKIP_SSL_VALIDATION
+      value: "true"
+
+
+  volumes:
+    - name: ninjacat-ca
+      secret:
+        secretName: ninjacat-lab-ca
+  volumeMounts:
+    - name: ninjacat-ca
+      mountPath: /etc/ninjacat-ca
+      readOnly: true
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits:   { memory: 384Mi }
+
+agents:
+
+  volumes:
+    - name: ninjacat-ca
+      secret:
+        secretName: ninjacat-lab-ca
+  # Applies to every container in the agent pod — agent, process-agent and any
+  # other the chart turns on — matching the scope of SSL_CERT_FILE above.
+  volumeMounts:
+    - name: ninjacat-ca
+      mountPath: /etc/ninjacat-ca
+      readOnly: true
+
+  # Memory ceilings on every container the chart actually renders. The host
+  # has roughly 5 GB free and ClickHouse alone wants a gigabyte of it, so an
+  # unbounded agent pod is the difference between a working lab and an OOM.
+  #
+  # There is deliberately no processAgent entry: since Agent 7.78 the process
+  # checks run inside the core agent on Linux, so that container does not
+  # exist. Live processes and containers still arrive.
+  containers:
+    agent:
+      resources:
+        requests: { cpu: 50m, memory: 192Mi }
+        limits:   { memory: 640Mi }
+    traceAgent:
+      resources:
+        requests: { cpu: 10m, memory: 48Mi }
+        limits:   { memory: 192Mi }
+    systemProbe:
+      resources:
+        requests: { cpu: 10m, memory: 48Mi }
+        limits:   { memory: 192Mi }

@@ -47,7 +47,7 @@ type builder struct {
 	host     string
 	now      time.Time
 	interval uint32
-	tags     map[string]string
+	tags     map[string][]string
 }
 
 func (b *builder) add(metricType, name, unit string, value float64) {
@@ -67,11 +67,11 @@ func (b *builder) count(name, unit string, value float64) { b.add("COUNT", name,
 // Used for per-level log counts, where the level belongs in a tag rather than
 // in six separate metric names.
 func (b *builder) addTagged(metricType, name, unit string, value float64, key, val string) {
-	tags := make(map[string]string, len(b.tags)+1)
+	tags := make(map[string][]string, len(b.tags)+1)
 	for k, v := range b.tags {
 		tags[k] = v
 	}
-	tags[key] = val
+	tags[key] = []string{val}
 	b.points = append(b.points, storage.MetricPoint{
 		TenantID: b.tenant, Timestamp: b.now,
 		Metric: prefix + name, Host: b.host,
@@ -175,18 +175,18 @@ func build(info gen.NodeShortInfo, prev *counters, tenant, host string, interval
 // is exactly what you want — it lets you put v0.3 and v0.4 side by side and
 // see which one leaks. A restart is not a new thing, it is the same thing
 // again, so it must not split the series.
-func identityTags(info gen.NodeShortInfo) map[string]string {
-	tags := map[string]string{
-		"node":      string(info.Name),
-		"mode":      info.Mode.String(),
-		"version":   orUnknown(info.Version.Release),
-		"framework": orUnknown(info.Framework.Release),
+func identityTags(info gen.NodeShortInfo) map[string][]string {
+	tags := map[string][]string{
+		"node":      {string(info.Name)},
+		"mode":      {info.Mode.String()},
+		"version":   {orUnknown(info.Version.Release)},
+		"framework": {orUnknown(info.Framework.Release)},
 	}
 	// Commit is empty unless the binary was built from a tagged or committed
 	// tree. When present it is the most precise answer to "which build is
 	// this", which is the question you ask once a chart looks wrong.
 	if c := info.Version.Commit; c != "" {
-		tags["commit"] = c
+		tags["commit"] = []string{c}
 	}
 	return tags
 }

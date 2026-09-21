@@ -13,6 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/itsninjacats/server/apps/storage"
 )
 
 // contlcycle-intake.<site>, contimage-intake.<site> — containers.
@@ -25,7 +27,8 @@ import (
 // Both carry protobuf, and both schemas ship in agent-payload — the same
 // module we already use for metrics and processes.
 //
-// Decoded but not stored yet.
+// Lifecycle events land in ninjacat.container_events, the image inventory in
+// ninjacat.container_images.
 func (a *Server) routeContainers(g *gin.RouterGroup) {
 	g.POST("/api/v2/contlcycle", a.HandleContainerLifecycle)
 	g.POST("/api/v2/contimage", a.HandleContainerImages)
@@ -68,28 +71,89 @@ func (a *Server) HandleContainerLifecycle(c *gin.Context) {
 
 	lcLogPayload(&payload)
 
-	// The log above stops at containersLogLimit; the payload does not. Every
-	// event the agent sent is still here, in the Datadog type, nothing
-	// flattened or reformatted. The oneof is walked once more so each variant
-	// stands on its own as a typed value: this is what storage will receive.
-	for _, e := range payload.GetEvents() {
+	tenant := TenantFromContext(c)
+	if tenant == "" {
+		return
+	}
+
+	// The log above stops at containersLogLimit; the rows do not. Storage is
+	// fire-and-forget — the 202 is already deferred and never waits on it.
+	rows := lcRows(&payload, tenant, time.Now().UTC())
+	a.store(storage.ContainerEventsWriter, storage.WriteContainerEvents{Events: rows}, len(rows))
+}
+
+// lcRows converts one lifecycle payload into container_events rows.
+//
+// The envelope (host, cluster, object kind) repeats on every row so a row is
+// self-sufficient at query time; the per-kind detail comes from the oneof, and
+// each variant fills only its own identity column — a pod row has an empty
+// ContainerID, not a borrowed one.
+//
+// now is the row timestamp: the payload carries no "when was this batch sent",
+// only the per-event creation/exit/transition times, which keep their own
+// Nullable columns. Passed in rather than read here so tests can pin it.
+func lcRows(p *contlcycle.EventsPayload, tenant string, now time.Time) []storage.ContainerEventRow {
+	events := p.GetEvents()
+	rows := make([]storage.ContainerEventRow, 0, len(events))
+	for _, e := range events {
+		row := storage.ContainerEventRow{
+			TenantID:   tenant,
+			Timestamp:  now,
+			Host:       p.GetHost(),
+			ClusterID:  p.GetClusterId(),
+			ObjectKind: p.GetObjectKind().String(),
+			EventType:  e.GetEventType().String(),
+		}
 		switch {
 		case e.GetContainer() != nil:
-			container := e.GetContainer()
-			_ = container // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+			ev := e.GetContainer()
+			row.ContainerID = ev.GetContainerID()
+			row.ContainerName = ev.GetContainerName()
+			row.Source = ev.GetSource()
+			// The oneof is read for presence, not value: nil means the
+			// runtime never reported a code, and that must reach ClickHouse
+			// as NULL, distinct from an honest exit 0. See lcExitCode.
+			if code, ok := lcExitCode(ev); ok {
+				row.ExitCode = &code
+			}
+			row.CreatedAt = lcTimePtr(ev.GetOptionalCreationTimestamp() != nil, ev.GetCreationTimestamp())
+			row.ExitedAt = lcTimePtr(ev.GetOptionalExitTimestamp() != nil, ev.GetExitTimestamp())
+			if owner := ev.GetOwner(); owner != nil {
+				row.OwnerType = owner.GetOwnerType().String()
+				row.OwnerUID = owner.GetOwnerUID()
+			}
+			if tr := ev.GetTransition(); tr != nil {
+				// Same formatter as the log line, so the stored state and
+				// the logged state cannot drift apart.
+				row.OldState = lcContainerState(tr.GetLastObservedState())
+				row.NewState = lcContainerState(tr.GetNewState())
+				row.TransitionAt = lcTimePtr(true, tr.GetTransitionTimestamp())
+			}
 		case e.GetPod() != nil:
-			pod := e.GetPod()
-			_ = pod // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+			ev := e.GetPod()
+			row.PodUID = ev.GetPodUID()
+			row.Source = ev.GetSource()
+			row.CreatedAt = lcTimePtr(ev.CreationTimestamp != nil, ev.GetCreationTimestamp())
+			row.ExitedAt = lcTimePtr(ev.ExitTimestamp != nil, ev.GetExitTimestamp())
+			if tr := ev.GetTransition(); tr != nil {
+				row.OldState = lcPodStatus(tr.GetLastObservedState())
+				row.NewState = lcPodStatus(tr.GetNewState())
+				row.TransitionAt = lcTimePtr(true, tr.GetTransitionTimestamp())
+			}
 		case e.GetTask() != nil:
-			task := e.GetTask()
-			_ = task // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+			ev := e.GetTask()
+			row.TaskARN = ev.GetTaskARN()
+			row.Source = ev.GetSource()
+			row.ExitedAt = lcTimePtr(ev.ExitTimestamp != nil, ev.GetExitTimestamp())
 		default:
 			// No typed detail (nil oneof, or a variant newer than this
-			// schema). The event itself, with its EventType, stays in
-			// payload.Events; only the detail is missing.
+			// schema). The EventType is still real information — a Delete
+			// with no detail is still a Delete — so the row stands with
+			// the envelope and event type alone.
 		}
+		rows = append(rows, row)
 	}
-	_ = &payload // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	return rows
 }
 
 // lcLogPayload reports one lifecycle batch: the envelope, then one line per
@@ -232,16 +296,30 @@ func lcPodStatus(st *contlcycle.PodStatusValue) string {
 	return lcOrDash(st.GetPhase())
 }
 
-// lcOptionalTime formats a Unix-seconds timestamp for the log.
+// lcTimePtr converts a Unix-seconds timestamp off the wire into a value for a
+// Nullable(DateTime) column.
 //
 // Same rule as wireTime in payloads.go: absent or zero means "not supplied",
-// never 1970. Here that is rendered as "-" rather than the receive time,
-// because a log line is for reading, not for retention.
-func lcOptionalTime(present bool, seconds int64) string {
+// never 1970. Unlike wireTime there is no fall-back to the receive time
+// either — the row's own Timestamp already records arrival, and inventing an
+// exit time would turn "we do not know when it exited" into a lie.
+func lcTimePtr(present bool, seconds int64) *time.Time {
 	if !present || seconds <= 0 {
+		return nil
+	}
+	t := time.Unix(seconds, 0).UTC()
+	return &t
+}
+
+// lcOptionalTime formats a Unix-seconds timestamp for the log: "-" when
+// lcTimePtr says absent, so the log and the stored value share one presence
+// rule and cannot drift apart.
+func lcOptionalTime(present bool, seconds int64) string {
+	t := lcTimePtr(present, seconds)
+	if t == nil {
 		return "-"
 	}
-	return time.Unix(seconds, 0).UTC().Format(time.RFC3339)
+	return t.Format(time.RFC3339)
 }
 
 // HandleContainerImages accepts the container image inventory.
@@ -272,10 +350,90 @@ func (a *Server) HandleContainerImages(c *gin.Context) {
 
 	ciLogPayload(&payload)
 
-	// Same as the lifecycle handler: the log is capped, the payload is not.
-	// One variant only here — every image is a *contimage.ContainerImage
-	// under payload.Images, layers and history included.
-	_ = &payload // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	tenant := TenantFromContext(c)
+	if tenant == "" {
+		return
+	}
+
+	// Same as the lifecycle handler: the log is capped, the rows are not, and
+	// storage is fire-and-forget behind the already-deferred 202.
+	rows, skipped := ciRows(&payload, tenant, time.Now().UTC())
+	if skipped > 0 {
+		log.Printf("[contimage] %d of %d images skipped: neither digest nor image id, so nothing to key on", skipped, len(payload.GetImages()))
+		// A log line records this once and is read never. The metric is what
+		// makes an incomplete inventory noticeable without going looking.
+		a.countSelf(tenant, payload.GetHost(), SelfImagesSkipped, float64(skipped),
+			map[string][]string{"reason": {"no_identity"}})
+	}
+	a.store(storage.ContainerImagesWriter, storage.WriteContainerImages{Images: rows}, len(rows))
+}
+
+// ciRows converts one image inventory into container_images rows, returning
+// the rows and how many images had no usable identity at all.
+//
+// The table replaces on (tenant, digest, host): the digest IS the identity —
+// it is what the SBOM track will join on — so an image without one has
+// nowhere to land and is skipped rather than stored under an empty key,
+// where every digestless image on a host would collapse into one row.
+//
+// now is the sighting time; the payload does not date itself. The image's own
+// provenance times (BuiltAt, PublishedAt) keep their Nullable columns.
+func ciRows(p *contimage.ContainerImagePayload, tenant string, now time.Time) (rows []storage.ContainerImageRow, skipped int) {
+	images := p.GetImages()
+	rows = make([]storage.ContainerImageRow, 0, len(images))
+	for _, img := range images {
+		// A missing digest is a normal state, not a defect — an image built
+		// locally and never pushed, loaded from a tarball, or pulled moments
+		// ago has none. Dropping those would make the inventory quietly
+		// incomplete, so the image id stands in: it is the config digest,
+		// content-addressed the same way, just local to the runtime rather
+		// than assigned by a registry.
+		//
+		// Only an image with neither is genuinely unidentifiable. Keying such
+		// rows on the empty string would collapse them all into one, which
+		// loses more than skipping does.
+		key, source := img.GetDigest(), "digest"
+		if key == "" {
+			key, source = img.GetId(), "image_id"
+		}
+		if key == "" {
+			skipped++
+			continue
+		}
+		// Same sum as ciLogImage, so the stored total and the logged total
+		// cannot disagree.
+		layers := img.GetLayers()
+		var layerBytes int64
+		for _, l := range layers {
+			layerBytes += l.GetSize()
+		}
+		rows = append(rows, storage.ContainerImageRow{
+			TenantID:    tenant,
+			CollectedAt: now,
+			Host:        p.GetHost(),
+
+			ImageKey:       key,
+			IdentitySource: source,
+
+			ImageID:      img.GetId(),
+			Digest:       img.GetDigest(),
+			Name:         img.GetName(),
+			ShortName:    img.GetShortName(),
+			Registry:     img.GetRegistry(),
+			RepoTags:     img.GetRepoTags(),
+			RepoDigests:  img.GetRepoDigests(),
+			SizeBytes:    uint64(img.GetSize()),
+			OSName:       img.GetOs().GetName(),
+			OSVersion:    img.GetOs().GetVersion(),
+			Architecture: img.GetOs().GetArchitecture(),
+			LayerCount:   uint32(len(layers)),
+			LayerBytes:   uint64(layerBytes),
+			BuiltAt:      ciTimePtr(img.GetBuiltAt()),
+			PublishedAt:  ciTimePtr(img.GetPublishedAt()),
+			DDTags:       tagsToMultiMap(img.GetDdTags()),
+		})
+	}
+	return rows, skipped
 }
 
 // ciLogPayload reports one image inventory: the envelope, then two lines per
@@ -332,16 +490,30 @@ func ciPlatform(os *contimage.ContainerImage_OperatingSystem) string {
 	return strings.Join(parts, "/")
 }
 
-// ciTime formats a protobuf Timestamp for the log.
+// ciTimePtr converts a protobuf Timestamp into a value for a
+// Nullable(DateTime) column.
 //
 // nil is "not supplied" — the agent sets BuiltAt from the newest layer
 // history and often has no PublishedAt at all. Same rule as wireTime in
-// payloads.go: a missing value never becomes 1970.
-func ciTime(ts *timestamppb.Timestamp) string {
+// payloads.go: a missing value never becomes 1970, and no receive-time
+// fall-back either — CollectedAt records arrival, and a fabricated build
+// date would poison the provenance record.
+func ciTimePtr(ts *timestamppb.Timestamp) *time.Time {
 	if ts == nil || !ts.IsValid() || ts.GetSeconds() <= 0 {
+		return nil
+	}
+	t := ts.AsTime().UTC()
+	return &t
+}
+
+// ciTime formats a protobuf Timestamp for the log: "-" when ciTimePtr says
+// absent, so the log and the stored value share one presence rule.
+func ciTime(ts *timestamppb.Timestamp) string {
+	t := ciTimePtr(ts)
+	if t == nil {
 		return "-"
 	}
-	return ts.AsTime().UTC().Format(time.RFC3339)
+	return t.Format(time.RFC3339)
 }
 
 func ciJoin(s []string) string {

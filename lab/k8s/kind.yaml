@@ -1,0 +1,31 @@
+# Single-node kind cluster for the end-to-end lab.
+#
+# One node, not three: the host has ~5 GB free and this cluster has to hold
+# ClickHouse, Postgres, the panel, the server, a TLS proxy and a full Datadog
+# agent stack. A DaemonSet still schedules here, so node-level collection is
+# exercised exactly as it would be on a real cluster.
+#
+# kind removes the control-plane taint itself on a single-node cluster, so
+# workloads schedule without help. Do NOT add a kubeadm patch setting
+# `taints: []` to "make sure" — that stops the taint being applied at all, and
+# kind's own removal step then fails with "taint not found", taking the whole
+# cluster creation down with it.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: ninjacat-lab
+
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      # Panel, straight from the host browser.
+      - containerPort: 30000
+        hostPort: 8888
+        protocol: TCP
+      # ClickHouse HTTP, so you can query the lab from the host with curl.
+      - containerPort: 30123
+        hostPort: 18123
+        protocol: TCP
+      # NinjaCat panel API, for poking the internal endpoints.
+      - containerPort: 30081
+        hostPort: 18081
+        protocol: TCP

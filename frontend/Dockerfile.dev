@@ -1,0 +1,22 @@
+# Development image for the panel: Vite's dev server with HMR.
+#
+# Source is bind-mounted by compose, so an edit on the host reloads the
+# browser. node_modules lives in a named volume rather than the bind mount —
+# native binaries (lightningcss, the Paraglide toolchain) are platform
+# specific and the host's copy is not necessarily the right one.
+FROM oven/bun:1
+
+WORKDIR /app
+
+# Debian-based rather than Alpine on purpose: the installed lightningcss
+# binary is the glibc build (lightningcss-linux-x64-gnu).
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+
+COPY . .
+
+EXPOSE 5173
+
+# --host binds 0.0.0.0; without it Vite listens on localhost inside the
+# container and the port mapping leads nowhere.
+CMD ["bun", "run", "dev", "--host", "0.0.0.0", "--port", "5173"]

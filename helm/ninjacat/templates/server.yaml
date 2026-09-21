@@ -1,0 +1,133 @@
+{{- $fullname := include "ninjacat.fullname" . -}}
+{{- $secret := include "ninjacat.secretName" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-server
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "server") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "server") | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # Roll the pod when its configuration changes.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if not .Values.secrets.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.server.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "server") | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+      containers:
+        - name: server
+          image: {{ include "ninjacat.serverImage" . | quote }}
+          imagePullPolicy: {{ .Values.server.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: intake
+              containerPort: {{ .Values.server.intakeService.port }}
+            - name: internal
+              containerPort: {{ .Values.server.internalService.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ $fullname }}-server
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: DATABASE_URL
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: CLICKHOUSE_PASSWORD
+          # The intake routes on the Host header, so a bare GET /ping is a
+          # 404 by design. Readiness goes through a real intake host; liveness
+          # uses the panel API, which has no host routing.
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: intake
+              httpHeaders:
+                - name: Host
+                  value: {{ printf "api.%s" .Values.domainRoot | quote }}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: internal
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          {{- with .Values.server.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.server.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.server.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.server.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+# Agent intake. The Ingress targets this one.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-server
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "server") | nindent 4 }}
+  {{- with .Values.server.intakeService.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.server.intakeService.type }}
+  ports:
+    - name: intake
+      port: {{ .Values.server.intakeService.port }}
+      targetPort: intake
+  selector:
+    {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "server") | nindent 4 }}
+---
+# Panel API. A separate Service rather than a second port on the one above,
+# so no Ingress or LoadBalancer can ever expose it by accident.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-server-internal
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "server") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: internal
+      port: {{ .Values.server.internalService.port }}
+      targetPort: internal
+  selector:
+    {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "server") | nindent 4 }}

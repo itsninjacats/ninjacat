@@ -1,3 +1,6 @@
 venv/
 __pycache__/
 .idea/
+
+# Production secrets for compose.prod.yaml
+.env

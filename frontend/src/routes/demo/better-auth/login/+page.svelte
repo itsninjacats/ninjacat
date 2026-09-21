@@ -33,10 +33,7 @@
 	<button class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"
 		>Login</button
 	>
-	<button
-		formaction="?/signUpEmail"
-		class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"
-		>Register</button
-	>
+	<!-- No Register button: registration is closed (see src/lib/server/auth.ts).
+	     Accounts are created with `bun run user:create`. -->
 </form>
 <p class="text-red-500">{form?.message ?? ''}</p>

@@ -1,0 +1,27 @@
+# Air — rebuild and restart the server when a .go file changes.
+# https://github.com/air-verse/air
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  # CGO is mandatory: DataDog/zstd_0 (legacy process-agent frames) is a cgo
+  # binding, and the build fails to link without it.
+  cmd = "CGO_ENABLED=1 go build -o ./tmp/ninjacat ./cmd/ninjacat"
+  bin = "./tmp/ninjacat"
+  include_ext = ["go", "sql"]
+  exclude_dir = ["tmp", "captures", "docs", "clickhouse"]
+  # Generated files change only when their generator is run, and rebuilding
+  # on them mid-generation just produces noise.
+  exclude_regex = ["_test\\.go$"]
+  # Wait for the editor to finish writing before kicking off a build.
+  delay = 300
+  stop_on_error = true
+  send_interrupt = true
+  kill_delay = "2s"
+
+[log]
+  time = true
+
+[misc]
+  clean_on_exit = true

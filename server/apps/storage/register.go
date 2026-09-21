@@ -29,6 +29,12 @@ func RegisterTypes(node gen.Node) error {
 		WriteHosts{},
 		WriteProcesses{},
 		WriteEvents{},
+		WriteK8sResources{},
+		WriteK8sManifests{},
+		WriteK8sCluster{},
+		WriteK8sActions{},
+		WriteContainerEvents{},
+		WriteContainerImages{},
 		MetricPoint{},
 		SketchRow{},
 		CheckRunRow{},
@@ -36,6 +42,12 @@ func RegisterTypes(node gen.Node) error {
 		HostRow{},
 		ProcessRow{},
 		EventRow{},
+		K8sResourceRow{},
+		K8sManifestRow{},
+		K8sClusterRow{},
+		K8sActionRow{},
+		ContainerEventRow{},
+		ContainerImageRow{},
 	}
 	if err := node.Network().RegisterTypes(types); err != nil {
 		return fmt.Errorf("storage: register types: %w", err)

@@ -1,0 +1,90 @@
+# TLS front door for the whole lab.
+#
+# The Datadog agent derives a hostname per product from DD_SITE and talks
+# https to all of them. NinjaCat serves plain HTTP and routes on the Host
+# header, so this proxy does exactly two things: terminate TLS with the lab
+# wildcard certificate, and forward with the Host header UNTOUCHED.
+#
+# That last part is the whole point. If this proxy rewrote Host — which is
+# what proxy_pass does by default when you give it a name — every payload
+# would arrive at NinjaCat looking identical and the host-based router would
+# have nothing to dispatch on.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ninjacat-proxy-conf
+  namespace: ninjacat-lab
+data:
+  default.conf: |
+    server {
+        listen 443 ssl;
+        http2 on;
+        server_name _;
+
+        ssl_certificate     /etc/nginx/certs/tls.crt;
+        ssl_certificate_key /etc/nginx/certs/tls.key;
+
+        # Agent payloads are batched and compressed; the default 1m would
+        # silently 413 a large orchestrator collection from a busy cluster.
+        client_max_body_size 64m;
+
+        location / {
+            proxy_pass http://ninjacat:8080;
+
+            # $host is the name the CLIENT asked for. Preserving it is what
+            # keeps app.*, kubeops-intake.*, contlcycle-intake.* and the rest
+            # distinguishable once they reach the intake router.
+            proxy_set_header Host              $host;
+            proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto https;
+
+            proxy_http_version 1.1;
+            proxy_request_buffering off;
+            proxy_read_timeout 60s;
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ninjacat-proxy
+  namespace: ninjacat-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: ninjacat-proxy }
+  template:
+    metadata:
+      labels: { app: ninjacat-proxy }
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.29-alpine
+          ports:
+            - containerPort: 443
+          volumeMounts:
+            - { name: conf,  mountPath: /etc/nginx/conf.d }
+            - { name: certs, mountPath: /etc/nginx/certs, readOnly: true }
+          resources:
+            requests: { cpu: 20m, memory: 32Mi }
+            limits:   { memory: 96Mi }
+          readinessProbe:
+            tcpSocket: { port: 443 }
+            initialDelaySeconds: 2
+      volumes:
+        - name: conf
+          configMap: { name: ninjacat-proxy-conf }
+        - name: certs
+          secret: { secretName: ninjacat-lab-tls }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ninjacat-proxy
+  namespace: ninjacat-lab
+spec:
+  selector: { app: ninjacat-proxy }
+  ports:
+    - name: https
+      port: 443
+      targetPort: 443

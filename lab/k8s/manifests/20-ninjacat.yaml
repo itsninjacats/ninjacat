@@ -1,0 +1,73 @@
+# NinjaCat server — agent intake (:8080) and panel API (:8081).
+#
+# The image is built on the host and side-loaded with `kind load
+# docker-image`; it exists in no registry. IfNotPresent is what keeps the
+# kubelet from trying (and failing) to pull it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ninjacat
+  namespace: ninjacat-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: ninjacat }
+  template:
+    metadata:
+      labels: { app: ninjacat }
+    spec:
+      containers:
+        - name: ninjacat
+          image: ninjacat/server:lab
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { containerPort: 8080, name: intake }
+            - { containerPort: 8081, name: internal }
+          env:
+            - name: DATABASE_URL
+              value: postgres://root:mysecretpassword@postgres:5432/local
+            - { name: CLICKHOUSE_ADDR,     value: "clickhouse:9000" }
+            - { name: CLICKHOUSE_DB,       value: ninjacat }
+            - { name: CLICKHOUSE_USER,     value: ninjacat }
+            - { name: CLICKHOUSE_PASSWORD, value: ninjacat }
+            - { name: NINJACAT_ADDR,          value: ":8080" }
+            - { name: NINJACAT_INTERNAL_ADDR, value: ":8081" }
+            - { name: DEBUG, value: "true" }
+          # /ping on the PANEL port. The intake port (8080) routes on the
+          # Host header and deliberately 404s anything it does not
+          # recognise — a kubelet probe there would flap the pod forever.
+          readinessProbe:
+            httpGet: { path: /ping, port: 8081 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests: { cpu: 100m, memory: 192Mi }
+            limits:   { memory: 512Mi }
+---
+# The name `ninjacat` is load-bearing: 30-proxy.yaml forwards agent traffic
+# to http://ninjacat:8080 and the frontend dials http://ninjacat:8081.
+# Renaming this Service breaks both.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ninjacat
+  namespace: ninjacat-lab
+spec:
+  selector: { app: ninjacat }
+  ports:
+    - { name: intake,   port: 8080, targetPort: 8080 }
+    - { name: internal, port: 8081, targetPort: 8081 }
+---
+# Panel API on a NodePort; kind maps 30081 to host port 18081, so the
+# internal endpoints can be poked from the host with curl.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ninjacat-internal
+  namespace: ninjacat-lab
+spec:
+  type: NodePort
+  selector: { app: ninjacat }
+  ports:
+    - { name: internal, port: 8081, targetPort: 8081, nodePort: 30081 }

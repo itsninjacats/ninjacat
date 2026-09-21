@@ -1,0 +1,150 @@
+# NinjaCat — development stack.
+#
+#   docker compose up            everything, with hot reload on both sides
+#   docker compose up -d db      just the databases, if you run the apps on the host
+#
+# Both application services rebuild themselves on save: the Go server through
+# Air (see server/.air.toml), the panel through Vite's dev server. Source is
+# bind-mounted, so an edit on the host is an edit in the container.
+#
+# Databases publish on 127.0.0.1 only. They have passwords, but exposing a
+# development database on 0.0.0.0 is a separate decision — drop the prefix if
+# you mean to make it.
+
+name: ninjacat
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.8.6.5
+    container_name: ninjacat-clickhouse
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8123:8123"   # HTTP / JDBC
+      - "127.0.0.1:9000:9000"   # native protocol
+    environment:
+      CLICKHOUSE_DB: ninjacat
+      CLICKHOUSE_USER: ninjacat
+      CLICKHOUSE_PASSWORD: ninjacat
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    # No docker-entrypoint-initdb.d mount: the server owns the schema and
+    # applies its embedded migrations at startup (server/schema). The
+    # entrypoint mechanism only ever fired on an empty data directory anyway.
+    # CLICKHOUSE_DB above still creates the (empty) database itself.
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "-u", "ninjacat", "--password", "ninjacat", "-q", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  postgres:
+    image: postgres:18-alpine
+    container_name: ninjacat-postgres
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5433:5432"
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: local
+    volumes:
+      # 18+ keeps data in a version-specific subdirectory and wants the
+      # parent mounted, not .../data.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # One-shot: brings the Postgres schema up to date, then exits. Everything
+  # that needs the schema waits for it to finish, so a fresh clone works
+  # without a manual step.
+  migrate:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: ninjacat-migrate
+    command: ["bun", "run", "db:migrate"]
+    environment:
+      DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile.dev
+    container_name: ninjacat-server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # agent intake — reachable from agent machines
+      - "8081:8081"   # panel API — internal
+      - "9911:9911"   # Ergo observer
+    environment:
+      DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
+      CLICKHOUSE_ADDR: clickhouse:9000
+      CLICKHOUSE_DB: ninjacat
+      CLICKHOUSE_USER: ninjacat
+      CLICKHOUSE_PASSWORD: ninjacat
+      NINJACAT_ADDR: ":8080"
+      NINJACAT_INTERNAL_ADDR: ":8081"
+      # The observer binds this address. 0.0.0.0 is what makes it reachable
+      # from the host at http://localhost:9911.
+      NINJACAT_OBSERVER_HOST: 0.0.0.0
+      NINJACAT_CAPTURE_DIR: /data/captures
+      DEBUG: "true"
+    volumes:
+      - ./server:/app
+      - ./server/captures:/data/captures
+      # Module and build caches live in volumes, not in the bind mount, so a
+      # rebuild after an edit is seconds rather than a full download.
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    depends_on:
+      clickhouse: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: ninjacat-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
+      # The panel talks to :8081, never to the agent intake on :8080.
+      NINJACAT_INTERNAL_URL: http://server:8081
+      ORIGIN: http://localhost:5173
+      BETTER_AUTH_SECRET: dev-only-secret-change-me-in-production-32ch
+    volumes:
+      - ./frontend:/app
+      # Named volumes shadow the bind mount, so the container keeps its own
+      # Linux-built node_modules even if the host has none (or has macOS ones).
+      - frontend-node-modules:/app/node_modules
+      - frontend-svelte-kit:/app/.svelte-kit
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+
+volumes:
+  clickhouse-data:
+  clickhouse-logs:
+  pgdata:
+  go-mod-cache:
+  go-build-cache:
+  frontend-node-modules:
+  frontend-svelte-kit:

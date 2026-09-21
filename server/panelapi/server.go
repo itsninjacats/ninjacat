@@ -66,7 +66,12 @@ func (a *Server) Handler() http.Handler {
 
 		internal.GET("/metrics/names", a.HandleMetricNames)
 		internal.GET("/metrics/hosts", a.HandleMetricHosts)
+		internal.GET("/metrics/tags", a.HandleMetricTagKeys)
+		internal.GET("/metrics/tag-values", a.HandleMetricTagValues)
 		internal.GET("/metrics/query", a.HandleMetricQuery)
+
+		internal.GET("/logs/search", a.HandleLogSearch)
+		internal.GET("/logs/facets", a.HandleLogFacets)
 	}
 
 	return r
@@ -157,12 +162,65 @@ func (a *Server) HandleMetricHosts(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"hosts": list.Hosts})
 }
 
-// HandleMetricQuery returns one metric over a time range, one series per host.
+// HandleMetricTagKeys lists tag keys, narrowed to one metric with ?metric=.
+func (a *Server) HandleMetricTagKeys(c *gin.Context) {
+	res, ok := a.ask(c, query.ListTagKeys{
+		TenantID: a.tenant(c),
+		Metric:   c.Query("metric"),
+	})
+	if !ok {
+		return
+	}
+	list, ok := res.(query.TagKeysList)
+	if !ok {
+		a.unexpected(c, res)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"keys": list.Keys})
+}
+
+// HandleMetricTagValues lists the values one tag key holds.
+//
+//	?key=env         required
+//	?metric=...      optional, narrows to one metric
+//	?search=pro      optional substring
+//	?limit=200       optional
+func (a *Server) HandleMetricTagValues(c *gin.Context) {
+	key := c.Query("key")
+	if key == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "key is required"})
+		return
+	}
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	res, ok := a.ask(c, query.ListTagValues{
+		TenantID: a.tenant(c),
+		Metric:   c.Query("metric"),
+		Key:      key,
+		Search:   c.Query("search"),
+		Limit:    limit,
+	})
+	if !ok {
+		return
+	}
+	list, ok := res.(query.TagValuesList)
+	if !ok {
+		a.unexpected(c, res)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"values": list.Values})
+}
+
+// HandleMetricQuery returns one metric over a time range, one series per
+// host — or, with ?by=, one series per combination of tag values.
 //
 //	?metric=ninjacat.node.goroutines   required
 //	?from=-1h | RFC3339                default -1h
 //	?to=now | RFC3339                  default now
 //	?host=a&host=b                     optional, repeatable
+//	?tag=env:prod&tag=svc:a&tag=svc:b  optional, repeatable; same key ORs,
+//	                                   different keys AND — Datadog scoping
+//	?by=env&by=service                 optional, repeatable; group by tags
+//	                                   instead of by host
 //	?step=60s                          optional, derived from the range if absent
 //	?agg=avg|min|max|sum|count         default avg
 func (a *Server) HandleMetricQuery(c *gin.Context) {
@@ -188,6 +246,12 @@ func (a *Server) HandleMetricQuery(c *gin.Context) {
 		return
 	}
 
+	tags, err := parseTagFilters(c.QueryArray("tag"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	step := resolveStep(c.Query("step"), to.Sub(from))
 
 	res, ok := a.ask(c, query.QuerySeries{
@@ -198,6 +262,8 @@ func (a *Server) HandleMetricQuery(c *gin.Context) {
 		To:          to,
 		Step:        step,
 		Aggregation: c.Query("agg"),
+		Tags:        tags,
+		GroupBy:     c.QueryArray("by"),
 	})
 	if !ok {
 		return
@@ -214,6 +280,110 @@ func (a *Server) HandleMetricQuery(c *gin.Context) {
 		"to":     to,
 		"step":   int(result.Step.Seconds()),
 		"series": result.Series,
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Logs
+// ---------------------------------------------------------------------------
+
+// HandleLogSearch returns matching log lines, newest first, plus the total
+// match count.
+//
+//	?q=connection refused    optional free-text phrase over message
+//	?service=nginx           optional exact match
+//	?host=web-1              optional exact match
+//	?status=error            optional exact match
+//	?tag=env:prod            optional, repeatable; same semantics as metrics
+//	?from=-1h | RFC3339      default -1h
+//	?to=now | RFC3339        default now
+//	?limit=200               default 200, capped at 1000
+func (a *Server) HandleLogSearch(c *gin.Context) {
+	now := time.Now().UTC()
+	from, err := parseTime(c.Query("from"), now.Add(-time.Hour), now)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bad from: " + err.Error()})
+		return
+	}
+	to, err := parseTime(c.Query("to"), now, now)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bad to: " + err.Error()})
+		return
+	}
+	if !to.After(from) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "to must be after from"})
+		return
+	}
+
+	tags, err := parseTagFilters(c.QueryArray("tag"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	limit, _ := strconv.Atoi(c.Query("limit"))
+
+	res, ok := a.ask(c, query.SearchLogs{
+		TenantID: a.tenant(c),
+		Query:    c.Query("q"),
+		Service:  c.Query("service"),
+		Host:     c.Query("host"),
+		Status:   c.Query("status"),
+		Tags:     tags,
+		From:     from,
+		To:       to,
+		Limit:    limit,
+	})
+	if !ok {
+		return
+	}
+	result, ok := res.(query.LogsResult)
+	if !ok {
+		a.unexpected(c, res)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"logs": result.Logs, "count": result.Count})
+}
+
+// HandleLogFacets returns the explorer sidebar: top services, hosts and
+// statuses by line count in the window.
+//
+//	?from=-1h | RFC3339      default -1h
+//	?to=now | RFC3339        default now
+func (a *Server) HandleLogFacets(c *gin.Context) {
+	now := time.Now().UTC()
+	from, err := parseTime(c.Query("from"), now.Add(-time.Hour), now)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bad from: " + err.Error()})
+		return
+	}
+	to, err := parseTime(c.Query("to"), now, now)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bad to: " + err.Error()})
+		return
+	}
+	if !to.After(from) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "to must be after from"})
+		return
+	}
+
+	res, ok := a.ask(c, query.ListLogFacets{
+		TenantID: a.tenant(c),
+		From:     from,
+		To:       to,
+	})
+	if !ok {
+		return
+	}
+	facets, ok := res.(query.LogFacets)
+	if !ok {
+		a.unexpected(c, res)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"services": facets.Services,
+		"hosts":    facets.Hosts,
+		"statuses": facets.Statuses,
 	})
 }
 
@@ -251,6 +421,35 @@ func (a *Server) tenant(c *gin.Context) string {
 		return t
 	}
 	return defaultTenant
+}
+
+// parseTagFilters turns repeated ?tag=key:value params into filters.
+//
+// Repeats of the SAME key merge into one filter and are OR-ed by the worker;
+// distinct keys stay separate filters and are AND-ed. That asymmetry is how
+// Datadog scopes read: "kube_service:a kube_service:b env:prod" means "(in
+// service a OR b) AND in prod". Key order is first appearance, values keep
+// their given order — the worker does not care, but stable output makes the
+// tests honest.
+//
+// The value may itself contain colons (an image tag, a URL); only the first
+// colon splits.
+func parseTagFilters(raw []string) ([]query.TagFilter, error) {
+	var filters []query.TagFilter
+	index := map[string]int{}
+	for _, t := range raw {
+		key, value, ok := strings.Cut(t, ":")
+		if !ok || key == "" || value == "" {
+			return nil, fmt.Errorf("bad tag %q: want key:value", t)
+		}
+		if i, seen := index[key]; seen {
+			filters[i].Values = append(filters[i].Values, value)
+			continue
+		}
+		index[key] = len(filters)
+		filters = append(filters, query.TagFilter{Key: key, Values: []string{value}})
+	}
+	return filters, nil
 }
 
 // parseTime accepts RFC3339, "now", or a relative offset such as "-24h".

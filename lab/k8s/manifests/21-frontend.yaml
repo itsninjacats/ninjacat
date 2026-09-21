@@ -1,0 +1,57 @@
+# Panel — the SvelteKit frontend, served by `node build`.
+#
+# Like the server image, ninjacat/frontend:lab is built on the host and
+# side-loaded into kind; IfNotPresent keeps the kubelet from pulling.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: ninjacat-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: frontend }
+  template:
+    metadata:
+      labels: { app: frontend }
+    spec:
+      containers:
+        - name: frontend
+          image: ninjacat/frontend:lab
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { containerPort: 3000, name: http }
+          env:
+            - name: DATABASE_URL
+              value: postgres://root:mysecretpassword@postgres:5432/local
+            # Panel API port (8081), never the agent intake (8080).
+            - { name: NINJACAT_INTERNAL_URL, value: "http://ninjacat:8081" }
+            # What the BROWSER sees: NodePort 30000 is mapped by kind to
+            # host port 8888. SvelteKit rejects form actions whose Origin
+            # does not match this, so it must be the host-side address.
+            - { name: ORIGIN, value: "http://localhost:8888" }
+            # Created by up.sh, so the secret never lands in git.
+            - name: BETTER_AUTH_SECRET
+              valueFrom:
+                secretKeyRef: { name: ninjacat-lab-frontend, key: betterAuthSecret }
+          readinessProbe:
+            httpGet: { path: /, port: 3000 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits:   { memory: 384Mi }
+---
+# Reachable from the host browser at http://localhost:8888 (kind maps
+# 30000 there — which is also why ORIGIN above says 8888).
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: ninjacat-lab
+spec:
+  type: NodePort
+  selector: { app: frontend }
+  ports:
+    - { name: http, port: 3000, targetPort: 3000, nodePort: 30000 }

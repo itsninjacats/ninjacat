@@ -1,0 +1,27 @@
+NinjaCat is deployed.
+
+Panel:
+  {{ include "ninjacat.origin" . }}
+
+Agents — point them at this site and nothing else:
+  DD_SITE={{ .Values.domainRoot }}
+
+DNS: {{ .Values.domainRoot }} and every intake host below must resolve to the
+Ingress controller. A single wildcard record (*.{{ .Values.domainRoot }}) covers
+them all, including the two-label ones — DNS wildcards match any depth, only
+TLS wildcards do not.
+{{- if .Values.ingress.enabled }}
+
+Intake hosts:
+{{- range (include "ninjacat.intakeHosts" . | trim | splitList "\n") }}
+  {{ . }}
+{{- end }}
+{{- end }}
+
+Quick check from inside the cluster:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ninjacat.fullname" . }}-server {{ .Values.server.intakeService.port }}
+  curl -H 'Host: api.{{ .Values.domainRoot }}' localhost:{{ .Values.server.intakeService.port }}/ping
+
+ClickHouse schema: the server applies its embedded migrations at startup, so a
+fresh database needs no manual step. With more than one server replica, set
+NINJACAT_AUTO_MIGRATE=false and run `ninjacat migrate` as a pre-upgrade Job.

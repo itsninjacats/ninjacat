@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { fetchMetricHosts, fetchMetricSeries, NinjacatError } from '$lib/server/ninjacat';
+import { fetchMetricSeries, NinjacatError } from '$lib/server/ninjacat';
 import type { RequestHandler } from './$types';
 
 // Proxy between the browser and the Go panel API.
@@ -17,27 +17,25 @@ import type { RequestHandler } from './$types';
 // the data the guard above it exists to protect.
 export const GET: RequestHandler = async ({ url, locals }) => {
 	if (!locals.user) {
-		return json({ error: 'nieautoryzowany' }, { status: 401 });
+		return json({ error: 'unauthorized' }, { status: 401 });
 	}
 
 	const metric = url.searchParams.get('metric');
 	if (!metric) {
-		return json({ error: 'brak nazwy metryki' }, { status: 400 });
+		return json({ error: 'missing metric name' }, { status: 400 });
 	}
 
 	try {
-		const [series, hosts] = await Promise.all([
-			fetchMetricSeries({
-				metric,
-				from: url.searchParams.get('from') ?? '-1h',
-				agg: url.searchParams.get('agg') ?? 'avg',
-				hosts: url.searchParams.getAll('host')
-			}),
-			fetchMetricHosts(metric)
-		]);
-		return json({ ...series, hosts });
+		const series = await fetchMetricSeries({
+			metric,
+			from: url.searchParams.get('from') ?? '-1h',
+			agg: url.searchParams.get('agg') ?? 'avg',
+			tags: url.searchParams.getAll('tag'),
+			by: url.searchParams.getAll('by')
+		});
+		return json(series);
 	} catch (e) {
-		const message = e instanceof NinjacatError ? e.message : 'nieznany błąd';
+		const message = e instanceof NinjacatError ? e.message : 'unknown error';
 		return json({ error: message }, { status: 502 });
 	}
 };

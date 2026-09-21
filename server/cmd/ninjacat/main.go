@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
+	"time"
 
 	"ergo.services/application/observer"
 	"ergo.services/ergo"
@@ -14,6 +16,7 @@ import (
 	"github.com/itsninjacats/server/apps/storage"
 	"github.com/itsninjacats/server/intake"
 	"github.com/itsninjacats/server/panelapi"
+	"github.com/itsninjacats/server/schema"
 )
 
 func envOr(name, fallback string) string {
@@ -23,7 +26,38 @@ func envOr(name, fallback string) string {
 	return fallback
 }
 
+// runMigrate is the second entrypoint of the binary: apply the ClickHouse
+// migrations, then exit. It exists for the deployment where auto-migration
+// on startup is wrong — replicas > 1, where NINJACAT_AUTO_MIGRATE=false and
+// a pre-upgrade Job runs this instead, exactly like the frontend image's
+// `node migrate.js` (see frontend/Dockerfile and
+// lab/k8s/manifests/22-migrate-job.yaml).
+func runMigrate() {
+	conn, err := storage.Connect()
+	if err != nil {
+		log.Fatalf("migrate: %s", err)
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	applied, err := schema.Apply(ctx, conn)
+	if err != nil {
+		log.Fatalf("migrate: %s", err)
+	}
+	log.Printf("migrate: schema up to date (%d applied)", applied)
+}
+
 func main() {
+	// Deliberately primitive dispatch: one subcommand, read straight from
+	// os.Args. A flag library earns its keep when there are flags; there are
+	// none.
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		runMigrate()
+		return
+	}
+
 	// The key store is built BEFORE the node, so the HTTP middleware and the
 	// actor hold the same pointer. The actor writes to it, the middleware
 	// reads from it, without locking — see apps/apikeys/store.go.

@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"ergo.services/ergo/gen"
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/itsninjacats/server/schema"
 )
 
 const (
@@ -31,6 +33,13 @@ const (
 	HostsWriter     = gen.Atom("storage_hosts")
 	ProcessesWriter = gen.Atom("storage_processes")
 	EventsWriter    = gen.Atom("storage_events")
+
+	K8sResourcesWriter    = gen.Atom("storage_k8s_resources")
+	K8sManifestsWriter    = gen.Atom("storage_k8s_manifests")
+	K8sClusterWriter      = gen.Atom("storage_k8s_cluster")
+	K8sActionsWriter      = gen.Atom("storage_k8s_actions")
+	ContainerEventsWriter = gen.Atom("storage_container_events")
+	ContainerImagesWriter = gen.Atom("storage_container_images")
 )
 
 // writers describes every table we write to. Thresholds differ by expected
@@ -91,6 +100,88 @@ var writers = []struct {
 		// One row per host every ~20s. ReplacingMergeTree collapses duplicates.
 		MaxRows: 100, FlushInterval: 10 * time.Second,
 	}},
+	{K8sResourcesWriter, WriterConfig{
+		Name: "k8s_resources",
+		Insert: `INSERT INTO k8s_resources
+			(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,
+			 uid, resource_version, owner_kind, owner_name, node_name, phase, status,
+			 ready, desired, available, counts, labels, annotations, tags,
+			 agent_version, group_id, group_size)`,
+		// The cluster agent sends whole collection passes at once: thousands of
+		// objects in a burst every ~10s, then silence. MaxRows keeps a burst
+		// from becoming one giant insert, the buffer holds a few full passes
+		// while ClickHouse hiccups, and a second in-flight flush lets the next
+		// pass start draining before the previous insert lands. Rows carry
+		// label and annotation maps, so 50k of them is real memory — hence an
+		// explicit ceiling instead of the 200k default.
+		MaxRows: 2000, FlushInterval: 5 * time.Second,
+		BufferLimit: 50_000, MaxInFlight: 2,
+	}},
+	{K8sManifestsWriter, WriterConfig{
+		Name: "k8s_manifests",
+		Insert: `INSERT INTO k8s_manifests
+			(tenant_id, collected_at, cluster_id, cluster_name, uid, kind, api_version,
+			 resource_version, content, content_type, is_terminated)`,
+		// Every row is a whole YAML document, so these row counts stand for
+		// megabytes: 200 rows can be 2 MB of insert and 5000 buffered can be
+		// tens of MB. The tight ceilings bound memory, and a single in-flight
+		// flush is plenty for what is bulk, not urgency.
+		MaxRows: 200, FlushInterval: 10 * time.Second,
+		BufferLimit: 5_000, MaxInFlight: 1,
+	}},
+	{K8sClusterWriter, WriterConfig{
+		Name: "k8s_cluster",
+		Insert: `INSERT INTO k8s_cluster
+			(tenant_id, collected_at, cluster_id, cluster_name, node_count,
+			 pod_capacity, pod_allocatable, cpu_capacity, cpu_allocatable,
+			 memory_capacity, memory_allocatable, kubelet_versions, apiserver_versions)`,
+		// One row per cluster per pass — the quietest table here. The timer
+		// does all the flushing; the thresholds only exist so a stall cannot
+		// grow the buffer unbounded.
+		MaxRows: 50, FlushInterval: 15 * time.Second,
+		BufferLimit: 1_000, MaxInFlight: 1,
+	}},
+	{K8sActionsWriter, WriterConfig{
+		Name: "k8s_actions",
+		Insert: `INSERT INTO k8s_actions
+			(tenant_id, timestamp, action_id, org_id, event_type, status, action_type,
+			 cluster_id, cluster_name, resource_id, resource_kind, resource_name,
+			 resource_namespace, requested_by, message, extra_keys)`,
+		// Human scale, like the events table: an operator triggers an action
+		// and expects to see its result — a 10s timer is about as long as
+		// that wait should get. Small everything, one flush at a time.
+		MaxRows: 200, FlushInterval: 10 * time.Second,
+		BufferLimit: 10_000, MaxInFlight: 1,
+	}},
+	{ContainerEventsWriter, WriterConfig{
+		Name: "container_events",
+		Insert: `INSERT INTO container_events
+			(tenant_id, timestamp, host, cluster_id, object_kind, event_type,
+			 container_id, container_name, pod_uid, task_arn, source,
+			 exit_code, created_at, exited_at, owner_type, owner_uid,
+			 old_state, new_state, transition_at)`,
+		// Every node agent reports every restart and OOM in the fleet, and a
+		// bad rollout turns that into a storm — the second in-flight flush is
+		// for exactly that day. This is also the table that must not drop
+		// rows lightly (each one is a crash somebody will look for), so the
+		// buffer is the deepest of the new set.
+		MaxRows: 1000, FlushInterval: 5 * time.Second,
+		BufferLimit: 50_000, MaxInFlight: 2,
+	}},
+	{ContainerImagesWriter, WriterConfig{
+		Name: "container_images",
+		Insert: `INSERT INTO container_images
+			(tenant_id, collected_at, host, image_key, identity_source,
+			 image_id, digest, name, short_name,
+			 registry, repo_tags, repo_digests, size_bytes, os_name, os_version,
+			 architecture, layer_count, layer_bytes, built_at, published_at, dd_tags)`,
+		// Periodic full inventories: every node re-announces every image it
+		// holds, so arrivals are bursty and repetitive. ReplacingMergeTree
+		// absorbs the repetition; here we just batch the bursts, with a second
+		// flush in flight for when many nodes report at once.
+		MaxRows: 500, FlushInterval: 10 * time.Second,
+		BufferLimit: 20_000, MaxInFlight: 2,
+	}},
 }
 
 // App owns writing to ClickHouse.
@@ -102,7 +193,14 @@ var writers = []struct {
 //	        ├── storage_checks
 //	        ├── storage_logs
 //	        ├── storage_processes
-//	        └── storage_hosts
+//	        ├── storage_events
+//	        ├── storage_hosts
+//	        ├── storage_k8s_resources
+//	        ├── storage_k8s_manifests
+//	        ├── storage_k8s_cluster
+//	        ├── storage_k8s_actions
+//	        ├── storage_container_events
+//	        └── storage_container_images
 //
 // one_for_one matters here: a writer that dies is restarted alone, and the
 // other tables keep accepting data.
@@ -138,15 +236,10 @@ func (a *App) Tune(spec gen.ApplicationSpec, args ...any) (gen.ApplicationSpec, 
 	return spec, nil
 }
 
-// Init opens the ClickHouse connection once for the whole application.
-//
-// The driver pools connections internally and is safe for concurrent use, so
-// all writers share it. Opening one per writer would multiply connections for
-// no benefit.
-//
-// Failing here aborts application start, which is what we want: without a
-// database there is nothing to write to.
-func (a *App) Init(ref gen.Ref, mode gen.ApplicationMode) error {
+// Connect opens a ClickHouse connection from the CLICKHOUSE_* environment
+// and verifies it with a Ping. Shared between the application's Init and the
+// `ninjacat migrate` subcommand, so both dial exactly the same way.
+func Connect() (driver.Conn, error) {
 	addr := envOr("CLICKHOUSE_ADDR", "localhost:9000")
 
 	conn, err := clickhouse.Open(&clickhouse.Options{
@@ -161,14 +254,56 @@ func (a *App) Init(ref gen.Ref, mode gen.ApplicationMode) error {
 		DialTimeout: 5 * time.Second,
 	})
 	if err != nil {
-		return fmt.Errorf("storage: connect: %w", err)
+		return nil, fmt.Errorf("storage: connect: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := conn.Ping(ctx); err != nil {
 		conn.Close()
-		return fmt.Errorf("storage: clickhouse unreachable at %s: %w", addr, err)
+		return nil, fmt.Errorf("storage: clickhouse unreachable at %s: %w", addr, err)
+	}
+	return conn, nil
+}
+
+// Init opens the ClickHouse connection once for the whole application and
+// brings the schema up to date.
+//
+// The driver pools connections internally and is safe for concurrent use, so
+// all writers share it. Opening one per writer would multiply connections for
+// no benefit.
+//
+// Failing here aborts application start, which is what we want: without a
+// database there is nothing to write to, and without the schema every insert
+// would fail anyway.
+func (a *App) Init(ref gen.Ref, mode gen.ApplicationMode) error {
+	conn, err := Connect()
+	if err != nil {
+		return err
+	}
+
+	// Migrate on startup unless explicitly disabled.
+	//
+	// HAZARD, stated honestly: with more than one server replica, every
+	// replica races to apply migrations at boot — there is no lock. Today
+	// that is harmless: we run a single instance, and every statement is
+	// CREATE ... IF NOT EXISTS, so the losers of the race no-op. Under
+	// Kubernetes with replicas > 1 it stops being fine: set
+	// NINJACAT_AUTO_MIGRATE=false in the deployment and run
+	// `ninjacat migrate` as a pre-upgrade Job instead — the same shape the
+	// frontend already uses for Postgres (lab/k8s/manifests/22-migrate-job.yaml,
+	// `node migrate.js` from the serving image).
+	if envOr("NINJACAT_AUTO_MIGRATE", "true") != "false" {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		n, err := schema.Apply(ctx, conn)
+		if err != nil {
+			conn.Close()
+			return fmt.Errorf("storage: %w", err)
+		}
+		if n > 0 {
+			log.Printf("storage: applied %d schema migration(s)", n)
+		}
 	}
 
 	a.conn = conn

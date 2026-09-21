@@ -1,0 +1,9 @@
+apiVersion: v2
+name: ninjacat
+description: >-
+  NinjaCat — a drop-in Datadog replacement. Deploys the Go server (agent intake
+  + internal panel API) and the SvelteKit panel. Postgres and ClickHouse are
+  expected to exist already.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

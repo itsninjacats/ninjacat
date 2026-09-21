@@ -1,0 +1,25 @@
+# Development image: rebuilds and restarts the server on every save.
+#
+# Air (github.com/air-verse/air) watches the bind-mounted source, runs
+# `go build` and swaps the process. Configuration lives in .air.toml.
+#
+# This image is NOT for production — it carries the full Go toolchain.
+# See Dockerfile for the shipping one.
+FROM golang:1.26
+
+# gcc is already in this image, which matters: CGO_ENABLED=1 is required
+# because agent-payload/process decompresses legacy zstd frames through
+# DataDog/zstd_0, which is a cgo binding.
+RUN go install github.com/air-verse/air@latest
+
+WORKDIR /app
+
+# Warm the module cache at image build time so the first `up` does not spend
+# minutes downloading. The bind mount replaces /app afterwards, but the
+# modules stay in /go/pkg/mod, which is a volume.
+COPY go.mod go.sum ./
+RUN go mod download
+
+EXPOSE 8080 8081 9911
+
+CMD ["air", "-c", ".air.toml"]
