@@ -1,0 +1,14 @@
+# Przechwycone payloady agenta - lokalny material do analizy protokolu.
+captures/
+
+# Skompilowane binarki. Nazwa modulu to "ninjacat", wiec "go build" bez -o
+# zostawia je w korzeniu albo obok main.go.
+/ninjacat
+cmd/*/[a-z]*
+!cmd/*/*.go
+*.exe
+
+# Pokrycie i profile
+*.out
+*.test
+*.prof
