@@ -1,0 +1,82 @@
+# MyNode
+
+Built with [Ergo Framework](https://ergo.services), actor model and network transparency for Go.
+
+## Quick start
+
+```
+go run ./cmd
+```
+
+## Supervision tree
+
+```
+node: MyNode
+  └─ [app] MyNodeApp  (transient)
+    └─ [sup] MyNodeSup (one_for_one)
+      └─ [actor] MyNodeActor
+  └─ [app] observer  (external)
+```
+
+## File layout
+
+`*_gen.go` files are regenerated on every `ergo generate` or `ergo add`. Do not edit them.
+Edit only the plain `.go` counterpart.
+
+```
+cmd/
+  main_gen.go     node startup, application list        [generated]
+  main.go         extraApps() hook for custom apps
+apps/mynodeapp/
+  mynodeapp_gen.go  CreateApp, Load with Group   [generated]
+  mynodeapp.go      Tune, Start, Terminate
+```
+
+## Adding components
+
+```bash
+# actor inside a supervisor
+ergo add actor <SupervisorName>:MyActor
+
+# pool actor inside a supervisor
+ergo add actor --pool <SupervisorName>:MyPool
+
+# supervisor inside an app or another supervisor
+ergo add supervisor <ParentName>:MySup --type one_for_one --strategy transient
+
+# new application
+ergo add app MyApp --mode transient
+
+# network message type (EDF serialization)
+# field types: string, int, []byte, gen.Alias, gen.PID, ...
+ergo add message MyMessage --field ID:gen.Alias --field Data:string
+```
+
+## Key concepts
+
+**Actor** is an isolated process that handles async messages (`HandleMessage`)
+and sync calls (`HandleCall`). A crash in one actor does not affect others.
+[docs](https://docs.ergo.services/basics/actors)
+
+**Supervisor** monitors children and restarts them on failure.
+Strategies: `one_for_one`, `all_for_one`, `rest_for_one`.
+Restart policies: `transient`, `permanent`, `temporary`.
+[docs](https://docs.ergo.services/basics/supervisors)
+
+**Application** is a named group of supervised processes with lifecycle
+callbacks `Load`, `Start`, `Terminate`. Customize spec in `Tune`.
+[docs](https://docs.ergo.services/basics/applications)
+
+**Pool** distributes messages across a fixed set of worker processes.
+Workers are restarted automatically.
+[docs](https://docs.ergo.services/basics/pool)
+
+**EDF messages** provide typed network serialization. Never reorder or remove
+registered types. Doing so breaks wire compatibility with running nodes.
+[docs](https://docs.ergo.services/networking/edf)
+
+## Updating after editing ergo.yaml
+
+```
+ergo generate
+```

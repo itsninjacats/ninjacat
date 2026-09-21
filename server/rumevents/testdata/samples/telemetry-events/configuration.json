@@ -1,0 +1,82 @@
+{
+  "_dd": {
+    "format_version": 2
+  },
+  "type": "telemetry",
+  "date": 1591284175342,
+  "service": "sample-sdk",
+  "source": "browser",
+  "version": "1.2.3",
+  "application": {
+    "id": "ac8218cf-498b-4d33-bd44-151095959547"
+  },
+  "session": {
+    "id": "cacbf45c-3a05-48ce-b066-d76349460599"
+  },
+  "view": {
+    "id": "623d50fd-75cf-4025-97d2-e51ff94171f6"
+  },
+  "action": {
+    "id": "ae3a5d82-cdd1-468d-9bc9-3aa9e54d953c"
+  },
+  "experimental_features": ["foo"],
+  "telemetry": {
+    "type": "configuration",
+    "configuration": {
+      "session_sample_rate": 100,
+      "telemetry_sample_rate": 100,
+      "telemetry_configuration_sample_rate": 5,
+      "trace_sample_rate": 100,
+      "trace_context_injection": "all",
+      "session_replay_sample_rate": 100,
+      "start_session_replay_recording_manually": true,
+      "start_recording_immediately": true,
+      "premium_sample_rate": 100,
+      "replay_sample_rate": 100,
+      "use_proxy": true,
+      "use_before_send": true,
+      "silent_multiple_init": false,
+      "track_session_across_subdomains": true,
+      "track_resources": true,
+      "track_resource_headers": "default_headers",
+      "track_long_task": true,
+      "track_bfcache_views": true,
+      "use_cross_site_session_cookie": false,
+      "use_secure_session_cookie": true,
+      "session_persistence": "cookie",
+      "action_name_attribute": "foo",
+      "use_allowed_tracing_origins": false,
+      "use_allowed_graph_ql_urls": false,
+      "use_track_graph_ql_payload": false,
+      "use_track_graph_ql_response_errors": true,
+      "default_privacy_level": "mask",
+      "text_and_input_privacy_level": "mask_all",
+      "image_privacy_level": "mask_all",
+      "touch_privacy_level": "hide",
+      "enable_privacy_for_action_name": false,
+      "use_excluded_activity_urls": false,
+      "use_allowed_tracking_origins": false,
+      "track_frustrations": true,
+      "track_views_manually": true,
+      "track_interactions": true,
+      "track_user_interactions": true,
+      "forward_console_logs": ["log", "debug"],
+      "forward_errors_to_logs": false,
+      "forward_reports": "all",
+      "view_tracking_strategy": "ActivityViewTrackingStrategy",
+      "swiftui_view_tracking_enabled": true,
+      "swiftui_action_tracking_enabled": true,
+      "track_background_events": true,
+      "mobile_vitals_update_period": 10,
+      "track_native_crashes": true,
+      "plugins": [
+        {
+          "name": "foo",
+          "option_foo": "bar"
+        }
+      ],
+      "track_feature_flags_for_events": ["long_task", "resource", "vital"],
+      "remote_configuration_id": "ae3a5d82-cdd1-468d-9bc9-3aa9e54d953c"
+    }
+  }
+}

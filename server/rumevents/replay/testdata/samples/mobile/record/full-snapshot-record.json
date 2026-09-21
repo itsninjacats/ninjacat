@@ -1,0 +1,83 @@
+{
+  "timestamp": 1657618587157,
+  "type": 10,
+  "data": {
+    "wireframes": [
+      {
+        "id": 1,
+        "x": 10,
+        "y": 10,
+        "width": 20,
+        "height": 30,
+        "type": "text",
+        "text": "Test",
+        "textStyle": {
+          "family": "Arial",
+          "size": 20,
+          "type": "sans-serif",
+          "color": "#FF000000"
+        }
+      },
+      {
+        "id": 2,
+        "x": 10,
+        "y": 10,
+        "width": 20,
+        "height": 30,
+        "type": "image",
+        "base64": "base64Mock",
+        "resourceId": "resourceIdMock",
+        "mimeType": "image/jpeg"
+      },
+      {
+        "id": 3,
+        "x": 10,
+        "y": 10,
+        "width": 20,
+        "height": 30,
+        "type": "image"
+      },
+      {
+        "id": 4,
+        "x": 10,
+        "y": 10,
+        "width": 20,
+        "height": 30,
+        "type": "image",
+        "isEmpty": true
+      },
+      {
+        "id": 5,
+        "x": 20,
+        "y": 30,
+        "width": 100,
+        "height": 50,
+        "type": "shape",
+        "shapeStyle": {
+          "backgroundGradient": {
+            "type": "linear",
+            "stops": [
+              {
+                "color": "#FF0000FF",
+                "position": 0
+              },
+              {
+                "color": "#0000FFFF",
+                "position": 1
+              }
+            ],
+            "startPoint": {
+              "x": 0,
+              "y": 0.5
+            },
+            "endPoint": {
+              "x": 1,
+              "y": 0.5
+            }
+          },
+          "cornerRadius": 8
+        }
+      }
+    ]
+  }
+}

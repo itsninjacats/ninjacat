@@ -1,0 +1,65 @@
+# Stend do przechwytywania Datadog Agenta.
+#
+# Siec 'lab' ma internal: true - kontenery w niej NIE MAJA TRASY NA ZEWNATRZ.
+# To jedyna gwarancja, ze nic nie poleci do Datadoga: nie zalezy od flag
+# konfiguracyjnych agenta ani od tego, co dorzuca kolejna jego wersja.
+# Sprawdzone: DNS sie nie rozwiazuje, TCP odciete, curl zwraca 000.
+#
+# Uruchomienie:  docker compose up --build
+# Zrzuty ladują w ./captures na hoscie.
+
+services:
+  ninjacat:
+    build: .
+    container_name: ninjacat
+    environment:
+      DEBUG: "true"                        # wlacza RequestLogger i zrzuty na dysk
+      NINJACAT_CAPTURE_DIR: /data/captures
+      # NINJACAT_PRINT_ALL: "true"         # bez limitu 5 pozycji na paczke
+      # NINJACAT_ACK_UNKNOWN: "true"       # 202 zamiast 404 na nieznanych sciezkach
+    volumes:
+      - ./captures:/data/captures
+    networks: [lab]
+
+  agent:
+    image: datadog/agent:7
+    container_name: dd-agent
+    depends_on: [ninjacat]
+    networks: [lab]
+    environment:
+      DD_API_KEY: "00000000000000000000000000000000"   # nieprawdziwy i nikt go nie sprawdzi
+      DD_HOSTNAME: ninjacat-lab
+      DD_LOG_LEVEL: info
+
+      # Przekierowanie tego, co ma wlasny URL.
+      DD_DD_URL: http://ninjacat:8080
+      DD_PROCESS_CONFIG_PROCESS_DD_URL: http://ninjacat:8080
+      DD_APM_DD_URL: http://ninjacat:8080
+      DD_LOGS_CONFIG_LOGS_DD_URL: ninjacat:8080
+      DD_LOGS_CONFIG_USE_HTTP: "true"
+      DD_LOGS_CONFIG_LOGS_NO_SSL: "true"
+      DD_SKIP_SSL_VALIDATION: "true"
+
+      # Wyciszenie tego, czego przekierowac sie nie da. To juz tylko
+      # ograniczanie szumu w logach - siec i tak niczego nie przepusci.
+      DD_REMOTE_CONFIGURATION_ENABLED: "false"
+      DD_INVENTORIES_ENABLED: "false"
+      DD_TELEMETRY_ENABLED: "false"
+      DD_CONTAINER_LIFECYCLE_ENABLED: "false"
+      DD_CONTAINER_IMAGE_ENABLED: "false"
+      DD_SBOM_ENABLED: "false"
+      DD_ORCHESTRATOR_EXPLORER_ENABLED: "false"
+      DD_COMPLIANCE_CONFIG_ENABLED: "false"
+      DD_RUNTIME_SECURITY_CONFIG_ENABLED: "false"
+      DD_DISCOVERY_ENABLED: "false"
+      DD_NETWORK_PATH_ENABLED: "false"
+      DD_SYSTEM_PROBE_CONFIG_ENABLED: "false"
+
+      # Wlaczone celowo - to chcemy ogladac.
+      DD_APM_ENABLED: "true"
+      DD_APM_NON_LOCAL_TRAFFIC: "true"
+      DD_DOGSTATSD_NON_LOCAL_TRAFFIC: "true"
+
+networks:
+  lab:
+    internal: true
