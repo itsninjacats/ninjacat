@@ -1,0 +1,58 @@
+# Postgres — panel accounts, sessions and API keys.
+#
+# Credentials match compose.yaml exactly (root / mysecretpassword / local):
+# this is a throwaway lab, and identical values make the two stacks trivially
+# comparable when debugging.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: ninjacat-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels: { app: postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:18-alpine
+          ports:
+            - { containerPort: 5432, name: pg }
+          env:
+            - { name: POSTGRES_USER,     value: root }
+            - { name: POSTGRES_PASSWORD, value: mysecretpassword }
+            - { name: POSTGRES_DB,       value: local }
+          volumeMounts:
+            # CRITICAL: postgres 18+ keeps data in a version-specific
+            # subdirectory (/var/lib/postgresql/18/...) and expects the
+            # PARENT mounted. Mounting /var/lib/postgresql/data — the path
+            # every pre-18 example uses — makes the container refuse to
+            # start. This has already cost a debugging session; do not
+            # "fix" it back.
+            - { name: data, mountPath: /var/lib/postgresql }
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "root", "-d", "local"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 10
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits:   { memory: 384Mi }
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: ninjacat-lab
+spec:
+  selector: { app: postgres }
+  ports:
+    - { name: pg, port: 5432, targetPort: 5432 }

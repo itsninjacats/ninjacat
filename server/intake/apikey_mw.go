@@ -30,8 +30,30 @@ func RequireAPIKey(store *apikeys.Store) gin.HandlerFunc {
 			return
 		}
 
-		// The agent sends the key in a header, never in the query string.
+		// The header is how the agent authenticates almost everything.
 		key := c.GetHeader("Dd-Api-Key")
+		if key == "" {
+			// ...but not everything. GET /api/v1/validate, which the agent
+			// calls at startup and then periodically, passes the key as a
+			// QUERY PARAMETER instead:
+			//
+			//   GET /api/v1/validate?api_key=<key>
+			//
+			// Rejecting that costs far more than a 403 on one endpoint: the
+			// forwarder cannot validate its key, marks ITSELF unhealthy, and
+			// the agent's /ready probe starts returning 500 — so Kubernetes
+			// takes the pod out of service even though metrics, logs and
+			// orchestrator payloads are all still flowing perfectly.
+			//
+			// Observed exactly that way in the k8s lab: 485 requests answered
+			// 202, and the only failures in the whole capture were eight 403s
+			// on /api/v1/validate.
+			//
+			// Checked second, not first, so the hot path stays a single
+			// header read — query parsing only happens on the rare request
+			// that has no header at all.
+			key = c.Query("api_key")
+		}
 
 		info, ok := store.Lookup(key)
 		if !ok {

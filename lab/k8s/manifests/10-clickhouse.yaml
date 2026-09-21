@@ -1,0 +1,84 @@
+# ClickHouse — the telemetry store.
+#
+# Same image, credentials and healthcheck as compose.yaml, so behaviour in
+# the lab is directly comparable with the dev stack.
+#
+# The schema is NOT applied here. The server carries its migrations embedded
+# (server/schema) and applies them at startup, so this pod only needs the
+# empty database that CLICKHOUSE_DB creates. The old docker-entrypoint-initdb.d
+# ConfigMap is gone with it — that mechanism only fired on an empty data
+# directory and had become redundant.
+#
+# Data lives on an emptyDir on purpose. The lab is disposable; keeping state
+# would only make "delete the cluster and start clean" less true.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clickhouse
+  namespace: ninjacat-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: clickhouse }
+  template:
+    metadata:
+      labels: { app: clickhouse }
+    spec:
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:26.8.6.5
+          ports:
+            - { containerPort: 9000, name: native }
+            - { containerPort: 8123, name: http }
+          env:
+            - { name: CLICKHOUSE_DB,       value: ninjacat }
+            - { name: CLICKHOUSE_USER,     value: ninjacat }
+            - { name: CLICKHOUSE_PASSWORD, value: ninjacat }
+            # Lets the bootstrap user manage users/grants, matching the dev
+            # stack; without it some entrypoint SQL is refused.
+            - { name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT, value: "1" }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/clickhouse }
+          # Same probe as the compose healthcheck: the server answers HTTP
+          # before it finishes loading, so only a real authenticated query
+          # proves it is ready for the agent's inserts.
+          readinessProbe:
+            exec:
+              command: ["clickhouse-client", "-u", "ninjacat", "--password", "ninjacat", "-q", "SELECT 1"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 10
+          resources:
+            requests: { cpu: 100m, memory: 512Mi }
+            # ClickHouse grabs memory eagerly; 1.5Gi is the ceiling that
+            # still leaves room for the rest of the stack on a ~5 GB host.
+            limits:   { memory: 1536Mi }
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+# In-cluster name the server and the Datadog agent both dial.
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+  namespace: ninjacat-lab
+spec:
+  selector: { app: clickhouse }
+  ports:
+    - { name: native, port: 9000, targetPort: 9000 }
+    - { name: http,   port: 8123, targetPort: 8123 }
+---
+# HTTP interface pinned to a NodePort; kind maps 30123 to host port 18123,
+# so `curl localhost:18123` on the host queries the lab directly.
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse-http
+  namespace: ninjacat-lab
+spec:
+  type: NodePort
+  selector: { app: clickhouse }
+  ports:
+    - { name: http, port: 8123, targetPort: 8123, nodePort: 30123 }

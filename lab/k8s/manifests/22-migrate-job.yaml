@@ -1,0 +1,38 @@
+# Drizzle migrations — one-shot, before anything is useful.
+#
+# A Job rather than an init container on purpose: the Go server refuses to
+# start without the api_key table, and the frontend needs the auth tables.
+# An init container would re-run the migrator once per pod REPLICA on every
+# restart of either deployment; a Job runs it once per INSTALL, which is
+# what a schema migration actually is. This mirrors the `migrate` service
+# in compose.yaml.
+#
+# The frontend image carries a second entrypoint for exactly this:
+# `node migrate.js` applies the migrations and exits (see
+# frontend/Dockerfile).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  namespace: ninjacat-lab
+spec:
+  backoffLimit: 3
+  # Cleans itself up shortly after finishing, so a re-apply of the manifests
+  # does not trip over an old completed Job.
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels: { app: db-migrate }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: ninjacat/frontend:lab
+          imagePullPolicy: IfNotPresent
+          command: ["node", "migrate.js"]
+          env:
+            - name: DATABASE_URL
+              value: postgres://root:mysecretpassword@postgres:5432/local
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits:   { memory: 256Mi }

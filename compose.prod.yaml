@@ -1,0 +1,112 @@
+# NinjaCat — production-shaped stack.
+#
+#   docker compose -f compose.prod.yaml up -d --build
+#
+# Differences from compose.yaml that matter: images are built rather than
+# bind-mounted, no toolchain ships in either runtime image, nothing reloads,
+# and every secret comes from the environment instead of a literal.
+#
+# Copy .env.example to .env and fill it in before starting.
+
+name: ninjacat-prod
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.8.6.5
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ninjacat}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-ninjacat}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD}
+    # No docker-entrypoint-initdb.d mount: the server applies its embedded
+    # ClickHouse migrations at startup (server/schema). CLICKHOUSE_DB still
+    # creates the (empty) database itself.
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client -u $${CLICKHOUSE_USER} --password $${CLICKHOUSE_PASSWORD} -q 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ninjacat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-ninjacat}
+    volumes:
+      # 18+ keeps data in a version-specific subdirectory and wants the
+      # parent mounted, not .../data.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: applies the Drizzle migrations, then exits. The server refuses
+  # to start without the api_key table, so everything waits for this.
+  #
+  # Same image as the panel, different entrypoint. Under Kubernetes this is
+  # the pre-upgrade hook Job; here it is a service that runs to completion.
+  migrate:
+    image: ninjacat/frontend:local
+    build:
+      context: ./frontend
+    command: ["node", "migrate.js"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-ninjacat}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ninjacat}
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  server:
+    build:
+      context: ./server
+    restart: unless-stopped
+    ports:
+      # The intake must be reachable by the agents. The panel API on 8081 is
+      # deliberately NOT published — only the frontend container needs it,
+      # and it reaches it over the compose network.
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-ninjacat}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ninjacat}
+      CLICKHOUSE_ADDR: clickhouse:9000
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ninjacat}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-ninjacat}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      NINJACAT_ADDR: ":8080"
+      NINJACAT_INTERNAL_ADDR: ":8081"
+    depends_on:
+      clickhouse: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+
+  frontend:
+    image: ninjacat/frontend:local
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-ninjacat}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ninjacat}
+      NINJACAT_INTERNAL_URL: http://server:8081
+      # Must be the URL users actually reach, or form actions and auth break.
+      ORIGIN: ${ORIGIN:?set ORIGIN, e.g. https://ninjacat.example.com}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+      server: { condition: service_started }
+
+volumes:
+  clickhouse-data:
+  clickhouse-logs:
+  pgdata:

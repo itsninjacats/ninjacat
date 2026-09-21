@@ -15,8 +15,12 @@ func RegisterTypes(node gen.Node) error {
 	types := []any{
 		ListMetrics{}, MetricsList{},
 		ListHosts{}, HostsList{},
+		ListTagKeys{}, TagKeysList{},
+		ListTagValues{}, TagValuesList{},
 		QuerySeries{}, SeriesResult{},
-		Series{}, Point{},
+		Series{}, Point{}, TagFilter{},
+		SearchLogs{}, LogsResult{}, LogEntry{},
+		ListLogFacets{}, LogFacets{}, FacetCount{},
 		Failed{},
 	}
 	if err := node.Network().RegisterTypes(types); err != nil {

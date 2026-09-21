@@ -10,6 +10,7 @@
 	const pozycje = [
 		{ href: '/app', etykieta: 'Przegląd' },
 		{ href: '/app/metrics', etykieta: 'Metryki' },
+		{ href: '/app/logs', etykieta: 'Logs' },
 		{ href: '/app/ustawienia/klucze', etykieta: 'Klucze API' }
 	];
 

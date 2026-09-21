@@ -160,7 +160,7 @@ func (a *Server) HandleSeriesV2(c *gin.Context) {
 				Metric: s.Metric, Host: host,
 				MetricType: metricTypeName(int32(s.Type)), SourceType: s.SourceTypeName,
 				Unit: s.Unit, Interval: uint32(s.Interval),
-				Value: p.GetValue(), Tags: tagsToMap(s.Tags),
+				Value: p.GetValue(), Tags: tagsToMultiMap(s.Tags),
 			})
 		}
 	}
@@ -283,7 +283,7 @@ func (a *Server) HandleSeriesV1(c *gin.Context) {
 				SourceType: attrString(s.AdditionalProperties, "source_type_name"),
 				Unit:       attrString(s.AdditionalProperties, "unit"),
 				Interval:   interval,
-				Value:      *p[1], Tags: tagsToMap(s.Tags),
+				Value:      *p[1], Tags: tagsToMultiMap(s.Tags),
 			})
 		}
 	}
@@ -378,7 +378,7 @@ func (a *Server) HandleSketches(c *gin.Context) {
 		for _, d := range s.Dogsketches {
 			rows = append(rows, storage.SketchRow{
 				TenantID: tenant, Timestamp: wireTime(d.Ts),
-				Metric: s.Metric, Host: s.Host, Tags: tagsToMap(s.Tags),
+				Metric: s.Metric, Host: s.Host, Tags: tagsToMultiMap(s.Tags),
 				Count: uint64(d.Cnt), Min: d.Min, Max: d.Max, Avg: d.Avg, Sum: d.Sum,
 				BucketKeys: d.K, BucketCounts: d.N,
 			})
@@ -449,7 +449,7 @@ func (a *Server) HandleCheckRun(c *gin.Context) {
 			TenantID: tenant, Timestamp: wireTime(r.GetTimestamp()),
 			CheckName: r.Check, Host: r.HostName,
 			Status: statusName(int(r.Status)), Message: r.GetMessage(),
-			Tags: tagsToMap(r.Tags),
+			Tags: tagsToMultiMap(r.Tags),
 		})
 	}
 	a.store(storage.ChecksWriter, storage.WriteCheckRuns{Runs: rows}, len(rows))
@@ -727,7 +727,7 @@ func (a *Server) intakeHost(c *gin.Context, label string, m map[string]json.RawM
 		Platform:     gohaiSection(gohai, "platform"),
 		CPU:          gohaiSection(gohai, "cpu"),
 		Memory:       gohaiSection(gohai, "memory"),
-		Tags:         hostTags["system"],
+		Tags:         tagsToMultiMap(hostTags["system"]),
 	}}}, 1)
 }
 
@@ -1122,7 +1122,7 @@ func (a *Server) HandleEvents(c *gin.Context) {
 			AggregationKey: e.GetAggregationKey(),
 			SourceTypeName: e.GetSourceTypeName(),
 			DeviceName:     e.GetDeviceName(),
-			Tags:           tagsToMap(e.Tags),
+			Tags:           tagsToMultiMap(e.Tags),
 		})
 	}
 
@@ -1243,7 +1243,7 @@ func (a *Server) HandleDistributionPoints(c *gin.Context) {
 			keys, counts, stats := sketch.Build(values)
 			rows = append(rows, storage.SketchRow{
 				TenantID: tenant, Timestamp: ts,
-				Metric: s.Metric, Host: s.GetHost(), Tags: tagsToMap(s.Tags),
+				Metric: s.Metric, Host: s.GetHost(), Tags: tagsToMultiMap(s.Tags),
 				Count: uint64(stats.Count), Min: stats.Min, Max: stats.Max,
 				Avg: stats.Avg, Sum: stats.Sum,
 				BucketKeys: keys, BucketCounts: counts,

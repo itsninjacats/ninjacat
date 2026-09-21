@@ -82,7 +82,7 @@ func (a *Server) HandleLogs(c *gin.Context) {
 			Source:    e.GetDdsource(),
 			Status:    attrString(e.AdditionalProperties, "status"),
 			Message:   e.Message,
-			Tags:      tagsToMap(splitDDTags(e.GetDdtags())),
+			Tags:      tagsToMultiMap(splitDDTags(e.GetDdtags())),
 		})
 
 		if n := len(e.AdditionalProperties) - countPresent(e.AdditionalProperties, "status", "timestamp"); n > 0 {

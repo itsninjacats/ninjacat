@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "ninjacat.fullname" . }}-test-connection"
+  labels:
+    {{- include "ninjacat.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    # The intake answers only on a known Host, so send one.
+    - name: intake
+      image: busybox
+      command: ["wget", "-qO-", "--header", "Host: api.{{ .Values.domainRoot }}",
+                "http://{{ include "ninjacat.fullname" . }}-server:{{ .Values.server.intakeService.port }}/ping"]
+    - name: panel-api
+      image: busybox
+      command: ["wget", "-qO-",
+                "http://{{ include "ninjacat.fullname" . }}-server-internal:{{ .Values.server.internalService.port }}/ping"]

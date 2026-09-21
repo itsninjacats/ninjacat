@@ -33,22 +33,52 @@ func isDiagnose(c *gin.Context) bool {
 	return c.GetHeader("X-Requested-With") == "datadog-agent-diagnose"
 }
 
-// tagsToMap turns Datadog's flat "key:value" tag list into a map.
+// splitTag splits one Datadog "key:value" tag. The ONLY place that knows how
+// a tag string comes apart — every map builder below goes through it.
 //
-// Tags without a colon are kept with an empty value — Datadog allows bare tags
-// and dropping them silently would lose information. Only the FIRST colon
-// splits, because values legitimately contain colons ("url:http://x").
-func tagsToMap(tags []string) map[string]string {
+// Only the FIRST colon splits, because values legitimately contain colons
+// ("url:http://x"). A tag without a colon keeps its key with an empty value —
+// Datadog allows bare tags and dropping them silently would lose information.
+func splitTag(t string) (key, value string) {
+	key, value, _ = strings.Cut(t, ":")
+	return key, value
+}
+
+// tagsToMultiMap turns Datadog's flat "key:value" tag list into a map of
+// key -> every value seen, in arrival order.
+//
+// The value is a SLICE because tags are a multiset, not properties: nothing
+// forbids two tags sharing a key, and real clusters emit them constantly
+// (kube_service:a plus kube_service:b on a pod behind two services). The old
+// map[string]string here kept whichever came last and silently dropped the
+// rest — see docs/decisions/0001-tags-are-a-multiset.md for the damage that
+// did. A bare tag appends an empty value, keeping its old meaning of
+// "key present".
+func tagsToMultiMap(tags []string) map[string][]string {
 	if len(tags) == 0 {
 		return nil
 	}
-	out := make(map[string]string, len(tags))
+	out := make(map[string][]string, len(tags))
 	for _, t := range tags {
-		if k, v, found := strings.Cut(t, ":"); found {
-			out[k] = v
-		} else {
-			out[t] = ""
-		}
+		k, v := splitTag(t)
+		out[k] = append(out[k], v)
+	}
+	return out
+}
+
+// kvToMap is the single-valued cousin for maps that are NOT tags — Kubernetes
+// labels and annotations, which travel in the same flat "key:value" form but
+// whose keys the Kubernetes API guarantees unique. They stay plain maps in
+// the schema, so the multiset shape would cost lookup speed for a collision
+// that cannot happen.
+func kvToMap(pairs []string) map[string]string {
+	if len(pairs) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(pairs))
+	for _, p := range pairs {
+		k, v := splitTag(p)
+		out[k] = v
 	}
 	return out
 }

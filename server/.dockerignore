@@ -1,0 +1,9 @@
+captures/
+tmp/
+docs/
+*_test.go
+*.out
+*.test
+*.prof
+/ninjacat
+.git

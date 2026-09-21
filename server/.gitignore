@@ -12,3 +12,6 @@ cmd/*/[a-z]*
 *.out
 *.test
 *.prof
+
+# Air's build directory (see .air.toml).
+tmp/
