@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/itsninjacats/server/apps/storage"
 )
 
 // dbm-metrics-intake.<site> — Database Monitoring.
@@ -25,9 +27,11 @@ import (
 // the forwarder batches them. Each event is decoded into dbmEnvelope below;
 // the engine-specific remainder stays raw.
 //
-// Nothing is stored yet. Each handler ends with its track's complete batch,
-// every event decoded into dbmEnvelope, in a variable of its own, so storage
-// can see per route what arrives.
+// Storage: every track lands in one table, storage.DBMEventsWriter /
+// dbm_events (schema/migrations/0006_dbm.sql) — see that migration's header
+// for why one table serves six tracks and every database engine. A body
+// that is not a JSON array/object, or an element that fails to decode, goes
+// to storeRaw instead (intake/raw.go) rather than being dropped.
 func (a *Server) routeDBM(g *gin.RouterGroup) {
 	g.POST("/api/v2/dbmmetrics", a.handleDBMMetrics)             // database metrics
 	g.POST("/api/v2/dbmactivity", a.handleDBMActivity)           // active sessions
@@ -82,8 +86,11 @@ type dbmEnvelope struct {
 	DBMSVersion      string // "dbms_version" (metadata)
 
 	// CollectionInterval is "collection_interval" (activity, metadata) or
-	// "min_collection_interval" (metrics), whichever the track sends.
-	CollectionInterval float64
+	// "min_collection_interval" (metrics), whichever the track sends. A
+	// pointer, not a bare float64: a genuine 0s interval and "neither key was
+	// sent" are different facts, and a storage column downstream is Nullable
+	// specifically to keep that distinction (see 0006_dbm.sql).
+	CollectionInterval *float64
 
 	// Tags merges "ddtags" and "tags", normalized to a list.
 	Tags dbmTags
@@ -166,10 +173,10 @@ func (e *dbmEnvelope) UnmarshalJSON(data []byte) error {
 		e.AgentVersion = altVersion
 	}
 
-	var minInterval float64
+	var minInterval *float64
 	take("collection_interval", &e.CollectionInterval)
 	take("min_collection_interval", &minInterval)
-	if e.CollectionInterval == 0 {
+	if e.CollectionInterval == nil {
 		e.CollectionInterval = minInterval
 	}
 
@@ -210,11 +217,11 @@ const dbmLogLimit = 3
 // rows sit in Extra under oracle_rows, postgres_rows, mysql_rows, ...
 func (a *Server) handleDBMMetrics(c *gin.Context) {
 	defer c.JSON(http.StatusAccepted, gin.H{})
-	metrics, ok := dbmBatch(c, "dbmmetrics")
+	events, ok := a.dbmBatch(c, "dbmmetrics")
 	if !ok {
 		return
 	}
-	_ = metrics // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	a.storeDBMEvents(c, "dbmmetrics", events)
 }
 
 // handleDBMActivity — /api/v2/dbmactivity: activity snapshots (oracle
@@ -222,22 +229,24 @@ func (a *Server) handleDBMMetrics(c *gin.Context) {
 // oracle_activity, postgres_activity, mysql_activity, ...
 func (a *Server) handleDBMActivity(c *gin.Context) {
 	defer c.JSON(http.StatusAccepted, gin.H{})
-	activity, ok := dbmBatch(c, "dbmactivity")
+	events, ok := a.dbmBatch(c, "dbmactivity")
 	if !ok {
 		return
 	}
-	_ = activity // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	a.storeDBMEvents(c, "dbmactivity", events)
 }
 
 // handleDBMQuery — /api/v2/databasequery: query samples, dbm_type=fqt (full
-// query text) or plan. The "db" object (dbmQuerySample) sits in Extra.
+// query text) or plan. The "db" object (dbmQuerySample) sits in Extra and
+// also feeds the db_instance/query_signature/statement/plan_* convenience
+// columns on the stored row.
 func (a *Server) handleDBMQuery(c *gin.Context) {
 	defer c.JSON(http.StatusAccepted, gin.H{})
-	samples, ok := dbmBatch(c, "databasequery")
+	events, ok := a.dbmBatch(c, "databasequery")
 	if !ok {
 		return
 	}
-	_ = samples // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	a.storeDBMEvents(c, "databasequery", events)
 }
 
 // handleDBMMetadata — /api/v2/dbmmetadata: kind=database_instance (oracle
@@ -245,22 +254,22 @@ func (a *Server) handleDBMQuery(c *gin.Context) {
 // ddagentversion. Schema payloads sit in Extra under "metadata".
 func (a *Server) handleDBMMetadata(c *gin.Context) {
 	defer c.JSON(http.StatusAccepted, gin.H{})
-	metadata, ok := dbmBatch(c, "dbmmetadata")
+	events, ok := a.dbmBatch(c, "dbmmetadata")
 	if !ok {
 		return
 	}
-	_ = metadata // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	a.storeDBMEvents(c, "dbmmetadata", events)
 }
 
 // handleDBMHealth — /api/v2/dbmhealth: integration health. No producer in
 // the agent clone; whatever is sent beyond the envelope is in Extra.
 func (a *Server) handleDBMHealth(c *gin.Context) {
 	defer c.JSON(http.StatusAccepted, gin.H{})
-	health, ok := dbmBatch(c, "dbmhealth")
+	events, ok := a.dbmBatch(c, "dbmhealth")
 	if !ok {
 		return
 	}
-	_ = health // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	a.storeDBMEvents(c, "dbmhealth", events)
 }
 
 // handleDBMColumnStat — /api/v2/dbmcolumnstatistics: column statistics. No
@@ -268,20 +277,35 @@ func (a *Server) handleDBMHealth(c *gin.Context) {
 // Extra.
 func (a *Server) handleDBMColumnStat(c *gin.Context) {
 	defer c.JSON(http.StatusAccepted, gin.H{})
-	columnStats, ok := dbmBatch(c, "dbmcolstat")
+	// The label used to be "dbmcolstat", which meant every log line for this
+	// route was tagged differently from its own path — grepping for
+	// dbmcolumnstatistics found nothing. Track column and log label now
+	// match the route.
+	events, ok := a.dbmBatch(c, "dbmcolumnstatistics")
 	if !ok {
 		return
 	}
-	_ = columnStats // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	a.storeDBMEvents(c, "dbmcolumnstatistics", events)
+}
+
+// dbmEvent pairs a decoded envelope with the exact bytes it was decoded
+// from — dbmEnvelope only ever describes the fields it recognizes, and the
+// stored row needs the complete event verbatim (see DBMEventRow.Event).
+type dbmEvent struct {
+	Raw json.RawMessage
+	Env dbmEnvelope
 }
 
 // dbmBatch reads the body, splits it and decodes every event into a
 // dbmEnvelope. The log shows the first dbmLogLimit events; the returned slice
 // holds all of them, each with its engine-specific remainder raw in Extra.
 //
-// An element that is not a JSON object cannot be a DBM event (the envelope is
-// keyed by name); it is logged with its index and left out of the result.
-func dbmBatch(c *gin.Context, label string) ([]dbmEnvelope, bool) {
+// A body that does not split into a JSON array or object, and an element
+// that is not a JSON object, are handed to storeRaw rather than dropped —
+// dbmEnvelope's own UnmarshalJSON already keeps anything IT does not
+// recognize (that is what Extra/Undecoded are for), so the only things that
+// reach storeRaw here are inputs dbmEnvelope could not even attempt to read.
+func (a *Server) dbmBatch(c *gin.Context, label string) ([]dbmEvent, bool) {
 	body, err := c.GetRawData()
 	if err != nil {
 		log.Printf("[%s] cannot read body: %v", label, err)
@@ -292,18 +316,20 @@ func dbmBatch(c *gin.Context, label string) ([]dbmEnvelope, bool) {
 	if err != nil {
 		log.Printf("[%s] not a JSON array (%v), raw follows", label, err)
 		describe(label, c.GetHeader("Content-Type"), body)
+		a.storeRaw(c, "dbm", "decode_error", fmt.Sprintf("[%s] not a JSON array or object: %v", label, err), body)
 		return nil, false
 	}
 	log.Printf("[%s] %d events, %d B", label, len(raws), len(body))
 
-	events := make([]dbmEnvelope, 0, len(raws))
+	events := make([]dbmEvent, 0, len(raws))
 	for i, raw := range raws {
 		var ev dbmEnvelope
 		if err := json.Unmarshal(raw, &ev); err != nil {
 			log.Printf("[%s] event %d: not an object (%v), dropped", label, i, err)
+			a.storeRaw(c, "dbm", "decode_error", fmt.Sprintf("[%s] event %d: not an object: %v", label, i, err), raw)
 			continue
 		}
-		events = append(events, ev)
+		events = append(events, dbmEvent{Raw: raw, Env: ev})
 		if i >= dbmLogLimit {
 			continue
 		}
@@ -327,6 +353,125 @@ func dbmBatch(c *gin.Context, label string) ([]dbmEnvelope, bool) {
 		log.Printf("[%s] ... %d more", label, len(raws)-dbmLogLimit)
 	}
 	return events, true
+}
+
+// storeDBMEvents converts a track's decoded batch into rows and hands them
+// to storage.DBMEventsWriter. Tenant comes from the request; with no tenant
+// nothing is stored, matching storeRaw's own rule (tenant_id is the first
+// ORDER BY column of every table, and a row without one is invisible to
+// every query — see intake/raw.go).
+func (a *Server) storeDBMEvents(c *gin.Context, track string, events []dbmEvent) {
+	if len(events) == 0 {
+		return
+	}
+	tenant := TenantFromContext(c)
+	if tenant == "" {
+		return
+	}
+
+	receivedAt := time.Now().UTC()
+	rows := make([]storage.DBMEventRow, 0, len(events))
+	for _, ev := range events {
+		rows = append(rows, dbmEventRow(tenant, track, receivedAt, ev))
+	}
+	a.store(storage.DBMEventsWriter, storage.WriteDBMEvents{Events: rows}, len(rows))
+}
+
+// dbmEventRow converts one decoded event into the row dbm_events stores.
+// Pure and side-effect free so it can be table-tested directly against
+// realistic per-track JSON without a server or an HTTP round trip.
+func dbmEventRow(tenant, track string, receivedAt time.Time, ev dbmEvent) storage.DBMEventRow {
+	env := ev.Env
+	row := storage.DBMEventRow{
+		TenantID:           tenant,
+		ReceivedAt:         receivedAt,
+		Track:              track,
+		Timestamp:          dbmTimestamp(env.Timestamp),
+		Host:               env.Host,
+		DatabaseInstance:   env.DatabaseInstance,
+		AgentHostname:      env.AgentHostname,
+		AgentVersion:       env.AgentVersion,
+		Source:             env.Source,
+		DBMType:            env.DBMType,
+		Kind:               env.Kind,
+		DBMS:               env.DBMS,
+		DBMSVersion:        env.DBMSVersion,
+		CollectionInterval: env.CollectionInterval,
+		Tags:               tagsToMultiMap(env.Tags),
+		ExtraKeys:          env.extraKeys(),
+		UndecodedKeys:      append([]string(nil), env.Undecoded...),
+		Event:              string(ev.Raw),
+	}
+
+	if db, ok := env.Extra["db"]; ok {
+		var sample dbmQuerySample
+		if err := json.Unmarshal(db, &sample); err == nil {
+			if sample.Instance != "" {
+				row.DBInstance = &sample.Instance
+			}
+			if sample.QuerySignature != "" {
+				row.QuerySignature = &sample.QuerySignature
+			}
+			if sample.Statement != "" {
+				row.Statement = &sample.Statement
+			}
+			if sample.Plan != nil {
+				if sample.Plan.Signature != "" {
+					row.PlanSignature = &sample.Plan.Signature
+				}
+				if steps, ok := dbmPlanDefinitionSteps(sample.Plan.Definition); ok {
+					row.PlanDefinitionSteps = &steps
+				}
+			}
+		}
+	}
+
+	return row
+}
+
+// dbmPlanDefinitionSteps counts the steps in db.plan.definition. The second
+// return value is false when the definition was never sent at all — a plan
+// with zero steps and "no plan was sent" are different facts, and the
+// caller keeps that distinction by leaving the row's pointer nil rather than
+// storing 0.
+func dbmPlanDefinitionSteps(definition json.RawMessage) (uint32, bool) {
+	if len(definition) == 0 {
+		return 0, false
+	}
+	var steps []json.RawMessage
+	if err := json.Unmarshal(definition, &steps); err != nil {
+		return 0, false
+	}
+	return uint32(len(steps)), true
+}
+
+// dbmTimestamp turns the envelope's wire timestamp into the value the
+// Nullable(DateTime64(3)) column takes: nil when the field was never sent —
+// an absent timestamp must never become 1970 or "now" — a real instant
+// otherwise.
+//
+// The fast path parses the wire token as an integer directly, so the oracle
+// corecheck's float64(UnixMilli()) — an exact integer that merely looks like
+// a float on the wire, e.g. "1758326400000" — never touches float64 and
+// keeps full int64 precision. Some Python integrations send a genuinely
+// fractional number of milliseconds (time.time()*1000); DateTime64(3) is
+// millisecond precision anyway, so that one case rounds through float64,
+// which is safe here because millisecond epoch values sit far below
+// float64's 2^53 exact-integer bound.
+func dbmTimestamp(n json.Number) *time.Time {
+	if n == "" {
+		return nil
+	}
+	if ms, err := n.Int64(); err == nil {
+		t := time.UnixMilli(ms).UTC()
+		return &t
+	}
+	f, err := n.Float64()
+	if err != nil {
+		return nil
+	}
+	t := time.UnixMilli(int64(math.Round(f))).UTC()
+	return &t
 }
 
 // dbmEvents splits the batch. A lone object is wrapped so a hand-crafted
@@ -363,8 +508,8 @@ func (e *dbmEnvelope) summary() string {
 	if e.Timestamp != "" {
 		add("ts", dbmTime(e.Timestamp))
 	}
-	if e.CollectionInterval != 0 {
-		add("interval", fmt.Sprintf("%gs", e.CollectionInterval))
+	if e.CollectionInterval != nil {
+		add("interval", fmt.Sprintf("%gs", *e.CollectionInterval))
 	}
 	if len(e.Tags) > 0 {
 		add("tags", fmt.Sprintf("%d %v", len(e.Tags), dbmHead(e.Tags, 3)))
