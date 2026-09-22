@@ -25,6 +25,11 @@ const (
 //
 // One writer per table, each with its own mailbox and buffer, so a burst of
 // logs cannot delay metrics. See BatchWriter for the full reasoning.
+//
+// The NAMES stay here because the intake handlers address them and a constant
+// two packages reference belongs somewhere neutral. Each writer's CONFIG —
+// its table, INSERT and batching — lives in the rows_*.go file that owns the
+// table and registers it (registry.go).
 const (
 	MetricsWriter   = gen.Atom("storage_metrics")
 	SketchesWriter  = gen.Atom("storage_sketches")
@@ -42,165 +47,29 @@ const (
 	ContainerImagesWriter = gen.Atom("storage_container_images")
 )
 
-// writers describes every table we write to. Thresholds differ by expected
-// volume: logs arrive far more often than metrics, host metadata barely at all.
-var writers = []struct {
-	name gen.Atom
-	cfg  WriterConfig
-}{
-	{MetricsWriter, WriterConfig{
-		Name: "metrics",
-		Insert: `INSERT INTO metrics
-			(tenant_id, timestamp, metric, host, metric_type, source_type, unit, interval, value, tags)`,
-		MaxRows: 5000, FlushInterval: 2 * time.Second,
-	}},
-	{SketchesWriter, WriterConfig{
-		Name: "sketches",
-		Insert: `INSERT INTO sketches
-			(tenant_id, timestamp, metric, host, tags, count, min, max, avg, sum, bucket_keys, bucket_counts)`,
-		MaxRows: 1000, FlushInterval: 5 * time.Second,
-	}},
-	{ChecksWriter, WriterConfig{
-		Name: "check_runs",
-		Insert: `INSERT INTO check_runs
-			(tenant_id, timestamp, check_name, host, status, message, tags)`,
-		// Check runs trickle in, so a small threshold and a longer timer.
-		MaxRows: 500, FlushInterval: 5 * time.Second,
-	}},
-	{LogsWriter, WriterConfig{
-		Name: "logs",
-		Insert: `INSERT INTO logs
-			(tenant_id, timestamp, host, service, source, status, message, tags)`,
-		// Logs are the high-volume table: bigger batches, bigger safety margin.
-		MaxRows: 20000, FlushInterval: time.Second, BufferLimit: 500_000,
-	}},
-	{ProcessesWriter, WriterConfig{
-		Name: "processes",
-		Insert: `INSERT INTO processes
-			(tenant_id, timestamp, host, pid, ppid, user, comm, exe, cmdline,
-			 rss, vms, cpu_pct, threads, open_fds, state, create_time, container_id, tags)`,
-		// A few hundred rows per host per snapshot, every ~10s. Large batches,
-		// moderate interval.
-		MaxRows: 10000, FlushInterval: 3 * time.Second,
-	}},
-	{EventsWriter, WriterConfig{
-		Name: "events",
-		Insert: `INSERT INTO events
-			(tenant_id, timestamp, event_id, event_id_num, title, text, host,
-			 alert_type, priority, aggregation_key, source_type_name, device_name, tags)`,
-		// Human and system scale, not machine scale: tens or hundreds a day.
-		// Small batches, and a timer short enough that a deploy marker shows
-		// up on the chart while someone is still looking at it.
-		MaxRows: 200, FlushInterval: 2 * time.Second,
-	}},
-	{HostsWriter, WriterConfig{
-		Name: "hosts",
-		Insert: `INSERT INTO hosts
-			(tenant_id, host, seen_at, agent_version, os, platform, cpu, memory, tags)`,
-		// One row per host every ~20s. ReplacingMergeTree collapses duplicates.
-		MaxRows: 100, FlushInterval: 10 * time.Second,
-	}},
-	{K8sResourcesWriter, WriterConfig{
-		Name: "k8s_resources",
-		Insert: `INSERT INTO k8s_resources
-			(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,
-			 uid, resource_version, owner_kind, owner_name, node_name, phase, status,
-			 ready, desired, available, counts, labels, annotations, tags,
-			 agent_version, group_id, group_size)`,
-		// The cluster agent sends whole collection passes at once: thousands of
-		// objects in a burst every ~10s, then silence. MaxRows keeps a burst
-		// from becoming one giant insert, the buffer holds a few full passes
-		// while ClickHouse hiccups, and a second in-flight flush lets the next
-		// pass start draining before the previous insert lands. Rows carry
-		// label and annotation maps, so 50k of them is real memory — hence an
-		// explicit ceiling instead of the 200k default.
-		MaxRows: 2000, FlushInterval: 5 * time.Second,
-		BufferLimit: 50_000, MaxInFlight: 2,
-	}},
-	{K8sManifestsWriter, WriterConfig{
-		Name: "k8s_manifests",
-		Insert: `INSERT INTO k8s_manifests
-			(tenant_id, collected_at, cluster_id, cluster_name, uid, kind, api_version,
-			 resource_version, content, content_type, is_terminated)`,
-		// Every row is a whole YAML document, so these row counts stand for
-		// megabytes: 200 rows can be 2 MB of insert and 5000 buffered can be
-		// tens of MB. The tight ceilings bound memory, and a single in-flight
-		// flush is plenty for what is bulk, not urgency.
-		MaxRows: 200, FlushInterval: 10 * time.Second,
-		BufferLimit: 5_000, MaxInFlight: 1,
-	}},
-	{K8sClusterWriter, WriterConfig{
-		Name: "k8s_cluster",
-		Insert: `INSERT INTO k8s_cluster
-			(tenant_id, collected_at, cluster_id, cluster_name, node_count,
-			 pod_capacity, pod_allocatable, cpu_capacity, cpu_allocatable,
-			 memory_capacity, memory_allocatable, kubelet_versions, apiserver_versions)`,
-		// One row per cluster per pass — the quietest table here. The timer
-		// does all the flushing; the thresholds only exist so a stall cannot
-		// grow the buffer unbounded.
-		MaxRows: 50, FlushInterval: 15 * time.Second,
-		BufferLimit: 1_000, MaxInFlight: 1,
-	}},
-	{K8sActionsWriter, WriterConfig{
-		Name: "k8s_actions",
-		Insert: `INSERT INTO k8s_actions
-			(tenant_id, timestamp, action_id, org_id, event_type, status, action_type,
-			 cluster_id, cluster_name, resource_id, resource_kind, resource_name,
-			 resource_namespace, requested_by, message, extra_keys)`,
-		// Human scale, like the events table: an operator triggers an action
-		// and expects to see its result — a 10s timer is about as long as
-		// that wait should get. Small everything, one flush at a time.
-		MaxRows: 200, FlushInterval: 10 * time.Second,
-		BufferLimit: 10_000, MaxInFlight: 1,
-	}},
-	{ContainerEventsWriter, WriterConfig{
-		Name: "container_events",
-		Insert: `INSERT INTO container_events
-			(tenant_id, timestamp, host, cluster_id, object_kind, event_type,
-			 container_id, container_name, pod_uid, task_arn, source,
-			 exit_code, created_at, exited_at, owner_type, owner_uid,
-			 old_state, new_state, transition_at)`,
-		// Every node agent reports every restart and OOM in the fleet, and a
-		// bad rollout turns that into a storm — the second in-flight flush is
-		// for exactly that day. This is also the table that must not drop
-		// rows lightly (each one is a crash somebody will look for), so the
-		// buffer is the deepest of the new set.
-		MaxRows: 1000, FlushInterval: 5 * time.Second,
-		BufferLimit: 50_000, MaxInFlight: 2,
-	}},
-	{ContainerImagesWriter, WriterConfig{
-		Name: "container_images",
-		Insert: `INSERT INTO container_images
-			(tenant_id, collected_at, host, image_key, identity_source,
-			 image_id, digest, name, short_name,
-			 registry, repo_tags, repo_digests, size_bytes, os_name, os_version,
-			 architecture, layer_count, layer_bytes, built_at, published_at, dd_tags)`,
-		// Periodic full inventories: every node re-announces every image it
-		// holds, so arrivals are bursty and repetitive. ReplacingMergeTree
-		// absorbs the repetition; here we just batch the bursts, with a second
-		// flush in flight for when many nodes report at once.
-		MaxRows: 500, FlushInterval: 10 * time.Second,
-		BufferLimit: 20_000, MaxInFlight: 2,
-	}},
-}
-
 // App owns writing to ClickHouse.
 //
 //	storage (application)
 //	  └── storage_sup (supervisor, one_for_one)
-//	        ├── storage_metrics
-//	        ├── storage_sketches
-//	        ├── storage_checks
-//	        ├── storage_logs
-//	        ├── storage_processes
-//	        ├── storage_events
-//	        ├── storage_hosts
-//	        ├── storage_k8s_resources
-//	        ├── storage_k8s_manifests
-//	        ├── storage_k8s_cluster
-//	        ├── storage_k8s_actions
-//	        ├── storage_container_events
-//	        └── storage_container_images
+//	        ├── storage_checks             rows_checks.go
+//	        ├── storage_container_events   rows_containers.go
+//	        ├── storage_container_images   rows_containers.go
+//	        ├── storage_events             rows_events.go
+//	        ├── storage_hosts              rows_hosts.go
+//	        ├── storage_k8s_resources      rows_k8s.go
+//	        ├── storage_k8s_manifests      rows_k8s.go
+//	        ├── storage_k8s_cluster        rows_k8s.go
+//	        ├── storage_k8s_actions        rows_k8s.go
+//	        ├── storage_logs               rows_logs.go
+//	        ├── storage_metrics            rows_metrics.go
+//	        ├── storage_sketches           rows_metrics.go
+//	        ├── storage_processes          rows_process.go
+//	        └── storage_raw_payloads       rows_raw.go
+//
+// There is no list of children anywhere: the supervisor asks Writers(), which
+// is built by the init() in each of those files. The order above is therefore
+// filename order, and it is cosmetic — one_for_one children neither start in a
+// meaningful sequence nor depend on each other.
 //
 // one_for_one matters here: a writer that dies is restarted alone, and the
 // other tables keep accepting data.
@@ -322,12 +191,16 @@ type Supervisor struct {
 }
 
 func (sup *Supervisor) Init(args ...any) (act.SupervisorSpec, error) {
-	children := make([]act.SupervisorChildSpec, 0, len(writers))
-	for _, w := range writers {
+	// Writers() is whatever the rows_*.go files registered from init() — see
+	// registry.go. A new table gets a writer here without this function being
+	// touched, and without any shared list to conflict over.
+	specs := Writers()
+	children := make([]act.SupervisorChildSpec, 0, len(specs))
+	for _, w := range specs {
 		children = append(children, act.SupervisorChildSpec{
-			Name:    w.name,
+			Name:    w.Name,
 			Factory: func() gen.ProcessBehavior { return &BatchWriter{} },
-			Args:    []any{w.cfg, sup.app.conn},
+			Args:    []any{w.Config, sup.app.conn},
 		})
 	}
 

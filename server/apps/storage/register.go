@@ -20,6 +20,12 @@ import (
 //
 // Note RegisterType rejects pointer types, so all row types are registered by
 // value — which is also why Row implementations have value receivers.
+//
+// The list below is the ORIGINAL set and stays exactly as it is: Ergo hands
+// out wire identities in registration order, so reordering or removing an
+// entry changes what an already-deployed peer decodes. Tables added since the
+// registry landed append themselves through registerTypes (registry.go) and
+// are registered after this list, in filename order — never before it.
 func RegisterTypes(node gen.Node) error {
 	types := []any{
 		WriteMetrics{},
@@ -49,6 +55,7 @@ func RegisterTypes(node gen.Node) error {
 		ContainerEventRow{},
 		ContainerImageRow{},
 	}
+	types = append(types, extraTypes...)
 	if err := node.Network().RegisterTypes(types); err != nil {
 		return fmt.Errorf("storage: register types: %w", err)
 	}

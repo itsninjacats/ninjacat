@@ -87,7 +87,19 @@ func (a *Server) Handler() http.Handler {
 	events := a.engine(a.routeEventManagement)
 	softinv := a.engine(a.routeSoftwareInventory)
 	synthetics := a.engine(a.routeSynthetics)
-	dataobs := a.engine(a.routeDataObs)
+	// Data Observability is the one intake whose clients do not all send
+	// Dd-Api-Key: the OpenLineage transport uses "Authorization: Bearer <key>"
+	// and the trace-agent's lineage proxy forwards it unchanged, so this route
+	// answered 403 to a correctly configured agent. Bearer goes after the
+	// header (query-actions does send Dd-Api-Key) and the query parameter last.
+	dataobs := a.engineAuth(
+		RequireAPIKeyFrom(a.Store,
+			KeyFromHeader("Dd-Api-Key"),
+			KeyFromBearer(),
+			KeyFromQuery("api_key"),
+		),
+		a.routeDataObs,
+	)
 	aiusage := a.engine(a.routeAIUsage)
 	llmobs := a.engine(a.routeLLMObs)
 
@@ -209,12 +221,21 @@ func (a *Server) baseEngine() *gin.Engine {
 	return r
 }
 
-// engine builds one Gin router from the given route sets.
+// engine builds one Gin router from the given route sets, guarded by the
+// default authentication: Dd-Api-Key, then the api_key query parameter.
 func (a *Server) engine(routes ...func(*gin.RouterGroup)) *gin.Engine {
+	return a.engineAuth(RequireAPIKey(a.Store), routes...)
+}
+
+// engineAuth is engine with the guard named explicitly, for the intakes whose
+// clients authenticate differently — see RequireAPIKeyFrom. Splitting this out
+// keeps the exception at the one call site that needs it, instead of widening
+// what every other engine accepts.
+func (a *Server) engineAuth(auth gin.HandlerFunc, routes ...func(*gin.RouterGroup)) *gin.Engine {
 	r := a.baseEngine()
 
-	// Everything else needs a valid Dd-Api-Key — see apikey_mw.go.
-	g := r.Group("", RequireAPIKey(a.Store))
+	// Everything else needs a valid key — see apikey_mw.go.
+	g := r.Group("", auth)
 	for _, add := range routes {
 		add(g)
 	}

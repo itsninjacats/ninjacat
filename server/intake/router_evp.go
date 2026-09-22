@@ -572,8 +572,9 @@ func (a *Server) HandleSynthetics(c *gin.Context) {
 //	                       Python integrations, batched JSON.
 //
 // The lineage proxy carries the API key as "Authorization: Bearer <key>",
-// the OpenLineage client's convention, NOT Dd-Api-Key. RequireAPIKey does not
-// read that header yet, so this route answers 403 until it does.
+// the OpenLineage client's convention, NOT Dd-Api-Key. This host is therefore
+// the one intake built with engineAuth rather than engine, so that its guard
+// reads Bearer as well — see routes.go and RequireAPIKeyFrom.
 func (a *Server) routeDataObs(g *gin.RouterGroup) {
 	g.POST("/api/v1/lineage", a.HandleOpenLineage)
 	g.POST("/api/v2/query-actions", a.HandleQueryActions)
