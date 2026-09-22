@@ -1,6 +1,7 @@
 package intake
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
@@ -16,7 +17,12 @@ import (
 // None of these carry Dd-Api-Key except the two POSTs, so the install host
 // cannot sit behind RequireAPIKey — that is a routes.go concern.
 //
-// Nothing is stored yet.
+// The install host itself (OCI 404s, BTF, the HEAD probe) has nothing to
+// store: every response is a fixed protocol error or an empty ack, and none
+// of its routes reads a body — see each handler below. aiusage and llmobs
+// have no published schema, so a real payload on either goes to raw_payloads
+// (reason "no_schema"); llmobs additionally has a diagnose/empty-body path
+// that stores nothing, since that is the agent's only real caller.
 
 // routeInstall — install.datadoghq.com / install.datad0g.com.
 //
@@ -106,9 +112,10 @@ func (a *Server) handleAIUsage(c *gin.Context) {
 	}
 	describe("aiusage", c.GetHeader("Content-Type"), body)
 
-	// body is the ai_prompt_logger payload byte for byte; the proxy's origin
-	// headers (DD-EVP-ORIGIN, DD-EVP-ORIGIN-VERSION) and Content-Type are on c.
-	_ = body // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	// No schema is published for this track anywhere, so the bytes go to
+	// raw_payloads whole; the note carries the proxy's origin headers since
+	// there is no row of columns for them to land in.
+	a.storeRaw(c, "aiusage", "no_schema", installOriginNote(c), body)
 }
 
 // routeLLMObs — llmobs-intake.<site>.
@@ -134,7 +141,16 @@ func (a *Server) handleLLMObs(c *gin.Context) {
 	log.Printf("[llmobs] unexpected payload — the agent only probes this host")
 	describe("llmobs", c.GetHeader("Content-Type"), body)
 
-	// Not expected, but not dropped either: body is whatever was sent, byte
-	// for byte.
-	_ = body // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	// Not expected, but not dropped either: whatever was sent goes to
+	// raw_payloads, byte for byte.
+	a.storeRaw(c, "llmobs", "no_schema",
+		"unexpected payload — the agent only probes this host; "+installOriginNote(c), body)
+}
+
+// installOriginNote is the note storeRaw gets for the tracks with no
+// published schema: the event platform's origin headers plus Content-Type,
+// the only context available alongside the opaque bytes.
+func installOriginNote(c *gin.Context) string {
+	return fmt.Sprintf("DD-EVP-ORIGIN=%q DD-EVP-ORIGIN-VERSION=%q Content-Type=%q",
+		c.GetHeader("DD-EVP-ORIGIN"), c.GetHeader("DD-EVP-ORIGIN-VERSION"), c.GetHeader("Content-Type"))
 }

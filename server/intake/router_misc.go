@@ -1,13 +1,18 @@
 package intake
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/itsninjacats/server/apps/storage"
 )
 
 // Two small intakes with one endpoint each.
@@ -18,7 +23,12 @@ import (
 //	config: none for resources — event platform, `genresources.` prefix.
 //	        telemetry is switched off wholesale with DD_TELEMETRY_ENABLED.
 //
-// Nothing is stored yet.
+// genresources has no published schema anywhere upstream, so it goes to
+// raw_payloads (reason "no_schema") — see HandleGenResources. apmtelemetry
+// decodes its JSON envelope and stores one row per request in apm_telemetry,
+// plus one more per entry of a message-batch request (see HandleTelemetry);
+// a body that is not a JSON object goes to raw_payloads too (reason
+// "decode_error").
 
 // resources-intake.<site> — Generic Resources track of the event platform.
 //
@@ -34,7 +44,7 @@ import (
 //
 // What we can do without a schema: notice if the integration actually sent
 // JSON despite the protobuf Content-Type (describe handles that), otherwise
-// log size and leading bytes.
+// log size and leading bytes; either way the bytes go to raw_payloads.
 func (a *Server) routeResources(g *gin.RouterGroup) {
 	g.POST("/api/v2/genresources", a.HandleGenResources)
 }
@@ -47,16 +57,14 @@ func (a *Server) HandleGenResources(c *gin.Context) {
 		log.Printf("[genresources] cannot read body: %v", err)
 		return
 	}
-	// The raw payload outlives every path out of this handler: a decoder
-	// that fails or does not exist yet must not make the bytes disappear.
-	defer func() { _ = body }()
 	log.Printf("[genresources] origin=%q %d B", c.GetHeader("DD-EVP-ORIGIN"), len(body))
 	describe("genresources", c.GetHeader("Content-Type"), body)
 
-	// body is the integration's payload byte for byte, one per request; with
-	// no schema published there is nothing deeper to decode into. The origin
-	// (DD-EVP-ORIGIN, DD-EVP-ORIGIN-VERSION) and Content-Type are on c.
-	_ = body // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	// No .proto exists for this track anywhere upstream (see the header
+	// comment above), so there is nothing to decode into: the bytes are
+	// everything there is, plus the sender identity the event platform
+	// forwarder carries in headers rather than in the body.
+	a.storeRaw(c, "genresources", "no_schema", apmOriginNote(c), body)
 }
 
 // instrumentation-telemetry-intake.<site> — one path, five producers (docs §4.6).
@@ -87,9 +95,16 @@ func (a *Server) HandleGenResources(c *gin.Context) {
 //	apm-remote-config-event.
 //
 // None of those types is importable (nested in agent modules, or unexported),
-// so the envelope is read generically. The payload shape depends on
-// request_type; only its keys are logged, plus the few fields that identify
-// the producer.
+// so the envelope is read generically: application/host give up their known
+// fields as real columns (apm_telemetry), and payload travels as raw JSON
+// text regardless of producer — nobody outside the producer's own source can
+// claim more authority over its shape than the JSON already has.
+//
+// message-batch is the one request_type that produces more than one row: its
+// payload is [{request_type, payload}, ...], and each entry becomes its own
+// apm_telemetry row (batch_index set, parent_request_type = "message-batch")
+// in addition to the parent row, whose own payload column keeps the whole
+// batch array.
 func (a *Server) routeTelemetry(g *gin.RouterGroup) {
 	g.POST("/api/v2/apmtelemetry", a.HandleTelemetry)
 }
@@ -102,14 +117,12 @@ func (a *Server) HandleTelemetry(c *gin.Context) {
 		log.Printf("[apmtelemetry] cannot read body: %v", err)
 		return
 	}
-	// The raw payload outlives every path out of this handler: a decoder
-	// that fails or does not exist yet must not make the bytes disappear.
-	defer func() { _ = body }()
 
 	var env map[string]json.RawMessage
 	if err := json.Unmarshal(body, &env); err != nil {
 		log.Printf("[apmtelemetry] not a JSON object (%v), raw follows", err)
 		describe("apmtelemetry", c.GetHeader("Content-Type"), body)
+		a.storeRaw(c, "apmtelemetry", "decode_error", err.Error(), body)
 		return
 	}
 
@@ -141,59 +154,208 @@ func (a *Server) HandleTelemetry(c *gin.Context) {
 
 	telLogPayload(reqType, env["payload"])
 
-	// The log above is a partial view. env is the whole envelope, every key
-	// raw; payload is the producer-specific part, its shape fixed by
-	// request_type. Held once per producer so storage sees what each one can
-	// carry. The proxy headers (Via, DD-Agent-Hostname, DD-Agent-Env,
-	// Datadog-Container-ID, X-Datadog-Container-Tags) are still on c.
-	payload := env["payload"]
+	tenant := TenantFromContext(c)
+	if tenant == "" {
+		// Same rule as storeRaw: a made-up tenant would put rows where no
+		// query looks, so a request with none stores nothing. In practice
+		// this cannot happen behind RequireAPIKey.
+		return
+	}
+
+	// One row for the request itself, whatever producer sent it. For
+	// message-batch this row's payload is the WHOLE batch array — "what did
+	// this HTTP request contain" stays answerable from one row — and the
+	// loop below adds one more row per entry, on top of it, not instead.
+	base := apmBuildRow(tenant, time.Now().UTC(), env, reqType, producer, c)
+	rows := []storage.APMTelemetryRow{base}
+
 	if reqType == "message-batch" {
-		// Tracers and agent telemetry both batch: payload is
-		// [{request_type, payload}], each entry's payload shaped like a
-		// top-level one of that request_type.
-		batch, err := telBatch(payload)
+		batch, err := telBatch(env["payload"])
 		if err != nil {
-			log.Printf("   payload: batch is not an array (%v); kept raw", err)
+			log.Printf("   payload: batch is not an array (%v); kept only on the parent row", err)
 		}
-		_ = batch // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+		for i, entry := range batch {
+			childType := telString(entry["request_type"])
+			child := base
+			child.RequestType = childType
+			child.Producer = telProducer(env, childType)
+			child.Payload = apmRawText(entry["payload"])
+			idx := uint32(i)
+			child.BatchIndex = &idx
+			child.ParentRequestType = reqType
+			rows = append(rows, child)
+		}
 	}
-	switch producer {
-	case "tracer":
-		// Envelope: api_version, request_type, tracer_time, runtime_id,
-		// seq_id, application, host, payload, debug. request_type and the
-		// payload shape come from the tracer telemetry spec: app-started,
-		// app-heartbeat, app-closing, app-dependencies-loaded,
-		// app-integrations-change, app-client-configuration-change,
-		// app-product-change, app-extended-heartbeat, generate-metrics,
-		// distributions, logs, message-batch.
-		tracer := payload
-		_ = tracer // TODO(ninjacat): tables. Complete, unconverted, ready to take.
-	case "fleet-installer":
-		// The tracer envelope plus origin; request_type is logs or traces.
-		installer := payload
-		_ = installer // TODO(ninjacat): tables. Complete, unconverted, ready to take.
-	case "agent-telemetry":
-		// Envelope: api_version, request_type, event_time, debug, host,
-		// payload. agent-metrics: {message, metrics{name: {...}}};
-		// agent-logs: {logs[...]}; message-batch: see above; profile events
-		// such as agent-bsod carry their own object.
-		agent := payload
-		_ = agent // TODO(ninjacat): tables. Complete, unconverted, ready to take.
-	case "trace-agent":
-		// apm-onboarding-event: {event_name, tags, error}.
-		onboarding := payload
-		_ = onboarding // TODO(ninjacat): tables. Complete, unconverted, ready to take.
-	case "cluster-agent":
-		// apm-remote-config-event: {event_name, tags, error}.
-		remoteConfig := payload
-		_ = remoteConfig // TODO(ninjacat): tables. Complete, unconverted, ready to take.
-	default:
-		// A request_type this list does not know, from an envelope that
-		// names no producer. Nothing is dropped; it just has no home yet.
-		unknown := payload
-		_ = unknown // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+
+	a.store(storage.APMTelemetryWriter, storage.WriteAPMTelemetry{Rows: rows}, len(rows))
+}
+
+// apmOriginNote is the note storeRaw gets for the tracks with no published
+// schema: the event platform's origin headers plus Content-Type, the only
+// context available alongside the opaque bytes.
+func apmOriginNote(c *gin.Context) string {
+	return fmt.Sprintf("DD-EVP-ORIGIN=%q DD-EVP-ORIGIN-VERSION=%q Content-Type=%q",
+		c.GetHeader("DD-EVP-ORIGIN"), c.GetHeader("DD-EVP-ORIGIN-VERSION"), c.GetHeader("Content-Type"))
+}
+
+// apmUnixTime parses a telemetry timestamp: Unix seconds, with an optional
+// fractional part, sent as a JSON number or (some producers) a JSON string.
+// nil means "absent or not parseable" — never the epoch, which is why the raw
+// JSON text travels alongside in *_raw regardless of whether this succeeds.
+func apmUnixTime(raw json.RawMessage) *time.Time {
+	if len(raw) == 0 {
+		return nil
 	}
-	_ = env // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	s := strings.Trim(strings.TrimSpace(string(raw)), `"`)
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return nil
+	}
+	sec := int64(f)
+	nsec := int64((f - float64(sec)) * 1e9)
+	t := time.Unix(sec, nsec).UTC()
+	return &t
+}
+
+// apmSeqID parses seq_id through json.Number, never through float64 or a bare
+// interface{} decode — either would silently round a large sequence number
+// past 2^53.
+func apmSeqID(raw json.RawMessage) *int64 {
+	if len(raw) == 0 {
+		return nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var n json.Number
+	if err := dec.Decode(&n); err != nil {
+		return nil
+	}
+	v, err := n.Int64()
+	if err != nil {
+		return nil
+	}
+	return &v
+}
+
+// apmRawText is the *_raw twin of every parsed field above: the JSON text
+// exactly as it arrived, kept even when parsing succeeds, because a parse
+// failure must not erase the value entirely. Absent is "", not "null" or "-".
+func apmRawText(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	return string(raw)
+}
+
+// apmApplication reads the six fields every producer that sends an
+// application block is documented to include.
+func apmApplication(raw json.RawMessage) (serviceName, serviceVersion, env, languageName, languageVersion, tracerVersion string) {
+	if len(raw) == 0 {
+		return
+	}
+	var app map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &app); err != nil {
+		return
+	}
+	return telString(app["service_name"]), telString(app["service_version"]), telString(app["env"]),
+		telString(app["language_name"]), telString(app["language_version"]), telString(app["tracer_version"])
+}
+
+// apmHost reads hostname/os/architecture and keeps every other key the host
+// block carried, JSON-text-encoded by name — gohai and the tracer both put
+// more than those three fields there, and the schema does not need to know
+// their names in advance to keep them.
+func apmHost(raw json.RawMessage) (hostname, osName, arch string, extra map[string]string) {
+	if len(raw) == 0 {
+		return
+	}
+	var host map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &host); err != nil {
+		return
+	}
+	hostname, osName, arch = telString(host["hostname"]), telString(host["os"]), telString(host["architecture"])
+	for k, v := range host {
+		if k == "hostname" || k == "os" || k == "architecture" {
+			continue
+		}
+		if extra == nil {
+			extra = make(map[string]string, len(host))
+		}
+		extra[k] = string(v)
+	}
+	return
+}
+
+// apmKnownEnvelopeKeys are the keys apmBuildRow reads by name; anything else
+// in the envelope lands in Extra instead of being silently dropped — the same
+// "keep the names even without a column" rule k8s_actions' extra_keys follows.
+var apmKnownEnvelopeKeys = map[string]bool{
+	"request_type": true, "api_version": true, "runtime_id": true, "seq_id": true,
+	"tracer_time": true, "event_time": true, "application": true, "host": true,
+	"payload": true, "debug": true, "origin": true,
+}
+
+func apmExtraKeys(env map[string]json.RawMessage) map[string]string {
+	var extra map[string]string
+	for k, v := range env {
+		if apmKnownEnvelopeKeys[k] {
+			continue
+		}
+		if extra == nil {
+			extra = make(map[string]string)
+		}
+		extra[k] = string(v)
+	}
+	return extra
+}
+
+// apmBuildRow turns one envelope into the row that always exists: the
+// request itself. For request_type message-batch, HandleTelemetry adds one
+// more row per batch entry on top of this one.
+func apmBuildRow(tenant string, receivedAt time.Time, env map[string]json.RawMessage, reqType, producer string, c *gin.Context) storage.APMTelemetryRow {
+	serviceName, serviceVersion, envName, languageName, languageVersion, tracerVersion := apmApplication(env["application"])
+	hostname, hostOS, hostArch, hostExtra := apmHost(env["host"])
+
+	return storage.APMTelemetryRow{
+		TenantID:   tenant,
+		ReceivedAt: receivedAt,
+
+		RequestType: reqType,
+		Producer:    producer,
+		APIVersion:  telString(env["api_version"]),
+		RuntimeID:   telString(env["runtime_id"]),
+
+		SeqID: apmSeqID(env["seq_id"]),
+
+		TracerTime:    apmUnixTime(env["tracer_time"]),
+		TracerTimeRaw: apmRawText(env["tracer_time"]),
+		EventTime:     apmUnixTime(env["event_time"]),
+		EventTimeRaw:  apmRawText(env["event_time"]),
+
+		ServiceName:     serviceName,
+		ServiceVersion:  serviceVersion,
+		Env:             envName,
+		LanguageName:    languageName,
+		LanguageVersion: languageVersion,
+		TracerVersion:   tracerVersion,
+
+		Hostname:         hostname,
+		HostOS:           hostOS,
+		HostArchitecture: hostArch,
+		HostExtra:        hostExtra,
+
+		Payload: apmRawText(env["payload"]),
+		Debug:   apmRawText(env["debug"]),
+		Origin:  telString(env["origin"]),
+
+		Via:                   c.GetHeader("Via"),
+		DDAgentHostname:       c.GetHeader("DD-Agent-Hostname"),
+		DDAgentEnv:            c.GetHeader("DD-Agent-Env"),
+		DatadogContainerID:    c.GetHeader("Datadog-Container-Id"),
+		XDatadogContainerTags: c.GetHeader("X-Datadog-Container-Tags"),
+
+		Extra: apmExtraKeys(env),
+	}
 }
 
 // telBatch splits a message-batch payload into its entries, each a raw
