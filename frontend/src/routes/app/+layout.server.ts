@@ -9,9 +9,9 @@ export const load: LayoutServerLoad = ({ locals }) => {
 	}
 
 	return {
-		uzytkownik: {
+		user: {
 			email: locals.user.email,
-			nazwa: locals.user.name
+			name: locals.user.name
 		}
 	};
 };
