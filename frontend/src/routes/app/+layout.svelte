@@ -1,59 +1,35 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
-	import { Button } from '$lib/components/ui/button';
+	import AppSidebar from '$lib/components/app/app-sidebar.svelte';
 	import { Separator } from '$lib/components/ui/separator';
+	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
 
-	const pozycje = [
-		{ href: '/app', etykieta: 'Przegląd' },
-		{ href: '/app/metrics', etykieta: 'Metryki' },
-		{ href: '/app/logs', etykieta: 'Logs' },
-		{ href: '/app/ustawienia/klucze', etykieta: 'Klucze API' }
-	];
-
-	// Dokladne dopasowanie dla /app, prefiksowe dla podstron.
-	function aktywna(href: string) {
-		return href === '/app' ? page.url.pathname === '/app' : page.url.pathname.startsWith(href);
-	}
+	// The header shows where you are, because the sidebar collapses to icons and
+	// then cannot.
+	const title = $derived.by(() => {
+		const p = page.url.pathname;
+		if (p.startsWith('/app/metrics')) return 'Metrics';
+		if (p.startsWith('/app/logs')) return 'Logs';
+		if (p.startsWith('/app/ustawienia/klucze')) return 'API keys';
+		return 'Overview';
+	});
 </script>
 
-<div class="min-h-svh bg-background">
-	<header class="border-b">
-		<div class="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
-			<div class="flex items-center gap-6">
-				<a href="/app" class="flex items-center gap-2">
-					<div class="size-6 rounded-md bg-primary"></div>
-					<span class="font-heading text-sm font-semibold tracking-tight">ninjacat</span>
-				</a>
+<Sidebar.Provider>
+	<AppSidebar user={data.user} />
 
-				<Separator orientation="vertical" class="h-5" />
+	<Sidebar.Inset class="flex h-svh flex-col overflow-hidden">
+		<header class="flex h-14 shrink-0 items-center gap-2 border-b px-4">
+			<Sidebar.Trigger class="-ms-1" />
+			<Separator orientation="vertical" class="mr-2 h-4" />
+			<h1 class="font-heading text-sm font-semibold tracking-tight">{title}</h1>
+		</header>
 
-				<nav class="flex items-center gap-1">
-					{#each pozycje as p (p.href)}
-						<Button
-							href={p.href}
-							variant="ghost"
-							size="sm"
-							class={aktywna(p.href) ? 'bg-accent text-accent-foreground' : ''}
-						>
-							{p.etykieta}
-						</Button>
-					{/each}
-				</nav>
-			</div>
-
-			<div class="flex items-center gap-3">
-				<span class="hidden text-sm text-muted-foreground sm:inline">{data.uzytkownik.email}</span>
-				<!-- Akcje zyja tylko w +page.server.ts, wiec celujemy w akcje strony /app -->
-				<form method="POST" action="/app?/wyloguj" use:enhance>
-					<Button type="submit" variant="ghost" size="sm">Wyloguj</Button>
-				</form>
-			</div>
+		<div class="flex-1 overflow-auto">
+			{@render children()}
 		</div>
-	</header>
-
-	{@render children()}
-</div>
+	</Sidebar.Inset>
+</Sidebar.Provider>

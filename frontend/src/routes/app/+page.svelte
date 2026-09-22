@@ -47,7 +47,7 @@
 <main class="mx-auto max-w-6xl px-6 py-10">
 	<div class="mb-8">
 		<h1 class="font-heading text-3xl font-semibold tracking-tight">
-			Witaj{data.uzytkownik.nazwa ? `, ${data.uzytkownik.nazwa}` : ''}
+			Witaj{data.user.name ? `, ${data.user.name}` : ''}
 		</h1>
 		<p class="mt-2 text-sm text-muted-foreground">
 			Instancja stoi i czeka na dane. Nic jeszcze nie przyszło.
