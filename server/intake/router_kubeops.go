@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/DataDog/agent-payload/v5/process"
 	"github.com/gin-gonic/gin"
@@ -29,9 +30,12 @@ import (
 // process.DecodeMessage handles them; only the message types differ, 41..88
 // instead of 12. kubeactions is different: event platform, JSON.
 //
-// Stored: object collections in k8s_resources, raw manifests in k8s_manifests,
-// the cluster summary in k8s_cluster, action results in k8s_actions. ECS tasks
-// are decoded but not stored — no Kubernetes identity to store them under.
+// Stored: object collections in k8s_resources (with k8s_resources_current
+// derived from it by a materialized view), raw manifests in k8s_manifests, the
+// cluster summary in k8s_cluster, ECS tasks in ecs_tasks, action results in
+// k8s_actions. Every one of them carries the frame header as well. A frame
+// that does not decode, and any message type that is not an orchestrator
+// message, goes to raw_payloads rather than only to the log.
 func (a *Server) routeKubeops(g *gin.RouterGroup) {
 	g.POST("/api/v2/orch", a.HandleOrchestrator)
 	g.POST("/api/v2/orchmanif", a.HandleOrchestratorManifests)
@@ -74,6 +78,7 @@ func (a *Server) handleOrchestratorFrame(c *gin.Context, label string) {
 	msg, err := process.DecodeMessage(body)
 	if err != nil {
 		log.Printf("[%s] process frame: %v (%d bytes)", label, err, len(body))
+		a.storeRaw(c, "orchestrator", "decode_error", label+": "+err.Error(), body)
 		return
 	}
 
@@ -90,10 +95,10 @@ func (a *Server) handleOrchestratorFrame(c *gin.Context, label string) {
 	// The frame header, as decoded. Type is the message type (the switch below
 	// resolves it to a concrete Go type); Version and Encoding say how the body
 	// was framed. Timestamp is only present in the V3 header, and the agent's
-	// orchestrator sender leaves it unset, so 0 means "not provided" — never
-	// 1970-01-01. OrgID and SubscriptionID are unused by the agent.
-	header := msg.Header
-	_ = header // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	// orchestrator sender leaves it unset, so 0 means "not provided". OrgID and
+	// SubscriptionID are unused by the agent today — which is why they are
+	// stored now rather than when a sender starts filling them.
+	frame := orchFrameOf(msg.Header)
 
 	// The decoded body, one typed variant per case. Everything the logging
 	// above read came from these same pointers; nothing was copied, flattened
@@ -138,26 +143,31 @@ func (a *Server) handleOrchestratorFrame(c *gin.Context, label string) {
 		*process.CollectorLimitRange,              // 86 — LimitRanges []*process.LimitRange
 		*process.CollectorStorageClass,            // 87 — StorageClasses []*process.StorageClass
 		*process.CollectorPodDisruptionBudget:     // 88 — PodDisruptionBudgets []*process.PodDisruptionBudget
-		a.storeOrchResources(c, payload)
+		a.storeOrchResources(c, frame, payload)
 
 	case *process.CollectorCluster: // 46 — Cluster *process.Cluster, one per frame
-		a.storeOrchCluster(c, payload)
+		a.storeOrchCluster(c, frame, payload)
 
 	// Manifests carry the object's own YAML/JSON in Content. The CRD and CR
 	// wrappers hold an inner *process.CollectorManifest that MAY BE NIL —
 	// GetManifest absorbs that, and the converter treats nil as empty.
+	//
+	// The CRD and CR wrappers carry Tags of their OWN, beside the inner
+	// manifest's, and they used to be read by nobody — so they are passed
+	// down rather than discarded with the wrapper.
 	case *process.CollectorManifest: // 80 — Manifests []*process.Manifest
-		a.storeOrchManifests(c, payload)
+		a.storeOrchManifests(c, frame, payload, nil)
 	case *process.CollectorManifestCRD: // 81 — Manifest *process.CollectorManifest (may be nil), CRDs
-		a.storeOrchManifests(c, payload.GetManifest())
+		a.storeOrchManifests(c, frame, payload.GetManifest(), payload.GetTags())
 	case *process.CollectorManifestCR: // 82 — Manifest *process.CollectorManifest (may be nil), custom resources
-		a.storeOrchManifests(c, payload.GetManifest())
+		a.storeOrchManifests(c, frame, payload.GetManifest(), payload.GetTags())
 
 	case *process.CollectorECSTask: // 200 — Tasks []*process.ECSTask; no Metadata, has AwsAccountID (int64), Region
 		// ECS, not Kubernetes: a task has no Metadata, so nothing here maps
-		// onto k8s_resources' identity columns (namespace/name/uid). Stays
-		// unstored until ECS earns a table of its own.
-		_ = payload // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+		// onto k8s_resources' identity columns (namespace/name/uid). It has a
+		// table of its own instead — forcing it into k8s_resources would have
+		// meant an empty sort key on every task row.
+		a.storeOrchECSTasks(c, frame, payload)
 
 	default:
 		// Every other type process.DecodeMessage can produce belongs to the
@@ -165,8 +175,12 @@ func (a *Server) handleOrchestratorFrame(c *gin.Context, label string) {
 		// CollectorProc, CollectorRealTime, CollectorContainer,
 		// CollectorContainerRealTime, CollectorProcDiscovery,
 		// CollectorConnections, CollectorProcEvent, ResCollector. Landing here
-		// means a misconfigured agent, and the frame is still whole.
+		// means a misconfigured agent — the frame is whole and decoded, but
+		// this router has nowhere to put it, so the bytes go to raw_payloads
+		// where the process router's owner can find them.
 		log.Printf("[%s] %T is not an orchestrator message; kept as is", label, payload)
+		a.storeRaw(c, "orchestrator", "unexpected_shape",
+			fmt.Sprintf("%s: %T on an orchestrator intake", label, payload), body)
 	}
 }
 
@@ -389,18 +403,69 @@ func orchFallback(label string, body process.MessageBody) {
 // Storage
 // ---------------------------------------------------------------------------
 
+// orchFrame is the 16-byte frame header, unpacked into the four columns every
+// orchestrator row carries.
+//
+// It is passed down rather than read again inside the converters so that the
+// converters stay pure functions of their input — which is what lets the
+// tests build a payload and a header by hand and assert on the row.
+type orchFrame struct {
+	OrgID          int32
+	SubscriptionID uint8
+	// Timestamp is the header's raw int64. The frame format documents no unit
+	// for it and no sender we have seen sets it, so it is stored as the
+	// integer it is; nil when the wire said 0, which means "not provided".
+	Timestamp *int64
+	Encoding  string
+}
+
+func orchFrameOf(h process.MessageHeader) orchFrame {
+	f := orchFrame{
+		OrgID:          h.OrgID,
+		SubscriptionID: h.SubscriptionID,
+		Encoding:       orchEncodingName(h.Encoding),
+	}
+	if h.Timestamp != 0 {
+		ts := h.Timestamp
+		f.Timestamp = &ts
+	}
+	return f
+}
+
+// orchEncodingName names the body encoding the frame declared. The wire value
+// is a byte and the type has no String method, so the mapping lives here —
+// and an unknown value keeps its number rather than becoming "".
+func orchEncodingName(e process.MessageEncoding) string {
+	switch e {
+	case process.MessageEncodingProtobuf:
+		return "protobuf"
+	case process.MessageEncodingJSON:
+		return "json"
+	case process.MessageEncodingZstdPB:
+		return "zstd_protobuf"
+	case process.MessageEncodingZstd1xPB:
+		return "zstd1x_protobuf"
+	case process.MessageEncodingZstdPBxNoCgo:
+		return "zstd_protobuf_nocgo"
+	default:
+		return fmt.Sprintf("unknown_%d", uint8(e))
+	}
+}
+
 // storeOrchResources turns one Collector* object list into rows for
 // ninjacat.k8s_resources. Fire-and-forget: the 202 was already deferred, and
 // a missing tenant (a request that skipped the API key middleware) stores
 // nothing rather than writing rows nobody can query.
-func (a *Server) storeOrchResources(c *gin.Context, body process.MessageBody) {
+func (a *Server) storeOrchResources(c *gin.Context, frame orchFrame, body process.MessageBody) {
 	tenant := TenantFromContext(c)
 	if tenant == "" {
 		return
 	}
 	// The orchestrator sender leaves the frame timestamp unset (see the header
-	// comment above), so arrival time is the collection time we have.
-	rows := orchResourceRows(tenant, time.Now().UTC(), body)
+	// comment above), so arrival time is the collection time we have. The
+	// object's OWN creation timestamp now has a column of its own, so this is
+	// no longer the only date on the row.
+	rows := orchResourceRows(tenant, time.Now().UTC(), frame, body)
 	a.store(storage.K8sResourcesWriter, storage.WriteK8sResources{Resources: rows}, len(rows))
 }
 
@@ -414,11 +479,22 @@ func (a *Server) storeOrchResources(c *gin.Context, body process.MessageBody) {
 // (*process.Pod -> "Pod"): agent-payload names its messages after the objects
 // they mirror, which is exactly the string the kind column wants.
 //
-// Only the numbers differ per kind, and those go through a typed switch in
-// orchResourceNumbers. An element that is nil, or has no Metadata, is skipped:
-// without namespace/name/uid the row has no identity and could never be
-// queried or joined — dropping it loses less than storing it as noise.
-func orchResourceRows(tenant string, now time.Time, body process.MessageBody) []storage.K8sResourceRow {
+// THREE THINGS make this lossless rather than a projection, which is what it
+// used to be:
+//
+//   - the fields every kind shares (metadata dates, finalizers, all owner
+//     references, conditions, resource requirements, metrics) are read
+//     generically by name, so a kind nobody wrote a case for still gets them;
+//   - the numbers and typed extras that differ per kind go through the switch
+//     in orchResourceNumbers;
+//   - Object holds the WHOLE element as JSON and Envelope the frame around it,
+//     so a StorageClass's provisioner or a NetworkPolicy's rules survive with
+//     no column of their own.
+//
+// An element that is nil, or has no Metadata, is skipped: without
+// namespace/name/uid the row has no identity and could never be queried or
+// joined — dropping it loses less than storing it as noise.
+func orchResourceRows(tenant string, now time.Time, frame orchFrame, body process.MessageBody) []storage.K8sResourceRow {
 	v := reflect.Indirect(reflect.ValueOf(body))
 	if v.Kind() != reflect.Struct {
 		return nil
@@ -439,10 +515,11 @@ func orchResourceRows(tenant string, now time.Time, body process.MessageBody) []
 	}
 
 	var items reflect.Value
+	itemsField := -1
 	for i := 0; i < v.NumField(); i++ {
 		f := v.Field(i)
 		if f.Kind() == reflect.Slice && f.Type().Elem().Kind() == reflect.Ptr && f.Type().Elem().Elem().Kind() == reflect.Struct {
-			items = f
+			items, itemsField = f, i
 			break
 		}
 	}
@@ -455,11 +532,13 @@ func orchResourceRows(tenant string, now time.Time, body process.MessageBody) []
 	clusterName, clusterID := str("ClusterName"), str("ClusterId")
 	groupID, groupSize := num("GroupId"), num("GroupSize")
 	envTags := orchStringSlice(v, "Tags")
+	hostName := str("HostName")
 	var agentVersion string
 	if f := v.FieldByName("AgentVersion"); f.IsValid() && f.CanInterface() {
 		av, _ := f.Interface().(*process.AgentVersion)
 		agentVersion = agentVersionString(av)
 	}
+	envelope := orchEnvelopeJSON(v, itemsField)
 
 	rows := make([]storage.K8sResourceRow, 0, items.Len())
 	for i := 0; i < items.Len(); i++ {
@@ -495,11 +574,43 @@ func orchResourceRows(tenant string, now time.Time, body process.MessageBody) []
 			AgentVersion: agentVersion,
 			GroupID:      groupID,
 			GroupSize:    groupSize,
+
+			OrgID:           frame.OrgID,
+			SubscriptionID:  frame.SubscriptionID,
+			HeaderTimestamp: frame.Timestamp,
+			Encoding:        frame.Encoding,
+
+			// The object's own dates. Without creationTimestamp "how old is
+			// this pod" had no answer for any kind, because collected_at only
+			// says when we saw it.
+			CreationTimestamp: orchTimePtr(md.GetCreationTimestamp()),
+			DeletionTimestamp: orchTimePtr(md.GetDeletionTimestamp()),
+			Finalizers:        md.GetFinalizers(),
+
+			HostName: hostName,
+			Object:   orchJSON(e.Interface()),
+			Envelope: envelope,
+		}
+		// A grace period is only meaningful while an object is being deleted,
+		// and 0 is then a real value (force delete), not absence — so the
+		// pointer is set exactly when the deletion timestamp is.
+		if md.GetDeletionTimestamp() != 0 {
+			g := md.GetDeletionGracePeriodSeconds()
+			row.DeletionGracePeriodSeconds = &g
 		}
 		// The first owner reference, like orchOwner in the log: Kubernetes
-		// allows several but in practice writes exactly one controller.
+		// allows several but in practice writes exactly one controller. The
+		// rest, and the uid a join needs, go into the parallel arrays.
 		if refs := md.GetOwnerReferences(); len(refs) > 0 {
 			row.OwnerKind, row.OwnerName = refs[0].GetKind(), refs[0].GetName()
+			row.OwnerKinds = make([]string, 0, len(refs))
+			row.OwnerNames = make([]string, 0, len(refs))
+			row.OwnerUIDs = make([]string, 0, len(refs))
+			for _, ref := range refs {
+				row.OwnerKinds = append(row.OwnerKinds, ref.GetKind())
+				row.OwnerNames = append(row.OwnerNames, ref.GetName())
+				row.OwnerUIDs = append(row.OwnerUIDs, ref.GetUid())
+			}
 		}
 		// The frame's tags apply to every object, the object's own on top.
 		objTags := orchStringSlice(e.Elem(), "Tags")
@@ -509,26 +620,94 @@ func orchResourceRows(tenant string, now time.Time, body process.MessageBody) []
 			tags = append(tags, objTags...)
 			row.Tags = tagsToMultiMap(tags)
 		}
+		orchCommonFields(e.Elem(), &row)
 		orchResourceNumbers(e.Interface(), &row)
 		rows = append(rows, row)
 	}
 	return rows
 }
 
-// orchResourceNumbers fills the per-kind numbers — the one part of the row
+// orchCommonFields fills the parts every kind can carry but only some do —
+// conditions, the agent's condition summary, resource requirements and the
+// agent's computed metrics — by looking them up by name.
+//
+// By name rather than by type because each kind declares its OWN condition
+// message (PodCondition, NodeCondition, DeploymentCondition, ...) with the
+// same field names and slightly different sets: NodeCondition has no
+// lastUpdateTime, PodCondition has lastProbeTime and DeploymentCondition has
+// lastUpdateTime. A switch over thirteen near-identical types would be
+// thirteen places to forget a new one; reading Type/Status/Reason/Message and
+// the three optional times by name covers every present and future condition
+// shape at once.
+//
+// Conditions and resource requirements live either on the object or inside
+// its Status/Spec depending on the kind, so both places are tried.
+func orchCommonFields(e reflect.Value, row *storage.K8sResourceRow) {
+	conds := orchFindSlice(e, "Conditions", "Status")
+	if conds.IsValid() && conds.Len() > 0 {
+		n := conds.Len()
+		row.ConditionTypes = make([]string, 0, n)
+		row.ConditionStatuses = make([]string, 0, n)
+		row.ConditionReasons = make([]string, 0, n)
+		row.ConditionMessages = make([]string, 0, n)
+		row.ConditionLastTransition = make([]*time.Time, 0, n)
+		row.ConditionLastUpdate = make([]*time.Time, 0, n)
+		row.ConditionLastProbe = make([]*time.Time, 0, n)
+		for i := 0; i < n; i++ {
+			cv := reflect.Indirect(conds.Index(i))
+			if !cv.IsValid() || cv.Kind() != reflect.Struct {
+				continue
+			}
+			// Two naming conventions in one payload family: most conditions
+			// call the fields Type/Status, while HorizontalPodAutoscaler's
+			// and VPACondition's call them ConditionType/ConditionStatus.
+			// Reading both is the difference between an autoscaler's
+			// conditions arriving and arriving empty.
+			row.ConditionTypes = append(row.ConditionTypes, orchFirstString(cv, "Type", "ConditionType"))
+			row.ConditionStatuses = append(row.ConditionStatuses, orchFirstString(cv, "Status", "ConditionStatus"))
+			row.ConditionReasons = append(row.ConditionReasons, orchStringOf(cv, "Reason"))
+			row.ConditionMessages = append(row.ConditionMessages, orchStringOf(cv, "Message"))
+			row.ConditionLastTransition = append(row.ConditionLastTransition, orchTimePtr(orchInt64Of(cv, "LastTransitionTime")))
+			row.ConditionLastUpdate = append(row.ConditionLastUpdate, orchTimePtr(orchInt64Of(cv, "LastUpdateTime")))
+			row.ConditionLastProbe = append(row.ConditionLastProbe, orchTimePtr(orchInt64Of(cv, "LastProbeTime")))
+		}
+	}
+
+	row.ConditionMessage = orchStringOf(e, "ConditionMessage")
+	if row.ConditionMessage == "" {
+		if st := reflect.Indirect(orchValue(e, "Status")); st.IsValid() && st.Kind() == reflect.Struct {
+			row.ConditionMessage = orchStringOf(st, "ConditionMessage")
+		}
+	}
+
+	if rr := orchFindSlice(e, "ResourceRequirements", "Spec"); rr.IsValid() && rr.Len() > 0 {
+		row.ResourceRequirements = orchJSON(rr.Interface())
+	}
+
+	if m := orchValue(e, "Metrics"); m.IsValid() && m.CanInterface() {
+		if rm, ok := m.Interface().(*process.ResourceMetrics); ok && rm != nil {
+			row.Metrics = rm.GetMetricValues()
+		}
+	}
+}
+
+// orchResourceNumbers fills the per-kind numbers and typed extras — the part
 // reflection cannot see, because every kind names its counters differently.
 // The arithmetic mirrors the orchPod/orchLogBody lines above: what the log
 // prints for a kind is exactly what its Counts map stores.
 //
 // The dedicated Ready/Desired/Available columns carry the same values where
 // the kind has them, so the common "how healthy" query needs no map lookup.
-// Kinds without meaningful numbers (Service, Role, Ingress, ...) leave
-// Counts empty — expected, not a gap.
+// A kind with no case here is NOT a gap any more: its identity, metadata,
+// conditions and metrics are filled generically and its whole message is in
+// the object column. What a case adds is a number somebody charts.
 func orchResourceNumbers(obj any, row *storage.K8sResourceRow) {
 	switch o := obj.(type) {
 	case *process.Pod:
 		// Same sums as orchPod: ready and restarts come from the container
-		// statuses, not from a field of their own.
+		// statuses, not from a field of their own. The per-container detail
+		// now survives beside the sums — "which container of the three is
+		// crashlooping, and with what message" used to have no answer.
 		ready, restarts := 0, int32(0)
 		for _, cs := range o.GetContainerStatuses() {
 			if cs.GetReady() {
@@ -537,14 +716,67 @@ func orchResourceNumbers(obj any, row *storage.K8sResourceRow) {
 			restarts += cs.GetRestartCount()
 		}
 		total := len(o.GetContainerStatuses())
+		initReady, initRestarts := 0, int32(0)
+		for _, cs := range o.GetInitContainerStatuses() {
+			if cs.GetReady() {
+				initReady++
+			}
+			initRestarts += cs.GetRestartCount()
+		}
 		row.NodeName, row.Phase, row.Status = o.GetNodeName(), o.GetPhase(), o.GetStatus()
 		// For a pod "ready/desired" is containers ready / containers total —
 		// the same fraction the log prints as "containers=2/3 ready".
 		row.Ready, row.Desired = int32(ready), int32(total)
 		row.Counts = map[string]int64{
-			"restarts":         int64(restarts),
-			"ready_containers": int64(ready),
-			"total_containers": int64(total),
+			"restarts":              int64(restarts),
+			"ready_containers":      int64(ready),
+			"total_containers":      int64(total),
+			"init_restarts":         int64(initRestarts),
+			"ready_init_containers": int64(initReady),
+			"total_init_containers": int64(len(o.GetInitContainerStatuses())),
+			// The agent's own aggregate, kept beside the recomputed one: if
+			// they ever disagree, that is worth seeing rather than hiding.
+			"pod_restart_count": int64(o.GetRestartCount()),
+		}
+		row.PodIP = o.GetIP()
+		row.NominatedNodeName = o.GetNominatedNodeName()
+		row.QOSClass = o.GetQOSClass()
+		row.PriorityClass = o.GetPriorityClass()
+		row.StartTime = orchTimePtr(o.GetStartTime())
+		row.ScheduledTime = orchTimePtr(o.GetScheduledTime())
+		if h := o.GetHost(); h != nil && h.GetName() != "" {
+			row.HostName = h.GetName()
+		}
+		// Regular containers first, then init containers, told apart by
+		// ContainerIsInit — one set of arrays rather than two, because every
+		// question about a container ("is it ready", "what is its image") is
+		// the same question for both.
+		statuses := make([]*process.ContainerStatus, 0, total+len(o.GetInitContainerStatuses()))
+		isInit := make([]uint8, 0, cap(statuses))
+		for _, cs := range o.GetContainerStatuses() {
+			statuses, isInit = append(statuses, cs), append(isInit, 0)
+		}
+		for _, cs := range o.GetInitContainerStatuses() {
+			statuses, isInit = append(statuses, cs), append(isInit, 1)
+		}
+		row.ContainerNames = make([]string, 0, len(statuses))
+		row.ContainerIDs = make([]string, 0, len(statuses))
+		row.ContainerReady = make([]uint8, 0, len(statuses))
+		row.ContainerRestarts = make([]int32, 0, len(statuses))
+		row.ContainerStates = make([]string, 0, len(statuses))
+		row.ContainerMessages = make([]string, 0, len(statuses))
+		row.ContainerImages = make([]string, 0, len(statuses))
+		row.ContainerImageIDs = make([]string, 0, len(statuses))
+		row.ContainerIsInit = isInit
+		for _, cs := range statuses {
+			row.ContainerNames = append(row.ContainerNames, cs.GetName())
+			row.ContainerIDs = append(row.ContainerIDs, cs.GetContainerID())
+			row.ContainerReady = append(row.ContainerReady, boolToUint8(cs.GetReady()))
+			row.ContainerRestarts = append(row.ContainerRestarts, cs.GetRestartCount())
+			row.ContainerStates = append(row.ContainerStates, cs.GetState())
+			row.ContainerMessages = append(row.ContainerMessages, cs.GetMessage())
+			row.ContainerImages = append(row.ContainerImages, cs.GetImage())
+			row.ContainerImageIDs = append(row.ContainerImageIDs, cs.GetImageID())
 		}
 	case *process.Deployment:
 		row.Ready, row.Desired, row.Available = o.GetReadyReplicas(), o.GetReplicasDesired(), o.GetAvailableReplicas()
@@ -554,13 +786,18 @@ func orchResourceNumbers(obj any, row *storage.K8sResourceRow) {
 			"updated":     int64(o.GetUpdatedReplicas()),
 			"available":   int64(o.GetAvailableReplicas()),
 			"unavailable": int64(o.GetUnavailableReplicas()),
+			// The observed total, distinct from desired: during a rollout
+			// they differ, and that difference is the rollout.
+			"replicas": int64(o.GetReplicas()),
 		}
 	case *process.ReplicaSet:
 		row.Ready, row.Desired, row.Available = o.GetReadyReplicas(), o.GetReplicasDesired(), o.GetAvailableReplicas()
 		row.Counts = map[string]int64{
-			"ready":     int64(o.GetReadyReplicas()),
-			"desired":   int64(o.GetReplicasDesired()),
-			"available": int64(o.GetAvailableReplicas()),
+			"ready":         int64(o.GetReadyReplicas()),
+			"desired":       int64(o.GetReplicasDesired()),
+			"available":     int64(o.GetAvailableReplicas()),
+			"replicas":      int64(o.GetReplicas()),
+			"fully_labeled": int64(o.GetFullyLabeledReplicas()),
 		}
 	case *process.DaemonSet:
 		st := o.GetStatus()
@@ -572,6 +809,9 @@ func orchResourceNumbers(obj any, row *storage.K8sResourceRow) {
 			"updated":      int64(st.GetUpdatedNumberScheduled()),
 			"available":    int64(st.GetNumberAvailable()),
 			"misscheduled": int64(st.GetNumberMisscheduled()),
+			// The seventh number of DaemonSetStatus, and the one that says a
+			// rollout is stuck.
+			"unavailable": int64(st.GetNumberUnavailable()),
 		}
 	case *process.StatefulSet:
 		// Desired lives in the SPEC here, unlike the other workloads — the
@@ -583,14 +823,230 @@ func orchResourceNumbers(obj any, row *storage.K8sResourceRow) {
 			"desired": int64(sp.GetDesiredReplicas()),
 			"current": int64(st.GetCurrentReplicas()),
 			"updated": int64(st.GetUpdatedReplicas()),
+			// Status.Replicas, the observed total — a different field from
+			// current, and it used to be the one that went missing.
+			"replicas":  int64(st.GetReplicas()),
+			"partition": int64(sp.GetPartition()),
 		}
 	case *process.Node:
 		// No counts, but the condition summary ("Ready", "NotReady") is the
 		// one status a node has — the same string orchNode logs.
-		row.Status = o.GetStatus().GetStatus()
+		st := o.GetStatus()
+		row.Status = st.GetStatus()
+		row.PodCIDR = o.GetPodCIDR()
+		row.PodCIDRs = o.GetPodCIDRs()
+		row.Unschedulable = boolToUint8(o.GetUnschedulable())
+		row.ProviderID = o.GetProviderID()
+		row.NodeRoles = o.GetRoles()
+		if len(o.GetTaints()) > 0 {
+			row.Taints = orchJSON(o.GetTaints())
+		}
+		row.Capacity = st.GetCapacity()
+		row.Allocatable = st.GetAllocatable()
+		if len(st.GetNodeAddresses()) > 0 {
+			row.NodeAddresses = orchJSON(st.GetNodeAddresses())
+		}
+		row.KubeletVersion = st.GetKubeletVersion()
+		row.KubeProxyVersion = st.GetKubeProxyVersion()
+		row.OperatingSystem = st.GetOperatingSystem()
+		row.Architecture = st.GetArchitecture()
+		row.KernelVersion = st.GetKernelVersion()
+		row.OSImage = st.GetOsImage()
+		row.ContainerRuntimeVersion = st.GetContainerRuntimeVersion()
+		if h := o.GetHost(); h != nil && h.GetName() != "" {
+			row.HostName = h.GetName()
+		}
+		row.Counts = map[string]int64{
+			"taints": int64(len(o.GetTaints())),
+			// The node-local image cache, counted; the images themselves are
+			// the contimage intake's job and are in object anyway.
+			"images": int64(len(st.GetImages())),
+		}
 	case *process.Namespace:
 		row.Status = o.GetStatus() // Active / Terminating
+	case *process.Service:
+		sp := o.GetSpec()
+		row.ServiceType = sp.GetType()
+		row.ClusterIP = sp.GetClusterIP()
+		if len(sp.GetPorts()) > 0 {
+			row.ServicePorts = orchJSON(sp.GetPorts())
+		}
+		row.Counts = map[string]int64{"ports": int64(len(sp.GetPorts()))}
+	case *process.Role:
+		row.RBACRules = orchJSON(o.GetRules())
+		row.Counts = map[string]int64{"rules": int64(len(o.GetRules()))}
+	case *process.ClusterRole:
+		row.RBACRules = orchJSON(o.GetRules())
+		row.Counts = map[string]int64{
+			"rules":             int64(len(o.GetRules())),
+			"aggregation_rules": int64(len(o.GetAggregationRules())),
+		}
+	case *process.RoleBinding:
+		row.RBACSubjects = orchJSON(o.GetSubjects())
+		row.RBACRoleRef = orchJSON(o.GetRoleRef())
+		row.Counts = map[string]int64{"subjects": int64(len(o.GetSubjects()))}
+	case *process.ClusterRoleBinding:
+		row.RBACSubjects = orchJSON(o.GetSubjects())
+		row.RBACRoleRef = orchJSON(o.GetRoleRef())
+		row.Counts = map[string]int64{"subjects": int64(len(o.GetSubjects()))}
+	case *process.Job:
+		st, sp := o.GetStatus(), o.GetSpec()
+		row.Counts = map[string]int64{
+			"active":                  int64(st.GetActive()),
+			"succeeded":               int64(st.GetSucceeded()),
+			"failed":                  int64(st.GetFailed()),
+			"parallelism":             int64(sp.GetParallelism()),
+			"completions":             int64(sp.GetCompletions()),
+			"backoff_limit":           int64(sp.GetBackoffLimit()),
+			"active_deadline_seconds": sp.GetActiveDeadlineSeconds(),
+		}
+		row.StartTime = orchTimePtr(st.GetStartTime())
+	case *process.CronJob:
+		st, sp := o.GetStatus(), o.GetSpec()
+		row.Counts = map[string]int64{
+			"active_jobs":                   int64(len(st.GetActive())),
+			"suspend":                       int64(boolToUint8(sp.GetSuspend())),
+			"successful_jobs_history_limit": int64(sp.GetSuccessfulJobsHistoryLimit()),
+			"failed_jobs_history_limit":     int64(sp.GetFailedJobsHistoryLimit()),
+			"starting_deadline_seconds":     sp.GetStartingDeadlineSeconds(),
+		}
+	case *process.HorizontalPodAutoscaler:
+		st, sp := o.GetStatus(), o.GetSpec()
+		row.Ready, row.Desired = st.GetCurrentReplicas(), st.GetDesiredReplicas()
+		row.Counts = map[string]int64{
+			"min_replicas":     int64(sp.GetMinReplicas()),
+			"max_replicas":     int64(sp.GetMaxReplicas()),
+			"current_replicas": int64(st.GetCurrentReplicas()),
+			"desired_replicas": int64(st.GetDesiredReplicas()),
+		}
+	case *process.PodDisruptionBudget:
+		st := o.GetStatus()
+		row.Counts = map[string]int64{
+			// The number a PDB exists to produce: how many pods may be
+			// evicted right now.
+			"disruptions_allowed": int64(st.GetDisruptionsAllowed()),
+			"current_healthy":     int64(st.GetCurrentHealthy()),
+			"desired_healthy":     int64(st.GetDesiredHealthy()),
+			"expected_pods":       int64(st.GetExpectedPods()),
+			"disrupted_pods":      int64(len(st.GetDisruptedPods())),
+		}
 	}
+}
+
+// orchValue reads a field by name off a struct value, or an invalid Value
+// when the message has no such field.
+func orchValue(v reflect.Value, name string) reflect.Value {
+	if !v.IsValid() || v.Kind() != reflect.Struct {
+		return reflect.Value{}
+	}
+	f := v.FieldByName(name)
+	if !f.IsValid() || !f.CanInterface() {
+		return reflect.Value{}
+	}
+	return f
+}
+
+// orchFirstString reads the first of several candidate field names that is
+// present and non-empty.
+func orchFirstString(v reflect.Value, names ...string) string {
+	for _, n := range names {
+		if s := orchStringOf(v, n); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+func orchStringOf(v reflect.Value, name string) string {
+	f := orchValue(v, name)
+	if f.IsValid() && f.Kind() == reflect.String {
+		return f.String()
+	}
+	return ""
+}
+
+func orchInt64Of(v reflect.Value, name string) int64 {
+	f := orchValue(v, name)
+	if f.IsValid() && (f.Kind() == reflect.Int64 || f.Kind() == reflect.Int32) {
+		return f.Int()
+	}
+	return 0
+}
+
+// orchFindSlice looks for a slice field by name on the object, then in the
+// named sub-message. Deployment keeps its conditions on the object while a
+// PodDisruptionBudget keeps them in Status, and a Job keeps its resource
+// requirements in Spec while a Pod keeps them on the object — one lookup
+// covers both layouts.
+func orchFindSlice(e reflect.Value, name, nested string) reflect.Value {
+	if f := orchValue(e, name); f.IsValid() && f.Kind() == reflect.Slice {
+		return f
+	}
+	if sub := reflect.Indirect(orchValue(e, nested)); sub.IsValid() && sub.Kind() == reflect.Struct {
+		if f := orchValue(sub, name); f.IsValid() && f.Kind() == reflect.Slice {
+			return f
+		}
+	}
+	return reflect.Value{}
+}
+
+// orchEnvelopeJSON renders the frame envelope without its object list.
+//
+// The list is the rows, so repeating it per row would square the payload; the
+// rest of the envelope is small, identical for every row of the pass, and
+// holds the per-kind extras nothing else reads — CollectorPod's Host, Info and
+// IsTerminated, CollectorNode's HostAliasMapping. ZSTD collapses the repeats
+// inside the part.
+//
+// The copy is made through reflection rather than by mutating the caller's
+// message, which is still being read by the log path and by the converters.
+func orchEnvelopeJSON(v reflect.Value, itemsField int) string {
+	if itemsField < 0 || !v.IsValid() || v.Kind() != reflect.Struct {
+		return ""
+	}
+	cp := reflect.New(v.Type()).Elem()
+	for i := 0; i < v.NumField(); i++ {
+		if i == itemsField || !cp.Field(i).CanSet() {
+			continue
+		}
+		cp.Field(i).Set(v.Field(i))
+	}
+	return orchJSON(cp.Addr().Interface())
+}
+
+// orchJSON renders a decoded sub-message for a String column.
+//
+// encoding/json rather than protojson: agent-payload's process package is
+// generated by protoc-gen-gogo, so its messages are not protoreflect messages
+// and protojson cannot see them. encoding/json reads the same generated
+// struct tags, keeps int64 ids as exact digits rather than floats, and needs
+// no new dependency.
+//
+// A marshalling failure returns "" rather than propagating: the column is a
+// completeness guarantee, not the row's identity, and losing the whole row
+// over it would be the worse trade. In practice generated structs always
+// marshal.
+func orchJSON(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		log.Printf("[orch] cannot render %T as JSON: %v", v, err)
+		return ""
+	}
+	return string(b)
+}
+
+// orchTimePtr converts a Unix-seconds timestamp off the orchestrator wire
+// into a value for a Nullable(DateTime) column.
+//
+// Same rule as lcTimePtr and wireTime: 0 means the sender did not supply the
+// field, and it must never become 1970-01-01. Every date in this payload
+// family is an int64 of seconds, including the ones inside conditions.
+func orchTimePtr(seconds int64) *time.Time {
+	if seconds <= 0 {
+		return nil
+	}
+	t := time.Unix(seconds, 0).UTC()
+	return &t
 }
 
 // orchStringSlice reads a []string field by name, or nil when the message
@@ -621,32 +1077,55 @@ func agentVersionString(v *process.AgentVersion) string {
 
 // storeOrchManifests turns one manifest envelope into rows for
 // ninjacat.k8s_manifests. The CRD/CR callers pass GetManifest(), which may be
-// nil — orchManifestRows treats that as an empty collection.
-func (a *Server) storeOrchManifests(c *gin.Context, m *process.CollectorManifest) {
+// nil — orchManifestRows treats that as an empty collection — plus the
+// wrapper's own tags, which nothing used to read.
+func (a *Server) storeOrchManifests(c *gin.Context, frame orchFrame, m *process.CollectorManifest, wrapperTags []string) {
 	tenant := TenantFromContext(c)
 	if tenant == "" {
 		return
 	}
-	rows := orchManifestRows(tenant, time.Now().UTC(), m)
+	rows := orchManifestRows(tenant, time.Now().UTC(), frame, m, wrapperTags)
 	a.store(storage.K8sManifestsWriter, storage.WriteK8sManifests{Manifests: rows}, len(rows))
 }
 
 // orchManifestRows converts one CollectorManifest into rows, one per object.
 // Content is stored whole — the entire YAML or JSON document — which is why
 // the manifests writer runs with much smaller batches than everything else.
-func orchManifestRows(tenant string, now time.Time, m *process.CollectorManifest) []storage.K8sManifestRow {
+//
+// TAGS COME FROM THREE PLACES and used to come from none: the frame envelope,
+// the CRD/CR wrapper around it, and the manifest itself. They are merged into
+// one multiset, because a query asking for env:prod does not care who
+// attached the tag, and TagSources keeps the provenance beside it so the
+// question "who said so" is still answerable.
+func orchManifestRows(tenant string, now time.Time, frame orchFrame, m *process.CollectorManifest, wrapperTags []string) []storage.K8sManifestRow {
 	if m == nil {
 		return nil // a CRD/CR wrapper around a nil envelope — orchManifests logs it
 	}
+	envTags := m.GetTags()
 	rows := make([]storage.K8sManifestRow, 0, len(m.GetManifests()))
 	for _, man := range m.GetManifests() {
 		if man == nil {
 			continue
 		}
-		var terminated uint8
-		if man.GetIsTerminated() {
-			terminated = 1
+		content := man.GetContent()
+		manTags := man.GetTags()
+
+		merged := make([]string, 0, len(envTags)+len(wrapperTags)+len(manTags))
+		merged = append(merged, envTags...)
+		merged = append(merged, wrapperTags...)
+		merged = append(merged, manTags...)
+
+		sources := make(map[string][]string, 3)
+		for name, tags := range map[string][]string{
+			"envelope": envTags,
+			"wrapper":  wrapperTags,
+			"manifest": manTags,
+		} {
+			if len(tags) > 0 {
+				sources[name] = tags
+			}
 		}
+
 		rows = append(rows, storage.K8sManifestRow{
 			TenantID:        tenant,
 			CollectedAt:     now,
@@ -656,9 +1135,33 @@ func orchManifestRows(tenant string, now time.Time, m *process.CollectorManifest
 			Kind:            man.GetKind(),
 			APIVersion:      man.GetApiVersion(),
 			ResourceVersion: man.GetResourceVersion(),
-			Content:         string(man.GetContent()),
+			Content:         string(content),
 			ContentType:     man.GetContentType(),
-			IsTerminated:    terminated,
+			IsTerminated:    boolToUint8(man.GetIsTerminated()),
+
+			OrgID:           frame.OrgID,
+			SubscriptionID:  frame.SubscriptionID,
+			HeaderTimestamp: frame.Timestamp,
+			Encoding:        frame.Encoding,
+
+			GroupID:         m.GetGroupId(),
+			GroupSize:       m.GetGroupSize(),
+			HostName:        m.GetHostName(),
+			AgentVersion:    agentVersionString(m.GetAgentVersion()),
+			OriginCollector: m.GetOriginCollector().String(),
+
+			Tags:       tagsToMultiMap(merged),
+			TagSources: sources,
+
+			NodeName:        man.GetNodeName(),
+			Type:            man.GetType(),
+			Version:         man.GetVersion(),
+			ExtraAttributes: man.GetExtraAttributes(),
+
+			// A ClickHouse String is a byte string, so the content survives
+			// either way — but whoever reads the column deserves to know
+			// whether it can be parsed as text before trying.
+			ContentIsUTF8: boolToUint8(utf8.Valid(content)),
 		})
 	}
 	return rows
@@ -666,18 +1169,22 @@ func orchManifestRows(tenant string, now time.Time, m *process.CollectorManifest
 
 // storeOrchCluster turns the CollectorCluster summary into its single row for
 // ninjacat.k8s_cluster.
-func (a *Server) storeOrchCluster(c *gin.Context, m *process.CollectorCluster) {
+func (a *Server) storeOrchCluster(c *gin.Context, frame orchFrame, m *process.CollectorCluster) {
 	tenant := TenantFromContext(c)
 	if tenant == "" {
 		return
 	}
-	rows := orchClusterRows(tenant, time.Now().UTC(), m)
+	rows := orchClusterRows(tenant, time.Now().UTC(), frame, m)
 	a.store(storage.K8sClusterWriter, storage.WriteK8sCluster{Clusters: rows}, len(rows))
 }
 
 // orchClusterRows converts a CollectorCluster into its one row — or none,
 // when the inner Cluster message is missing.
-func orchClusterRows(tenant string, now time.Time, m *process.CollectorCluster) []storage.K8sClusterRow {
+//
+// NodesInfo is the per-node breakdown behind NodeCount, kept as parallel
+// arrays in wire order. Only the total used to survive, so "which of my nodes
+// is still on the old kubelet" was a histogram with no names on it.
+func orchClusterRows(tenant string, now time.Time, frame orchFrame, m *process.CollectorCluster) []storage.K8sClusterRow {
 	cl := m.GetCluster()
 	if cl == nil {
 		return nil
@@ -686,7 +1193,9 @@ func orchClusterRows(tenant string, now time.Time, m *process.CollectorCluster) 
 	if nodeCount < 0 {
 		nodeCount = 0 // a count cannot be negative; don't let int32->uint32 invent 4 billion nodes
 	}
-	return []storage.K8sClusterRow{{
+
+	info := cl.GetNodesInfo()
+	row := storage.K8sClusterRow{
 		TenantID:          tenant,
 		CollectedAt:       now,
 		ClusterID:         m.GetClusterId(),
@@ -700,7 +1209,67 @@ func orchClusterRows(tenant string, now time.Time, m *process.CollectorCluster) 
 		MemoryAllocatable: cl.GetMemoryAllocatable(),
 		KubeletVersions:   orchVersionSpread(cl.GetKubeletVersions()),
 		APIServerVersions: orchVersionSpread(cl.GetApiServerVersions()),
-	}}
+
+		OrgID:           frame.OrgID,
+		SubscriptionID:  frame.SubscriptionID,
+		HeaderTimestamp: frame.Timestamp,
+		Encoding:        frame.Encoding,
+
+		GroupID:      m.GetGroupId(),
+		GroupSize:    m.GetGroupSize(),
+		AgentVersion: agentVersionString(m.GetAgentVersion()),
+
+		// Two tag sets, not merged: the frame's and the Cluster object's own
+		// are different fields on the wire, and which producer attached a tag
+		// is worth keeping.
+		Tags:        tagsToMultiMap(m.GetTags()),
+		ClusterTags: tagsToMultiMap(cl.GetTags()),
+
+		ResourceVersion:              cl.GetResourceVersion(),
+		CreationTimestamp:            orchTimePtr(cl.GetCreationTimestamp()),
+		Metrics:                      cl.GetMetrics().GetMetricValues(),
+		ExtendedResourcesCapacity:    cl.GetExtendedResourcesCapacity(),
+		ExtendedResourcesAllocatable: cl.GetExtendedResourcesAllocatable(),
+
+		NodesName:                    make([]string, 0, len(info)),
+		NodesRegion:                  make([]string, 0, len(info)),
+		NodesInstanceType:            make([]string, 0, len(info)),
+		NodesOS:                      make([]string, 0, len(info)),
+		NodesOSImage:                 make([]string, 0, len(info)),
+		NodesArchitecture:            make([]string, 0, len(info)),
+		NodesKernelVersion:           make([]string, 0, len(info)),
+		NodesContainerRuntimeVersion: make([]string, 0, len(info)),
+		NodesKubeletVersion:          make([]string, 0, len(info)),
+		NodesAllocatable:             make([]map[string]string, 0, len(info)),
+		NodesCapacity:                make([]map[string]string, 0, len(info)),
+	}
+	for _, n := range info {
+		row.NodesName = append(row.NodesName, n.GetName())
+		row.NodesRegion = append(row.NodesRegion, n.GetRegion())
+		row.NodesInstanceType = append(row.NodesInstanceType, n.GetInstanceType())
+		row.NodesOS = append(row.NodesOS, n.GetOperatingSystem())
+		row.NodesOSImage = append(row.NodesOSImage, n.GetOperatingSystemImage())
+		row.NodesArchitecture = append(row.NodesArchitecture, n.GetArchitecture())
+		row.NodesKernelVersion = append(row.NodesKernelVersion, n.GetKernelVersion())
+		row.NodesContainerRuntimeVersion = append(row.NodesContainerRuntimeVersion, n.GetContainerRuntimeVersion())
+		row.NodesKubeletVersion = append(row.NodesKubeletVersion, n.GetKubeletVersion())
+		// An Array(Map(...)) rejects a nil element, and a node that reported
+		// no quantities is a normal occurrence — so the hole is filled here,
+		// not left for the driver to reject the whole batch over.
+		row.NodesAllocatable = append(row.NodesAllocatable, orEmptyStringMap(n.GetResourceAllocatable()))
+		row.NodesCapacity = append(row.NodesCapacity, orEmptyStringMap(n.GetResourceCapacity()))
+	}
+	return []storage.K8sClusterRow{row}
+}
+
+// orEmptyStringMap is the per-element guard for Array(Map(String, String)):
+// storage's orEmpty fixes a nil map passed as a whole column, but a nil
+// INSIDE an array never reaches it.
+func orEmptyStringMap(m map[string]string) map[string]string {
+	if m == nil {
+		return map[string]string{}
+	}
+	return m
 }
 
 // orchVersionSpread converts the wire's int32 node counts (version -> nodes
@@ -718,6 +1287,90 @@ func orchVersionSpread(m map[string]int32) map[string]uint32 {
 		out[k] = uint32(v)
 	}
 	return out
+}
+
+// storeOrchECSTasks turns one CollectorECSTask frame into rows for
+// ninjacat.ecs_tasks.
+func (a *Server) storeOrchECSTasks(c *gin.Context, frame orchFrame, m *process.CollectorECSTask) {
+	tenant := TenantFromContext(c)
+	if tenant == "" {
+		return
+	}
+	rows := orchECSTaskRows(tenant, time.Now().UTC(), frame, m)
+	a.store(storage.ECSTasksWriter, storage.WriteECSTasks{Tasks: rows}, len(rows))
+}
+
+// orchECSTaskRows converts a CollectorECSTask into one row per task.
+//
+// ECS, not Kubernetes: a task has no Metadata, so it has no namespace, name or
+// uid — the columns k8s_resources sorts by. The ARN is the identity instead,
+// which is why this has a table of its own rather than an emptied-out row in
+// somebody else's.
+//
+// FOUR tag sets stay apart: the frame envelope's, and the three ECS itself
+// keeps separate (Datadog tags, the task's own ECS tags, and the tags of the
+// container instance it happens to run on — those belong to the machine, not
+// the workload).
+func orchECSTaskRows(tenant string, now time.Time, frame orchFrame, m *process.CollectorECSTask) []storage.ECSTaskRow {
+	tasks := m.GetTasks()
+	envelopeTags := tagsToMultiMap(m.GetTags())
+	rows := make([]storage.ECSTaskRow, 0, len(tasks))
+	for _, t := range tasks {
+		if t == nil {
+			continue
+		}
+		rows = append(rows, storage.ECSTaskRow{
+			TenantID:    tenant,
+			CollectedAt: now,
+
+			OrgID:           frame.OrgID,
+			SubscriptionID:  frame.SubscriptionID,
+			HeaderTimestamp: frame.Timestamp,
+			Encoding:        frame.Encoding,
+
+			AWSAccountID: m.GetAwsAccountID(),
+			ClusterID:    m.GetClusterId(),
+			ClusterName:  m.GetClusterName(),
+			Region:       m.GetRegion(),
+			GroupID:      m.GetGroupId(),
+			GroupSize:    m.GetGroupSize(),
+			HostName:     m.GetHostName(),
+			AgentVersion: agentVersionString(m.GetAgentVersion()),
+			EnvelopeTags: envelopeTags,
+
+			ARN:                  t.GetArn(),
+			ResourceVersion:      t.GetResourceVersion(),
+			LaunchType:           t.GetLaunchType(),
+			DesiredStatus:        t.GetDesiredStatus(),
+			KnownStatus:          t.GetKnownStatus(),
+			Family:               t.GetFamily(),
+			Version:              t.GetVersion(),
+			AvailabilityZone:     t.GetAvailabilityZone(),
+			ServiceName:          t.GetServiceName(),
+			VpcID:                t.GetVpcId(),
+			ContainerInstanceARN: t.GetContainerInstanceArn(),
+			DaemonName:           t.GetDaemonName(),
+			TaskHostName:         t.GetHost().GetName(),
+
+			Limits:                  t.GetLimits(),
+			EphemeralStorageMetrics: t.GetEphemeralStorageMetrics(),
+
+			PullStartedAt:      orchTimePtr(t.GetPullStartedAt()),
+			PullStoppedAt:      orchTimePtr(t.GetPullStoppedAt()),
+			ExecutionStoppedAt: orchTimePtr(t.GetExecutionStoppedAt()),
+
+			// The containers as JSON. An ECSContainer nests ports, networks,
+			// volumes, health and log options, each a repeated sub-message —
+			// parallel arrays would have to be arrays of arrays of structs.
+			Containers:     orchJSON(t.GetContainers()),
+			ContainerCount: uint32(len(t.GetContainers())),
+
+			Tags:                  tagsToMultiMap(t.GetTags()),
+			ECSTags:               tagsToMultiMap(t.GetEcsTags()),
+			ContainerInstanceTags: tagsToMultiMap(t.GetContainerInstanceTags()),
+		})
+	}
+	return rows
 }
 
 // HandleKubeActions accepts the cluster agent's reports on actions it ran.
@@ -743,6 +1396,10 @@ func (a *Server) HandleKubeActions(c *gin.Context) {
 	if err := json.Unmarshal(body, &batch); err != nil {
 		log.Printf("[kubeactions] not a JSON array (%v), raw follows", err)
 		describe("kubeactions", c.GetHeader("Content-Type"), body)
+		// describe() prints the shape without guessing a schema; the bytes
+		// themselves go to raw_payloads, because a shape we cannot parse is
+		// exactly the payload somebody will want to read later.
+		a.storeRaw(c, "kubeactions", "decode_error", err.Error(), body)
 		return
 	}
 
@@ -755,6 +1412,11 @@ func (a *Server) HandleKubeActions(c *gin.Context) {
 		ev, err := kubeActionDecode(raw)
 		if err != nil {
 			log.Printf("   event %d: %v (%d B)", i, err, len(raw))
+			// One bad element must not cost the batch, and must not cost
+			// itself either: the element's own JSON goes to raw_payloads
+			// while the rest of the batch becomes rows.
+			a.storeRaw(c, "kubeactions", "decode_error",
+				fmt.Sprintf("batch element %d: %v", i, err), raw)
 			continue
 		}
 		events = append(events, ev)
@@ -771,10 +1433,9 @@ func (a *Server) HandleKubeActions(c *gin.Context) {
 	// any key the struct does not declare. batch is the same thing untouched.
 	//
 	// Storage: one K8sActionRow per decoded event — the audit record of what
-	// the cluster agent did with a remote action. The row keeps every declared
-	// field except Payloads (whole attachments, no column; they stay only in
-	// events) and records the NAMES of undeclared keys in ExtraKeys, so a
-	// newer agent's additions are at least visible in queries.
+	// the cluster agent did with a remote action. Every declared field, the
+	// attachments, and the undeclared keys with their values, which used to
+	// survive as names alone.
 	if tenant := TenantFromContext(c); tenant != "" && len(events) > 0 {
 		now := time.Now().UTC()
 		rows := make([]storage.K8sActionRow, 0, len(events))
@@ -783,11 +1444,11 @@ func (a *Server) HandleKubeActions(c *gin.Context) {
 		}
 		a.store(storage.K8sActionsWriter, storage.WriteK8sActions{Actions: rows}, len(rows))
 	}
-
-	_ = batch // TODO(ninjacat): tables. Complete, unconverted, ready to take.
 }
 
-// kubeActionRow converts one decoded event into its row.
+// kubeActionRow converts one decoded event into its row. Nothing is left
+// behind: the attachments and the undeclared keys' values, both previously
+// dropped by design, have columns now.
 //
 // Timestamp on the wire is an RFC 3339 string, and empty means "not provided"
 // — the same rule wireTime encodes for numeric timestamps: fall back to
@@ -802,12 +1463,26 @@ func kubeActionRow(tenant string, arrival time.Time, ev kubeActionResultEvent) s
 		}
 	}
 	var extra []string
+	var extraJSON string
 	if len(ev.Extra) > 0 {
 		extra = make([]string, 0, len(ev.Extra))
 		for k := range ev.Extra {
 			extra = append(extra, k)
 		}
 		sort.Strings(extra) // deterministic: map order must not leak into rows
+		// The names stay a column of their own because filtering on them
+		// then needs no JSON parsing; the values come too, because a newer
+		// agent's addition is worth keeping and not just counting.
+		extraJSON = orchJSON(ev.Extra)
+	}
+	// Attachments, name -> bytes. ClickHouse Strings are byte strings, so a
+	// non-text attachment survives the trip unchanged.
+	var payloads map[string]string
+	if len(ev.Payloads) > 0 {
+		payloads = make(map[string]string, len(ev.Payloads))
+		for k, v := range ev.Payloads {
+			payloads[k] = string(v)
+		}
 	}
 	return storage.K8sActionRow{
 		TenantID:          tenant,
@@ -826,6 +1501,12 @@ func kubeActionRow(tenant string, arrival time.Time, ev kubeActionResultEvent) s
 		RequestedBy:       ev.RequestedBy,
 		Message:           ev.Message,
 		ExtraKeys:         extra,
+		Payloads:          payloads,
+		Extra:             extraJSON,
+		// The string exactly as it arrived. Timestamp above falls back to
+		// arrival time when this is empty or unparseable, and that fallback
+		// used to erase its own evidence.
+		TimestampRaw: ev.Timestamp,
 	}
 }
 

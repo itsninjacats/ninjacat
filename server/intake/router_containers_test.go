@@ -1,6 +1,8 @@
 package intake
 
 import (
+	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +11,8 @@ import (
 	"github.com/DataDog/agent-payload/v5/contlcycle"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/itsninjacats/server/apps/storage"
 )
 
 // The exit code is a proto3 oneof, so "no code reported" and "exit 0" are
@@ -484,5 +488,370 @@ func TestSelfCountPointShape(t *testing.T) {
 	}
 	if !p.Timestamp.Equal(now) {
 		t.Errorf("timestamp: got %v, want %v", p.Timestamp, now)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Fidelity: what the transition formatter used to flatten away
+// ---------------------------------------------------------------------------
+
+// A container killed by the OOM killer, which is what this intake exists for.
+// The flattened OldState/NewState strings stay — a dashboard wants a label —
+// but "every OOM kill with signal 9" is a question about columns, and the
+// reason, exit code and signal had none.
+func TestLifecycleRowStructuredContainerTransition(t *testing.T) {
+	reason := "OOMKilled"
+	exit := int32(137)
+	signal := int32(9)
+
+	rows := lcRows(&contlcycle.EventsPayload{
+		Version: "v1", Host: "node-1", ClusterId: "cid",
+		Events: []*contlcycle.Event{{
+			EventType: contlcycle.Event_Transition,
+			TypedEvent: &contlcycle.Event_Container{Container: &contlcycle.ContainerEvent{
+				ContainerID: "containerd://abc",
+				Transition: &contlcycle.ContainerStateTransition{
+					ContainerKind:       contlcycle.ContainerKind_CONTAINER_KIND_REGULAR,
+					Precision:           contlcycle.Precision_PRECISION_EXACT,
+					MissedIntermediate:  contlcycle.MissedIntermediate_MISSED_INTERMEDIATE_PROVEN,
+					TransitionTimestamp: 1700000000,
+					LastObservedState: &contlcycle.ContainerStateValue{
+						Kind: contlcycle.ContainerStateKind_CONTAINER_STATE_KIND_RUNNING,
+					},
+					NewState: &contlcycle.ContainerStateValue{
+						Kind:     contlcycle.ContainerStateKind_CONTAINER_STATE_KIND_TERMINATED,
+						Reason:   &reason,
+						ExitCode: &exit,
+						Signal:   &signal,
+					},
+				},
+			}},
+		}},
+	}, "t", time.Now().UTC())
+
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+	r := rows[0]
+
+	if r.PayloadVersion != "v1" {
+		t.Errorf("PayloadVersion = %q, want v1", r.PayloadVersion)
+	}
+	if r.EventVariant != "container" {
+		t.Errorf("EventVariant = %q, want container", r.EventVariant)
+	}
+	if r.ContainerKind != "CONTAINER_KIND_REGULAR" {
+		t.Errorf("ContainerKind = %q", r.ContainerKind)
+	}
+	if r.Precision != "PRECISION_EXACT" || r.MissedIntermediate != "MISSED_INTERMEDIATE_PROVEN" {
+		t.Errorf("precision/missed = %q / %q — these are the agent saying how much to trust the row",
+			r.Precision, r.MissedIntermediate)
+	}
+	if r.OldStateKind != "CONTAINER_STATE_KIND_RUNNING" || r.NewStateKind != "CONTAINER_STATE_KIND_TERMINATED" {
+		t.Errorf("state kinds = %q -> %q", r.OldStateKind, r.NewStateKind)
+	}
+	if r.NewReason == nil || *r.NewReason != "OOMKilled" {
+		t.Errorf("NewReason = %v, want OOMKilled", r.NewReason)
+	}
+	if r.NewExitCode == nil || *r.NewExitCode != 137 || r.NewSignal == nil || *r.NewSignal != 9 {
+		t.Errorf("new exit/signal = %v / %v, want 137 / 9", r.NewExitCode, r.NewSignal)
+	}
+	// The RUNNING state carried no reason, exit code or signal — proto3
+	// optionals left unset — and absent must stay absent rather than become
+	// "" and 0, which would read as "terminated cleanly with no reason".
+	if r.OldReason != nil || r.OldExitCode != nil || r.OldSignal != nil {
+		t.Errorf("old state invented values: reason=%v exit=%v signal=%v", r.OldReason, r.OldExitCode, r.OldSignal)
+	}
+	// The formatted strings are still there, from the same wire message, so
+	// the log and the row cannot disagree.
+	if !strings.Contains(r.NewState, "OOMKilled") || !strings.Contains(r.NewState, "signal=9") {
+		t.Errorf("NewState = %q, want the human label kept beside the columns", r.NewState)
+	}
+}
+
+// A pod scheduling failure. The old formatter collapsed the whole status into
+// one string and never read Message at all — which is the half that says what
+// to do about it.
+func TestLifecycleRowPodConditionTransition(t *testing.T) {
+	reason := "Unschedulable"
+	message := "0/3 nodes are available: insufficient memory"
+
+	rows := lcRows(&contlcycle.EventsPayload{
+		Events: []*contlcycle.Event{{
+			EventType: contlcycle.Event_Transition,
+			TypedEvent: &contlcycle.Event_Pod{Pod: &contlcycle.PodEvent{
+				PodUID: "pod-uid-1",
+				Transition: &contlcycle.PodStateTransition{
+					Field: contlcycle.PodStatusField_POD_STATUS_FIELD_CONDITION,
+					LastObservedState: &contlcycle.PodStatusValue{
+						Value: &contlcycle.PodStatusValue_Phase{Phase: "Pending"},
+					},
+					NewState: &contlcycle.PodStatusValue{
+						Value: &contlcycle.PodStatusValue_Condition{Condition: &contlcycle.ConditionValue{
+							Type: "PodScheduled", Status: "False", Reason: &reason, Message: &message,
+						}},
+					},
+				},
+			}},
+		}},
+	}, "t", time.Now().UTC())
+	r := rows[0]
+
+	if r.EventVariant != "pod" || r.PodUID != "pod-uid-1" {
+		t.Errorf("variant/uid = %q / %q", r.EventVariant, r.PodUID)
+	}
+	if r.PodStatusField != "POD_STATUS_FIELD_CONDITION" {
+		t.Errorf("PodStatusField = %q — WHICH field moved was never stored", r.PodStatusField)
+	}
+	// The oneof discriminator: a phase row and a condition row use different
+	// columns, and nothing said which arm had been populated.
+	if r.OldStateVariant != "phase" || r.NewStateVariant != "condition" {
+		t.Errorf("state variants = %q -> %q, want phase -> condition", r.OldStateVariant, r.NewStateVariant)
+	}
+	if r.OldPhase == nil || *r.OldPhase != "Pending" {
+		t.Errorf("OldPhase = %v, want Pending", r.OldPhase)
+	}
+	if r.OldConditionType != nil || r.NewPhase != nil {
+		t.Errorf("the unused arm was filled in: oldCondType=%v newPhase=%v", r.OldConditionType, r.NewPhase)
+	}
+	if r.NewConditionType == nil || *r.NewConditionType != "PodScheduled" ||
+		r.NewConditionStatus == nil || *r.NewConditionStatus != "False" {
+		t.Errorf("new condition = %v / %v", r.NewConditionType, r.NewConditionStatus)
+	}
+	if r.NewConditionMessage == nil || *r.NewConditionMessage != message {
+		t.Errorf("NewConditionMessage = %v, want the scheduler's explanation", r.NewConditionMessage)
+	}
+}
+
+// containerName is a proto3 optional, so "never set" and "set to empty" are
+// different wire states. The column cannot become Nullable without rewriting
+// every stored row, so presence travels beside it.
+func TestLifecycleRowContainerNamePresence(t *testing.T) {
+	empty := ""
+	cases := []struct {
+		name        string
+		event       *contlcycle.ContainerEvent
+		wantPresent uint8
+	}{
+		{"never set", &contlcycle.ContainerEvent{ContainerID: "a"}, 0},
+		{"set to empty", &contlcycle.ContainerEvent{ContainerID: "b", ContainerName: &empty}, 1},
+		{"set to a name", &contlcycle.ContainerEvent{ContainerID: "c", ContainerName: strPtr("app")}, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rows := lcRows(&contlcycle.EventsPayload{
+				Events: []*contlcycle.Event{{TypedEvent: &contlcycle.Event_Container{Container: tc.event}}},
+			}, "t", time.Now().UTC())
+			if rows[0].ContainerNamePresent != tc.wantPresent {
+				t.Errorf("ContainerNamePresent = %d, want %d", rows[0].ContainerNamePresent, tc.wantPresent)
+			}
+		})
+	}
+}
+
+// An event whose oneof is nil, or a variant newer than this schema, produced
+// a row indistinguishable from a typed event whose fields all happened to be
+// empty. The variant column is what tells them apart.
+func TestLifecycleRowUnknownVariant(t *testing.T) {
+	rows := lcRows(&contlcycle.EventsPayload{
+		Events: []*contlcycle.Event{{EventType: contlcycle.Event_Delete}},
+	}, "t", time.Now().UTC())
+	if rows[0].EventVariant != "unknown" {
+		t.Errorf("EventVariant = %q, want unknown", rows[0].EventVariant)
+	}
+	if rows[0].EventType != "Delete" {
+		t.Errorf("EventType = %q — the envelope is still real information", rows[0].EventType)
+	}
+}
+
+func strPtr(s string) *string { return &s }
+
+// The layer list was reduced to two numbers and the build history thrown away
+// whole — the Dockerfile instruction that created each layer, its author, and
+// when. Layers are index-aligned arrays in wire order, because an image IS
+// its ordered layer stack.
+func TestImageRowsLayers(t *testing.T) {
+	created := timestamppb.New(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
+	source := "agent"
+
+	rows, skipped := ciRows(&contimage.ContainerImagePayload{
+		Version: "v1", Host: "node-1", Source: &source,
+		Images: []*contimage.ContainerImage{{
+			Id: "sha256:img", Name: "shop/app", Digest: "sha256:dig", Size: 300,
+			Layers: []*contimage.ContainerImage_ContainerImageLayer{
+				{
+					MediaType: "application/vnd.oci.image.layer.v1.tar+gzip",
+					Digest:    "sha256:layer1", Size: 100,
+					Urls: []string{"https://example.invalid/blob"},
+					History: &contimage.ContainerImage_ContainerImageLayer_History{
+						Created: created, CreatedBy: "RUN apk add curl", Author: "ci", Comment: "base",
+					},
+				},
+				{
+					Digest: "sha256:layer2", Size: 200,
+					History: &contimage.ContainerImage_ContainerImageLayer_History{
+						CreatedBy: "COPY . /app", EmptyLayer: true,
+					},
+				},
+			},
+		}},
+	}, "t", time.Now().UTC())
+
+	if skipped != 0 || len(rows) != 1 {
+		t.Fatalf("rows=%d skipped=%d, want 1/0", len(rows), skipped)
+	}
+	r := rows[0]
+
+	if r.PayloadVersion != "v1" {
+		t.Errorf("PayloadVersion = %q", r.PayloadVersion)
+	}
+	// Which pipeline produced the inventory was decoded for the log line and
+	// never stored; nil there is "the sender did not say", not "agent".
+	if r.Source == nil || *r.Source != "agent" {
+		t.Errorf("Source = %v, want agent", r.Source)
+	}
+
+	if !reflect.DeepEqual(r.LayerDigests, []string{"sha256:layer1", "sha256:layer2"}) {
+		t.Errorf("LayerDigests = %v, want both in wire order", r.LayerDigests)
+	}
+	if !reflect.DeepEqual(r.LayerSizes, []int64{100, 200}) {
+		t.Errorf("LayerSizes = %v", r.LayerSizes)
+	}
+	if r.LayerMediaTypes[0] != "application/vnd.oci.image.layer.v1.tar+gzip" {
+		t.Errorf("LayerMediaTypes[0] = %q", r.LayerMediaTypes[0])
+	}
+	// The layer that had no urls must get an EMPTY slice: the driver rejects
+	// a nil inside an Array(Array(String)) and takes the whole batch with it.
+	if len(r.LayerURLs) != 2 || r.LayerURLs[1] == nil {
+		t.Errorf("LayerURLs = %v, want an empty slice for the layer with none", r.LayerURLs)
+	}
+	if r.LayerURLs[0][0] != "https://example.invalid/blob" {
+		t.Errorf("LayerURLs[0] = %v", r.LayerURLs[0])
+	}
+
+	// The build history: this is the single biggest thing the old converter
+	// decoded and dropped.
+	if r.LayerHistoryCreatedBy[0] != "RUN apk add curl" || r.LayerHistoryCreatedBy[1] != "COPY . /app" {
+		t.Errorf("LayerHistoryCreatedBy = %v", r.LayerHistoryCreatedBy)
+	}
+	if r.LayerHistoryAuthor[0] != "ci" || r.LayerHistoryComment[0] != "base" {
+		t.Errorf("author/comment = %q / %q", r.LayerHistoryAuthor[0], r.LayerHistoryComment[0])
+	}
+	if !reflect.DeepEqual(r.LayerHistoryEmptyLayer, []uint8{0, 1}) {
+		t.Errorf("LayerHistoryEmptyLayer = %v", r.LayerHistoryEmptyLayer)
+	}
+	if r.LayerHistoryCreated[0] == nil || !r.LayerHistoryCreated[0].Equal(created.AsTime()) {
+		t.Errorf("LayerHistoryCreated[0] = %v", r.LayerHistoryCreated[0])
+	}
+	// The second layer's history carried no Created, and a missing date must
+	// not become 1970 — the arrays stay index-aligned with a NULL in the hole.
+	if r.LayerHistoryCreated[1] != nil {
+		t.Errorf("LayerHistoryCreated[1] = %v, want nil", r.LayerHistoryCreated[1])
+	}
+	if r.LayerCount != 2 || r.LayerBytes != 300 {
+		t.Errorf("layer count/bytes = %d / %d", r.LayerCount, r.LayerBytes)
+	}
+}
+
+// size is a signed int64 on the wire and unsigned in the table. Casting a
+// negative blindly produces ~18 exabytes and poisons every SUM over the
+// table, so it is clamped and the clamp is recorded rather than hidden.
+func TestImageRowsNegativeSizeIsClampedAndFlagged(t *testing.T) {
+	rows, _ := ciRows(&contimage.ContainerImagePayload{
+		Images: []*contimage.ContainerImage{
+			{Id: "a", Size: -1},
+			{Id: "b", Size: 42},
+		},
+	}, "t", time.Now().UTC())
+	if len(rows) != 2 {
+		t.Fatalf("got %d rows, want 2", len(rows))
+	}
+	if rows[0].SizeBytes != 0 || rows[0].SizeNegative != 1 {
+		t.Errorf("negative size = %d (flag %d), want 0 with the flag raised", rows[0].SizeBytes, rows[0].SizeNegative)
+	}
+	if rows[1].SizeBytes != 42 || rows[1].SizeNegative != 0 {
+		t.Errorf("honest size = %d (flag %d)", rows[1].SizeBytes, rows[1].SizeNegative)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Through the real engine
+// ---------------------------------------------------------------------------
+
+// The whole path for a lifecycle batch, and the 202 with an empty object that
+// every sender on this intake depends on.
+func TestHandleContainerLifecycleStoresRows(t *testing.T) {
+	a, node := newTestServer(t)
+	e := newTestEngine(t, a, a.routeContainers)
+
+	body, err := proto.Marshal(&contlcycle.EventsPayload{
+		Version: "v1", Host: "node-1", ClusterId: "cid",
+		ObjectKind: contlcycle.ObjectKind_Container,
+		Events: []*contlcycle.Event{
+			{EventType: contlcycle.Event_Create, TypedEvent: &contlcycle.Event_Container{
+				Container: &contlcycle.ContainerEvent{ContainerID: "c1"}}},
+			{EventType: contlcycle.Event_Delete, TypedEvent: &contlcycle.Event_Container{
+				Container: &contlcycle.ContainerEvent{ContainerID: "c2",
+					OptionalExitCode: &contlcycle.ContainerEvent_ExitCode{ExitCode: 137}}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	w := post(t, e, "/api/v2/contlcycle", body)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("got %d, want 202 (%s)", w.Code, w.Body.String())
+	}
+	if got := strings.TrimSpace(w.Body.String()); got != "{}" {
+		t.Errorf("body = %q, want {}", got)
+	}
+
+	rows := Rows[storage.ContainerEventRow](node)
+	if len(rows) != 2 {
+		t.Fatalf("container_events rows: got %d, want 2", len(rows))
+	}
+	for i, r := range rows {
+		if r.TenantID != testTenant || r.Host != "node-1" || r.PayloadVersion != "v1" {
+			t.Errorf("row %d = %+v", i, r)
+		}
+	}
+	if rows[1].ExitCode == nil || *rows[1].ExitCode != 137 {
+		t.Errorf("exit code = %v, want 137", rows[1].ExitCode)
+	}
+}
+
+// Protobuf fails OPEN: a payload meant for another endpoint decodes into an
+// empty struct rather than erroring. The bytes are the only thing that says
+// what really arrived, so they go to raw_payloads.
+func TestHandleContainerPayloadsStoreRawWhenUndecodable(t *testing.T) {
+	cases := []struct {
+		name, path, intake, reason string
+		body                       []byte
+	}{
+		{"lifecycle garbage", "/api/v2/contlcycle", "contlcycle", "decode_error", []byte{0xff, 0xff, 0xff, 0xff}},
+		{"lifecycle empty decode", "/api/v2/contlcycle", "contlcycle", "unexpected_shape", nil},
+		{"image garbage", "/api/v2/contimage", "contimage", "decode_error", []byte{0xff, 0xff, 0xff, 0xff}},
+		{"image empty decode", "/api/v2/contimage", "contimage", "unexpected_shape", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a, node := newTestServer(t)
+			e := newTestEngine(t, a, a.routeContainers)
+
+			if w := post(t, e, tc.path, tc.body); w.Code != http.StatusAccepted {
+				t.Fatalf("got %d, want 202 — this intake never rejects", w.Code)
+			}
+			raw := Rows[storage.RawPayloadRow](node)
+			if len(raw) != 1 {
+				t.Fatalf("raw_payloads rows: got %d, want 1", len(raw))
+			}
+			if raw[0].Intake != tc.intake || raw[0].Reason != tc.reason {
+				t.Errorf("intake/reason = %q/%q, want %q/%q", raw[0].Intake, raw[0].Reason, tc.intake, tc.reason)
+			}
+			if raw[0].TenantID != testTenant {
+				t.Errorf("tenant = %q", raw[0].TenantID)
+			}
+		})
 	}
 }
