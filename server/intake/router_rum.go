@@ -391,10 +391,6 @@ func (a *Server) HandleRUM(c *gin.Context) {
 	if !ok || len(body) == 0 {
 		return
 	}
-	// The raw payload outlives every path out of this handler: a decoder
-	// that fails or does not exist yet must not make the bytes disappear.
-	defer func() { _ = body }()
-
 	req := rumRequestInfo(c)
 	lines := rumNDJSON(body)
 	log.Printf("[rum] %d events, ddsource=%s origin=%s/%s request_id=%s",
@@ -749,10 +745,6 @@ func (a *Server) HandleRUMReplay(c *gin.Context) {
 	if !ok || len(body) == 0 {
 		return
 	}
-	// The raw payload outlives every path out of this handler: a decoder
-	// that fails or does not exist yet must not make the bytes disappear.
-	defer func() { _ = body }()
-
 	ct := c.GetHeader("Content-Type")
 	parts, err := rumParts("rum-replay", ct, body)
 	if err != nil {
@@ -970,10 +962,6 @@ func (a *Server) HandleRUMSpans(c *gin.Context) {
 	if !ok || len(body) == 0 {
 		return
 	}
-	// The raw payload outlives every path out of this handler: a decoder
-	// that fails or does not exist yet must not make the bytes disappear.
-	defer func() { _ = body }()
-
 	req := rumRequestInfo(c)
 	lines := rumNDJSON(body)
 	log.Printf("[rum-spans] %d envelopes, origin=%s/%s", len(lines), req.EVPOrigin, req.EVPOriginVersion)
