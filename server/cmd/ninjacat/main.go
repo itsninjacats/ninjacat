@@ -79,6 +79,16 @@ func main() {
 				IntakeHandler:   intakeSrv.Handler(),
 				InternalAddr:    envOr("NINJACAT_INTERNAL_ADDR", ":8081"),
 				InternalHandler: panelSrv.Handler(),
+				// agent-intake.logs.<site>: the Datadog Agent's TCP logs
+				// transport, for installs that never set logs_config.use_http
+				// (see intake/tcplogs.go). "off" disables the listener.
+				LogsTCPAddr:   envOr("NINJACAT_LOGS_TCP_ADDR", ":10516"),
+				LogsTCPServer: intakeSrv.TCPLogsServer(),
+				// TLS is opt-in for this listener only — see tcpMeta in
+				// apps/httpapi/tcplogs.go. Neither set means plain, which is
+				// what the agent needs logs_config.logs_no_ssl: true for.
+				LogsTCPCertFile: os.Getenv("NINJACAT_TLS_CERT"),
+				LogsTCPKeyFile:  os.Getenv("NINJACAT_TLS_KEY"),
 			}),
 			// selfmon comes after storage: its only dependency is the
 			// metrics writer, which it reaches by message.
@@ -118,6 +128,7 @@ func main() {
 	log.Printf("ninjacat is up")
 	log.Printf("  agent intake : %s", envOr("NINJACAT_ADDR", ":8080"))
 	log.Printf("  panel API    : %s", envOr("NINJACAT_INTERNAL_ADDR", ":8081"))
+	log.Printf("  logs TCP     : %s", envOr("NINJACAT_LOGS_TCP_ADDR", ":10516"))
 	log.Printf("  observer     : http://localhost:9911")
 
 	// We block on the node, not on an HTTP server. The servers live as

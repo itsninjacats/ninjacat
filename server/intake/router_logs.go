@@ -2,6 +2,7 @@ package intake
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -16,8 +17,10 @@ import (
 //
 //	config: logs_config.logs_dd_url / DD_LOGS_CONFIG_LOGS_DD_URL
 //
-// Needs logs_config.use_http=true; logs otherwise use their own TCP+TLS
-// transport and never reach an HTTP endpoint.
+// Needs logs_config.use_http=true (or HTTPS reachable at agent startup, its
+// default probe). Without it the agent falls back to its own TCP transport —
+// agent-intake.logs.<site> — which never reaches this file or a gin.Engine
+// at all: see tcplogs.go and docs/tables/logs.md's "TCP transport" section.
 //
 // STORED: one `logs` row per item — the declared fields, plus status, plus a
 // timestamp resolved from four possible wire forms (timestamp_source records
@@ -90,22 +93,24 @@ func (a *Server) HandleLogs(c *gin.Context) {
 	rows := make([]storage.LogRow, 0, len(raws))
 
 	for i, raw := range raws {
-		var e datadogV2.HTTPLogItem
-		if err := json.Unmarshal(raw, &e); err != nil {
-			// The generated unmarshaller swallows most odd shapes into
-			// UnparsedObject, so reaching here means the bytes are not even an
-			// object. Keep them: this is the only copy.
-			log.Printf("[logs] item #%d: %v", i, err)
-			a.storeRaw(c, "logs", "decode_error", "item #"+strconv.Itoa(i)+": "+err.Error(), raw)
-			continue
-		}
-		if e.UnparsedObject != nil {
-			// The item decoded as JSON but not as a log: none of the declared
-			// fields were populated, so a row built from it would be a row of
-			// empty strings pretending to be a log line.
-			log.Printf("[logs] item #%d did not fit HTTPLogItem, kept raw, keys: %s",
-				i, apiKeys(e.UnparsedObject))
-			a.storeRaw(c, "logs", "unexpected_shape", "item #"+strconv.Itoa(i)+" did not fit datadogV2.HTTPLogItem", raw)
+		// The generated unmarshaller swallows most odd shapes into
+		// UnparsedObject, so decodeLogItemJSON failing outright means the
+		// bytes are not even an object. Keep them either way: this is the
+		// only copy.
+		e, unparsedKeys, err := decodeLogItemJSON(raw)
+		if err != nil {
+			if errors.Is(err, errLogItemUnparsedShape) {
+				// The item decoded as JSON but not as a log: none of the
+				// declared fields were populated, so a row built from it
+				// would be a row of empty strings pretending to be a log
+				// line.
+				log.Printf("[logs] item #%d did not fit HTTPLogItem, kept raw, keys: %s",
+					i, unparsedKeys)
+				a.storeRaw(c, "logs", "unexpected_shape", "item #"+strconv.Itoa(i)+" did not fit datadogV2.HTTPLogItem", raw)
+			} else {
+				log.Printf("[logs] item #%d: %v", i, err)
+				a.storeRaw(c, "logs", "decode_error", "item #"+strconv.Itoa(i)+": "+err.Error(), raw)
+			}
 			continue
 		}
 		if tenant == "" {
@@ -125,6 +130,32 @@ func (a *Server) HandleLogs(c *gin.Context) {
 	}
 
 	a.store(storage.LogsWriter, storage.WriteLogs{Entries: rows}, len(rows))
+}
+
+// errLogItemUnparsedShape marks a raw item that decoded as JSON but not as a
+// log: none of datadogV2.HTTPLogItem's declared fields were populated. Wrap
+// it with nothing extra — the keys that WERE there differ per item and are
+// returned alongside it by decodeLogItemJSON instead of living on a
+// package-level error value.
+var errLogItemUnparsedShape = errors.New("log item did not fit datadogV2.HTTPLogItem")
+
+// decodeLogItemJSON is the ONLY place a raw log item is unmarshalled.
+// HandleLogs (a whole batch, one HTTP request) and the TCP transport (one
+// line at a time — see tcplogs.go) both call it, so the same bytes are
+// classified as "not JSON" or "not shaped like a log" identically no matter
+// which wire they arrived on.
+//
+// unparsedKeys is only meaningful when err wraps errLogItemUnparsedShape: the
+// sorted, bounded key list of whatever WAS in the object, for a log line or a
+// raw_payloads note that says more than "did not fit".
+func decodeLogItemJSON(raw []byte) (item datadogV2.HTTPLogItem, unparsedKeys string, err error) {
+	if err := json.Unmarshal(raw, &item); err != nil {
+		return datadogV2.HTTPLogItem{}, "", err
+	}
+	if item.UnparsedObject != nil {
+		return datadogV2.HTTPLogItem{}, apiKeys(item.UnparsedObject), errLogItemUnparsedShape
+	}
+	return item, "", nil
 }
 
 // logRow turns one decoded item into the row, applying the batch-level query

@@ -22,6 +22,7 @@ import (
 //	trace.agent.<site>          apm_config.apm_dd_url         router_trace.go
 //	http-intake.logs.<site>     logs_config.logs_dd_url       router_logs.go
 //	agent-http-intake.logs.<site>                             router_logs.go
+//	agent-intake.logs.<site>    logs_config.logs_dd_url (TCP) tcplogs.go
 //	process.<site>              process_config.process_dd_url router_process.go
 //	orchestrator.<site>         orchestrator_dd_url           router_kubeops.go
 //	kubeops-intake.<site>       kubeactions.forwarder         router_kubeops.go
