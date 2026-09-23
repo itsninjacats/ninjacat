@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"strings"
 	"time"
 
 	"github.com/DataDog/agent-payload/v5/gogen"
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV1"
-	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/gin-gonic/gin"
 )
 
@@ -25,7 +25,7 @@ import (
 //	/api/v1/check_run            []datadogV1.ServiceCheck
 //	/api/v1/events               datadogV1.EventCreateRequest
 //	/api/v1/distribution_points  datadogV1.DistributionPointsPayload
-//	/api/v2/logs                 []datadogV2.HTTPLogItem
+//	/api/v2/logs                 []datadogV2.HTTPLogItem (framed by parseLogItems)
 //
 // This is not only about saving work. Every datadog-api-client model carries
 // AdditionalProperties, filled by a generated UnmarshalJSON that decodes the
@@ -162,16 +162,54 @@ func parseSketchesJSON(body []byte) (gogen.SketchPayload, error) {
 // Logs, checks, events, distributions
 // ---------------------------------------------------------------------------
 
-// parseLogs reads a logs payload into Datadog's own log model.
+// parseLogItems splits a logs body into one raw JSON value per log item,
+// WITHOUT decoding them.
 //
-// The agent sends an array; clients sometimes send a bare object, and
-// Datadog's API accepts both.
-func parseLogs(body []byte) ([]datadogV2.HTTPLogItem, error) {
-	items, err := decodeJSONList[datadogV2.HTTPLogItem](body)
-	if err != nil {
-		return nil, fmt.Errorf("JSON logs: %w", err)
+// Raw, because the item is the unit of failure here: an entry that does not
+// fit datadogV2.HTTPLogItem has to reach raw_payloads as the bytes that
+// arrived, and a decoded-then-re-encoded copy is not those bytes.
+//
+// Three framings share this path:
+//
+//	[{...},{...}]   the agent, and every official client
+//	{...}           a single bare object, which the API also accepts
+//	{...}\n{...}    NDJSON — what the browser SDK sends
+//
+// The first significant byte tells the array apart from the other two, and a
+// streaming decoder covers both of those at once: it reads consecutive JSON
+// values until EOF, which is exactly NDJSON with the single object as its
+// one-line case. Whitespace between values, including none at all, is fine —
+// the decoder does not care about the newline, only NDJSON's producers do.
+func parseLogItems(body []byte) ([]json.RawMessage, error) {
+	for _, b := range body {
+		switch b {
+		case ' ', '\t', '\r', '\n':
+			continue
+		case '[':
+			var items []json.RawMessage
+			if err := json.Unmarshal(body, &items); err != nil {
+				return nil, fmt.Errorf("JSON logs array: %w", err)
+			}
+			return items, nil
+		}
+		break
 	}
-	return items, nil
+
+	dec := json.NewDecoder(bytes.NewReader(body))
+	var items []json.RawMessage
+	for {
+		var raw json.RawMessage
+		err := dec.Decode(&raw)
+		if err == io.EOF {
+			return items, nil
+		}
+		if err != nil {
+			// Report how far we got: with NDJSON the interesting question is
+			// which line broke, not that something did.
+			return nil, fmt.Errorf("JSON logs item %d: %w", len(items), err)
+		}
+		items = append(items, raw)
+	}
 }
 
 // parseCheckRuns decodes a check_run batch, per item.
@@ -186,32 +224,37 @@ func parseLogs(body []byte) ([]datadogV2.HTTPLogItem, error) {
 //
 // Second, decoding the batch as one unit means a single odd check discards
 // every other check beside it. Per-item decoding keeps the good ones.
-func parseCheckRuns(body []byte) ([]datadogV1.ServiceCheck, error) {
+//
+// The second return value is the items that did NOT decode, exactly as they
+// arrived. They used to be counted here and dropped, which put the only copy
+// of an unknown check shape out of reach of the handler that could have kept
+// it.
+func parseCheckRuns(body []byte) ([]datadogV1.ServiceCheck, []json.RawMessage, error) {
 	var raw []json.RawMessage
 	if err := json.Unmarshal(body, &raw); err != nil {
 		// Not an array: fall back to the shared decoder, which also handles a
 		// bare object as datadogpy sends it.
 		runs, err := decodeJSONList[datadogV1.ServiceCheck](body)
 		if err != nil {
-			return nil, fmt.Errorf("JSON check_run: %w", err)
+			return nil, nil, fmt.Errorf("JSON check_run: %w", err)
 		}
-		return runs, nil
+		return runs, nil, nil
 	}
 
 	runs := make([]datadogV1.ServiceCheck, 0, len(raw))
-	var skipped int
+	var skipped []json.RawMessage
 	for _, item := range raw {
 		var run datadogV1.ServiceCheck
 		if err := json.Unmarshal(withTags(item), &run); err != nil {
-			skipped++
+			skipped = append(skipped, item)
 			continue
 		}
 		runs = append(runs, run)
 	}
-	if skipped > 0 {
-		log.Printf("[check_run] %d of %d checks could not be decoded and were skipped", skipped, len(raw))
+	if len(skipped) > 0 {
+		log.Printf("[check_run] %d of %d checks could not be decoded, kept in raw_payloads", len(skipped), len(raw))
 	}
-	return runs, nil
+	return runs, skipped, nil
 }
 
 // withTags supplies an empty tag list when a check has none, so the generated

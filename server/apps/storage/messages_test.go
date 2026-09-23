@@ -49,12 +49,12 @@ func TestAppendToCarriesMultiValuedTags(t *testing.T) {
 			name: "metrics",
 			row: MetricPoint{TenantID: "t", Timestamp: now, Metric: "m",
 				Host: "h", Value: 1, Tags: tags},
-			argN: 10, tagsAt: 9,
+			argN: 15, tagsAt: 9,
 		},
 		{
 			name: "hosts",
 			row:  HostRow{TenantID: "t", Host: "h", SeenAt: now, Tags: tags},
-			argN: 9, tagsAt: 8,
+			argN: 27, tagsAt: 8,
 		},
 		{
 			name: "k8s_resources",
