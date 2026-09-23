@@ -1,6 +1,7 @@
 package intake
 
 import (
+	"bytes"
 	"log"
 	"time"
 
@@ -71,6 +72,16 @@ func (a *Server) storeRaw(c *gin.Context, intake, reason, note string, body []by
 			intake, c.Request.URL.Path, len(body))
 		return
 	}
+	if rawIsProbe(body) {
+		// The agent sweeps every intake at startup with an empty object or
+		// an empty body and no X-Requested-With header (seen from a real
+		// 7.83 agent on contlcycle, contimage, sbom, genresources, ndmtraps,
+		// data_streams_messages and logs). Those bytes carry nothing, so a
+		// row per probe per boot would only bury the payloads this table
+		// exists for.
+		log.Printf("[raw] %s %s: empty probe body, not stored", intake, c.Request.URL.Path)
+		return
+	}
 
 	headers := make(map[string]string, len(rawHeaders))
 	for _, h := range rawHeaders {
@@ -100,4 +111,15 @@ func (a *Server) storeRaw(c *gin.Context, intake, reason, note string, body []by
 	}
 
 	a.store(storage.RawPayloadsWriter, storage.WriteRawPayloads{Payloads: []storage.RawPayloadRow{row}}, 1)
+}
+
+// rawIsProbe reports whether a body is one of the agent's connectivity
+// probes: nothing, or a bare empty JSON object or array. Anything else, even
+// a single byte of garbage, is worth keeping.
+func rawIsProbe(body []byte) bool {
+	switch string(bytes.TrimSpace(body)) {
+	case "", "{}", "[]":
+		return true
+	}
+	return false
 }

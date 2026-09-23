@@ -316,3 +316,26 @@ func TestStoreRawWithoutTenantStoresNothing(t *testing.T) {
 		t.Errorf("%d messages stored without a tenant, want 0", n)
 	}
 }
+
+// The agent's startup sweep posts "{}" (and sometimes nothing) to every
+// intake without the diagnose header, so storeRaw must recognise the probe
+// by its body alone — a real 7.83 agent left fourteen such rows per boot in
+// the e2e lab before this rule.
+func TestStoreRawSkipsEmptyProbeBodies(t *testing.T) {
+	for _, body := range []string{"", "{}", "[]", " {} \n"} {
+		a, node := newTestServer(t)
+		e := newTestEngine(t, a, func(g *gin.RouterGroup) {
+			g.POST("/probe", func(c *gin.Context) {
+				a.storeRaw(c, "probe", "decode_error", "test", []byte(body))
+				c.Status(http.StatusAccepted)
+			})
+		})
+		post(t, e, "/probe", []byte(body))
+		if got := len(Rows[storage.RawPayloadRow](node)); got != 0 {
+			t.Errorf("body %q: %d raw rows stored, want 0", body, got)
+		}
+	}
+	if rawIsProbe([]byte("{\"a\":1}")) || rawIsProbe([]byte("x")) {
+		t.Errorf("non-empty bodies must not be treated as probes")
+	}
+}

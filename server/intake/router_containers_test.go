@@ -830,9 +830,9 @@ func TestHandleContainerPayloadsStoreRawWhenUndecodable(t *testing.T) {
 		body                       []byte
 	}{
 		{"lifecycle garbage", "/api/v2/contlcycle", "contlcycle", "decode_error", []byte{0xff, 0xff, 0xff, 0xff}},
-		{"lifecycle empty decode", "/api/v2/contlcycle", "contlcycle", "unexpected_shape", nil},
+		{"lifecycle empty decode", "/api/v2/contlcycle", "contlcycle", "unexpected_shape", []byte{0xba, 0x3e, 0x01, 0x41}}, // field 999 only: valid protobuf, empty EventsPayload
 		{"image garbage", "/api/v2/contimage", "contimage", "decode_error", []byte{0xff, 0xff, 0xff, 0xff}},
-		{"image empty decode", "/api/v2/contimage", "contimage", "unexpected_shape", nil},
+		{"image empty decode", "/api/v2/contimage", "contimage", "unexpected_shape", []byte{0xba, 0x3e, 0x01, 0x41}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
