@@ -364,7 +364,10 @@ TTL toDateTime(flow_start) + INTERVAL 14 DAY;
 -- around here, unlike netflow).
 --
 -- Classified with check_runs: a scheduled test run, human/config scale
--- rather than per-packet volume.
+-- rather than per-packet volume — same monthly partitioning AND the same
+-- 90-day TTL (conventions.md pairs toYYYYMM with 90d+ retention, toDate with
+-- <=30d for cheap DROP PARTITION), not the 30-day TTL every daily-partitioned
+-- table in this migration gets.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS network_paths
 (
@@ -445,4 +448,4 @@ CREATE TABLE IF NOT EXISTS network_paths
 ENGINE = MergeTree
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (tenant_id, namespace, test_config_id, timestamp)
-TTL toDateTime(timestamp) + INTERVAL 30 DAY;
+TTL toDateTime(timestamp) + INTERVAL 90 DAY;

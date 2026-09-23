@@ -9,6 +9,7 @@ import (
 	"time"
 
 	netflowpayload "github.com/DataDog/datadog-agent/comp/netflow/payload"
+	networkpayload "github.com/DataDog/datadog-agent/pkg/network/payload"
 	netpathpayload "github.com/DataDog/datadog-agent/pkg/networkpath/payload"
 	"github.com/itsninjacats/server/apps/storage"
 	"github.com/itsninjacats/server/apps/storage/storagetest"
@@ -323,6 +324,29 @@ func TestNdmNetworkPathRowNilVia(t *testing.T) {
 	}
 }
 
+// Via present but its Subnet/Interface fields unresolved (empty, non-pointer
+// strings on the wire) must NOT collapse to the same NULL as Via absent
+// entirely — that distinction is the whole reason the columns are Nullable.
+func TestNdmNetworkPathRowViaPresentButUnresolved(t *testing.T) {
+	p := netpathpayload.NetworkPath{
+		Source: netpathpayload.NetworkPathSource{
+			Hostname: "h1",
+			Via:      &networkpayload.Via{}, // present, but Subnet.Alias/Interface.HardwareAddr both empty
+		},
+	}
+	row := ndmNetworkPathRow("test", p)
+	if row.SourceViaSubnetAlias == nil {
+		t.Error("via present with empty alias: got nil, want a non-nil pointer to \"\"")
+	} else if *row.SourceViaSubnetAlias != "" {
+		t.Errorf("via subnet alias: got %q, want empty string", *row.SourceViaSubnetAlias)
+	}
+	if row.SourceViaInterfaceHardwareAddr == nil {
+		t.Error("via present with empty hardware_addr: got nil, want a non-nil pointer to \"\"")
+	} else if *row.SourceViaInterfaceHardwareAddr != "" {
+		t.Errorf("via hardware_addr: got %q, want empty string", *row.SourceViaInterfaceHardwareAddr)
+	}
+}
+
 // Runs and hops become parallel Array(Array(...)) columns keyed by run index
 // — this pins the nesting, an unresponsive hop's absent IP/RTT, and a hop's
 // own multi-valued reverse_dns, not just the flat scalar fields.
@@ -411,6 +435,26 @@ func TestNdmTrapRowV1WithEnterpriseOID(t *testing.T) {
 	}
 	if row.Enriched["customEnrichedKey"] != `"resolved-value"` {
 		t.Errorf("enriched: got %v", row.Enriched)
+	}
+}
+
+// trap.Timestamp is set by the agent from time.Now().UnixMilli()
+// (comp/snmptraps/listener/impl/listener.go) and copied verbatim onto the
+// wire by FormatPacket (comp/snmptraps/formatter/impl) — a 13-digit
+// milliseconds epoch, unlike ndm/ndmconfig's collect_timestamp which really
+// is seconds. Decoding it with time.Unix(x, 0) instead of time.UnixMilli(x)
+// would land every trap about 1000x too far in the future.
+func TestNdmTrapRowTimestampIsMilliseconds(t *testing.T) {
+	trapRaw := json.RawMessage(`{"ddsource":"snmp-traps","ddtags":"snmp_device:10.0.0.7",` +
+		`"timestamp":1758326400123,"snmpTrapOID":"1.3.6.1.6.3.1.1.5.4"}`)
+	var trap ndmTrapJSON
+	if err := json.Unmarshal(trapRaw, &trap); err != nil {
+		t.Fatal(err)
+	}
+	row := ndmTrapRow("test", trapRaw, trap)
+	want := time.UnixMilli(1758326400123).UTC()
+	if !row.Timestamp.Equal(want) {
+		t.Errorf("timestamp: got %v, want %v (treating 1758326400123 as seconds would land in the year 57708)", row.Timestamp, want)
 	}
 }
 

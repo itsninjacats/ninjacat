@@ -194,6 +194,12 @@ func (a *Server) handleNDMMetadata(c *gin.Context) {
 		}
 
 		extra := ndmExtraTopLevel(raw, ndmMetadataKnownKeys)
+		// Unlike this intake's usual "undocumented timestamp means ms" default
+		// (see ndmFlowKnownKeys/network_paths), collect_timestamp genuinely is
+		// whole seconds: confirmed against pkg/networkdevice/metadata/
+		// payload_utils.go (`CollectTimestamp: collectTime.Unix()`) and
+		// pkg/networkconfigmanagement/sender/sender.go's device-metadata path
+		// (`s.clock.Now().Unix()`), both real vendored sources for this field.
 		ts := time.Unix(payload.CollectTimestamp, 0).UTC()
 
 		for _, d := range payload.Devices {
@@ -402,6 +408,11 @@ func (a *Server) handleNDMConfig(c *gin.Context) {
 		}
 
 		extra := ndmExtraTopLevel(raw, ndmConfigKnownKeys)
+		// Seconds, not ms — confirmed against pkg/networkconfigmanagement/
+		// report/payload.go's ToNCMPayload and its one caller
+		// (pkg/collector/corechecks/networkconfigmanagement), both of which
+		// build this field (and cfg.Timestamp below, when a config's own
+		// timestamp could not be extracted) from `c.clock.Now().Unix()`.
 		ts := time.Unix(payload.CollectTimestamp, 0).UTC()
 		var inventories string
 		if len(payload.Inventories) > 0 {
@@ -516,7 +527,12 @@ func ndmTrapRow(tenant string, trapRaw json.RawMessage, trap ndmTrapJSON) storag
 	}
 	uptime, _ := trap.Uptime.Int64()
 	return storage.SNMPTrapRow{
-		TenantID: tenant, Timestamp: time.Unix(trap.Timestamp, 0).UTC(),
+		// packet.SnmpPacket.Timestamp (comp/snmptraps/packet) is set from
+		// time.Now().UnixMilli() in the listener (comp/snmptraps/listener/impl)
+		// and copied verbatim into the wire's "timestamp" by FormatPacket
+		// (comp/snmptraps/formatter/impl) — milliseconds, not seconds, unlike
+		// collect_timestamp/ndmconfig's timestamp which really are .Unix().
+		TenantID: tenant, Timestamp: time.UnixMilli(trap.Timestamp).UTC(),
 		DDSource: trap.DDSource, DDTags: tagsToMultiMap(ndmSplitTags(trap.DDTags)),
 		Device: ndmTag(trap.DDTags, "snmp_device"),
 		Uptime: uint32(uptime), SNMPTrapOID: trap.SNMPTrapOID, SNMPTrapName: trap.SNMPTrapName,
@@ -653,12 +669,14 @@ func ndmIPString(ip net.IP) string {
 func ndmNetworkPathRow(tenant string, p netpathpayload.NetworkPath) storage.NetworkPathRow {
 	var viaSubnetAlias, viaIfaceHW *string
 	if p.Source.Via != nil {
-		if alias := p.Source.Via.Subnet.Alias; alias != "" {
-			viaSubnetAlias = &alias
-		}
-		if hw := p.Source.Via.Interface.HardwareAddr; hw != "" {
-			viaIfaceHW = &hw
-		}
+		// Alias/HardwareAddr are plain, non-pointer, omitempty strings on
+		// payload.Via (pkg/network/payload) — always take the address once
+		// Via itself is non-nil, even if empty, so "resolved to nothing" stays
+		// distinct from "Via absent" (nil) as the Nullable column intends.
+		alias := p.Source.Via.Subnet.Alias
+		viaSubnetAlias = &alias
+		hw := p.Source.Via.Interface.HardwareAddr
+		viaIfaceHW = &hw
 	}
 
 	n := len(p.Traceroute.Runs)

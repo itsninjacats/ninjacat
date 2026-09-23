@@ -49,7 +49,12 @@ enclosing `NetworkDevicesMetadata` envelope rather than normalized into a
 separate table (one collection pass is small enough that the repetition costs
 nothing and keeps every row self-contained for a query):
 
-- `namespace`, `subnet`, `integration`, `collect_timestamp` — the payload's own fields.
+- `namespace`, `subnet`, `integration`, `collect_timestamp` — the payload's own
+  fields. `collect_timestamp` is **whole seconds**, not the ms this intake
+  otherwise defaults to for an undocumented "timestamp" field — confirmed
+  against `pkg/networkdevice/metadata/payload_utils.go`
+  (`CollectTimestamp: collectTime.Unix()`) and the device-metadata sender path
+  in `pkg/networkconfigmanagement/sender/sender.go` (`s.clock.Now().Unix()`).
 - `extra Map(String, String)` — every top-level payload key the local mirror
   struct (`ndmMetadataPayload`) does not declare, raw JSON text per key. A
   newer agent's additions show up here instead of vanishing.
@@ -138,7 +143,7 @@ other NDM tables. Fed by `handleNDMConfig`.
 
 | Column | Source |
 |---|---|
-| `namespace`, `collect_timestamp` | the enclosing `NCMPayload`'s own fields |
+| `namespace`, `collect_timestamp` | the enclosing `NCMPayload`'s own fields. `collect_timestamp` is whole seconds, confirmed against `pkg/networkconfigmanagement/report/payload.go`'s `ToNCMPayload` and its one caller (`c.clock.Now().Unix()`) — same reasoning as `ndm_devices.collect_timestamp` above |
 | `agent_hostname`, `inventories` | observed on the wire but **not** in the documented `report.NCMPayload` struct (flagged in the gap report) — real columns rather than folded into `extra`, since they recur on every request rather than being a one-off addition. `inventories` is kept as raw JSON text (its shape is not confirmed enough to type yet) |
 | `extra` | any OTHER top-level `NCMPayload` key beyond the ones above, raw JSON text |
 | `device_id`, `device_ip`, `config_type`, `config_source`, `content` | same-named `NetworkDeviceConfig` fields |
@@ -157,6 +162,7 @@ happened, never replaced. Fed by `handleNDMTraps` → `ndmTrapRow`.
 
 | Column | Source |
 |---|---|
+| `timestamp` | `trap.timestamp` — **milliseconds**, confirmed against the vendored source: the listener sets `packet.Timestamp` from `time.Now().UnixMilli()` (`comp/snmptraps/listener/impl/listener.go`) and `FormatPacket` copies it verbatim onto the wire (`comp/snmptraps/formatter/impl/formatter.go`). Decoded with `time.UnixMilli`, not `time.Unix(x, 0)` — unlike `ndm_devices.collect_timestamp`/`ndm_device_configs.timestamp`, which really are whole seconds (see those tables' notes) |
 | `ddsource`, `uptime`, `snmp_trap_oid`, `snmp_trap_name`, `snmp_trap_mib` | same-named trap fields |
 | `ddtags` | `ddtags` (comma-joined string), split by `ndmSplitTags` (an empty string yields no tags, unlike a bare `strings.Split` which yields one bogus empty-key tag) and multiset-mapped |
 | `device` | pulled out of `ddtags`' `snmp_device:<ip>` — the column every "who sent this trap" query filters on first |
@@ -199,19 +205,22 @@ Fed by `handleNDMFlow` → `ndmFlowRow`.
 
 **Engine** `MergeTree` · **Partition** `toYYYYMM(timestamp)` ·
 **Order by** `(tenant_id, namespace, test_config_id, timestamp)` ·
-**TTL** `timestamp + INTERVAL 30 DAY`
+**TTL** `timestamp + INTERVAL 90 DAY`
 
 One row per `pkg/networkpath/payload.NetworkPath`, decoded as-is (no
 `MarshalJSON` asymmetry to work around, unlike netflow). Classified with
 `check_runs`: a scheduled test run, human/config scale rather than
-per-packet volume. Fed by `handleNetpath` → `ndmNetworkPathRow`.
+per-packet volume — same monthly partitioning AND the same 90-day TTL as
+`check_runs` (`toYYYYMM` is paired with 90d+ retention throughout this
+schema; `toDate` with `<=30d`, for cheap `DROP PARTITION`-based expiry — see
+conventions). Fed by `handleNetpath` → `ndmNetworkPathRow`.
 
 | Column | Source |
 |---|---|
 | `agent_version`, `namespace`, `test_config_id`, `test_config_name`, `test_result_id`, `test_run_id`, `origin`, `test_run_type`, `test_config_source`, `source_product`, `collector_type`, `protocol` | same-named `NetworkPath` fields; the five enum-typed ones travel as their string values |
 | `timestamp` | `timestamp` — **assumed milliseconds**, same reasoning as `netflow_flows.flush_timestamp`: no unit comment on the Go struct, and every other undocumented "timestamp" field in this intake turned out to be milliseconds, with seconds called out explicitly where it applies instead |
 | `source_name`, `source_display_name`, `source_hostname`, `source_network_id`, `source_service`, `source_container_id`, `source_public_ip` | `source.*` |
-| `source_via_subnet_alias`, `source_via_interface_hardware_addr` | `source.via.subnet.alias`, `source.via.interface.hardware_addr` — `Nullable(String)`, because `source.via` is `*payload.Via`: `nil` means the agent could not resolve a route, which must stay distinct from an empty string |
+| `source_via_subnet_alias`, `source_via_interface_hardware_addr` | `source.via.subnet.alias`, `source.via.interface.hardware_addr` — `Nullable(String)`, because `source.via` is `*payload.Via`: `nil` means the agent could not resolve a route, which must stay distinct from an empty string. `Subnet.Alias`/`Interface.HardwareAddr` are themselves plain, non-pointer, `omitempty` strings (`pkg/network/payload`), so once `Via` is non-nil the column is always set — to `""` if unresolved, never collapsed back to `NULL` |
 | `destination_hostname`, `destination_port`, `destination_service` | `destination.*` |
 | `hop_count_avg`, `hop_count_min`, `hop_count_max` | `traceroute.hop_count.*` |
 | `run_ids`, `run_source_ips`, `run_source_ports`, `run_destination_ips`, `run_destination_ports`, `run_destination_reverse_dns` | `traceroute.runs[]`, one array element per run (parallel arrays, `Array(...)`; `run_destination_reverse_dns` is `Array(Array(String))` since a destination can resolve to several names) |
