@@ -129,7 +129,13 @@ func (a *Server) Handler() http.Handler {
 		case strings.HasPrefix(host, "app."), strings.Contains(host, "-app.agent."):
 			app.ServeHTTP(w, r)
 
-		case strings.HasPrefix(host, "api."):
+		// The same rewrite mechanism, with the suffix "flare" instead of
+		// "app", sends a flare upload to <maj>-<min>-<patch>-flare.agent.<site>
+		// (AddAgentVersionToDomain in the agent's flare uploader). The route
+		// itself is registered on every engine (engineAuth below), but the
+		// host still has to reach ONE of them, and api.<site> is where
+		// /support/flare's dd_url-derived base lives.
+		case strings.HasPrefix(host, "api."), strings.Contains(host, "-flare.agent."):
 			api.ServeHTTP(w, r)
 		case strings.HasPrefix(host, "trace.agent."):
 			trace.ServeHTTP(w, r)

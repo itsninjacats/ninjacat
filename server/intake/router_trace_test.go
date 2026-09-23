@@ -19,6 +19,7 @@ import (
 	"github.com/itsninjacats/server/apps/storage"
 	"github.com/itsninjacats/server/apps/storage/storagetest"
 	"github.com/tinylib/msgp/msgp"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -930,6 +931,45 @@ func TestHandleTracesStoresUndecodableBodyRaw(t *testing.T) {
 		t.Errorf("intake/reason: got %q/%q, want trace/decode_error", raw[0].Intake, raw[0].Reason)
 	}
 	if raw[0].Body != "this is not protobuf at all" {
+		t.Errorf("the body must be kept as it came: %q", raw[0].Body)
+	}
+}
+
+// Protobuf carries no type marker, so a body for a completely different
+// message decodes WITHOUT an error into a zero-value AgentPayload — the
+// "fails open" hazard router_containers.go's HandleContainerLifecycle guards
+// against. This pins the same guard here: field 999 exists in no AgentPayload
+// field (TracerPayloads is 5, IdxTracerPayloads is 11), so it is skipped as
+// unknown, UnmarshalVT returns no error, and both payload lists stay empty.
+// That must go to raw_payloads under "unexpected_shape", not vanish as a
+// silent no-op store() call.
+func TestHandleTracesUnexpectedShapeGoesToRaw(t *testing.T) {
+	a, node := newTestServer(t)
+	e := newTestEngine(t, a, a.routeTrace)
+
+	var body []byte
+	body = protowire.AppendTag(body, 999, protowire.BytesType)
+	body = protowire.AppendBytes(body, []byte("wrong endpoint entirely"))
+
+	w := post(t, e, "/api/v0.2/traces", body)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200 even on an unexpected shape", w.Code)
+	}
+	if got := w.Body.String(); got != `{"rate_by_service":{}}` {
+		t.Errorf("body: got %s, want {\"rate_by_service\":{}} — the agent parses it regardless", got)
+	}
+
+	if n := len(Rows[storage.SpanRow](node)); n != 0 {
+		t.Errorf("stored %d spans from a zero-payload decode, want 0", n)
+	}
+	raw := Rows[storage.RawPayloadRow](node)
+	if len(raw) != 1 {
+		t.Fatalf("raw payload rows: got %d, want 1", len(raw))
+	}
+	if raw[0].Intake != traceIntake || raw[0].Reason != "unexpected_shape" {
+		t.Errorf("intake/reason: got %q/%q, want trace/unexpected_shape", raw[0].Intake, raw[0].Reason)
+	}
+	if raw[0].Body != string(body) {
 		t.Errorf("the body must be kept as it came: %q", raw[0].Body)
 	}
 }
