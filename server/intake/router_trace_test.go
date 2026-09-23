@@ -2,16 +2,20 @@ package intake
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
+	"ergo.services/ergo/gen"
 	pb "github.com/DataDog/datadog-agent/pkg/proto/pbgo/trace"
 	"github.com/DataDog/datadog-agent/pkg/proto/pbgo/trace/idx"
 	"github.com/DataDog/sketches-go/ddsketch"
+	"github.com/gin-gonic/gin"
 	"github.com/itsninjacats/server/apps/storage"
 	"github.com/itsninjacats/server/apps/storage/storagetest"
 	"github.com/tinylib/msgp/msgp"
@@ -1211,4 +1215,250 @@ func TestTraceRowArity(t *testing.T) {
 	storagetest.AssertArity(t, storage.DSMBacklogsWriter, storage.DSMBacklogRow{})
 	storagetest.AssertArity(t, storage.DSMBucketTransactionsWriter, storage.DSMBucketTransactionRow{})
 	storagetest.AssertArity(t, storage.DSMMessagesWriter, storage.DSMMessageRow{})
+}
+
+// ---------------------------------------------------------------------------
+// Hostile input
+// ---------------------------------------------------------------------------
+
+// AnyValue nests without limit on the wire, so an attribute can be a list of
+// lists of lists as deep as the sender cares to encode. Our renderer must stop
+// on its own: a Go stack overflow is a fatal runtime error that takes the
+// whole node with it, not a failed request. The truncation has to be VISIBLE
+// in the column, because an empty value would read as "no attributes".
+func TestTraceAttrsJSONStopsAtDepthLimit(t *testing.T) {
+	s := traceStrings{"", "deep", "leaf"}
+
+	// One AnyValue per level, each an array holding the next, far past the cap.
+	leaf := &idx.AnyValue{Value: &idx.AnyValue_StringValueRef{StringValueRef: 2}}
+	v := leaf
+	for i := 0; i < traceAttrMaxDepth*4; i++ {
+		v = &idx.AnyValue{Value: &idx.AnyValue_ArrayValue{
+			ArrayValue: &idx.ArrayValue{Values: []*idx.AnyValue{v}},
+		}}
+	}
+
+	got := s.attrsJSON(map[uint32]*idx.AnyValue{1: v})
+	if got == "" {
+		t.Fatal("a deeply nested attribute produced no JSON at all")
+	}
+	if !strings.Contains(got, `"_depth_exceeded"`) {
+		t.Errorf("no truncation marker in the rendered value: %.200s", got)
+	}
+	// The cap must actually bind: the marker replaces the tail, so the leaf
+	// string never appears.
+	if strings.Contains(got, `"leaf"`) {
+		t.Error("the depth cap did not bind — the whole chain was rendered")
+	}
+
+	// A legitimately nested value — the two or three levels real tracers send
+	// — must still round-trip whole.
+	shallow := &idx.AnyValue{Value: &idx.AnyValue_KeyValueList{
+		KeyValueList: &idx.KeyValueList{KeyValues: []*idx.KeyValue{{
+			Key: 1,
+			Value: &idx.AnyValue{Value: &idx.AnyValue_ArrayValue{
+				ArrayValue: &idx.ArrayValue{Values: []*idx.AnyValue{leaf}},
+			}},
+		}}},
+	}}
+	if got := s.attrsJSON(map[uint32]*idx.AnyValue{1: shallow}); got != `{"deep":{"kvlist":[{"key":"deep","value":{"array":[{"string":"leaf"}]}}]}}` {
+		t.Errorf("shallow nesting was damaged by the guard: %s", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// /api/v0.1/pipeline_stats through HTTP
+// ---------------------------------------------------------------------------
+
+// dsmTestBody encodes a minimal but complete dd-trace-go StatsPayload the way
+// its msgp codec does — a map whose keys are the Go field names — with one
+// point, one backlog and one transactions blob, so a request exercises all
+// three tables the handler fans out to.
+func dsmTestBody(t *testing.T) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+	w := msgp.NewWriter(&buf)
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("encode: %v", err)
+		}
+	}
+	must(w.WriteMapHeader(3))
+	must(w.WriteString("Env"))
+	must(w.WriteString("prod"))
+	must(w.WriteString("Service"))
+	must(w.WriteString("orders"))
+	must(w.WriteString("Stats"))
+	must(w.WriteArrayHeader(1))
+	{
+		must(w.WriteMapHeader(5))
+		must(w.WriteString("Start"))
+		must(w.WriteUint64(1_700_000_000_000_000_000))
+		must(w.WriteString("Duration"))
+		must(w.WriteUint64(10_000_000_000))
+		must(w.WriteString("Stats"))
+		must(w.WriteArrayHeader(1))
+		{
+			must(w.WriteMapHeader(2))
+			must(w.WriteString("Hash"))
+			must(w.WriteUint64(18446744073709551615))
+			must(w.WriteString("EdgeTags"))
+			must(w.WriteArrayHeader(1))
+			must(w.WriteString("type:kafka"))
+		}
+		must(w.WriteString("Backlogs"))
+		must(w.WriteArrayHeader(1))
+		{
+			must(w.WriteMapHeader(2))
+			must(w.WriteString("Tags"))
+			must(w.WriteArrayHeader(1))
+			must(w.WriteString("partition:3"))
+			must(w.WriteString("Value"))
+			must(w.WriteInt64(-17))
+		}
+		must(w.WriteString("Transactions"))
+		must(w.WriteBytes([]byte{0x01, 0x02, 0x03}))
+	}
+	must(w.Flush())
+	return buf.Bytes()
+}
+
+// postPipelineStats sends a gzipped pipeline_stats body with the three headers
+// the trace-agent adds on the way through. The engine's own Decompress()
+// unwraps it, which is what the real proxy chain does.
+func postPipelineStats(t *testing.T, e *gin.Engine, body []byte, extra map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	var gz bytes.Buffer
+	zw := gzip.NewWriter(&gz)
+	if _, err := zw.Write(body); err != nil {
+		t.Fatalf("gzip: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("gzip close: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v0.1/pipeline_stats", bytes.NewReader(gz.Bytes()))
+	req.Header.Set("Dd-Api-Key", testAPIKey)
+	req.Header.Set("Content-Type", "application/msgpack")
+	req.Header.Set("Content-Encoding", "gzip")
+	for k, v := range extra {
+		req.Header.Set(k, v)
+	}
+
+	w := httptest.NewRecorder()
+	e.ServeHTTP(w, req)
+	return w
+}
+
+// The whole pipeline_stats request as a tracer's agent actually makes it:
+// gzipped msgpack behind the trace-agent's proxy headers. One request has to
+// reach three different writers, and the container identity lives ONLY in
+// those headers — the body never repeats it, so a handler that reads them
+// after the body would lose it silently.
+func TestHandlePipelineStatsStoresAllThreeTables(t *testing.T) {
+	a, node := newTestServer(t)
+	e := newTestEngine(t, a, a.routeTrace)
+
+	w := postPipelineStats(t, e, dsmTestBody(t), map[string]string{
+		"Via":                       "trace-agent 7.58.2",
+		"X-Datadog-Additional-Tags": "_dd.tags.container:cid",
+		"X-Datadog-Container-Tags":  "kube_namespace:shop",
+	})
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status: got %d, want 202 (%s)", w.Code, w.Body.String())
+	}
+	if got := w.Body.String(); got != `{}` {
+		t.Errorf("body: got %s, want {}", got)
+	}
+
+	// One batch per table, addressed to the writer that owns it.
+	for _, writer := range []gen.Atom{
+		storage.DSMPipelineStatsWriter,
+		storage.DSMBacklogsWriter,
+		storage.DSMBucketTransactionsWriter,
+	} {
+		if msgs := node.SentTo(writer); len(msgs) != 1 {
+			t.Errorf("messages to %s: got %d, want 1", writer, len(msgs))
+		}
+	}
+
+	points := Rows[storage.DSMPipelineStatRow](node)
+	if len(points) != 1 {
+		t.Fatalf("pipeline stat rows: got %d, want 1", len(points))
+	}
+	p := points[0]
+	if p.TenantID != testTenant {
+		t.Errorf("tenant: got %q, want %q", p.TenantID, testTenant)
+	}
+	if p.Service != "orders" || p.Env != "prod" {
+		t.Errorf("payload level lost: %+v", p)
+	}
+	if p.Hash != 18446744073709551615 {
+		t.Errorf("hash: got %d — a 64-bit hash must not pass through a float", p.Hash)
+	}
+	// The four headers only the handler can see.
+	if p.Via != "trace-agent 7.58.2" || p.AdditionalTags != "_dd.tags.container:cid" ||
+		p.ContainerTags != "kube_namespace:shop" || p.ContentEncoding != "gzip" {
+		t.Errorf("proxy headers did not reach the row: via=%q additional=%q container=%q encoding=%q",
+			p.Via, p.AdditionalTags, p.ContainerTags, p.ContentEncoding)
+	}
+
+	backlogs := Rows[storage.DSMBacklogRow](node)
+	if len(backlogs) != 1 || backlogs[0].Value != -17 || backlogs[0].TenantID != testTenant {
+		t.Errorf("backlog rows: %+v", backlogs)
+	}
+	buckets := Rows[storage.DSMBucketTransactionRow](node)
+	if len(buckets) != 1 || buckets[0].Transactions != string([]byte{1, 2, 3}) {
+		t.Errorf("bucket transaction rows: %+v", buckets)
+	}
+	if n := len(Rows[storage.RawPayloadRow](node)); n != 0 {
+		t.Errorf("a payload that decoded cleanly produced %d raw rows, want 0", n)
+	}
+}
+
+// A body the msgp decoder cannot read — a tracer version that changed the
+// schema, or a mislabelled encoding — must still answer 202 and land in
+// raw_payloads, because this endpoint is a proxy target and the sender has
+// nowhere to retry to.
+func TestHandlePipelineStatsStoresUndecodableBodyRaw(t *testing.T) {
+	a, node := newTestServer(t)
+	e := newTestEngine(t, a, a.routeTrace)
+
+	w := postPipelineStats(t, e, []byte("not a msgpack stats payload"), nil)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status: got %d, want 202", w.Code)
+	}
+	raw := Rows[storage.RawPayloadRow](node)
+	if len(raw) != 1 || raw[0].Reason != "decode_error" {
+		t.Fatalf("raw payload rows: %+v", raw)
+	}
+	if raw[0].Intake != traceIntake {
+		t.Errorf("intake label: got %q, want %q", raw[0].Intake, traceIntake)
+	}
+	if n := len(Rows[storage.DSMPipelineStatRow](node)); n != 0 {
+		t.Errorf("%d pipeline stat rows from an undecodable body, want 0", n)
+	}
+}
+
+// The agent's connectivity sweep hits this route too, with an empty body. It
+// must not reach the decoder and must not fill raw_payloads on every restart.
+func TestHandlePipelineStatsIgnoresDiagnoseProbe(t *testing.T) {
+	a, node := newTestServer(t)
+	e := newTestEngine(t, a, a.routeTrace)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v0.1/pipeline_stats", bytes.NewReader(nil))
+	req.Header.Set("Dd-Api-Key", testAPIKey)
+	req.Header.Set("X-Requested-With", "datadog-agent-diagnose")
+	w := httptest.NewRecorder()
+	e.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Errorf("status: got %d, want 202", w.Code)
+	}
+	if n := len(node.Sends()); n != 0 {
+		t.Errorf("a diagnose probe stored %d messages, want 0", n)
+	}
 }

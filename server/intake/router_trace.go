@@ -476,12 +476,36 @@ func (s traceStrings) attrsJSON(attrs map[uint32]*idx.AnyValue) string {
 	}
 	out := make(map[string]any, len(attrs))
 	for k, v := range attrs {
-		out[s.at(k)] = s.anyValue(v)
+		out[s.at(k)] = s.anyValue(v, 0)
 	}
 	return traceJSON(out)
 }
 
-func (s traceStrings) anyValue(v *idx.AnyValue) any {
+// traceAttrMaxDepth caps how far anyValue will follow a nested attribute.
+//
+// AnyValue is recursive on the wire (an array of key-value lists of arrays…)
+// and nothing in the protobuf bounds it, so a hostile — or merely broken —
+// tracer can hand us a value nested deep enough to exhaust the goroutine
+// stack. A Go stack overflow is a fatal runtime error, not a panic a handler
+// can recover, so it would take the whole node down rather than one request.
+// Real tracers nest two or three levels; OTLP's own SDKs do not go past a
+// handful. 32 is far past anything legitimate and far short of anything
+// dangerous.
+//
+// This does not protect the DECODE itself: idx.TracerPayload arrives through
+// vtprotobuf's generated UnmarshalVT, which has no nesting limit of its own
+// and would blow the stack before this function is ever called. That is
+// upstream generated code we do not own; the guard here is what keeps OUR
+// conversion from being the thing that falls over, and it also bounds
+// json.Marshal, which recurses over the value we build.
+const traceAttrMaxDepth = 32
+
+func (s traceStrings) anyValue(v *idx.AnyValue, depth int) any {
+	if depth >= traceAttrMaxDepth {
+		// Truncated, and SAID so: an empty value here would read as "the
+		// tracer sent nothing", which is the one thing that is not true.
+		return map[string]any{"_depth_exceeded": traceAttrMaxDepth}
+	}
 	switch av := v.GetValue().(type) {
 	case *idx.AnyValue_StringValueRef:
 		return map[string]any{"string": s.at(av.StringValueRef)}
@@ -499,7 +523,7 @@ func (s traceStrings) anyValue(v *idx.AnyValue) any {
 		vals := av.ArrayValue.GetValues()
 		items := make([]any, 0, len(vals))
 		for _, item := range vals {
-			items = append(items, s.anyValue(item))
+			items = append(items, s.anyValue(item, depth+1))
 		}
 		return map[string]any{"array": items}
 	case *idx.AnyValue_KeyValueList:
@@ -510,7 +534,7 @@ func (s traceStrings) anyValue(v *idx.AnyValue) any {
 		for _, kv := range kvs {
 			items = append(items, map[string]any{
 				"key":   s.at(kv.GetKey()),
-				"value": s.anyValue(kv.GetValue()),
+				"value": s.anyValue(kv.GetValue(), depth+1),
 			})
 		}
 		return map[string]any{"kvlist": items}

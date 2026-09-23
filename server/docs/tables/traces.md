@@ -24,7 +24,11 @@ Response contracts are unchanged, because senders depend on them:
   parses this body; `rate_by_service` feeds its priority sampler. It is
   returned on every path out of the handler, decode failure included — failing
   the request would only make the agent retry the same undecodable payload.
-* `/api/v0.2/stats` — **200** with `{}`.
+* `/api/v0.2/stats` — **200** with `{}`. 200, not 202: that is what the handler
+  answered before this write layer existed (`f10ee4d:server/intake/router_trace.go`,
+  `defer c.JSON(http.StatusOK, gin.H{})`), and the agent's stats writer only
+  checks for 2xx. Changing it would be the behavioural change this section
+  exists to prevent, so it stays until someone has an agent-side reason.
 * `/api/v0.1/pipeline_stats` — **202** with `{}`.
 * `/api/v2/data_streams_messages` — **202** with `{}`.
 
@@ -238,3 +242,12 @@ default was to store; each of these has a reason.
    layout is a Java-tracer wire format, kept verbatim on purpose.
 8. **`rate_by_service` sampling rates in the traces response.** Not incoming
    data. The response stays `{}` until there is a sampler to feed it from.
+9. **idx attribute nesting past 32 levels.** `AnyValue` is recursive on the
+   wire and the protobuf bounds it nowhere, so the renderer stops at
+   `traceAttrMaxDepth` (32) and writes `{"_depth_exceeded":32}` in place of the
+   tail — visible in the column, never silently empty. A Go stack overflow is a
+   fatal runtime error that would take the whole node down, not one request,
+   and real tracers nest two or three levels. Note this guards OUR conversion
+   only: `idx.TracerPayload` is decoded by vtprotobuf's generated `UnmarshalVT`,
+   which has no nesting limit of its own, so a payload deep enough would fail
+   there first. That is upstream generated code.
