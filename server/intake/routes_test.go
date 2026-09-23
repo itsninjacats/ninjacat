@@ -72,6 +72,15 @@ func TestHostRoutingReachesOwnIntake(t *testing.T) {
 		{"sbom-intake.logs.mrf." + testSite, http.MethodPost, "/api/v2/sbom", http.StatusAccepted},
 		{"app.mrf." + testSite, http.MethodGet, "/api/v1/validate", http.StatusOK},
 
+		// browser-intake.<site> carries browser, iOS and Android alike —
+		// Datadog puts all three on one host and so do we.
+		{"browser-intake." + testSite, http.MethodPost, "/api/v2/rum", http.StatusAccepted},
+		{"browser-intake." + testSite, http.MethodPost, "/api/v2/replay", http.StatusAccepted},
+		{"browser-intake." + testSite, http.MethodPost, "/api/v2/spans", http.StatusAccepted},
+		{"browser-intake." + testSite, http.MethodPost, "/api/v2/logs", http.StatusAccepted},
+		{"browser-intake." + testSite, http.MethodPost, "/api/v2/profile", http.StatusAccepted},
+		{"browser-intake." + testSite, http.MethodPost, "/api/v2/debugger", http.StatusAccepted},
+
 		// Port and trailing dot are stripped before matching.
 		{"sbom-intake." + testSite + ":8443", http.MethodPost, "/api/v2/sbom", http.StatusAccepted},
 		{"sbom-intake." + testSite + ".", http.MethodPost, "/api/v2/sbom", http.StatusAccepted},
@@ -96,6 +105,9 @@ func TestHostRoutingIsolatesIntakes(t *testing.T) {
 		{"api." + testSite, "/api/v2/logs"},
 		{"intake.profile." + testSite, "/api/v2/logs"},
 		{"http-intake.logs." + testSite, "/api/v2/profile"},
+		// /api/v2/rum and /api/v2/replay belong to the RUM host alone.
+		{"http-intake.logs." + testSite, "/api/v2/rum"},
+		{"browser-intake." + testSite, "/api/v2/sbom"},
 	}
 	for _, tc := range cases {
 		rec := call(h, http.MethodPost, tc.host, tc.path, true)
@@ -155,6 +167,7 @@ func TestAPIKeyIsRequiredEverywhereButInstall(t *testing.T) {
 		{"sbom-intake." + testSite, http.MethodPost, "/api/v2/sbom"},
 		{"api." + testSite, http.MethodGet, "/api/v1/validate"},
 		{"http-intake.logs." + testSite, http.MethodPost, "/v1/input"},
+		{"browser-intake." + testSite, http.MethodPost, "/api/v2/rum"},
 	} {
 		rec := call(h, tc.method, tc.host, tc.path, false)
 		if rec.Code != http.StatusForbidden {
@@ -180,6 +193,7 @@ func TestProbesNeedNoKey(t *testing.T) {
 		"sbom-intake." + testSite,
 		"http-intake.logs." + testSite,
 		"install.datadoghq.com",
+		"browser-intake." + testSite,
 	} {
 		for _, path := range []string{"/ping", "/_health"} {
 			rec := call(h, http.MethodGet, host, path, false)
@@ -187,5 +201,46 @@ func TestProbesNeedNoKey(t *testing.T) {
 				t.Errorf("GET %s on %s without key: status %d, want 200", path, host, rec.Code)
 			}
 		}
+	}
+}
+
+// The browser SDK treats a CORS failure as success and discards the batch, so
+// the RUM host's preflight and its access-control headers are part of routing
+// rather than a detail of one handler: without them the host exists and loses
+// everything sent to it, silently.
+func TestRUMHostAnswersPreflight(t *testing.T) {
+	h := newTestHandler(t)
+
+	req := httptest.NewRequest(http.MethodOptions, "http://browser-intake."+testSite+"/api/v2/rum", nil)
+	req.Host = "browser-intake." + testSite
+	req.Header.Set("Origin", "https://shop.example")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("preflight: status %d, want 204 (body %q)", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "https://shop.example" {
+		t.Errorf("Access-Control-Allow-Origin: got %q, want the request origin", got)
+	}
+}
+
+// The browser SDK cannot set a header on a beacon, so the RUM host is the one
+// intake that takes its key from the query string — and the only one.
+func TestRUMHostAcceptsQueryStringKey(t *testing.T) {
+	h := newTestHandler(t)
+
+	host := "browser-intake." + testSite
+	rec := call(h, http.MethodPost, host, "/api/v2/rum?ddsource=browser&dd-api-key="+testKey, false)
+	if rec.Code != http.StatusAccepted {
+		t.Errorf("query-string key on %s: status %d, want 202 (body %q)", host, rec.Code, rec.Body.String())
+	}
+
+	// Everywhere else the key still has to be a header (or api_key, the
+	// grandfathered /api/v1/validate spelling) — dd-api-key is not accepted.
+	rec = call(h, http.MethodPost, "sbom-intake."+testSite, "/api/v2/sbom?dd-api-key="+testKey, false)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("dd-api-key on an agent intake: status %d, want 403 — query-string auth stays with the one client that has no choice", rec.Code)
 	}
 }

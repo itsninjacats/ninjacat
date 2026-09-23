@@ -52,6 +52,8 @@ import (
 //	eudm-intake.<site>          (via local evp_proxy)         router_install.go
 //	llmobs-intake.<site>        (diagnose probe only)         router_install.go
 //	install.datadoghq.com       installer.registry.url        router_install.go
+//	browser-intake.<site>       RUM/Logs SDKs (browser, iOS,   router_rum.go
+//	                            Android): proxy/customEndpoint
 //
 // Multi-Region Failover doubles most of these: the agent dual-ships to a host
 // with "mrf." spliced in after the product prefix (app.mrf.<site>,
@@ -100,6 +102,12 @@ func (a *Server) Handler() http.Handler {
 		),
 		a.routeDataObs,
 	)
+	// browser-intake.<site> is the one host whose clients are not agents:
+	// browser, iOS and Android SDKs, all three on the same name Datadog uses
+	// for all three. Its engine is built in router_rum.go because it needs
+	// more than a route set — query-string auth, CORS on every response, and
+	// a URL rewrite that has to happen above the router.
+	rum := a.rumEngine()
 	aiusage := a.engine(a.routeAIUsage)
 	llmobs := a.engine(a.routeLLMObs)
 
@@ -181,6 +189,8 @@ func (a *Server) Handler() http.Handler {
 			aiusage.ServeHTTP(w, r)
 		case strings.HasPrefix(host, "llmobs-intake."):
 			llmobs.ServeHTTP(w, r)
+		case strings.HasPrefix(host, "browser-intake."):
+			rum.ServeHTTP(w, r)
 		default:
 			// Every intake has its own hostname. Serving them all on one
 			// name needs a route that is claimed twice (POST /v1/input, by
