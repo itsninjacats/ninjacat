@@ -169,6 +169,26 @@ Anything that fails to decode, any batch element the model reports as
 `raw_payloads` through `storeRaw`. Decode success paths never do. The labels
 used here:
 
+**What is stored is the bytes the element ARRIVED as**, not a re-encoding of
+`UnparsedObject`. The generated `UnmarshalJSON` fills that map with plain
+`encoding/json` — only `AdditionalProperties` gets the `UseNumber` decoder — so
+an integer above 2^53 inside an element that did not fit the model has already
+been rounded to `float64` before a handler sees it, and re-encoding it would
+store the rounded number. `jsonElements` / `jsonFieldElements` (intake/payloads.go)
+re-split the body for those originals; `parseCheckRuns` returns them alongside
+the decoded checks, because it skips items and a later re-split would line the
+wrong bytes up with the wrong check. `apiJSONBytes` remains the fallback for a
+framing that cannot be re-split.
+
+A series is a special case worth knowing: `DistributionPointsSeries` also fills
+`UnparsedObject` when only its `type` word is outside the one legal value, and
+then its fields ARE populated. Such a series is stored raw **and** its points
+still become rows — a typo in `type` must not cost a host its distribution.
+`ServiceCheck` and `EventCreateRequest` do the same for an out-of-range
+`status` and an unknown `alert_type`/`priority`, but there the coerced value
+would be a guess in a column (an unreadable check stored as `OK`), so those
+keep the bytes only.
+
 | intake | reason | when |
 |---|---|---|
 | `series` | `decode_error` | the body is not a v1/v2 series payload |
@@ -176,7 +196,7 @@ used here:
 | `sketches` | `decode_error` / `no_schema` | undecodable body / a legacy pre-DDSketch `Distribution` |
 | `check_run` | `decode_error` / `unexpected_shape` | undecodable body / an item that is not a `ServiceCheck` |
 | `events` | `decode_error` / `unexpected_shape` | undecodable body / an event with `UnparsedObject` set |
-| `distribution_points` | `decode_error` / `unexpected_shape` | undecodable body / a pair that is not `[timestamp, [values]]` |
+| `distribution_points` | `decode_error` / `unexpected_shape` | undecodable body / a payload with `UnparsedObject` set, a series with `UnparsedObject` set, a payload-level undeclared key, a pair that is not `[timestamp, [values]]` |
 | `intake` | `decode_error` / `unexpected_shape` / `no_schema` | not JSON / no known variant key / the legacy V5 resources snapshot |
 | `metadata` | `decode_error` / `no_schema` | not JSON / no known variant key |
 | `symbols` | `decode_error` | not a JSON:API document |
@@ -187,8 +207,10 @@ used here:
 1. **`distribution_points` raw values.** `sketch.Build` reduces them to DDSketch
    buckets and the originals are discarded. Deliberate: a distribution exists to
    be merged with the agent's own sketches, which arrive already bucketed, and
-   keeping both forms would mean two tables that disagree about one metric. A
-   pair that could not be split at all IS kept, whole, in `raw_payloads`.
+   keeping both forms would mean two tables that disagree about one metric.
+   Everything the model could not fit IS kept, whole, in `raw_payloads`: a body
+   that fit no series list, a series that fit no series, and a pair that could
+   not be split.
 2. **`CommonMetadata.ApiKey`** (sketches) and the `/intake/` envelope's
    **`apiKey`**. The request already authenticated; storing the credential again
    would put it in a table with a TTL, which is exactly where a credential must

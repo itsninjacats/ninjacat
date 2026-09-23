@@ -33,8 +33,10 @@ func (c *captureBatch) Close() error                  { return nil }
 
 // A multi-valued tag must ride AppendTo intact and land in the argument slot
 // its INSERT list declares for the tag column. The positions asserted here
-// mirror application.go: metrics puts tags last of ten, hosts last of nine,
-// k8s_resources at position 21 of 24, container_images (dd_tags) last of 21.
+// mirror the INSERT lists: metrics at 10 of 15, hosts at 9 of 27 (and
+// host_tags at 24 of the same row), k8s_resources at position 21 of 24,
+// container_images (dd_tags) last of 21, external_host_tags last of 5,
+// action_connections at 5 of 8.
 func TestAppendToCarriesMultiValuedTags(t *testing.T) {
 	now := time.Unix(1700000000, 0).UTC()
 	tags := map[string][]string{"kube_service": {"a", "b"}}
@@ -65,6 +67,27 @@ func TestAppendToCarriesMultiValuedTags(t *testing.T) {
 			name: "container_images",
 			row:  ContainerImageRow{TenantID: "t", CollectedAt: now, DDTags: tags},
 			argN: 21, tagsAt: 20,
+		},
+		{
+			// The V5 collector's external host tags: one row per (host,
+			// source), and the tag list is the whole point of the row.
+			name: "external_host_tags",
+			row:  ExternalHostTagsRow{TenantID: "t", ReceivedAt: now, Host: "h", Source: "vsphere", Tags: tags},
+			argN: 5, tagsAt: 4,
+		},
+		{
+			// A Private Action Runner connection carries the tags the runner
+			// was registered with.
+			name: "action_connections",
+			row:  ActionConnectionRow{TenantID: "t", At: now, Name: "c", RunnerID: "r", Tags: tags},
+			argN: 8, tagsAt: 4,
+		},
+		{
+			// hosts has a SECOND tag-shaped column: every tag source the
+			// agent reports, not only "system".
+			name: "hosts (host_tags)",
+			row:  HostRow{TenantID: "t", Host: "h", SeenAt: now, HostTags: tags},
+			argN: 27, tagsAt: 23,
 		},
 	}
 	for _, tc := range cases {
@@ -99,6 +122,9 @@ func TestAppendToGuardsNilTagMaps(t *testing.T) {
 		{"hosts", HostRow{}, 8},
 		{"k8s_resources", K8sResourceRow{}, 20},
 		{"container_images", ContainerImageRow{}, 20},
+		{"external_host_tags", ExternalHostTagsRow{}, 4},
+		{"action_connections", ActionConnectionRow{}, 4},
+		{"hosts (host_tags)", HostRow{}, 23},
 	}
 	for _, tc := range rows {
 		t.Run(tc.name, func(t *testing.T) {

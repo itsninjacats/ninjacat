@@ -225,23 +225,33 @@ func parseLogItems(body []byte) ([]json.RawMessage, error) {
 // Second, decoding the batch as one unit means a single odd check discards
 // every other check beside it. Per-item decoding keeps the good ones.
 //
-// The second return value is the items that did NOT decode, exactly as they
+// The third return value is the items that did NOT decode, exactly as they
 // arrived. They used to be counted here and dropped, which put the only copy
 // of an unknown check shape out of reach of the handler that could have kept
 // it.
-func parseCheckRuns(body []byte) ([]datadogV1.ServiceCheck, []json.RawMessage, error) {
+//
+// The second is the ORIGINAL bytes of the checks that did decode, index for
+// index with them. A check the model swallowed into UnparsedObject comes back
+// decoded, and the handler stores it raw — from these bytes rather than from
+// the map, which has already lost the digits of any large number in it
+// (UnparsedObject is decoded without UseNumber). Skipping the undecodable
+// items is exactly what would misalign a plain re-split of the body, so the
+// alignment is built here, where both halves are in hand. It is nil when the
+// body was not an array, and the handler falls back to the decoded copy.
+func parseCheckRuns(body []byte) ([]datadogV1.ServiceCheck, []json.RawMessage, []json.RawMessage, error) {
 	var raw []json.RawMessage
 	if err := json.Unmarshal(body, &raw); err != nil {
 		// Not an array: fall back to the shared decoder, which also handles a
 		// bare object as datadogpy sends it.
 		runs, err := decodeJSONList[datadogV1.ServiceCheck](body)
 		if err != nil {
-			return nil, nil, fmt.Errorf("JSON check_run: %w", err)
+			return nil, nil, nil, fmt.Errorf("JSON check_run: %w", err)
 		}
-		return runs, nil, nil
+		return runs, jsonElements(body), nil, nil
 	}
 
 	runs := make([]datadogV1.ServiceCheck, 0, len(raw))
+	originals := make([]json.RawMessage, 0, len(raw))
 	var skipped []json.RawMessage
 	for _, item := range raw {
 		var run datadogV1.ServiceCheck
@@ -250,11 +260,12 @@ func parseCheckRuns(body []byte) ([]datadogV1.ServiceCheck, []json.RawMessage, e
 			continue
 		}
 		runs = append(runs, run)
+		originals = append(originals, item)
 	}
 	if len(skipped) > 0 {
 		log.Printf("[check_run] %d of %d checks could not be decoded, kept in raw_payloads", len(skipped), len(raw))
 	}
-	return runs, skipped, nil
+	return runs, originals, skipped, nil
 }
 
 // withTags supplies an empty tag list when a check has none, so the generated
@@ -388,4 +399,49 @@ func decodeJSONList[T any](body []byte) ([]T, error) {
 		return nil, err
 	}
 	return []T{one}, nil
+}
+
+// jsonElements returns the bytes each element of a JSON batch ARRIVED as.
+//
+// It exists because a decoded copy is not always as good as the original. The
+// generated UnmarshalJSON fills UnparsedObject with plain encoding/json — not
+// the UseNumber decoder it uses for AdditionalProperties — so a 64-bit id
+// inside an element that did not fit the model has already been through
+// float64 by the time a handler sees it, and re-encoding that map would store
+// the rounded number. These bytes never went through a number at all.
+//
+// The framing mirrors decodeJSONList: an array yields its elements in order,
+// a bare object yields itself, anything else yields nothing and the caller
+// falls back to the decoded copy.
+func jsonElements(body []byte) []json.RawMessage {
+	trimmed := bytes.TrimSpace(body)
+	switch {
+	case bytes.HasPrefix(trimmed, []byte("[")):
+		var many []json.RawMessage
+		if err := json.Unmarshal(trimmed, &many); err != nil {
+			return nil
+		}
+		return many
+	case bytes.HasPrefix(trimmed, []byte("{")):
+		if !json.Valid(trimmed) {
+			return nil
+		}
+		return []json.RawMessage{trimmed}
+	}
+	return nil
+}
+
+// jsonFieldElements is jsonElements for a batch nested under one key of an
+// envelope ({"series":[…]}). Only an array counts here: a `series` that is not
+// one never produced the decoded list the caller is walking.
+func jsonFieldElements(body []byte, field string) []json.RawMessage {
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return nil
+	}
+	list, ok := envelope[field]
+	if !ok || !bytes.HasPrefix(bytes.TrimSpace(list), []byte("[")) {
+		return nil
+	}
+	return jsonElements(list)
 }

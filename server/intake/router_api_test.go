@@ -810,6 +810,138 @@ func TestDistributionPointsKeepAnUnsplittablePairRaw(t *testing.T) {
 	}
 }
 
+// A client whose `series` is not a list at all (a dict keyed by metric name,
+// say) leaves datadogV1.DistributionPointsPayload with an empty series list
+// and UnparsedObject set. The handler used to log "kept in raw_payloads" and
+// keep nothing: the request was gone.
+func TestDistributionPointsKeepAPayloadThatFitNoSeriesList(t *testing.T) {
+	a, node := newTestServer(t)
+	e := newTestEngine(t, a, a.routeAPI)
+
+	body := []byte(`{"series":{"latency":[[1790151330,[1,2,3]]]}}`)
+
+	if w := post(t, e, "/api/v1/distribution_points", body); w.Code != http.StatusAccepted {
+		t.Fatalf("got %d, want 202 (%s)", w.Code, w.Body.String())
+	}
+
+	if rows := Rows[storage.SketchRow](node); len(rows) != 0 {
+		t.Fatalf("sketch rows: got %d, want 0", len(rows))
+	}
+	raws := Rows[storage.RawPayloadRow](node)
+	if len(raws) != 1 {
+		t.Fatalf("raw rows: got %d, want 1 — the body is the only copy left", len(raws))
+	}
+	if raws[0].Intake != "distribution_points" || raws[0].Reason != "unexpected_shape" {
+		t.Errorf("raw row: %+v", raws[0])
+	}
+	if !strings.Contains(raws[0].Body, "latency") {
+		t.Errorf("raw body lost the payload: %q", raws[0].Body)
+	}
+}
+
+// A series with a `type` outside the one legal value also lands in
+// UnparsedObject — but with its fields populated, so its points are real. The
+// typo must cost the type word, kept whole in raw_payloads, and not the
+// host's distribution.
+func TestDistributionPointsKeepASeriesTheModelRejectedAndStillStoreItsPoints(t *testing.T) {
+	a, node := newTestServer(t)
+	e := newTestEngine(t, a, a.routeAPI)
+
+	body := []byte(`{"series":[
+		{"metric":"latency","type":"histogram","points":[[1790151330,[1,2,3]]],"tags":["env:prod"]},
+		{"metric":"gone","points":"not-a-list"}
+	]}`)
+
+	if w := post(t, e, "/api/v1/distribution_points", body); w.Code != http.StatusAccepted {
+		t.Fatalf("got %d, want 202 (%s)", w.Code, w.Body.String())
+	}
+
+	sketches := Rows[storage.SketchRow](node)
+	if len(sketches) != 1 || sketches[0].Metric != "latency" {
+		t.Fatalf("sketch rows: %+v, want the one series that carried points", sketches)
+	}
+	raws := Rows[storage.RawPayloadRow](node)
+	if len(raws) != 2 {
+		t.Fatalf("raw rows: got %d, want 2 (the rejected type and the series with no points)", len(raws))
+	}
+	var sawType, sawGone bool
+	for _, r := range raws {
+		if r.Intake != "distribution_points" || r.Reason != "unexpected_shape" {
+			t.Errorf("raw row: %+v", r)
+		}
+		sawType = sawType || strings.Contains(r.Body, `"histogram"`)
+		sawGone = sawGone || strings.Contains(r.Body, "not-a-list")
+	}
+	if !sawType {
+		t.Error("the rejected type word is in no raw row — it is stored nowhere else")
+	}
+	if !sawGone {
+		t.Error("the series that decoded to nothing reached no raw row")
+	}
+}
+
+// A 64-bit id inside a series the model could not fit. UnparsedObject is
+// decoded without UseNumber, so re-encoding that map writes 1.23e+19 and the
+// id is gone; the bytes that arrived still have every digit.
+func TestSeriesV1KeepTheBytesOfAnUnfittableSeriesNotTheRoundedCopy(t *testing.T) {
+	a, node := newTestServer(t)
+	e := newTestEngine(t, a, a.routeAPI)
+
+	const id = "12345678901234567891"
+	body := []byte(`{"series":[{"metric":"m","points":"not-a-list","trace_id":` + id + `}]}`)
+
+	if w := post(t, e, "/api/v1/series", body); w.Code != http.StatusAccepted {
+		t.Fatalf("got %d, want 202 (%s)", w.Code, w.Body.String())
+	}
+
+	raws := Rows[storage.RawPayloadRow](node)
+	if len(raws) != 1 {
+		t.Fatalf("raw rows: got %d, want 1", len(raws))
+	}
+	if !strings.Contains(raws[0].Body, id) {
+		t.Errorf("the id lost its digits on the way to raw_payloads: %q", raws[0].Body)
+	}
+}
+
+// The same guarantee for a batch parsed item by item: an entry that is not an
+// object at all is skipped inside parseCheckRuns, so the index of a later
+// check no longer matches the body. A re-split done in the handler would keep
+// the wrong bytes; the originals travel with the decoded checks instead.
+func TestCheckRunKeepsTheBytesOfTheCheckItCouldNotFit(t *testing.T) {
+	a, node := newTestServer(t)
+	e := newTestEngine(t, a, a.routeAPI)
+
+	const id = "12345678901234567891"
+	body := []byte(`[
+	  "containerd.health",
+	  {"check":"odd","host_name":"h1","status":42,"tags":[],"run_id":` + id + `}
+	]`)
+
+	if w := post(t, e, "/api/v1/check_run", body); w.Code != http.StatusAccepted {
+		t.Fatalf("got %d, want 202 (%s)", w.Code, w.Body.String())
+	}
+
+	if rows := Rows[storage.CheckRunRow](node); len(rows) != 0 {
+		t.Fatalf("check rows: got %d, want 0 — a status of 42 must not be stored as OK", len(rows))
+	}
+	raws := Rows[storage.RawPayloadRow](node)
+	if len(raws) != 2 {
+		t.Fatalf("raw rows: got %d, want 2", len(raws))
+	}
+	var sawID bool
+	for _, r := range raws {
+		if strings.Contains(r.Body, id) {
+			sawID = true
+			if !strings.Contains(r.Body, `"odd"`) {
+				t.Errorf("the originals drifted: the id landed with the wrong check: %q", r.Body)
+			}
+		}
+	}
+	if !sawID {
+		t.Errorf("the run id lost its digits or its row: %+v", raws)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // endpoints the agent reads from
 // ---------------------------------------------------------------------------

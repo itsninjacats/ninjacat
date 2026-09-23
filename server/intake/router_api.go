@@ -285,6 +285,9 @@ func (a *Server) HandleSeriesV1(c *gin.Context) {
 		return
 	}
 
+	// The originals of the series, for the ones the model could not fit.
+	rawSeries := jsonFieldElements(body, "series")
+
 	var (
 		points    []storage.MetricPoint
 		resources = map[string]int{}
@@ -297,12 +300,13 @@ func (a *Server) HandleSeriesV1(c *gin.Context) {
 			// The generated UnmarshalJSON swallows a structurally wrong
 			// series (points not an array, say) into UnparsedObject and
 			// returns no error, so this series has no metric and no points.
-			// UnparsedObject holds the object it could not fit, which is the
-			// only copy of it left by the time we get here.
+			// The bytes it arrived as are kept in preference to
+			// UnparsedObject, which was decoded without UseNumber and would
+			// hand raw_payloads a rounded copy of any large number in it.
 			unparsed++
 			a.storeRaw(c, "series", "unexpected_shape",
 				"v1 series #"+strconv.Itoa(i)+" did not fit datadogV1.Series",
-				apiJSONBytes(s.UnparsedObject))
+				rawElementAt(rawSeries, i, s.UnparsedObject))
 			continue
 		}
 		interval := uint32(0)
@@ -324,6 +328,7 @@ func (a *Server) HandleSeriesV1(c *gin.Context) {
 			}
 		}
 		seriesExtra := apiExtraAny(s.AdditionalProperties, "device", "source_type_name", "unit")
+		rawPoints := jsonFieldElements(rawElementAt(rawSeries, i, nil), "points")
 		for j, p := range s.Points {
 			// A v1 point is a bare [timestamp, value] pair, both nullable.
 			// A pair missing either element is not a point, and the series it
@@ -333,7 +338,8 @@ func (a *Server) HandleSeriesV1(c *gin.Context) {
 				badPoints++
 				a.storeRaw(c, "series", "unexpected_shape",
 					"v1 series #"+strconv.Itoa(i)+" ("+s.Metric+") point #"+strconv.Itoa(j)+
-						" has a nil timestamp or value", apiJSONBytes(p))
+						" has a nil timestamp or value",
+					rawElementAt(rawPoints, j, p))
 				continue
 			}
 			points = append(points, storage.MetricPoint{
@@ -530,7 +536,7 @@ func (a *Server) HandleCheckRun(c *gin.Context) {
 		return
 	}
 
-	runs, undecodable, err := parseCheckRuns(body)
+	runs, originals, undecodable, err := parseCheckRuns(body)
 	if err != nil {
 		log.Printf("[check_run] %v", err)
 		a.storeRaw(c, "check_run", "decode_error", err.Error(), body)
@@ -550,9 +556,13 @@ func (a *Server) HandleCheckRun(c *gin.Context) {
 	for i, r := range runs {
 		apiLogExtra("check_run", "check #"+strconv.Itoa(i), r.AdditionalProperties, r.UnparsedObject)
 		if r.UnparsedObject != nil {
+			// Either nothing decoded, or the check carried a status outside
+			// 0..3 — which leaves Status at 0, and storing an unreadable
+			// check as OK is the one thing a check_run table must never do.
+			// The bytes are kept instead.
 			a.storeRaw(c, "check_run", "unexpected_shape",
 				"check #"+strconv.Itoa(i)+" did not fit datadogV1.ServiceCheck",
-				apiJSONBytes(r.UnparsedObject))
+				rawElementAt(originals, i, r.UnparsedObject))
 			continue
 		}
 		rows = append(rows, storage.CheckRunRow{
@@ -1499,6 +1509,8 @@ func (a *Server) HandleEvents(c *gin.Context) {
 
 	tenant := TenantFromContext(c)
 	rows := make([]storage.EventRow, 0, len(events))
+	// The originals, for the events the model could not fit.
+	rawEvents := jsonElements(body)
 	var firstID uint64
 
 	for i, e := range events {
@@ -1509,12 +1521,15 @@ func (a *Server) HandleEvents(c *gin.Context) {
 		}
 		apiLogExtra("events", "event #"+strconv.Itoa(i), e.AdditionalProperties, e.UnparsedObject)
 		if e.UnparsedObject != nil {
-			// None of the declared fields was populated, so a row here would
-			// be empty strings wearing an event id. The object that did not
-			// fit is the only copy of what was sent.
+			// Either nothing decoded at all — a row would then be empty
+			// strings wearing an event id — or the event carried an
+			// alert_type/priority outside the enum, which the generated
+			// UnmarshalJSON reports the same way. Coercing an event whose own
+			// words we could not read would put a guess in a column, so both
+			// cases keep the bytes and build no row.
 			a.storeRaw(c, "events", "unexpected_shape",
 				"event #"+strconv.Itoa(i)+" did not fit datadogV1.EventCreateRequest",
-				apiJSONBytes(e.UnparsedObject))
+				rawElementAt(rawEvents, i, e.UnparsedObject))
 			continue
 		}
 
@@ -1625,8 +1640,12 @@ func coercePriority(raw string) string {
 // are gone. It is deliberate — a distribution's whole purpose is to be merged
 // with the agent's own sketches, which arrive already bucketed, and keeping
 // both forms would mean two tables that disagree about the same metric. See
-// docs/tables/api.md. A pair that could not be split at all IS kept, whole, in
-// raw_payloads.
+// docs/tables/api.md.
+//
+// Everything the model could not fit IS kept, whole, in raw_payloads: a body
+// that fit no series list, a series that fit no series, and a pair that could
+// not be split. Those three used to be logged as "kept in raw_payloads" while
+// nothing was stored.
 func (a *Server) HandleDistributionPoints(c *gin.Context) {
 	defer ackSeries(c)
 	if isDiagnose(c) {
@@ -1646,20 +1665,59 @@ func (a *Server) HandleDistributionPoints(c *gin.Context) {
 		return
 	}
 	apiLogExtra("distribution_points", "payload", payload.AdditionalProperties, payload.UnparsedObject)
+	if payload.UnparsedObject != nil {
+		// The whole body fit no series list at all, so payload.Series is
+		// empty and the loop below will not run: the bytes are the only thing
+		// left to keep. Without this the request vanished behind a log line
+		// that claimed it had been kept.
+		a.storeRaw(c, "distribution_points", "unexpected_shape",
+			"payload did not fit datadogV1.DistributionPointsPayload", body)
+	}
+	if len(payload.AdditionalProperties) > 0 {
+		// A key beside `series` at the TOP of the payload belongs to the
+		// batch, not to any one point, and the extra map on a sketch row is
+		// per series — copying a batch-level value onto every row would
+		// multiply it by the point count. The body goes to raw_payloads
+		// instead, once. Same reasoning as HandleSeriesV1.
+		a.storeRaw(c, "distribution_points", "unexpected_shape",
+			"payload carried undeclared top-level keys: "+apiKeys(payload.AdditionalProperties), body)
+	}
 
 	tenant := TenantFromContext(c)
 	if tenant == "" {
 		return
 	}
 
+	// The originals of the series, for the ones the model could not fit: its
+	// UnparsedObject went through float64, these bytes did not.
+	rawSeries := jsonFieldElements(body, "series")
+
 	var rows []storage.SketchRow
-	badItems := 0
+	badItems, unparsedSeries := 0, 0
 	for i, s := range payload.Series {
 		apiLogExtra("distribution_points", "series #"+strconv.Itoa(i), s.AdditionalProperties, s.UnparsedObject)
+		if s.UnparsedObject != nil {
+			// The generated UnmarshalJSON fills UnparsedObject in two
+			// unrelated cases: the series fit no known shape (fields empty,
+			// nothing below will find a metric in it), or it carried a `type`
+			// outside the single legal value (fields populated, only that one
+			// word lost). Either way the object it could not fit holds what
+			// was sent, so it is kept whole — and when the points did come
+			// through they still become rows, because a typo in `type` must
+			// not cost a host its distribution.
+			unparsedSeries++
+			a.storeRaw(c, "distribution_points", "unexpected_shape",
+				"series #"+strconv.Itoa(i)+" did not fit datadogV1.DistributionPointsSeries",
+				rawElementAt(rawSeries, i, s.UnparsedObject))
+			if len(s.Points) == 0 {
+				continue
+			}
+		}
 		if t := string(s.GetType()); t != "" && t != string(datadogV1.DISTRIBUTIONPOINTSTYPE_DISTRIBUTION) {
 			log.Printf("[distribution_points] series #%d type=%q (only %q is defined)", i, t, datadogV1.DISTRIBUTIONPOINTSTYPE_DISTRIBUTION)
 		}
 		seriesExtra := apiExtraAny(s.AdditionalProperties)
+		rawPoints := jsonFieldElements(rawElementAt(rawSeries, i, nil), "points")
 		for j, pair := range s.Points {
 			bad := false
 			for _, item := range pair {
@@ -1676,7 +1734,7 @@ func (a *Server) HandleDistributionPoints(c *gin.Context) {
 				// itself is the smallest thing that still holds them.
 				a.storeRaw(c, "distribution_points", "unexpected_shape",
 					"series #"+strconv.Itoa(i)+" ("+s.Metric+") point #"+strconv.Itoa(j)+
-						" is not a [timestamp, [values]] pair", apiJSONBytes(pair))
+						" is not a [timestamp, [values]] pair", rawElementAt(rawPoints, j, pair))
 				continue
 			}
 			keys, counts, stats := sketch.Build(values)
@@ -1692,6 +1750,9 @@ func (a *Server) HandleDistributionPoints(c *gin.Context) {
 	}
 	if badItems > 0 {
 		log.Printf("[distribution_points] %d point elements were neither a timestamp nor a value list, kept in raw_payloads", badItems)
+	}
+	if unparsedSeries > 0 {
+		log.Printf("[distribution_points] %d series did not fit datadogV1.DistributionPointsSeries (UnparsedObject set), kept in raw_payloads", unparsedSeries)
 	}
 	a.store(storage.SketchesWriter, storage.WriteSketches{Sketches: rows}, len(rows))
 }
@@ -2359,18 +2420,36 @@ func apiFingerprint(pem string) string {
 
 // apiJSONBytes renders an already-decoded value back to JSON for storeRaw.
 //
-// The bytes that arrived would be the better thing to keep, but a model that
-// filled UnparsedObject has consumed them — the decoded map is the only copy
-// left. Re-encoding loses whitespace and key order and nothing else:
-// json.Number values keep their digits, so a 64-bit id survives the trip. A
-// value that cannot be encoded at all falls back to its Go rendering, because
-// an approximate raw row beats an empty one.
+// Re-encoding loses whitespace and key order, and for a value decoded with
+// UseNumber — AdditionalProperties, which is what apiExtraAny feeds here —
+// nothing else: a json.Number keeps its digits, so a 64-bit id survives the
+// trip.
+//
+// UnparsedObject is NOT such a value. The generated UnmarshalJSON decodes it
+// with plain encoding/json, so an integer above 2^53 inside an element that
+// did not fit the model has already been rounded to float64 before this
+// function sees it, and re-encoding would write the rounded number. That is
+// why every batch handler pairs this with rawElementAt and keeps the bytes
+// that arrived instead; this is the fallback for when they cannot be found.
+//
+// A value that cannot be encoded at all falls back to its Go rendering,
+// because an approximate raw row beats an empty one.
 func apiJSONBytes(v any) []byte {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return []byte(fmt.Sprint(v))
 	}
 	return b
+}
+
+// rawElementAt returns the bytes element i of a batch arrived as, falling back
+// to a re-encoding of what the model kept when the body could not be re-split
+// (a framing jsonElements does not recognise, or an index it never produced).
+func rawElementAt(elements []json.RawMessage, i int, decoded any) []byte {
+	if i >= 0 && i < len(elements) {
+		return elements[i]
+	}
+	return apiJSONBytes(decoded)
 }
 
 // apiExtraAny JSON-encodes the values of every key not named in skip, for an
