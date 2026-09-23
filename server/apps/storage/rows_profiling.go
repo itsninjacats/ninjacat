@@ -81,7 +81,12 @@ type ProfileRow struct {
 	TagsProfiler map[string][]string
 
 	// Attachments: parallel arrays, one entry per multipart part other than
-	// "event", in the order profParts returned them (wire order).
+	// "event", ordered by part name (router_profiling.go's profileRow walks
+	// parts via sortedKeys) — NOT the order the parts arrived on the wire,
+	// which a map[string][]byte never preserved to begin with. The true wire
+	// order is not recoverable from this row; it only ever existed in the
+	// per-part log lines profParts prints as it reads the multipart body.
+	// See docs/tables/profiling.md's "Dropped by decision" list.
 	AttachName          []string
 	AttachBytes         []string // raw part bytes exactly as received — gzip if the part was, since profile.ParseData undoes that internally and this column is the undecoded original.
 	AttachSize          []uint64
@@ -148,8 +153,14 @@ type DebuggerDiagnosticRow struct {
 	// collapse to ReceivedAt or the epoch — see profParseTimestamp.
 	Timestamp *time.Time
 
-	Service      string
-	DDSource     string
+	Service  string
+	DDSource string
+
+	// DDTags is the ?ddtags= query string, split and parsed as a multiset —
+	// same convention as DebuggerLogRow.DDTags. It travels alongside every
+	// message in the diagnostics batch, not per message.
+	DDTags map[string][]string
+
 	RuntimeID    string
 	ProbeID      string
 	Status       string
@@ -166,7 +177,7 @@ type DebuggerDiagnosticRow struct {
 }
 
 func (r DebuggerDiagnosticRow) AppendTo(b driver.Batch) error {
-	return b.Append(r.TenantID, r.ReceivedAt, r.Timestamp, r.Service, r.DDSource,
+	return b.Append(r.TenantID, r.ReceivedAt, r.Timestamp, r.Service, r.DDSource, orEmpty(r.DDTags),
 		r.RuntimeID, r.ProbeID, r.Status, r.ProbeVersion,
 		r.ExceptionType, r.ExceptionMessage, r.Message)
 }
@@ -184,6 +195,18 @@ func (r DebuggerDiagnosticRow) AppendTo(b driver.Batch) error {
 type SymdbUploadRow struct {
 	TenantID   string
 	ReceivedAt time.Time
+
+	// Event is the "event" part, byte for byte, before any decode — the
+	// lossless copy every extracted field below (Service through
+	// AttachmentSize) is a convenience extract of, never the source of
+	// truth. Same pattern as ProfileRow.Event / DebuggerLogRow.Entry /
+	// SymbolUploadRow.Meta; this table was the one gap in that pattern.
+	Event string
+
+	// DDTags is the ?ddtags= query string, split and parsed as a multiset —
+	// same convention as DebuggerLogRow.DDTags. It travels alongside the
+	// whole upload, not per scope.
+	DDTags map[string][]string
 
 	Service   string
 	Version   string
@@ -218,7 +241,8 @@ type SymdbUploadRow struct {
 }
 
 func (r SymdbUploadRow) AppendTo(b driver.Batch) error {
-	return b.Append(r.TenantID, r.ReceivedAt, r.Service, r.Version, r.Language,
+	return b.Append(r.TenantID, r.ReceivedAt, r.Event, orEmpty(r.DDTags),
+		r.Service, r.Version, r.Language,
 		r.RuntimeID, r.UploadID, r.BatchNum, r.Final, r.AttachmentSize,
 		r.File, r.InflatedSize, r.ScopeCount, r.ScopesOK,
 		r.EnvService, r.EnvVersion, r.EnvLanguage, r.EnvUploadID, r.EnvBatchNum, r.EnvFinal)
@@ -297,7 +321,7 @@ func init() {
 	registerWriter(DebuggerDiagnosticsWriter, WriterConfig{
 		Name: "debugger_diagnostics",
 		Insert: `INSERT INTO debugger_diagnostics
-			(tenant_id, received_at, timestamp, service, ddsource, runtime_id,
+			(tenant_id, received_at, timestamp, service, ddsource, ddtags, runtime_id,
 			 probe_id, status, probe_version, exception_type, exception_message, message)`,
 		// Human-scale class, same as events/k8s_actions: a probe's status
 		// changes a handful of times per install/removal, not per request.
@@ -307,7 +331,7 @@ func init() {
 	registerWriter(SymdbUploadsWriter, WriterConfig{
 		Name: "symdb_uploads",
 		Insert: `INSERT INTO symdb_uploads
-			(tenant_id, received_at, service, version, language, runtime_id,
+			(tenant_id, received_at, event, ddtags, service, version, language, runtime_id,
 			 upload_id, batch_num, final, attachment_size,
 			 file, inflated_size, scope_count, scopes_ok,
 			 env_service, env_version, env_language, env_upload_id, env_batch_num, env_final)`,

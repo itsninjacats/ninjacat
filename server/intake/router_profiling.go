@@ -368,20 +368,30 @@ func (a *Server) HandleDebugger(c *gin.Context) {
 		if tenant == "" {
 			return
 		}
-		row := symdbUploadRow(tenant, file, symdbEvent, envelope, scopes, inflatedSize)
+		row := symdbUploadRow(tenant, event, file, ddtags, symdbEvent, envelope, scopes, inflatedSize)
 		a.store(storage.SymdbUploadsWriter, storage.WriteSymdbUploads{Uploads: []storage.SymdbUploadRow{row}}, 1)
 	case hasEvent:
 		log.Printf("[debugger] variant=diagnostics ddtags=%q", ddtags)
 		raw, diagnostics := dbgDecodeDiagnostics(event)
+		if raw == nil {
+			// dbgDecodeDiagnostics returns (nil, nil) only on a genuine decode
+			// failure (the event part is not a JSON array) — distinct from a
+			// legitimately empty "[]" batch, which decodes to a non-nil empty
+			// slice and falls through to the ordinary empty-batch return below.
+			a.storeRaw(c, "debugger", "decode_error",
+				"diagnostics variant: event part is not a JSON array", body)
+			return
+		}
 
 		tenant := TenantFromContext(c)
 		if tenant == "" || len(raw) == 0 {
 			return
 		}
+		tags := tagsToMultiMap(splitDDTags(ddtags))
 		now := time.Now().UTC()
 		rows := make([]storage.DebuggerDiagnosticRow, 0, len(raw))
 		for i, r := range raw {
-			rows = append(rows, debuggerDiagnosticRow(tenant, now, r, diagnostics[i]))
+			rows = append(rows, debuggerDiagnosticRow(tenant, now, tags, r, diagnostics[i]))
 		}
 		a.store(storage.DebuggerDiagnosticsWriter, storage.WriteDebuggerDiagnostics{Diagnostics: rows}, len(rows))
 	default:
@@ -492,7 +502,7 @@ func dbgDecodeDiagnostics(data []byte) ([]json.RawMessage, []map[string]any) {
 // msg may be nil when that one entry failed to decode (dbgDecodeDiagnostics
 // keeps going past a single bad entry) — every extracted column is then
 // empty/NULL, but raw (and so Message) still carries the original bytes.
-func debuggerDiagnosticRow(tenant string, arrival time.Time, raw json.RawMessage, msg map[string]any) storage.DebuggerDiagnosticRow {
+func debuggerDiagnosticRow(tenant string, arrival time.Time, ddtags map[string][]string, raw json.RawMessage, msg map[string]any) storage.DebuggerDiagnosticRow {
 	diag, _ := nested(msg, "debugger", "diagnostics").(map[string]any)
 	row := storage.DebuggerDiagnosticRow{
 		TenantID:     tenant,
@@ -500,6 +510,7 @@ func debuggerDiagnosticRow(tenant string, arrival time.Time, raw json.RawMessage
 		Timestamp:    profParseTimestamp(msg["timestamp"]),
 		Service:      asString(msg["service"]),
 		DDSource:     asString(msg["ddsource"]),
+		DDTags:       ddtags,
 		RuntimeID:    asString(diag["runtimeId"]),
 		ProbeID:      asString(diag["probeId"]),
 		Status:       asString(diag["status"]),
@@ -573,16 +584,20 @@ func dbgDecodeSymdbFile(file []byte) (map[string]json.RawMessage, []map[string]a
 	return env, scopes, len(raw)
 }
 
-// symdbUploadRow assembles one ninjacat.symdb_uploads row. event is
-// dbgDecodeSymdbEvent's result (nil on decode failure); envelope/scopes are
-// dbgDecodeSymdbFile's — independently nilable, see that function's doc
-// comment.
-func symdbUploadRow(tenant string, file []byte, event map[string]any,
+// symdbUploadRow assembles one ninjacat.symdb_uploads row. rawEvent is the
+// event part's bytes exactly as received — kept whole regardless of whether
+// decoded parses it, the same lossless-copy contract every sibling table in
+// this file follows. decoded is dbgDecodeSymdbEvent's result (nil on decode
+// failure); envelope/scopes are dbgDecodeSymdbFile's — independently
+// nilable, see that function's doc comment.
+func symdbUploadRow(tenant string, rawEvent, file []byte, ddtags string, decoded map[string]any,
 	envelope map[string]json.RawMessage, scopes []map[string]any, inflatedSize int) storage.SymdbUploadRow {
 
 	row := storage.SymdbUploadRow{
 		TenantID:     tenant,
 		ReceivedAt:   time.Now().UTC(),
+		Event:        string(rawEvent),
+		DDTags:       tagsToMultiMap(splitDDTags(ddtags)),
 		File:         string(file),
 		InflatedSize: uint64(inflatedSize),
 		ScopeCount:   uint32(len(scopes)),
@@ -590,15 +605,20 @@ func symdbUploadRow(tenant string, file []byte, event map[string]any,
 	if scopes != nil {
 		row.ScopesOK = 1
 	}
-	if event != nil {
-		row.Service = asString(event["service"])
-		row.Version = asString(event["version"])
-		row.Language = asString(event["language"])
-		row.RuntimeID = asString(event["runtimeId"])
-		row.UploadID = asString(event["uploadId"])
-		row.BatchNum = rawText(event["batchNum"])
-		row.Final = asBool(event["final"])
-		row.AttachmentSize = asUint64(event["attachmentSize"])
+	if decoded != nil {
+		row.Service = asString(decoded["service"])
+		row.Version = asString(decoded["version"])
+		row.Language = asString(decoded["language"])
+		row.RuntimeID = asString(decoded["runtimeId"])
+		// UploadID and BatchNum both travel as the wire's literal text
+		// (rawText, not asString) — a producer that sends uploadId as a bare
+		// JSON number must not lose it to asString's string-only check, and
+		// both fields need the exact same handling since they are the same
+		// kind of identifier.
+		row.UploadID = rawText(decoded["uploadId"])
+		row.BatchNum = rawText(decoded["batchNum"])
+		row.Final = asBool(decoded["final"])
+		row.AttachmentSize = asUint64(decoded["attachmentSize"])
 	}
 	if envelope != nil {
 		row.EnvService = rawJSONText(envelope, "service")

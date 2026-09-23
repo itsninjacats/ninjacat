@@ -73,7 +73,9 @@ CREATE TABLE IF NOT EXISTS profiles
     service  LowCardinality(String) MATERIALIZED tags_profiler['service'][1],
 
     -- Attachments: parallel arrays, one entry per multipart part other than
-    -- "event", in wire order.
+    -- "event", ordered by part name (router_profiling.go's profileRow walks
+    -- parts via sortedKeys) — NOT wire order, which a map[string][]byte never
+    -- preserved to begin with; see docs/tables/profiling.md.
     attach_name             Array(String),
     -- Raw bytes exactly as the part arrived — gzip if the attachment was,
     -- since profile.ParseData undoes that internally and this column is the
@@ -162,6 +164,12 @@ CREATE TABLE IF NOT EXISTS debugger_diagnostics
 
     service        LowCardinality(String),
     ddsource       LowCardinality(String),
+
+    -- The ?ddtags= query string, split and parsed as a multiset — same
+    -- convention as debugger_logs.ddtags. It travels alongside every message
+    -- in the diagnostics batch, not per message.
+    ddtags  Map(LowCardinality(String), Array(LowCardinality(String))) CODEC(ZSTD(3)),
+
     runtime_id     String,
     probe_id       String,
     status         LowCardinality(String),
@@ -174,7 +182,10 @@ CREATE TABLE IF NOT EXISTS debugger_diagnostics
     exception_message  Nullable(String),
 
     -- The array element, byte for byte.
-    message  String CODEC(ZSTD(3))
+    message  String CODEC(ZSTD(3)),
+
+    INDEX idx_tag_keys   mapKeys(ddtags)   TYPE bloom_filter(0.01) GRANULARITY 4,
+    INDEX idx_tag_values arrayFlatten(mapValues(ddtags)) TYPE bloom_filter(0.01) GRANULARITY 4
 )
 ENGINE = MergeTree
 PARTITION BY toDate(received_at)
@@ -200,6 +211,17 @@ CREATE TABLE IF NOT EXISTS symdb_uploads
 (
     tenant_id    LowCardinality(String),
     received_at  DateTime64(3, 'UTC') CODEC(DoubleDelta, ZSTD(1)),
+
+    -- The "event" part, byte for byte, before any decode — the lossless
+    -- copy every column from service to attachment_size below is a
+    -- convenience extract of, same pattern as profiles.event /
+    -- symbol_uploads.meta / debugger_logs.entry.
+    event  String CODEC(ZSTD(3)),
+
+    -- The ?ddtags= query string, split and parsed as a multiset — same
+    -- convention as debugger_logs.ddtags. It travels alongside the whole
+    -- upload, not per scope.
+    ddtags  Map(LowCardinality(String), Array(LowCardinality(String))) CODEC(ZSTD(3)),
 
     service      LowCardinality(String),
     version      LowCardinality(String),
@@ -235,7 +257,10 @@ CREATE TABLE IF NOT EXISTS symdb_uploads
     env_language    String,
     env_upload_id   String,
     env_batch_num   String,
-    env_final       String
+    env_final       String,
+
+    INDEX idx_tag_keys   mapKeys(ddtags)   TYPE bloom_filter(0.01) GRANULARITY 4,
+    INDEX idx_tag_values arrayFlatten(mapValues(ddtags)) TYPE bloom_filter(0.01) GRANULARITY 4
 )
 ENGINE = MergeTree
 PARTITION BY toDate(received_at)

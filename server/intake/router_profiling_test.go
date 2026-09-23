@@ -6,6 +6,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 
@@ -343,8 +344,16 @@ func TestSymdbUploadRowKeepsBothSpellings(t *testing.T) {
 
 	envMap := dbgDecodeSymdbEvent(event)
 	env, scopes, inflated := dbgDecodeSymdbFile(envelope)
-	row := symdbUploadRow("t", envelope, envMap, env, scopes, inflated)
+	row := symdbUploadRow("t", event, envelope, "env:prod,team:x", envMap, env, scopes, inflated)
 
+	// The raw event part is the lossless copy — must survive byte for byte,
+	// same as profiles.event / symbol_uploads.meta / debugger_logs.entry.
+	if row.Event != string(event) {
+		t.Errorf("Event does not match the raw event part bytes")
+	}
+	if got := row.DDTags["env"]; len(got) != 1 || got[0] != "prod" {
+		t.Errorf("ddtags[env]: got %v, want [prod]", got)
+	}
 	if row.Service != "evt-svc" || row.EnvService != "env-svc" {
 		t.Errorf("service drift lost: event=%q envelope=%q, want evt-svc/env-svc", row.Service, row.EnvService)
 	}
@@ -395,12 +404,28 @@ func TestDbgDecodeSymdbFileMissingScopesKey(t *testing.T) {
 func TestSymdbUploadRowUndecodableFilePreservesRawBytes(t *testing.T) {
 	garbage := []byte("not gzip at all")
 	env, scopes, inflated := dbgDecodeSymdbFile(garbage)
-	row := symdbUploadRow("t", garbage, nil, env, scopes, inflated)
+	row := symdbUploadRow("t", []byte(`{"service":"s"}`), garbage, "", nil, env, scopes, inflated)
 	if row.File != string(garbage) {
 		t.Errorf("File: got %q, want the raw undecodable bytes preserved", row.File)
 	}
 	if row.ScopesOK != 0 || row.EnvService != "" {
 		t.Errorf("expected zero envelope-derived fields, got scopes_ok=%d env_service=%q", row.ScopesOK, row.EnvService)
+	}
+}
+
+// A producer that sends uploadId as a bare JSON number (not a string) must
+// not lose it: UploadID and BatchNum are both identifiers kept as literal
+// wire text (rawText), never as a string-only extract (asString) that would
+// silently blank a numeric value.
+func TestSymdbUploadRowNumericUploadID(t *testing.T) {
+	event := []byte(`{"uploadId": 42, "batchNum": 7}`)
+	envMap := dbgDecodeSymdbEvent(event)
+	row := symdbUploadRow("t", event, nil, "", envMap, nil, nil, 0)
+	if row.UploadID != "42" {
+		t.Errorf("upload_id: got %q, want \"42\" (a numeric uploadId must not blank to \"\")", row.UploadID)
+	}
+	if row.BatchNum != "7" {
+		t.Errorf("batch_num: got %q, want \"7\"", row.BatchNum)
 	}
 }
 
@@ -550,13 +575,15 @@ func TestHandleDebuggerSymdbVariantStoresRow(t *testing.T) {
 	a, node := newTestServer(t)
 	e := newTestEngine(t, a, a.routeDebugger)
 
+	eventPart := []byte(`{"service":"s","uploadId":"u1","batchNum":"1","final":true}`)
 	envelope := gzipBytes(t, []byte(`{"service":"s","upload_id":"u1","batch_num":"1","scopes":[]}`))
 	body, ct := buildMultipart(t, map[string][]byte{
-		"event": []byte(`{"service":"s","uploadId":"u1","batchNum":"1","final":true}`),
+		"event": eventPart,
 		"file":  envelope,
 	})
 
-	if w := postWithContentType(t, e, "/api/v2/debugger", ct, body); w.Code != http.StatusAccepted {
+	path := "/api/v2/debugger?ddtags=env:prod,team:x"
+	if w := postWithContentType(t, e, path, ct, body); w.Code != http.StatusAccepted {
 		t.Fatalf("got %d, want 202", w.Code)
 	}
 
@@ -566,6 +593,13 @@ func TestHandleDebuggerSymdbVariantStoresRow(t *testing.T) {
 	}
 	if rows[0].TenantID != testTenant || rows[0].UploadID != "u1" || rows[0].EnvUploadID != "u1" {
 		t.Errorf("row: got tenant=%q upload_id=%q env_upload_id=%q", rows[0].TenantID, rows[0].UploadID, rows[0].EnvUploadID)
+	}
+	// The event part must survive whole, not just its 8 named fields.
+	if rows[0].Event != string(eventPart) {
+		t.Errorf("event: got %q, want the raw event part preserved", rows[0].Event)
+	}
+	if got := rows[0].DDTags["env"]; len(got) != 1 || got[0] != "prod" {
+		t.Errorf("ddtags[env]: got %v, want [prod] — the query param must not be dropped for the symdb variant", got)
 	}
 }
 
@@ -582,7 +616,8 @@ func TestHandleDebuggerDiagnosticsVariantStoresRows(t *testing.T) {
 	}]`)
 	body, ct := buildMultipart(t, map[string][]byte{"event": diag})
 
-	if w := postWithContentType(t, e, "/api/v2/debugger", ct, body); w.Code != http.StatusAccepted {
+	path := "/api/v2/debugger?ddtags=env:prod,team:x"
+	if w := postWithContentType(t, e, path, ct, body); w.Code != http.StatusAccepted {
 		t.Fatalf("got %d, want 202", w.Code)
 	}
 
@@ -599,6 +634,33 @@ func TestHandleDebuggerDiagnosticsVariantStoresRows(t *testing.T) {
 	}
 	if r.Timestamp == nil {
 		t.Errorf("timestamp: got nil, want a parsed value")
+	}
+	if got := r.DDTags["env"]; len(got) != 1 || got[0] != "prod" {
+		t.Errorf("ddtags[env]: got %v, want [prod] — the query param must not be dropped for the diagnostics variant", got)
+	}
+}
+
+// A diagnostics event part that is not a JSON array at all (a genuine decode
+// failure, distinct from a legitimately empty "[]" batch) must reach
+// raw_payloads, not vanish silently.
+func TestHandleDebuggerDiagnosticsMalformedEventStoresRaw(t *testing.T) {
+	a, node := newTestServer(t)
+	e := newTestEngine(t, a, a.routeDebugger)
+
+	body, ct := buildMultipart(t, map[string][]byte{"event": []byte(`{"not": "an array"}`)})
+	if w := postWithContentType(t, e, "/api/v2/debugger", ct, body); w.Code != http.StatusAccepted {
+		t.Fatalf("got %d, want 202", w.Code)
+	}
+
+	rows := Rows[storage.RawPayloadRow](node)
+	if len(rows) != 1 {
+		t.Fatalf("raw payload rows: got %d, want 1", len(rows))
+	}
+	if rows[0].Reason != "decode_error" {
+		t.Errorf("reason: got %q, want decode_error", rows[0].Reason)
+	}
+	if diagRows := Rows[storage.DebuggerDiagnosticRow](node); len(diagRows) != 0 {
+		t.Errorf("diagnostic rows: got %d, want 0 (the batch never decoded)", len(diagRows))
 	}
 }
 
@@ -702,24 +764,50 @@ func TestProfilingTablesRoundTrip(t *testing.T) {
 		if got := storagetest.Count(t, conn, "debugger_logs"); got != 1 {
 			t.Fatalf("debugger_logs: %d rows, want 1", got)
 		}
+		row := storagetest.QueryRow(t, conn, "SELECT service, ddsource, entry, extra_keys FROM debugger_logs")
+		if row[0] != "svc" || row[1] != "dd_debugger" {
+			t.Errorf("service/ddsource: got %v/%v", row[0], row[1])
+		}
+		if row[2] != `{"a":1}` {
+			t.Errorf("entry: got %v, want the raw JSON preserved", row[2])
+		}
+		if !reflect.DeepEqual(row[3], []string{"a"}) {
+			t.Errorf("extra_keys: got %v, want [a]", row[3])
+		}
 	})
 
 	t.Run("debugger_diagnostics", func(t *testing.T) {
 		ts := now
 		excType := "NPE"
+		excMsg := "boom"
 		storagetest.Insert(t, conn, storage.DebuggerDiagnosticsWriter, []storage.Row{
 			storage.DebuggerDiagnosticRow{
 				TenantID: "default", ReceivedAt: now, Timestamp: &ts,
 				Service: "svc", ProbeID: "p1", Status: "INSTALLED",
-				ExceptionType: &excType, Message: `{"x":1}`,
+				DDTags:           map[string][]string{"env": {"prod"}},
+				ExceptionType:    &excType,
+				ExceptionMessage: &excMsg,
+				Message:          `{"x":1}`,
 			},
-			// No exception on this one — proves Nullable(String) round-trips NULL.
+			// No exception on this one — proves Nullable(String) round-trips
+			// NULL, checked below by an actual SELECT rather than asserted
+			// only in this comment.
 			storage.DebuggerDiagnosticRow{
 				TenantID: "default", ReceivedAt: now, Service: "svc2", Message: `{}`,
 			},
 		})
 		if got := storagetest.Count(t, conn, "debugger_diagnostics"); got != 2 {
 			t.Fatalf("debugger_diagnostics: %d rows, want 2", got)
+		}
+		row := storagetest.QueryRow(t, conn,
+			"SELECT exception_type, exception_message FROM debugger_diagnostics WHERE service = 'svc'")
+		if isNullColumn(row[0]) || isNullColumn(row[1]) {
+			t.Errorf("exception_type/message for svc: got %v/%v, want non-NULL", row[0], row[1])
+		}
+		noExc := storagetest.QueryRow(t, conn,
+			"SELECT exception_type, exception_message FROM debugger_diagnostics WHERE service = 'svc2'")
+		if !isNullColumn(noExc[0]) || !isNullColumn(noExc[1]) {
+			t.Errorf("exception_type/message for svc2: got %v/%v, want NULL/NULL", noExc[0], noExc[1])
 		}
 	})
 
@@ -729,6 +817,7 @@ func TestProfilingTablesRoundTrip(t *testing.T) {
 		storagetest.Insert(t, conn, storage.SymdbUploadsWriter, []storage.Row{
 			storage.SymdbUploadRow{
 				TenantID: "default", ReceivedAt: now, Service: "svc", UploadID: "u1",
+				Event: `{"uploadId":"u1"}`, DDTags: map[string][]string{"env": {"prod"}},
 				Final: &final, AttachmentSize: &size, File: "gzbytes",
 				EnvUploadID: "u1-env",
 			},
@@ -736,9 +825,12 @@ func TestProfilingTablesRoundTrip(t *testing.T) {
 		if got := storagetest.Count(t, conn, "symdb_uploads"); got != 1 {
 			t.Fatalf("symdb_uploads: %d rows, want 1", got)
 		}
-		row := storagetest.QueryRow(t, conn, "SELECT upload_id, env_upload_id, final FROM symdb_uploads")
+		row := storagetest.QueryRow(t, conn, "SELECT upload_id, env_upload_id, final, event FROM symdb_uploads")
 		if row[0] != "u1" || row[1] != "u1-env" {
 			t.Errorf("upload_id/env_upload_id: got %v/%v — camelCase and snake_case spellings must both survive", row[0], row[1])
+		}
+		if row[3] != `{"uploadId":"u1"}` {
+			t.Errorf("event: got %v, want the raw event part preserved", row[3])
 		}
 	})
 
@@ -753,7 +845,26 @@ func TestProfilingTablesRoundTrip(t *testing.T) {
 		if got := storagetest.Count(t, conn, "symbol_uploads"); got != 1 {
 			t.Fatalf("symbol_uploads: %d rows, want 1", got)
 		}
+		row := storagetest.QueryRow(t, conn, "SELECT arch, elf_class, other_parts['extra'] FROM symbol_uploads")
+		if row[0] != "amd64" || row[1] != "ELF64" {
+			t.Errorf("arch/elf_class: got %v/%v", row[0], row[1])
+		}
+		if row[2] != "part" {
+			t.Errorf("other_parts['extra']: got %v, want part", row[2])
+		}
 	})
+}
+
+// isNullColumn reports whether a storagetest.QueryRow value scanned a SQL
+// NULL — a nil interface for most drivers scans, or a typed nil pointer
+// (e.g. a nil *string) for a Nullable column, which `v != nil` alone would
+// get wrong (a non-nil interface holding a nil pointer is still != nil).
+func isNullColumn(v any) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	return rv.Kind() == reflect.Ptr && rv.IsNil()
 }
 
 func timePtr(t time.Time) *time.Time { return &t }

@@ -54,7 +54,7 @@ query can filter by shape without re-parsing every attachment.
 | `family`, `version`, `runtime`, `language` | `event.family`/`.version`/`.runtime`/`.language`, `""` when absent or not a string. |
 | `tags_profiler` | `event.tags_profiler`, a **third** Datadog tag convention (a single comma-joined string, unlike the flat array or `map[string]string` elsewhere in the intake) — split with `splitDDTags`, then `tagsToMultiMap` for the usual multiset shape. |
 | `service` | `MATERIALIZED tags_profiler['service'][1]` — the hot-tag column every other tagged table gets. |
-| `attach_name`, `attach_bytes`, `attach_size` | One entry per multipart part other than `"event"`, in wire order. `attach_bytes` is the part's raw bytes exactly as received — **still gzip if the part was gzip'd**, since `profile.ParseData` undoes that internally and this column is the undecoded original. |
+| `attach_name`, `attach_bytes`, `attach_size` | One entry per multipart part other than `"event"`, **ordered by part name** (`profileRow` walks `parts` via `sortedKeys`) — **not wire order**, which a `map[string][]byte` never preserved to begin with (see "Dropped by decision" below). `attach_bytes` is the part's raw bytes exactly as received — **still gzip if the part was gzip'd**, since `profile.ParseData` undoes that internally and this column is the undecoded original. |
 | `attach_parsed` | `1` when `profile.ParseData` accepted the part as pprof, `0` otherwise. Every other `attach_*` field at that index is zero-valued (an empty array, not NULL — there is no per-attachment Nullable here) when this is `0`. |
 | `attach_sample_types`, `attach_sample_units` | Per attachment, the pprof `SampleType[].Type`/`.Unit` lists, e.g. `["cpu"]`/`["nanoseconds"]`. |
 | `attach_sample_count` | `len(Sample)`. |
@@ -99,8 +99,15 @@ unexported: top-level `service`/`ddsource`/`timestamp`, and
 |---|---|
 | `timestamp` | `Nullable(DateTime64)`, `profParseTimestamp` of the message's own `timestamp` — NULL when absent or unparseable, never `received_at` or the epoch. |
 | `service`, `ddsource`, `runtime_id`, `probe_id`, `status`, `probe_version` | The named fields, `""` when absent. |
+| `ddtags` | The `?ddtags=` query string, split and parsed as a multiset — travels alongside every message in the batch, not per message, same as `debugger_logs.ddtags`. |
 | `exception_type`, `exception_message` | `Nullable(String)`, both together: `debugger.diagnostics.exception` is optional on the wire, so "no exception" (both NULL) and "an exception with an empty message" (both non-NULL, one `""`) stay distinguishable. |
 | `message` | The array element, byte for byte — a per-entry decode failure (an element that is not a JSON object) still lands here with every extracted column empty/NULL, rather than dropping the whole batch. |
+
+**When the `event` part of `/api/v2/debugger` is present but is not a JSON
+array at all** (a genuine decode failure, as opposed to a legitimate empty
+`[]` batch), the request goes to `raw_payloads` (`decode_error`) instead of
+silently producing zero rows — the same rule every other decode failure in
+this router follows.
 
 ## `symdb_uploads`
 
@@ -122,8 +129,10 @@ merged into one guess, because the drift itself is worth being able to see.
 
 | Column | Source |
 |---|---|
+| `event` | The `"event"` multipart part, byte for byte — the lossless copy every column below (through `attachment_size`) is a convenience extract of. This table was the one gap in the "every multipart table keeps a raw copy of its event part" pattern `profiles`/`symbol_uploads`/`debugger_logs` all follow; it now matches them. |
+| `ddtags` | The `?ddtags=` query string, split and parsed as a multiset — travels alongside the whole upload, not per scope, same as `debugger_logs.ddtags`. |
 | `service`, `version`, `language`, `runtime_id` | From the **event** part (`ev.service`/`.version`/`.language`/`.runtimeId`). |
-| `upload_id`, `batch_num` | From the event (`uploadId`/`batchNum`), kept as the wire's **literal text**, not parsed to an integer — they are identifiers, not quantities, and nothing guarantees they stay numeric across producers. |
+| `upload_id`, `batch_num` | From the event (`uploadId`/`batchNum`), read with `rawText` — the wire's **literal text**, not parsed to an integer (they are identifiers, not quantities, and nothing guarantees they stay numeric across producers) and, critically, **not** `asString` — a producer that sends `uploadId` as a bare JSON number must not silently blank to `""`. |
 | `final`, `attachment_size` | `Nullable(UInt8)`/`Nullable(UInt64)` from the event's `final`/`attachmentSize` — NULL when the key was absent, which is a different state from "false"/"0 bytes". |
 | `file` | The gzip'd file part exactly as received — the lossless copy. `inflated_size`/`scope_count`/`scopes_ok` and every `env_*` column below are convenience extracts of what is already fully present here (gunzip it to get everything back, including nested child scopes this table does not otherwise count). |
 | `inflated_size` | `len()` of the gunzipped file, `0` when the part was not valid gzip. |
@@ -157,9 +166,9 @@ this payload has. `TTL` 7 days (bulky-document class, same as
 None of these five tables carry anything from the credential-bearing header
 set (`Dd-Api-Key`, `Authorization`) — those never reach a row anywhere in the
 intake. `profiles.event`/`symbol_uploads.meta`/`debugger_logs.entry`/
-`debugger_diagnostics.message` are raw, attacker-controlled JSON text kept
-for fidelity; nothing about that JSON is redacted, matching `raw_payloads`'
-own treatment of arbitrary body content.
+`debugger_diagnostics.message`/`symdb_uploads.event` are raw,
+attacker-controlled JSON text kept for fidelity; nothing about that JSON is
+redacted, matching `raw_payloads`' own treatment of arbitrary body content.
 
 ## Dropped by decision
 
@@ -169,6 +178,13 @@ own treatment of arbitrary body content.
   thousands per attachment) for a shape that tool already parses for free.
   The pprof *envelope* (sample types/units, period, counts) is kept as
   columns so a query can filter without re-parsing.
+- **`profiles.attach_*`'s true wire order (which multipart part physically
+  arrived first) is not preserved** — `profileRow` walks the parts sorted by
+  name, and the `map[string][]byte` it reads from never carried wire order to
+  begin with. Not a correctness problem (attachments are individually
+  addressable by `attach_name`), but genuinely unrecoverable from the row;
+  the actual arrival order only ever existed in `profParts`' per-part log
+  lines.
 - **symdb nested child scopes are not counted or flattened**
   (`symdb_uploads.scope_count` is top-level only). The full scope tree,
   arbitrarily deep, is fully recoverable by gunzipping `file` — the raw
