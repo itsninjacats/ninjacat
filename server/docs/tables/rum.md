@@ -31,7 +31,7 @@ rather than 1970.
 
 A RUM event has no hostname, no agent and no container id. The only thing that
 identifies its sender is the request it arrived in, so all six tables start with
-the same fourteen columns:
+the same fifteen columns:
 
 | column | source |
 |---|---|
@@ -39,6 +39,7 @@ the same fourteen columns:
 | `received_at` | arrival, for measuring how stale a batch was |
 | `ddsource` | `?ddsource=` — `browser`, `ios`, `android`, `flutter`, … |
 | `evp_origin`, `evp_origin_version` | `?dd-evp-origin[-version]=` (browser) or `DD-EVP-ORIGIN[-VERSION]` (mobile) |
+| `evp_encoding` | `?dd-evp-encoding=deflate` (browser, which sets no headers) or `Content-Encoding` (mobile). `""` means the batch was sent uncompressed |
 | `request_id` | `?dd-request-id=` or `DD-REQUEST-ID` — fresh per attempt |
 | `idempotency_key` | `DD-IDEMPOTENCY-KEY` (`sha1(body)`, RUM only) — stable across retries, so the pair tells a retry from a new batch |
 | `dd_api` | `?_dd.api=fetch\|beacon` (browser) |
@@ -46,6 +47,11 @@ the same fourteen columns:
 | `retry_count`, `retry_after` | `?_dd.retry_*` (browser) or `?ddtags=retry_count:N,retry_after:CODE` (mobile). `Nullable`: a first attempt has no retry count, and "retried zero times" is the same number and a different fact. `retry_after` is stored **as sent** — a delay in milliseconds from the browser, the HTTP status that caused the retry from mobile |
 | `remote_addr`, `user_agent` | the connection and its header |
 | `query_extra` | every query parameter without a column of its own, as JSON, **with `dd-api-key` and `api_key` removed** |
+
+The payload columns hold the **decoded** bytes, so `evp_encoding` is the only
+record that compression happened at all — an SDK release that quietly stops
+compressing is a bandwidth regression that would otherwise show up in a network
+bill and nowhere else.
 
 `query_extra` is the `event` column's bargain applied to the URL: a parameter an
 SDK release adds must not become invisible. The credential is stripped because

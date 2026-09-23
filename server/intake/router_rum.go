@@ -30,8 +30,8 @@ import (
 // three on browser-intake-<site>: there is no mobile-intake. Mirroring that
 // is what lets a user redirect an SDK by changing a host and nothing else.
 // The platforms differ in how they authenticate and how they signal
-// compression, not in where they send, so those differences live in the gate
-// below rather than in three hosts.
+// compression, not in where they send, so those differences live in the engine
+// and the gate below rather than in three hosts.
 //
 //	POST /api/v2/rum       NDJSON of RUM events  -> rum_views, rum_events,
 //	                                                rum_telemetry, rum_timeseries
@@ -45,30 +45,43 @@ import (
 // per intake/raw.go — a batch that arrives once, from somebody's real app, is
 // not something a log line can replace.
 
-// rumPaths is every path this host serves, and the list the CORS preflight
-// is registered for. Preflight needs explicit OPTIONS routes because gin
-// matches a route BEFORE it runs the group's middleware, so a handler-side
-// answer alone would be a 404 from NoRoute.
-var rumPaths = []string{
-	"/api/v2/rum",
-	"/api/v2/logs",
-	"/api/v2/replay",
-	"/api/v2/spans",
-	"/api/v2/profile",
-	"/api/v2/debugger",
-}
-
 // rumEngine is the handler browser-intake.<site> is served by.
 //
-// It is an http.Handler around the gin engine rather than the engine itself
-// for one reason: the browser SDK's `proxy` string form sends the real path
-// inside ?ddforward=, and gin picks a route before any middleware of ours
-// runs. Rewriting the URL has to happen above the router or it rewrites
-// nothing.
+// It is an http.Handler around the gin engine rather than the engine itself,
+// and both things it does above the router have to happen there:
+//
+//   - the browser SDK's `proxy` string form sends the real path inside
+//     ?ddforward=, and gin picks a route before any middleware of ours runs,
+//     so rewriting the URL inside the engine would rewrite nothing;
+//
+//   - CORS has to be on EVERY response this host produces, and gin runs a
+//     route group's middleware only for a request that MATCHED a route in it.
+//     A path this build does not serve — a track a newer SDK added, a
+//     misconfigured client — falls through to NoRoute, whose handler chain
+//     does not include the group. Setting the headers inside the group would
+//     therefore leave them off exactly the 404s that need them most: to the
+//     browser SDK a cross-origin response it may not read is status 0 while
+//     online, which it counts as SUCCESS and drops the batch for. The
+//     unhandled endpoint would be invisible on both sides.
+//
+// The preflight is answered here for the same reason, rather than by OPTIONS
+// routes: a preflight for a path we do not serve must still be answered, so
+// the browser gets as far as the POST and sees the 404 it can act on.
 func (a *Server) rumEngine() http.Handler {
+	origins := rumAllowedOrigins()
 	e := a.engineAuth(a.rumGate(), a.routeRUM)
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rumUnwrapForward(r)
+		rumSetCORS(w.Header(), r.Header.Get("Origin"), origins)
+
+		// Preflight carries no credential by definition — the browser strips
+		// them — so it is answered before anything can ask for one.
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
 		e.ServeHTTP(w, r)
 	})
 }
@@ -85,27 +98,26 @@ func (a *Server) routeRUM(g *gin.RouterGroup) {
 	g.POST("/api/v2/profile", a.handleProfile("profile-browser"))
 	g.POST("/api/v2/debugger", a.HandleDebugger)
 
-	// The gate answers these before the handler runs; the handler exists so
-	// gin has a route to match.
-	for _, p := range rumPaths {
-		g.OPTIONS(p, func(c *gin.Context) { c.Status(http.StatusNoContent) })
-	}
+	// No OPTIONS routes: rumEngine answers every preflight above the router,
+	// including for paths that are not in this list.
 }
 
 // ---------------------------------------------------------------------------
 // CORS and authentication
 // ---------------------------------------------------------------------------
 
-// rumGate is CORS first, then the key check, as one handler.
+// rumGate is the key check for this host. CORS is NOT here — rumEngine sets
+// it above the router, and the comment there says why — but the ORDER it
+// creates is the whole point of this split.
 //
-// THE ORDER IS THE WHOLE POINT. The browser SDK retries only on 408, 429 and
-// 5xx, or on a network error while navigator.onLine is false. A CORS failure
-// reaches it as status 0 while online, which it treats as SUCCESS — it drops
-// the batch and never tells anyone. So a 403 without an
-// Access-Control-Allow-Origin header does not read as "bad key" in the
-// browser; it reads as nothing at all, and the operator sees an app that
-// sends no data and a server with no errors in it. Setting the header before
-// the key is even looked at is what makes a misconfigured key visible.
+// The browser SDK retries only on 408, 429 and 5xx, or on a network error
+// while navigator.onLine is false. A CORS failure reaches it as status 0 while
+// online, which it treats as SUCCESS — it drops the batch and never tells
+// anyone. So a 403 without an Access-Control-Allow-Origin header does not read
+// as "bad key" in the browser; it reads as nothing at all, and the operator
+// sees an app that sends no data and a server with no errors in it. The header
+// being on the response before the key is even looked at is what makes a
+// misconfigured key visible.
 //
 // Authentication accepts the header (iOS, Android) and the query parameter
 // (browser). The browser has no choice: its fetch sets zero headers on
@@ -115,25 +127,10 @@ func (a *Server) routeRUM(g *gin.RouterGroup) {
 // RequireAPIKey does not offer this by default and why this is the one intake
 // that asks for it explicitly.
 func (a *Server) rumGate() gin.HandlerFunc {
-	origins := rumAllowedOrigins()
-	auth := RequireAPIKeyFrom(a.Store,
+	return RequireAPIKeyFrom(a.Store,
 		KeyFromHeader("Dd-Api-Key"),
 		KeyFromQuery("dd-api-key"),
 	)
-
-	return func(c *gin.Context) {
-		rumSetCORS(c, origins)
-
-		// Preflight carries no credential by definition — the browser strips
-		// them — so it must be answered before the key check, not by it.
-		if c.Request.Method == http.MethodOptions {
-			c.AbortWithStatus(http.StatusNoContent)
-			return
-		}
-
-		// auth runs the rest of the chain itself via c.Next(), or aborts.
-		auth(c)
-	}
 }
 
 // rumCORSHeaders is what a preflight is told it may send. DD-API-KEY and the
@@ -166,12 +163,11 @@ func rumAllowedOrigins() []string {
 	return out
 }
 
-// rumSetCORS puts the access-control headers on the response. It runs before
-// anything can abort, so they are present on a 403 and on a 202 alike.
-func rumSetCORS(c *gin.Context, allowed []string) {
-	origin := c.GetHeader("Origin")
-	h := c.Writer.Header()
-
+// rumSetCORS puts the access-control headers on the response. It takes the
+// header map rather than a *gin.Context because it runs above the router,
+// where there is no context yet and where nothing — not an abort, not a
+// NoRoute, not a panic recovery — can get a response out without it.
+func rumSetCORS(h http.Header, origin string, allowed []string) {
 	switch {
 	case origin == "":
 		// Not a browser: iOS, Android, curl. There is no origin to allow, and
@@ -309,9 +305,17 @@ func rumRequestInfo(c *gin.Context) storage.RumRequest {
 		EVPOriginVersion: firstNonEmpty(q.Get("dd-evp-origin-version"), c.GetHeader("Dd-Evp-Origin-Version")),
 		RequestID:        firstNonEmpty(q.Get("dd-request-id"), c.GetHeader("Dd-Request-Id")),
 		IdempotencyKey:   c.GetHeader("Dd-Idempotency-Key"),
-		DDAPI:            q.Get("_dd.api"),
-		RemoteAddr:       c.ClientIP(),
-		UserAgent:        c.GetHeader("User-Agent"),
+		// How the batch arrived compressed, as the sender spelled it: the
+		// browser can only say it in the query string, iOS and Android use
+		// Content-Encoding, which Decompress() has already acted on and left
+		// in place. The body is stored decoded, so this column is the only
+		// record that compression happened at all — and an SDK release that
+		// silently stops compressing is a bandwidth regression that would
+		// otherwise be visible nowhere.
+		EVPEncoding: firstNonEmpty(q.Get("dd-evp-encoding"), c.GetHeader("Content-Encoding")),
+		DDAPI:       q.Get("_dd.api"),
+		RemoteAddr:  c.ClientIP(),
+		UserAgent:   c.GetHeader("User-Agent"),
 	}
 
 	if ms, ok := parseInt64(q.Get("batch_time")); ok {

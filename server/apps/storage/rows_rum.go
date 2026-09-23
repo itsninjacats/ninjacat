@@ -67,8 +67,15 @@ type RumRequest struct {
 	DDSource         string
 	EVPOrigin        string
 	EVPOriginVersion string
-	RequestID        string
-	IdempotencyKey   string
+
+	// EVPEncoding is how the batch arrived compressed — "deflate" from the
+	// browser's ?dd-evp-encoding, "gzip"/"deflate" from the mobile SDKs'
+	// Content-Encoding, "" from a sender that compressed nothing. The body is
+	// stored decoded, so nothing else in the row remembers this.
+	EVPEncoding string
+
+	RequestID      string
+	IdempotencyKey string
 
 	// Browser only: ?_dd.api=fetch|beacon, the transport the batch travelled
 	// on. A beacon is fire-and-forget at page unload, so its failures are
@@ -93,12 +100,13 @@ type RumRequest struct {
 	QueryExtra string
 }
 
-// args returns the fourteen shared columns in INSERT order. Each row's
+// args returns the fifteen shared columns in INSERT order. Each row's
 // AppendTo starts from this and appends its own.
 func (q RumRequest) args() []any {
 	return []any{
 		q.TenantID, q.ReceivedAt,
-		q.DDSource, q.EVPOrigin, q.EVPOriginVersion, q.RequestID, q.IdempotencyKey,
+		q.DDSource, q.EVPOrigin, q.EVPOriginVersion, q.EVPEncoding,
+		q.RequestID, q.IdempotencyKey,
 		q.DDAPI, q.BatchTime, q.RetryCount, q.RetryAfter,
 		q.RemoteAddr, q.UserAgent, q.QueryExtra,
 	}
@@ -483,7 +491,7 @@ func init() {
 	// The shared request block, spelled once so the six INSERTs below cannot
 	// drift from each other. Kept as a string constant rather than a helper
 	// because WriterConfig.Insert is what storagetest counts columns in.
-	const req = `tenant_id, received_at, ddsource, evp_origin, evp_origin_version,
+	const req = `tenant_id, received_at, ddsource, evp_origin, evp_origin_version, evp_encoding,
 		 request_id, idempotency_key, dd_api, batch_time, retry_count, retry_after,
 		 remote_addr, user_agent, query_extra`
 

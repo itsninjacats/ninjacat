@@ -469,6 +469,40 @@ func TestRumRequestInfoReadsQueryAndHeaders(t *testing.T) {
 			},
 		},
 		{
+			// The browser can only say it in the query string; iOS and
+			// Android use Content-Encoding. The body is stored decoded, so
+			// this column is the only record that the batch was compressed.
+			name: "browser: the compression signal is kept",
+			url:  "/api/v2/rum?ddsource=browser&dd-evp-encoding=deflate",
+			check: func(t *testing.T, r storage.RumRequest) {
+				if r.EVPEncoding != "deflate" {
+					t.Errorf("evp_encoding: got %q, want deflate", r.EVPEncoding)
+				}
+				if strings.Contains(r.QueryExtra, "dd-evp-encoding") {
+					t.Errorf("query_extra duplicates a column: %q", r.QueryExtra)
+				}
+			},
+		},
+		{
+			name: "mobile: the same fact spelled as Content-Encoding",
+			url:  "/api/v2/rum?ddsource=android",
+			hdr:  map[string]string{"Content-Encoding": "gzip"},
+			check: func(t *testing.T, r storage.RumRequest) {
+				if r.EVPEncoding != "gzip" {
+					t.Errorf("evp_encoding: got %q, want gzip", r.EVPEncoding)
+				}
+			},
+		},
+		{
+			name: "no compression at all is not a missing value",
+			url:  "/api/v2/rum?ddsource=browser",
+			check: func(t *testing.T, r storage.RumRequest) {
+				if r.EVPEncoding != "" {
+					t.Errorf("evp_encoding: got %q, want empty", r.EVPEncoding)
+				}
+			},
+		},
+		{
 			name: "a parameter with no column is kept, not counted",
 			url:  "/api/v2/rum?ddsource=browser&brand_new=1&brand_new=2",
 			check: func(t *testing.T, r storage.RumRequest) {
@@ -700,6 +734,57 @@ func TestRUMPreflight(t *testing.T) {
 	}
 	if h.Get("Access-Control-Max-Age") == "" {
 		t.Error("no Access-Control-Max-Age: every request would preflight again")
+	}
+}
+
+// A path this build does not serve must still answer with CORS headers.
+//
+// The real scenario: an SDK release adds a track (exposures, flagevaluation,
+// whatever comes next) before this server knows about it, so the browser posts
+// to a path that falls through to NoRoute. Without an
+// Access-Control-Allow-Origin on that 404 the browser blocks the read, the SDK
+// sees status 0 while online, counts the batch as delivered and drops it — the
+// operator gets no data and no error on either side. With the header it sees a
+// 404 it can report.
+func TestRUMUnknownPathStillCarriesCORS(t *testing.T) {
+	a, _ := newTestServer(t)
+	e := a.rumEngine()
+	hdr := map[string]string{"Origin": "https://shop.example"}
+
+	w := serve(e, request(http.MethodPost, "/api/v2/not-invented-yet?dd-api-key="+testAPIKey,
+		[]byte(`{"type":"whatever"}`), hdr))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("unknown path: got %d, want 404", w.Code)
+	}
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "https://shop.example" {
+		t.Errorf("404 Access-Control-Allow-Origin: got %q, want the origin — a CORS-blocked 404 reads as success to the SDK and the batch is dropped silently", got)
+	}
+
+	// The preflight for such a path is answered too, so the browser gets as
+	// far as the POST and sees the 404 instead of a blocked preflight.
+	w = serve(e, request(http.MethodOptions, "/api/v2/not-invented-yet", nil, hdr))
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("preflight for an unknown path: got %d, want 204", w.Code)
+	}
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "https://shop.example" {
+		t.Errorf("preflight allow-origin: got %q", got)
+	}
+}
+
+// The probes are not under the auth group either, and a browser that checks
+// the receiver is alive from a page hits the same wall if they answer without
+// the header.
+func TestRUMProbesCarryCORS(t *testing.T) {
+	a, _ := newTestServer(t)
+	e := a.rumEngine()
+
+	w := serve(e, request(http.MethodGet, "/ping", nil,
+		map[string]string{"Origin": "https://shop.example"}))
+	if w.Code != http.StatusOK {
+		t.Fatalf("ping: got %d, want 200", w.Code)
+	}
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "https://shop.example" {
+		t.Errorf("ping allow-origin: got %q", got)
 	}
 }
 
@@ -1013,7 +1098,8 @@ func TestRumTablesRoundTrip(t *testing.T) {
 		TenantID: "t", ReceivedAt: time.Now().UTC(),
 		DDSource: "ios", EVPOrigin: "ios", EVPOriginVersion: "3.17.0",
 		RequestID: "r1", IdempotencyKey: "sha1", DDAPI: "fetch",
-		RemoteAddr: "203.0.113.7", UserAgent: "App/1.0 CFNetwork",
+		EVPEncoding: "gzip",
+		RemoteAddr:  "203.0.113.7", UserAgent: "App/1.0 CFNetwork",
 		QueryExtra: `{"brand_new":["1"]}`,
 	}
 	// Recent, for the same TTL reason as the test above.
@@ -1078,7 +1164,7 @@ func TestRumTablesRoundTrip(t *testing.T) {
 	}
 
 	got := storagetest.QueryRow(t, conn,
-		"SELECT resource_size, long_task_duration, ddtags['team'], dd_api, query_extra FROM rum_events")
+		"SELECT resource_size, long_task_duration, ddtags['team'], dd_api, query_extra, evp_encoding FROM rum_events")
 	// A Nullable column scans as a pointer, which is the whole point: a
 	// stored 0 and an absent value are two different results here, not one.
 	if v, ok := got[0].(*int64); !ok || v == nil || *v != 0 {
@@ -1095,6 +1181,9 @@ func TestRumTablesRoundTrip(t *testing.T) {
 	}
 	if s, _ := got[4].(string); s != `{"brand_new":["1"]}` {
 		t.Errorf("query_extra: got %v", got[4])
+	}
+	if s, _ := got[5].(string); s != "gzip" {
+		t.Errorf("evp_encoding: got %v, want gzip — the body is stored decoded, so nothing else remembers", got[5])
 	}
 
 	// Nanoseconds must survive the DateTime64(9) columns, and the segment

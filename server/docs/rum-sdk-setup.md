@@ -88,13 +88,22 @@ origin's data, not an error you will find in a log.
 
 The actual data requests are "simple requests" (`text/plain` and
 `multipart/form-data` bodies, no custom headers) and never preflight. The server
-answers `OPTIONS` with 204 and a 24-hour `Access-Control-Max-Age` for the
-endpoints that do.
+answers any `OPTIONS` on this host with 204 and a 24-hour
+`Access-Control-Max-Age`, for the deployments that do preflight.
+
+The access-control headers go on **every** response this host produces — a 202,
+a 403 for a bad key, a 404 for a path this build does not serve — because they
+are set above the router, not inside the authenticated route group. A path we do
+not know yet (a track a newer SDK added) therefore answers 404 with the header,
+which the SDK can see and report, instead of a blocked response it would count
+as a success.
 
 ### Compression
 
 The browser sends **no** `Content-Encoding` header. Its only signal is
 `?dd-evp-encoding=deflate`, which the router reads itself. Nothing to configure.
+Either spelling is kept in the `evp_encoding` column, because the payload is
+stored decoded and nothing else would remember that the sender compressed.
 With `compressIntakeRequests: true` and the page unloading mid-encode, the SDK
 sends two requests — one compressed, one plain; both are handled independently.
 

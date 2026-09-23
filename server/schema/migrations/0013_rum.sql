@@ -65,6 +65,15 @@ CREATE TABLE IF NOT EXISTS rum_views
     evp_origin         LowCardinality(String),
     evp_origin_version LowCardinality(String),
 
+    -- How the batch arrived compressed, as the sender spelled it:
+    -- ?dd-evp-encoding=deflate from the browser (whose fetch sets no headers
+    -- at all), Content-Encoding from iOS and Android, "" from a sender that
+    -- compressed nothing. The payload columns hold the DECODED bytes, so
+    -- this is the only place the fact survives — and an SDK release that
+    -- quietly stops compressing is a bandwidth regression that would
+    -- otherwise show up in a network bill and nowhere else.
+    evp_encoding       LowCardinality(String),
+
     -- DD-REQUEST-ID is a fresh uuid per attempt; DD-IDEMPOTENCY-KEY is
     -- sha1(body) and stays the same across retries, so the pair is what tells
     -- a retry from a new batch.
@@ -244,6 +253,15 @@ CREATE TABLE IF NOT EXISTS rum_events
     ddsource           LowCardinality(String),
     evp_origin         LowCardinality(String),
     evp_origin_version LowCardinality(String),
+
+    -- How the batch arrived compressed, as the sender spelled it:
+    -- ?dd-evp-encoding=deflate from the browser (whose fetch sets no headers
+    -- at all), Content-Encoding from iOS and Android, "" from a sender that
+    -- compressed nothing. The payload columns hold the DECODED bytes, so
+    -- this is the only place the fact survives — and an SDK release that
+    -- quietly stops compressing is a bandwidth regression that would
+    -- otherwise show up in a network bill and nowhere else.
+    evp_encoding       LowCardinality(String),
     request_id         String,
     idempotency_key    String,
 
@@ -374,6 +392,15 @@ CREATE TABLE IF NOT EXISTS rum_telemetry
     ddsource           LowCardinality(String),
     evp_origin         LowCardinality(String),
     evp_origin_version LowCardinality(String),
+
+    -- How the batch arrived compressed, as the sender spelled it:
+    -- ?dd-evp-encoding=deflate from the browser (whose fetch sets no headers
+    -- at all), Content-Encoding from iOS and Android, "" from a sender that
+    -- compressed nothing. The payload columns hold the DECODED bytes, so
+    -- this is the only place the fact survives — and an SDK release that
+    -- quietly stops compressing is a bandwidth regression that would
+    -- otherwise show up in a network bill and nowhere else.
+    evp_encoding       LowCardinality(String),
     request_id         String,
     idempotency_key    String,
 
@@ -463,6 +490,15 @@ CREATE TABLE IF NOT EXISTS rum_timeseries
     ddsource           LowCardinality(String),
     evp_origin         LowCardinality(String),
     evp_origin_version LowCardinality(String),
+
+    -- How the batch arrived compressed, as the sender spelled it:
+    -- ?dd-evp-encoding=deflate from the browser (whose fetch sets no headers
+    -- at all), Content-Encoding from iOS and Android, "" from a sender that
+    -- compressed nothing. The payload columns hold the DECODED bytes, so
+    -- this is the only place the fact survives — and an SDK release that
+    -- quietly stops compressing is a bandwidth regression that would
+    -- otherwise show up in a network bill and nowhere else.
+    evp_encoding       LowCardinality(String),
     request_id         String,
     idempotency_key    String,
 
@@ -560,6 +596,15 @@ CREATE TABLE IF NOT EXISTS rum_replay_segments
     ddsource           LowCardinality(String),
     evp_origin         LowCardinality(String),
     evp_origin_version LowCardinality(String),
+
+    -- How the batch arrived compressed, as the sender spelled it:
+    -- ?dd-evp-encoding=deflate from the browser (whose fetch sets no headers
+    -- at all), Content-Encoding from iOS and Android, "" from a sender that
+    -- compressed nothing. The payload columns hold the DECODED bytes, so
+    -- this is the only place the fact survives — and an SDK release that
+    -- quietly stops compressing is a bandwidth regression that would
+    -- otherwise show up in a network bill and nowhere else.
+    evp_encoding       LowCardinality(String),
     request_id         String,
     idempotency_key    String,
 
@@ -655,6 +700,15 @@ CREATE TABLE IF NOT EXISTS rum_spans
     ddsource           LowCardinality(String),
     evp_origin         LowCardinality(String),
     evp_origin_version LowCardinality(String),
+
+    -- How the batch arrived compressed, as the sender spelled it:
+    -- ?dd-evp-encoding=deflate from the browser (whose fetch sets no headers
+    -- at all), Content-Encoding from iOS and Android, "" from a sender that
+    -- compressed nothing. The payload columns hold the DECODED bytes, so
+    -- this is the only place the fact survives — and an SDK release that
+    -- quietly stops compressing is a bandwidth regression that would
+    -- otherwise show up in a network bill and nowhere else.
+    evp_encoding       LowCardinality(String),
     request_id         String,
     idempotency_key    String,
 
