@@ -619,6 +619,21 @@ func init() {
 
 	registerTypes(
 		WriteSpans{}, SpanRow{},
+		// SketchSummary and DSMCommon are nested named struct types used as
+		// plain fields (APMStatRow.OkSummary/ErrorSummary,
+		// DSMPipelineStatRow.PathwayLatency/EdgeLatency/PayloadSize) or
+		// embedded (DSMCommon in all three DSM*Row types below). Ergo's EDF
+		// encoder resolves a struct-kind field by looking up its exact
+		// reflect.Type in its registry — unlike map/slice/array/pointer kinds,
+		// getEncoder has no generic fallback for reflect.Struct — so an
+		// unregistered nested struct type fails the OUTER type's registration
+		// ("(struct field encode) type storage.SketchSummary must be
+		// registered first", net/edf/register.go's reflect.Struct case), which
+		// RegisterTypesOf then reports as the outer type being "unresolvable"
+		// since it never makes progress across passes. Registering the helper
+		// types themselves fixes it; rows_rum.go's RumRequest already follows
+		// this pattern — copy it for any future nested helper type.
+		SketchSummary{}, DSMCommon{},
 		WriteAPMStats{}, APMStatRow{},
 		WriteDSMPipelineStats{}, DSMPipelineStatRow{},
 		WriteDSMBacklogs{}, DSMBacklogRow{},
