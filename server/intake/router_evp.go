@@ -1,6 +1,7 @@
 package intake
 
 import (
+	"bytes"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -12,7 +13,12 @@ import (
 	"github.com/DataDog/agent-payload/v5/agentdiscovery"
 	"github.com/DataDog/agent-payload/v5/healthplatform"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/itsninjacats/server/apps/storage"
 )
 
 // Six more single-purpose hosts, one route function each.
@@ -45,14 +51,18 @@ import (
 // fields by their documented names, everything else as sorted keys — never
 // through structs invented here.
 //
-// Nothing is stored yet. Every handler decodes the WHOLE body and leaves the
-// complete result in place at its end, marked TODO(ninjacat): tables. The log
-// cap below limits what is printed, never what is decoded or kept. Tracks that
-// arrive as a list keep the raw list next to the decoded one, so an item that
-// fails to decode is still there, byte for byte, at the same index.
+// Stored: agent_discovery, agent_health_reports + agent_health_issues,
+// event_management_events, host_software, synthetics_results,
+// openlineage_events, query_action_results — see
+// server/schema/migrations/0010_evp.sql and server/docs/tables/evp.md. A body
+// that fails to decode, or a list element that fails evpObject, goes to
+// storeRaw rather than being silently dropped; decode success paths never
+// call storeRaw. The log lines below predate storage and stay — they are how
+// this protocol was reverse-engineered — but logging is no longer the only
+// sink.
 
 // evpMaxItems caps per-item log lines on tracks that carry long lists. It is
-// a log cap only: decoding never stops at it.
+// a log cap only: decoding never stops at it, and neither does storage.
 const evpMaxItems = 20
 
 // evpBody reads the body and treats an empty one as the diagnostic probe.
@@ -85,9 +95,17 @@ func evpList(label string, body []byte) ([]json.RawMessage, bool) {
 
 // evpObject decodes one JSON object into a map. On failure it logs and returns
 // false; the caller still holds raw, so nothing is lost by skipping the item.
+//
+// Decoded with UseNumber: several tracks here carry ids and counters whose
+// wire type is JSON, and a plain float64 loses precision above 2^53 — the
+// same rule the rest of the intake applies to uint64 ids. json.Number
+// re-marshals to the exact literal it was decoded from, which is what lets
+// evpJSON below store nested objects losslessly.
 func evpObject(label string, raw []byte) (map[string]any, bool) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
 	var m map[string]any
-	if err := json.Unmarshal(raw, &m); err != nil {
+	if err := dec.Decode(&m); err != nil {
 		log.Printf("[%s] not a JSON object: %v (%d bytes)", label, err, len(raw))
 		return nil, false
 	}
@@ -117,13 +135,16 @@ func evpPath(m map[string]any, path ...string) any {
 	return cur
 }
 
-// evpStr renders a nested value for a log line; missing is "-".
+// evpStr renders a nested value for a LOG line; missing is "-", long strings
+// are cut. Never use this to build a stored value — see evpAsString.
 func evpStr(m map[string]any, path ...string) string {
 	return evpRender(evpPath(m, path...))
 }
 
-// evpRender renders one decoded JSON value: scalars as-is, composites as
-// their shape. Long strings are cut so one field cannot flood a line.
+// evpRender renders one decoded JSON value for a LOG line: scalars as-is,
+// composites as their shape. Long strings are cut so one field cannot flood
+// a line. This is a logging helper; storage uses evpAsString/evpJSON, which
+// never truncate.
 func evpRender(v any) string {
 	switch t := v.(type) {
 	case nil:
@@ -198,6 +219,7 @@ func evpOr(s string) string {
 }
 
 // evpDatasets renders OpenLineage inputs/outputs as namespace/name, capped.
+// Logging only — the cap never limits what datasetArrays stores.
 func evpDatasets(v any) string {
 	list, _ := v.([]any)
 	if len(list) == 0 {
@@ -213,6 +235,216 @@ func evpDatasets(v any) string {
 		names = append(names, evpStr(m, "namespace")+"/"+evpStr(m, "name"))
 	}
 	return strings.Join(names, ", ")
+}
+
+// ---------------------------------------------------------------------------
+// Storage conversion helpers — exact values, never the truncated/rendered
+// form the log helpers above produce.
+
+// evpAsString renders a decoded JSON value as the string a column holds:
+// a string verbatim, a json.Number by its exact literal (never through
+// float64), a bool as "true"/"false", nil as "", anything else re-marshaled.
+func evpAsString(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return t
+	case json.Number:
+		return t.String()
+	case bool:
+		if t {
+			return "true"
+		}
+		return "false"
+	default:
+		b, _ := json.Marshal(t)
+		return string(b)
+	}
+}
+
+// evpFieldStr reads one key of an object as a string; a nil object (a path
+// that did not resolve to a map) yields "" rather than panicking.
+func evpFieldStr(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	return evpAsString(m[key])
+}
+
+// evpPathStr is evpFieldStr for a nested path.
+func evpPathStr(m map[string]any, path ...string) string {
+	return evpAsString(evpPath(m, path...))
+}
+
+// evpFieldValue reads one key of an object, nil-safe when m is nil.
+func evpFieldValue(m map[string]any, key string) any {
+	if m == nil {
+		return nil
+	}
+	return m[key]
+}
+
+// evpJSON re-marshals a decoded value for a JSON-text column. nil renders as
+// "" (no value at all), distinct from an explicit JSON null or {}.
+func evpJSON(v any) string {
+	if v == nil {
+		return ""
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+// evpStringSlice reads a value as a string list: a JSON array renders each
+// element with evpAsString, a bare string is a one-element list (some
+// producers send a single tag as a scalar), anything else is empty.
+func evpStringSlice(v any) []string {
+	switch t := v.(type) {
+	case []any:
+		if len(t) == 0 {
+			return nil
+		}
+		out := make([]string, 0, len(t))
+		for _, it := range t {
+			out = append(out, evpAsString(it))
+		}
+		return out
+	case string:
+		if t == "" {
+			return nil
+		}
+		return []string{t}
+	default:
+		return nil
+	}
+}
+
+// evpBoolPtr reads a value as *uint8 for a Nullable(UInt8) boolean column:
+// nil when the value is absent or not a JSON bool, distinguishing "the
+// producer never said" from "false".
+func evpBoolPtr(v any) *uint8 {
+	b, ok := v.(bool)
+	if !ok {
+		return nil
+	}
+	u := boolToUint8(b)
+	return &u
+}
+
+// evpInt64Ptr reads a value as *int64 for a Nullable(Int64) column, using
+// json.Number so a large id or counter never rounds through float64.
+func evpInt64Ptr(v any) *int64 {
+	n, ok := v.(json.Number)
+	if !ok {
+		return nil
+	}
+	i, err := n.Int64()
+	if err != nil {
+		return nil
+	}
+	return &i
+}
+
+// evpFloat64Ptr is evpInt64Ptr for a Nullable(Float64) column.
+func evpFloat64Ptr(v any) *float64 {
+	n, ok := v.(json.Number)
+	if !ok {
+		return nil
+	}
+	f, err := n.Float64()
+	if err != nil {
+		return nil
+	}
+	return &f
+}
+
+// evpParseTime parses a wire timestamp string as RFC3339 (with or without
+// fractional seconds). A string that is empty or does not parse yields nil —
+// never a fallback to now(), which would invent a timestamp nobody sent. The
+// raw string is kept in its own column regardless, so nothing is lost by a
+// format this does not recognise.
+func evpParseTime(s string) *time.Time {
+	if s == "" {
+		return nil
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+		if t, err := time.Parse(layout, s); err == nil {
+			u := t.UTC()
+			return &u
+		}
+	}
+	return nil
+}
+
+// evpUnknownMap builds a Map(String,String) of the keys of m NOT in known,
+// each value re-marshaled to JSON so a caller can hold a nested object, an
+// array or a scalar uniformly. Returns nil (not an empty map) when there is
+// nothing undeclared, matching orEmpty's contract at the storage layer.
+func evpUnknownMap(m map[string]any, known map[string]bool) map[string]string {
+	if len(m) == 0 {
+		return nil
+	}
+	var out map[string]string
+	for k, v := range m {
+		if known[k] {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]string, len(m))
+		}
+		out[k] = evpJSON(v)
+	}
+	return out
+}
+
+// evpMergeExtra merges b into a, prefixing b's keys so they cannot collide
+// with a's — used when two different nesting levels each carry undeclared
+// keys that must land in the same repeated per-row catch-all column. Returns
+// nil (not an empty map) when both inputs are empty, matching evpUnknownMap's
+// contract.
+func evpMergeExtra(a, b map[string]string, prefix string) map[string]string {
+	if len(a) == 0 && len(b) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(a)+len(b))
+	for k, v := range a {
+		out[k] = v
+	}
+	for k, v := range b {
+		out[prefix+k] = v
+	}
+	return out
+}
+
+// evpSortedKeys lists an object's top-level keys, sorted — the stored
+// counterpart of evpKeys, which renders them joined for a log line.
+func evpSortedKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func boolToUint8(b bool) uint8 {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// evpTimestampPtr converts a protobuf Timestamp, ptr-optional on the wire,
+// to a *time.Time: nil stays nil rather than becoming the Unix epoch.
+func evpTimestampPtr(ts *timestamppb.Timestamp) *time.Time {
+	if ts == nil {
+		return nil
+	}
+	t := ts.AsTime().UTC()
+	return &t
 }
 
 // ---------------------------------------------------------------------------
@@ -236,13 +468,15 @@ func (a *Server) HandleAgentDiscovery(c *gin.Context) {
 	var batch agentdiscovery.AgentDiscoveryPayloadBatch
 	if err := proto.Unmarshal(body, &batch); err != nil {
 		log.Printf("[agentdiscovery] protobuf: %v (%d bytes)", err, len(body))
+		a.storeRaw(c, "agentdiscovery", "decode_error", err.Error(), body)
 		return
 	}
 
 	if len(batch.Payloads) == 0 {
 		// proto.Unmarshal fails OPEN: unknown fields are skipped, so a
 		// payload meant for another endpoint decodes into an empty struct.
-		// An empty decode is the only signal we get.
+		// An empty decode is the only signal we get — not a decode error,
+		// so no storeRaw: see the intake audit's note on fail-open guards.
 		log.Printf("[agentdiscovery] decoded to zero payloads (%d bytes) — wrong payload type?", len(body))
 		return
 	}
@@ -270,10 +504,64 @@ func (a *Server) HandleAgentDiscovery(c *gin.Context) {
 		}
 	}
 
-	// batch is the whole AgentDiscoveryPayloadBatch as decoded by proto:
-	// every payload with its config files (content included) and env vars
-	// (values included — only the log above hides them).
-	_ = &batch // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	tenant := TenantFromContext(c)
+	if tenant == "" {
+		return
+	}
+	rows := agentDiscoveryRows(tenant, time.Now().UTC(), &batch)
+	a.store(storage.AgentDiscoveryWriter, storage.WriteAgentDiscovery{Rows: rows}, len(rows))
+}
+
+// agentDiscoveryRows converts one decoded batch into agent_discovery rows,
+// one per payload. HostId is the batch's own identity and repeats onto every
+// row — the batch itself gets no separate table.
+func agentDiscoveryRows(tenant string, receivedAt time.Time, batch *agentdiscovery.AgentDiscoveryPayloadBatch) []storage.AgentDiscoveryRow {
+	payloads := batch.GetPayloads()
+	rows := make([]storage.AgentDiscoveryRow, 0, len(payloads))
+	for _, p := range payloads {
+		if p == nil {
+			continue
+		}
+		row := storage.AgentDiscoveryRow{
+			TenantID:           tenant,
+			ReceivedAt:         receivedAt,
+			HostID:             batch.GetHostId(),
+			Integration:        p.GetIntegration(),
+			Runtime:            p.GetRuntime(),
+			RuntimeID:          p.GetRuntimeId(),
+			IngestionTimestamp: evpTimestampPtr(p.GetIngestionTimestamp()),
+		}
+		row.EnvVarNames, row.EnvVarValues = agentDiscoveryEnvVars(p.GetEnvVars())
+		for _, f := range p.GetConfigFiles() {
+			if f == nil {
+				continue
+			}
+			row.ConfigPaths = append(row.ConfigPaths, f.GetPath())
+			row.ConfigContents = append(row.ConfigContents, string(f.GetContent()))
+			row.ConfigTruncated = append(row.ConfigTruncated, boolToUint8(f.GetTruncated()))
+			row.ConfigFormats = append(row.ConfigFormats, f.GetPayloadFormat().String())
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+// agentDiscoveryEnvVars keeps VALUES, not just names — see the migration's
+// header comment for why that is deliberate rather than an oversight.
+//
+// Two parallel arrays, not a map: EnvVars is a repeated field on the wire
+// (like ConfigFiles above), not a map, so a real agent CAN send the same name
+// twice. A map would silently collapse that to the last value and lose the
+// original order — arrays preserve both.
+func agentDiscoveryEnvVars(vars []*agentdiscovery.AgentDiscoveryEnvVar) (names, values []string) {
+	for _, v := range vars {
+		if v == nil {
+			continue
+		}
+		names = append(names, v.GetName())
+		values = append(values, v.GetValue())
+	}
+	return names, values
 }
 
 // ---------------------------------------------------------------------------
@@ -303,6 +591,7 @@ func (a *Server) HandleAgentHealth(c *gin.Context) {
 	if err := json.Unmarshal(body, &report); err != nil {
 		log.Printf("[agenthealth] json: %v (%d bytes)", err, len(body))
 		describe("agenthealth", c.GetHeader("Content-Type"), body)
+		a.storeRaw(c, "agenthealth", "decode_error", err.Error(), body)
 		return
 	}
 
@@ -339,9 +628,162 @@ func (a *Server) HandleAgentHealth(c *gin.Context) {
 			evpStructKeys(issue.GetExtra().GetFields()), evpRemediation(issue.GetRemediation()))
 	}
 
-	// report is the whole HealthReport: host, every issue keyed by id with
-	// its lifecycle, tags, extra Struct and remediation, as the agent sent it.
-	_ = &report // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	tenant := TenantFromContext(c)
+	if tenant == "" {
+		return
+	}
+	reportRow, issueRows := healthReportRows(tenant, time.Now().UTC(), uuid.New(), &report, evpHealthIssuesRaw(body))
+	a.store(storage.AgentHealthReportsWriter,
+		storage.WriteAgentHealthReports{Rows: []storage.AgentHealthReportRow{reportRow}}, 1)
+	a.store(storage.AgentHealthIssuesWriter,
+		storage.WriteAgentHealthIssues{Rows: issueRows}, len(issueRows))
+}
+
+// healthReportRows converts one decoded HealthReport into its report row and
+// the issue rows keyed off its Issues map. reportID is generated by the
+// caller (the wire has no report-level id of its own) and is what joins the
+// two tables.
+//
+// Issue keys are sorted before rows are built: Go map iteration order is
+// random, and two ingests of the same report must produce the same row
+// order, or a diff between them would be meaningless.
+func healthReportRows(tenant string, receivedAt time.Time, reportID uuid.UUID, report *healthplatform.HealthReport, rawIssues map[string]any) (storage.AgentHealthReportRow, []storage.AgentHealthIssueRow) {
+	var hostname string
+	var agentVersion *string
+	var parIDs []string
+	if host := report.GetHost(); host != nil {
+		hostname = host.GetHostname()
+		agentVersion = host.AgentVersion // ptr-optional field, host is non-nil here
+		parIDs = host.GetParIds()
+	}
+
+	emittedAt := report.GetEmittedAt()
+	reportRow := storage.AgentHealthReportRow{
+		TenantID:        tenant,
+		ReceivedAt:      receivedAt,
+		ReportID:        reportID,
+		SchemaVersion:   report.GetSchemaVersion(),
+		EventType:       report.GetEventType(),
+		EmittedAt:       emittedAt,
+		EmittedAtParsed: evpParseTime(emittedAt),
+		Service:         report.GetService(),
+		Host:            hostname,
+		AgentVersion:    agentVersion,
+		ParIDs:          parIDs,
+		IssueCount:      uint32(len(report.GetIssues())),
+	}
+
+	issues := report.GetIssues()
+	ids := make([]string, 0, len(issues))
+	for id := range issues {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	issueRows := make([]storage.AgentHealthIssueRow, 0, len(ids))
+	for _, id := range ids {
+		raw, _ := rawIssues[id].(map[string]any)
+		issueRows = append(issueRows, healthIssueRow(tenant, receivedAt, reportID, id, issues[id], raw))
+	}
+	return reportRow, issueRows
+}
+
+// evpHealthIssuesRaw decodes agenthealth's body a SECOND time, generically
+// and with UseNumber, to recover Issue.Extra without precision loss: Extra is
+// a *structpb.Struct on the typed side, and structpb.Value's generated type
+// stores every JSON number as float64 — a rounding that happens inside
+// structpb's own UnmarshalJSON, before evpObject's UseNumber decoder ever
+// gets a chance to run. The typed decode in HandleAgentHealth has already
+// succeeded by the time this is called, so the body is valid JSON and this
+// generic decode does not fail in practice; nil (a safe "nothing recovered")
+// is only a defensive fallback.
+func evpHealthIssuesRaw(body []byte) map[string]any {
+	m, ok := evpObject("agenthealth", body)
+	if !ok {
+		return nil
+	}
+	issues, _ := m["issues"].(map[string]any)
+	return issues
+}
+
+// evpIssueExtra renders Issue.Extra as JSON text, preferring the raw,
+// UseNumber-decoded value (rawIssue["extra"]) over the structpb-decoded one
+// — see evpHealthIssuesRaw for why the structpb path alone would round a
+// large id or counter through float64. rawIssue is nil, or has no "extra"
+// key, exactly when nothing could be recovered generically (a body that
+// somehow parses two different ways), in which case the structpb rendering
+// is what is left to report.
+func evpIssueExtra(extra *structpb.Struct, rawIssue map[string]any) string {
+	if rawIssue != nil {
+		if raw, ok := rawIssue["extra"]; ok {
+			return evpJSON(raw)
+		}
+	}
+	return evpStructJSON(extra)
+}
+
+// healthIssueRow converts one entry of a HealthReport's Issues map. rawIssue
+// is this issue's own entry from a generic, UseNumber decode of the same
+// body — nil when none was recovered — used only to render Extra losslessly;
+// every other field still comes from the typed proto.
+func healthIssueRow(tenant string, receivedAt time.Time, reportID uuid.UUID, key string, issue *healthplatform.Issue, rawIssue map[string]any) storage.AgentHealthIssueRow {
+	detectedAt := issue.GetDetectedAt()
+	row := storage.AgentHealthIssueRow{
+		TenantID:         tenant,
+		ReceivedAt:       receivedAt,
+		ReportID:         reportID,
+		IssueKey:         key,
+		ID:               issue.GetId(),
+		IssueName:        issue.GetIssueName(),
+		Title:            issue.GetTitle(),
+		Description:      issue.GetDescription(),
+		Category:         issue.GetCategory(),
+		Location:         issue.GetLocation(),
+		Severity:         issue.GetSeverity().String(),
+		DetectedAt:       detectedAt,
+		DetectedAtParsed: evpParseTime(detectedAt),
+		Source:           issue.GetSource(),
+		Extra:            evpIssueExtra(issue.GetExtra(), rawIssue),
+		Tags:             tagsToMultiMap(issue.GetTags()),
+		IssueType:        issue.GetIssueType(),
+	}
+
+	if rem := issue.GetRemediation(); rem != nil {
+		row.RemediationSummary = rem.GetSummary()
+		for _, step := range rem.GetSteps() {
+			if step == nil {
+				continue
+			}
+			row.RemediationStepOrder = append(row.RemediationStepOrder, step.GetOrder())
+			row.RemediationStepText = append(row.RemediationStepText, step.GetText())
+		}
+		if script := rem.GetScript(); script != nil {
+			row.ScriptLanguage = script.GetLanguage()
+			row.ScriptLanguageVersion = script.GetLanguageVersion()
+			row.ScriptFilename = script.GetFilename()
+			requiresRoot := boolToUint8(script.GetRequiresRoot())
+			row.ScriptRequiresRoot = &requiresRoot
+			row.ScriptContent = script.GetContent()
+		}
+	}
+
+	if lifecycle := issue.GetPersistedIssue(); lifecycle != nil {
+		row.PersistedState = lifecycle.GetState().String()
+		row.FirstSeen = lifecycle.GetFirstSeen()
+		row.LastSeen = lifecycle.GetLastSeen()
+		row.ResolvedAt = lifecycle.ResolvedAt // ptr-optional field, lifecycle is non-nil here
+	}
+
+	return row
+}
+
+// evpStructJSON renders a structpb.Struct (Issue.Extra: genuinely schemaless
+// per issue) as JSON text.
+func evpStructJSON(s *structpb.Struct) string {
+	if s == nil {
+		return ""
+	}
+	return evpJSON(s.AsMap())
 }
 
 // evpStructKeys lists the keys of a structpb.Struct's fields, sorted.
@@ -372,6 +814,25 @@ func evpRemediation(r *healthplatform.Remediation) string {
 // ---------------------------------------------------------------------------
 // event-management-intake.<site>
 
+// eventManagementKnownKeys are the data.attributes keys the intake documents
+// by name; anything else lands in OuterExtra.
+var eventManagementKnownKeys = map[string]bool{
+	"host": true, "title": true, "category": true, "integration_id": true,
+	"message": true, "timestamp": true, "tags": true, "aggregation_key": true,
+	"attributes": true, "system-notable-events": true,
+}
+
+// eventManagementDataKnownKeys are the data-level keys (siblings of
+// "attributes", e.g. a JSON:API "id" or "relationships") this intake
+// documents; anything else is merged into OuterExtra, prefixed "data." so it
+// cannot collide with an attributes-level key of the same name.
+var eventManagementDataKnownKeys = map[string]bool{"type": true, "attributes": true}
+
+// eventManagementEnvelopeKnownKeys are the top-level envelope keys (siblings
+// of "data", e.g. JSON:API "meta"/"included") this intake documents; anything
+// else is merged into OuterExtra, prefixed "top." for the same reason.
+var eventManagementEnvelopeKnownKeys = map[string]bool{"data": true}
+
 // Event Management: notable events, logon duration, anomaly notifications.
 //
 // JSON but useStreamStrategy, so ONE JSON:API-like envelope per request:
@@ -399,6 +860,7 @@ func (a *Server) HandleEventManagement(c *gin.Context) {
 	m, ok := evpObject("events", body)
 	if !ok {
 		describe("events", c.GetHeader("Content-Type"), body)
+		a.storeRaw(c, "events", "decode_error", "body is not a JSON object", body)
 		return
 	}
 
@@ -414,13 +876,87 @@ func (a *Server) HandleEventManagement(c *gin.Context) {
 		log.Printf("   attributes: %s", evpFields(inner))
 	}
 
-	// m is the whole envelope, decoded: data.type, every attribute the
-	// producer set, and the producer-specific inner attributes.
-	_ = m // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	row, ok := eventManagementRow(m)
+	if !ok {
+		// data.attributes was missing or not an object — the one shape this
+		// track's envelope requires and does not have.
+		a.storeRaw(c, "events", "unexpected_shape", "data.attributes is missing or not an object", body)
+		return
+	}
+
+	tenant := TenantFromContext(c)
+	if tenant == "" {
+		return
+	}
+	row.TenantID = tenant
+	row.ReceivedAt = time.Now().UTC()
+	a.store(storage.EventManagementWriter, storage.WriteEventManagementEvents{Rows: []storage.EventManagementEventRow{row}}, 1)
+}
+
+// eventManagementRow converts one decoded envelope. TenantID/ReceivedAt are
+// left zero-valued — the caller fills them once the tenant is known, so this
+// function stays testable without a context.
+//
+// OuterExtra catches undeclared keys at THREE levels, not just
+// data.attributes: the attributes level itself, data's own siblings of
+// "attributes" (e.g. a JSON:API "id"), and the envelope's own siblings of
+// "data" (e.g. JSON:API "meta"). The latter two are merged in with a "data."/
+// "top." prefix so a key from one level cannot silently shadow a same-named
+// key from another.
+func eventManagementRow(m map[string]any) (storage.EventManagementEventRow, bool) {
+	data, ok := m["data"].(map[string]any)
+	if !ok {
+		return storage.EventManagementEventRow{}, false
+	}
+	attrs, ok := data["attributes"].(map[string]any)
+	if !ok {
+		return storage.EventManagementEventRow{}, false
+	}
+	inner, _ := attrs["attributes"].(map[string]any)
+	timestamp := evpFieldStr(attrs, "timestamp")
+
+	extra := evpUnknownMap(attrs, eventManagementKnownKeys)
+	extra = evpMergeExtra(extra, evpUnknownMap(data, eventManagementDataKnownKeys), "data.")
+	extra = evpMergeExtra(extra, evpUnknownMap(m, eventManagementEnvelopeKnownKeys), "top.")
+
+	row := storage.EventManagementEventRow{
+		DataType:         evpFieldStr(data, "type"),
+		Host:             evpFieldStr(attrs, "host"),
+		Title:            evpFieldStr(attrs, "title"),
+		Category:         evpFieldStr(attrs, "category"),
+		IntegrationID:    evpFieldStr(attrs, "integration_id"),
+		Message:          evpFieldStr(attrs, "message"),
+		Timestamp:        timestamp,
+		TimestampParsed:  evpParseTime(timestamp),
+		Tags:             tagsToMultiMap(evpStringSlice(attrs["tags"])),
+		AggregationKey:   evpFieldStr(attrs, "aggregation_key"),
+		NotableEventType: evpPathStr(attrs, "system-notable-events", "event_type"),
+		Attributes:       evpJSON(inner),
+		OuterExtra:       extra,
+	}
+	return row, true
 }
 
 // ---------------------------------------------------------------------------
 // softinv-intake.<site>
+
+// softinvEntryKnownKeys are the pkg/inventory/software fields this intake
+// documents; anything else on a software entry lands in Extra.
+var softinvEntryKnownKeys = map[string]bool{
+	"software_type": true, "name": true, "version": true, "publisher": true,
+	"deployment_status": true, "deployment_time": true, "product_code": true,
+	"is_64_bit": true, "install_paths": true,
+}
+
+// softinvPayloadKnownKeys are the payload-level fields this intake
+// documents; anything else lands in PayloadExtra.
+var softinvPayloadKnownKeys = map[string]bool{"hostname": true, "host_software": true}
+
+// hostSoftwareObjKnownKeys are the host_software object's own keys (siblings
+// of "software") this intake documents; anything else is merged into
+// PayloadExtra, prefixed "host_software." so it cannot collide with a
+// payload-level key of the same name.
+var hostSoftwareObjKnownKeys = map[string]bool{"software": true}
 
 // Software inventory: installed packages per host.
 //
@@ -443,17 +979,23 @@ func (a *Server) HandleSoftwareInventory(c *gin.Context) {
 
 	items, ok := evpList("softinv", body)
 	if !ok {
+		a.storeRaw(c, "softinv", "unexpected_shape", "body is not a JSON array or object", body)
 		return
 	}
 
+	tenant := TenantFromContext(c)
+	now := time.Now().UTC()
+
 	// Every payload is decoded; the per-entry cap below only limits what is
 	// printed. A payload that fails to decode is skipped here but is still in
-	// items[i], raw.
+	// items[i], raw, and reaches storeRaw.
 	payloads := make([]map[string]any, 0, len(items))
+	var rows []storage.HostSoftwareRow
 	log.Printf("[softinv] %d payloads (%d bytes)", len(items), len(body))
 	for _, raw := range items {
 		m, ok := evpObject("softinv", raw)
 		if !ok {
+			a.storeRaw(c, "softinv", "decode_error", "item is not a JSON object", raw)
 			continue
 		}
 		payloads = append(payloads, m)
@@ -476,17 +1018,84 @@ func (a *Server) HandleSoftwareInventory(c *gin.Context) {
 				evpStr(em, "software_type"), evpStr(em, "name"), evpStr(em, "version"),
 				evpStr(em, "publisher"), evpStr(em, "deployment_status"), evpKeys(em))
 		}
+		if tenant != "" {
+			rows = append(rows, hostSoftwareRows(tenant, now, m)...)
+		}
 	}
 
-	// payloads is every inventory payload decoded, with its full software
-	// list — not the first evpMaxItems the log shows. items is the same list
-	// raw, one message per payload, including any that failed to decode.
-	_ = payloads // TODO(ninjacat): tables. Complete, unconverted, ready to take.
-	_ = items    // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	if tenant == "" {
+		return
+	}
+	a.store(storage.HostSoftwareWriter, storage.WriteHostSoftware{Rows: rows}, len(rows))
+}
+
+// hostSoftwareRows converts one decoded softinv payload into one row per
+// software entry. A software entry that is not itself a JSON object is
+// skipped — see docs/tables/evp.md's dropped_by_decision list.
+//
+// PayloadExtra catches undeclared keys at TWO levels: the payload's own
+// (hostname/host_software) and host_software's own (siblings of "software"),
+// the latter prefixed "host_software." so it cannot collide with a
+// payload-level key of the same name.
+func hostSoftwareRows(tenant string, receivedAt time.Time, payload map[string]any) []storage.HostSoftwareRow {
+	hostname := evpFieldStr(payload, "hostname")
+	hostSoftwareObj, _ := payload["host_software"].(map[string]any)
+	payloadExtra := evpMergeExtra(
+		evpUnknownMap(payload, softinvPayloadKnownKeys),
+		evpUnknownMap(hostSoftwareObj, hostSoftwareObjKnownKeys), "host_software.")
+
+	entries, _ := evpPath(payload, "host_software", "software").([]any)
+	rows := make([]storage.HostSoftwareRow, 0, len(entries))
+	for _, e := range entries {
+		em, ok := e.(map[string]any)
+		if !ok {
+			continue
+		}
+		deployTime := evpFieldStr(em, "deployment_time")
+		rows = append(rows, storage.HostSoftwareRow{
+			TenantID:             tenant,
+			ReceivedAt:           receivedAt,
+			Hostname:             hostname,
+			SoftwareType:         evpFieldStr(em, "software_type"),
+			Name:                 evpFieldStr(em, "name"),
+			Version:              evpFieldStr(em, "version"),
+			Publisher:            evpFieldStr(em, "publisher"),
+			DeploymentStatus:     evpFieldStr(em, "deployment_status"),
+			DeploymentTime:       deployTime,
+			DeploymentTimeParsed: evpParseTime(deployTime),
+			ProductCode:          evpFieldStr(em, "product_code"),
+			Is64Bit:              evpBoolPtr(em["is_64_bit"]),
+			InstallPaths:         evpStringSlice(em["install_paths"]),
+			Extra:                evpUnknownMap(em, softinvEntryKnownKeys),
+			PayloadExtra:         payloadExtra,
+		})
+	}
+	return rows
 }
 
 // ---------------------------------------------------------------------------
 // http-synthetics.<site>
+
+// syntheticsKnownKeys are the top-level result object keys this intake
+// documents; anything else lands in Extra.
+var syntheticsKnownKeys = map[string]bool{
+	"test": true, "location": true, "result": true, "_dd": true,
+	"enrichment": true, "v": true,
+}
+
+// syntheticsResultKnownKeys are the result object's own keys this intake
+// documents; anything else is merged into Extra, prefixed "result." so it
+// cannot collide with a top-level key of the same name. This is one level
+// deeper than syntheticsKnownKeys above — result.config keeps its own
+// unenumerated fields as opaque JSON (see the header comment), but an
+// unknown key directly ON result (a sibling of id/status/duration/...) had no
+// catch-all at all before this.
+var syntheticsResultKnownKeys = map[string]bool{
+	"id": true, "initialId": true, "status": true, "runType": true,
+	"duration": true, "testStartedAt": true, "testFinishedAt": true,
+	"testTriggeredAt": true, "assertions": true, "failure": true,
+	"config": true, "netstats": true, "netpath": true,
+}
 
 // Synthetics: results of network tests the agent ran on the server's behalf.
 //
@@ -518,16 +1127,22 @@ func (a *Server) HandleSynthetics(c *gin.Context) {
 
 	items, ok := evpList("synthetics", body)
 	if !ok {
+		a.storeRaw(c, "synthetics", "unexpected_shape", "body is not a JSON array or object", body)
 		return
 	}
 
+	tenant := TenantFromContext(c)
+	now := time.Now().UTC()
+
 	// Every result is decoded. One that fails to decode is skipped here but
-	// is still in items[i], raw.
+	// is still in items[i], raw, and reaches storeRaw.
 	results := make([]map[string]any, 0, len(items))
+	var rows []storage.SyntheticsResultRow
 	log.Printf("[synthetics] %d results (%d bytes)", len(items), len(body))
 	for _, raw := range items {
 		m, ok := evpObject("synthetics", raw)
 		if !ok {
+			a.storeRaw(c, "synthetics", "decode_error", "item is not a JSON object", raw)
 			continue
 		}
 		results = append(results, m)
@@ -551,17 +1166,114 @@ func (a *Server) HandleSynthetics(c *gin.Context) {
 			evpStr(res, "netstats", "packetsReceived"), evpStr(res, "netstats", "packetsSent"),
 			evpStr(res, "netstats", "packetLossPercentage"), evpStr(res, "netpath", "hops"),
 			evpStr(res, "failure", "code"), evpStr(res, "failure", "message"))
+
+		if tenant != "" {
+			rows = append(rows, syntheticsResultRow(m))
+		}
 	}
 
-	// results is every test result decoded: test, location, the full result
-	// with all assertions, netstats and netpath, _dd and enrichment. items is
-	// the same list raw, including any that failed to decode.
-	_ = results // TODO(ninjacat): tables. Complete, unconverted, ready to take.
-	_ = items   // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	if tenant == "" {
+		return
+	}
+	for i := range rows {
+		rows[i].TenantID = tenant
+		rows[i].ReceivedAt = now
+	}
+	a.store(storage.SyntheticsResultsWriter, storage.WriteSyntheticsResults{Rows: rows}, len(rows))
+}
+
+// syntheticsResultRow converts one decoded test result. TenantID/ReceivedAt
+// are left zero-valued for the same reason as eventManagementRow.
+func syntheticsResultRow(m map[string]any) storage.SyntheticsResultRow {
+	test, _ := m["test"].(map[string]any)
+	location, _ := m["location"].(map[string]any)
+	res, _ := m["result"].(map[string]any)
+	netstats, _ := res["netstats"].(map[string]any)
+
+	assertions, _ := res["assertions"].([]any)
+	var aType, aOp, aExpected, aActual []string
+	var aValid []uint8
+	for _, raw := range assertions {
+		am, _ := raw.(map[string]any)
+		aType = append(aType, evpFieldStr(am, "type"))
+		aOp = append(aOp, evpFieldStr(am, "operator"))
+		aExpected = append(aExpected, evpJSON(evpFieldValue(am, "expected")))
+		aActual = append(aActual, evpJSON(evpFieldValue(am, "actual")))
+		valid, _ := am["valid"].(bool)
+		aValid = append(aValid, boolToUint8(valid))
+	}
+
+	var failureCode, failureMessage *string
+	if failure, ok := res["failure"].(map[string]any); ok {
+		code := evpFieldStr(failure, "code")
+		msg := evpFieldStr(failure, "message")
+		failureCode, failureMessage = &code, &msg
+	}
+
+	started := evpFieldStr(res, "testStartedAt")
+	finished := evpFieldStr(res, "testFinishedAt")
+	triggered := evpFieldStr(res, "testTriggeredAt")
+
+	return storage.SyntheticsResultRow{
+		TestID:      evpFieldStr(test, "id"),
+		TestName:    evpFieldStr(test, "name"),
+		TestType:    evpFieldStr(test, "type"),
+		TestSubtype: evpFieldStr(test, "subType"),
+		TestVersion: evpFieldStr(test, "version"),
+
+		LocationID:          evpFieldStr(location, "id"),
+		LocationName:        evpFieldStr(location, "name"),
+		LocationDisplayName: evpFieldStr(location, "displayName"),
+
+		ResultID:        evpFieldStr(res, "id"),
+		ResultInitialID: evpFieldStr(res, "initialId"),
+		Status:          evpFieldStr(res, "status"),
+		RunType:         evpFieldStr(res, "runType"),
+		Duration:        evpAsString(evpFieldValue(res, "duration")),
+
+		TestStartedAt:         started,
+		TestStartedAtParsed:   evpParseTime(started),
+		TestFinishedAt:        finished,
+		TestFinishedAtParsed:  evpParseTime(finished),
+		TestTriggeredAt:       triggered,
+		TestTriggeredAtParsed: evpParseTime(triggered),
+
+		AssertionType:     aType,
+		AssertionOperator: aOp,
+		AssertionExpected: aExpected,
+		AssertionActual:   aActual,
+		AssertionValid:    aValid,
+
+		FailureCode:    failureCode,
+		FailureMessage: failureMessage,
+
+		Config: evpJSON(evpFieldValue(res, "config")),
+
+		NetstatsPacketsSent:          evpInt64Ptr(netstats["packetsSent"]),
+		NetstatsPacketsReceived:      evpInt64Ptr(netstats["packetsReceived"]),
+		NetstatsPacketLossPercentage: evpFloat64Ptr(netstats["packetLossPercentage"]),
+		NetstatsJitter:               evpFloat64Ptr(netstats["jitter"]),
+		NetstatsLatency:              evpFloat64Ptr(netstats["latency"]),
+		NetstatsHops:                 evpInt64Ptr(netstats["hops"]),
+
+		Netpath:    evpJSON(evpFieldValue(res, "netpath")),
+		DD:         evpJSON(evpFieldValue(m, "_dd")),
+		Enrichment: evpJSON(evpFieldValue(m, "enrichment")),
+		V:          evpAsString(evpFieldValue(m, "v")),
+		Extra: evpMergeExtra(evpUnknownMap(m, syntheticsKnownKeys),
+			evpUnknownMap(res, syntheticsResultKnownKeys), "result."),
+	}
 }
 
 // ---------------------------------------------------------------------------
 // data-obs-intake.<site>
+
+// lineageKnownKeys are the OpenLineage RunEvent top-level keys this intake
+// documents; anything else lands in Extra.
+var lineageKnownKeys = map[string]bool{
+	"eventType": true, "eventTime": true, "producer": true, "schemaURL": true,
+	"run": true, "job": true, "inputs": true, "outputs": true,
+}
 
 // Data Observability: two producers on one host.
 //
@@ -601,17 +1313,26 @@ func (a *Server) HandleOpenLineage(c *gin.Context) {
 
 	items, ok := evpList("lineage", body)
 	if !ok {
+		a.storeRaw(c, "lineage", "unexpected_shape", "body is not a JSON array or object", body)
 		return
 	}
 
+	tenant := TenantFromContext(c)
+	now := time.Now().UTC()
+	apiVersion := c.Query("api-version")
+	via := c.GetHeader("Via")
+
 	// Every event is decoded; evpDatasets caps only the rendered names. An
-	// event that fails to decode is skipped here but is still in items[i], raw.
+	// event that fails to decode is skipped here but is still in items[i],
+	// raw, and reaches storeRaw.
 	events := make([]map[string]any, 0, len(items))
+	var rows []storage.OpenLineageEventRow
 	log.Printf("[lineage] api-version=%s via=%q — %d events (%d bytes)",
-		evpOr(c.Query("api-version")), c.GetHeader("Via"), len(items), len(body))
+		evpOr(apiVersion), via, len(items), len(body))
 	for _, raw := range items {
 		m, ok := evpObject("lineage", raw)
 		if !ok {
+			a.storeRaw(c, "lineage", "decode_error", "item is not a JSON object", raw)
 			continue
 		}
 		events = append(events, m)
@@ -622,14 +1343,70 @@ func (a *Server) HandleOpenLineage(c *gin.Context) {
 		log.Printf("      inputs: %s | outputs: %s | run facets: %s | job facets: %s",
 			evpDatasets(m["inputs"]), evpDatasets(m["outputs"]),
 			evpStr(m, "run", "facets"), evpStr(m, "job", "facets"))
+
+		if tenant != "" {
+			rows = append(rows, openLineageEventRow(m, apiVersion, via))
+		}
 	}
 
-	// events is every RunEvent decoded, with all inputs, outputs and facets
-	// on run, job and datasets. items is the same list raw, including any
-	// that failed to decode. This is the /api/v1/lineage half of data-obs;
-	// query-actions keeps its own list below.
-	_ = events // TODO(ninjacat): tables. Complete, unconverted, ready to take.
-	_ = items  // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	if tenant == "" {
+		return
+	}
+	for i := range rows {
+		rows[i].TenantID = tenant
+		rows[i].ReceivedAt = now
+	}
+	a.store(storage.OpenLineageWriter, storage.WriteOpenLineageEvents{Rows: rows}, len(rows))
+}
+
+// openLineageEventRow converts one decoded RunEvent. TenantID/ReceivedAt are
+// left zero-valued for the same reason as eventManagementRow.
+func openLineageEventRow(m map[string]any, apiVersion, via string) storage.OpenLineageEventRow {
+	run, _ := m["run"].(map[string]any)
+	job, _ := m["job"].(map[string]any)
+	eventTime := evpFieldStr(m, "eventTime")
+
+	inNS, inName, inFacets := datasetArrays(m["inputs"])
+	outNS, outName, outFacets := datasetArrays(m["outputs"])
+
+	return storage.OpenLineageEventRow{
+		EventType:       evpFieldStr(m, "eventType"),
+		EventTime:       eventTime,
+		EventTimeParsed: evpParseTime(eventTime),
+		Producer:        evpFieldStr(m, "producer"),
+		SchemaURL:       evpFieldStr(m, "schemaURL"),
+
+		RunID:        evpFieldStr(run, "runId"),
+		RunFacets:    evpJSON(evpFieldValue(run, "facets")),
+		JobNamespace: evpFieldStr(job, "namespace"),
+		JobName:      evpFieldStr(job, "name"),
+		JobFacets:    evpJSON(evpFieldValue(job, "facets")),
+
+		InputNamespace:  inNS,
+		InputName:       inName,
+		InputFacets:     inFacets,
+		OutputNamespace: outNS,
+		OutputName:      outName,
+		OutputFacets:    outFacets,
+
+		APIVersion: apiVersion,
+		Via:        via,
+		Extra:      evpUnknownMap(m, lineageKnownKeys),
+	}
+}
+
+// datasetArrays reads an inputs[]/outputs[] list into three parallel arrays,
+// index-aligned within this one list (inputs and outputs are independent
+// lists, not one shared index).
+func datasetArrays(v any) (namespaces, names, facets []string) {
+	list, _ := v.([]any)
+	for _, it := range list {
+		dm, _ := it.(map[string]any)
+		namespaces = append(namespaces, evpFieldStr(dm, "namespace"))
+		names = append(names, evpFieldStr(dm, "name"))
+		facets = append(facets, evpJSON(evpFieldValue(dm, "facets")))
+	}
+	return namespaces, names, facets
 }
 
 // HandleQueryActions accepts an array of query-action results.
@@ -647,16 +1424,25 @@ func (a *Server) HandleQueryActions(c *gin.Context) {
 
 	items, ok := evpList("query-actions", body)
 	if !ok {
+		a.storeRaw(c, "query-actions", "unexpected_shape", "body is not a JSON array or object", body)
 		return
 	}
 
+	tenant := TenantFromContext(c)
+	now := time.Now().UTC()
+	ddOrigin := c.GetHeader("Dd-Evp-Origin")
+	ddOriginVersion := c.GetHeader("Dd-Evp-Origin-Version")
+
 	// Every entry is decoded — the cap only limits what is printed. An entry
-	// that fails to decode is skipped here but is still in items[i], raw.
+	// that fails to decode is skipped here but is still in items[i], raw, and
+	// reaches storeRaw.
 	results := make([]map[string]any, 0, len(items))
+	var rows []storage.QueryActionResultRow
 	log.Printf("[query-actions] %d entries (%d bytes)", len(items), len(body))
 	for i, raw := range items {
 		m, ok := evpObject("query-actions", raw)
 		if !ok {
+			a.storeRaw(c, "query-actions", "decode_error", "item is not a JSON object", raw)
 			continue
 		}
 		results = append(results, m)
@@ -665,12 +1451,23 @@ func (a *Server) HandleQueryActions(c *gin.Context) {
 		} else if i == evpMaxItems {
 			log.Printf("   ... %d more", len(items)-i)
 		}
+
+		if tenant != "" {
+			rows = append(rows, storage.QueryActionResultRow{
+				Result:             evpJSON(m),
+				Keys:               evpSortedKeys(m),
+				DDEVPOrigin:        ddOrigin,
+				DDEVPOriginVersion: ddOriginVersion,
+			})
+		}
 	}
 
-	// results is every query-action result decoded, every field as the
-	// integration sent it. items is the same list raw, including any that
-	// failed to decode. This is the /api/v2/query-actions half of data-obs;
-	// lineage keeps its own list above.
-	_ = results // TODO(ninjacat): tables. Complete, unconverted, ready to take.
-	_ = items   // TODO(ninjacat): tables. Complete, unconverted, ready to take.
+	if tenant == "" {
+		return
+	}
+	for i := range rows {
+		rows[i].TenantID = tenant
+		rows[i].ReceivedAt = now
+	}
+	a.store(storage.QueryActionResultsWriter, storage.WriteQueryActionResults{Rows: rows}, len(rows))
 }
