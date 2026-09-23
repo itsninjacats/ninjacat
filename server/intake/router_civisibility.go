@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -521,6 +522,19 @@ func civDecodeMsgpack(body []byte) (any, error) {
 		return nil, fmt.Errorf("empty body")
 	}
 	r := msgp.NewReader(bytes.NewReader(body))
+	// ReadIntf allocates an array or map from the length prefix before it
+	// has read a single element, and its only guard is GetMaxElements, which
+	// defaults to MaxUint32 — i.e. never fires, because the prefix is itself
+	// a uint32. Every element costs at least one byte on the wire, so the
+	// body length is a sound and generous ceiling: a real payload is never
+	// near it, and a forged header now fails to decode (and falls back to
+	// storeRaw) instead of asking for a hundred gigabytes and killing the
+	// process with an unrecoverable out-of-memory throw.
+	maxElems := uint32(math.MaxUint32)
+	if len(body) < math.MaxUint32 {
+		maxElems = uint32(len(body))
+	}
+	r.SetMaxElements(maxElems)
 	return r.ReadIntf()
 }
 
@@ -1157,7 +1171,17 @@ func civCoverageEntriesMsgpack(data []byte) ([]civCoverageEntry, int32, error) {
 			if err != nil {
 				return nil, version, fmt.Errorf("coverages array header: %w", err)
 			}
-			out = make([]civCoverageEntry, 0, count)
+			// The count is the wire's claim, not a fact: msgp's *Bytes
+			// API decodes the length prefix without checking it against
+			// what is left to read, so a 16-byte request can announce
+			// 2^32-2 entries. Preallocating from it would ask the
+			// allocator for tens of gigabytes, and Go answers an
+			// impossible allocation with a fatal throw, which gin's
+			// Recovery cannot catch — one malformed coverage upload would
+			// take the node down for every tenant. Grow with append
+			// instead and let ReadIntfBytes below end the loop with
+			// ErrShortBytes on the first entry that is not really there,
+			// the same shape dsmReadArray uses in router_trace.go.
 			for j := uint32(0); j < count; j++ {
 				before := rest
 				var value any

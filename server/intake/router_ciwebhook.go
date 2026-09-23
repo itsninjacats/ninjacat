@@ -27,7 +27,10 @@ import (
 // DD-CI-PROVIDER-NAME: jenkins, Content-Encoding: gzip, Content-Type:
 // application/json), and Datadog's own GitLab documentation gives the
 // identical URL for GitLab's legacy webhook integration — same intake, a
-// different provider name.
+// different provider name, and a different credential source: GitLab's
+// Project Webhook UI sets no headers, so the key arrives as
+// "?dd-api-key=<key>". That is why this host's engine is built with an
+// explicit RequireAPIKeyFrom in routes.go rather than the default guard.
 //
 // The body is a JSON ARRAY of payload objects batched to 5 MB uncompressed
 // (BatchSender.java:48-88). One batch MIXES levels: every element carries

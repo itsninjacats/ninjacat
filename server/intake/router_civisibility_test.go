@@ -1186,3 +1186,74 @@ func TestCIPipelineEventsStoreUndecodableBodiesRaw(t *testing.T) {
 		t.Error("an undecodable body must produce no pipeline rows")
 	}
 }
+
+// A msgpack array header is a claim the wire makes, not a fact: msgp decodes
+// the length prefix without comparing it with what is left to read. Both CI
+// Visibility decoders used to size a slice from that number, so sixteen bytes
+// could ask the allocator for tens of gigabytes — and Go answers an
+// impossible allocation with a fatal throw, which gin.Recovery cannot catch,
+// so one request would end ingestion for every tenant on the node. These
+// payloads must decode-fail and land in raw_payloads like any other garbage.
+//
+// The test's own failure mode is the point: before the fix it does not fail,
+// it kills the test binary.
+func TestCIVisibilityRefusesForgedArrayHeaders(t *testing.T) {
+	// array32 announcing 2^32-2 elements, with nothing following it.
+	forgedArray := []byte{0xdd, 0xff, 0xff, 0xff, 0xfe}
+
+	// {"version": 2, "coverages": <forged array header>}
+	coverage := []byte{0x82}
+	coverage = msgp.AppendString(coverage, "version")
+	coverage = msgp.AppendInt64(coverage, 2)
+	coverage = msgp.AppendString(coverage, "coverages")
+	coverage = append(coverage, forgedArray...)
+
+	if _, _, err := civCoverageEntriesMsgpack(coverage); err == nil {
+		t.Errorf("a coverages array header longer than the document must not decode")
+	}
+
+	// {"version": 1, "events": <forged array header>}
+	cycle := []byte{0x82}
+	cycle = msgp.AppendString(cycle, "version")
+	cycle = msgp.AppendInt64(cycle, 1)
+	cycle = msgp.AppendString(cycle, "events")
+	cycle = append(cycle, forgedArray...)
+
+	if _, err := civDecodeMsgpack(cycle); err == nil {
+		t.Errorf("an events array header longer than the document must not decode")
+	}
+
+	// End to end: both endpoints answer 202 and keep the bytes, exactly as
+	// they do for any other undecodable payload.
+	t.Run("citestcov", func(t *testing.T) {
+		a, node := newTestServer(t)
+		e := newTestEngine(t, a, a.routeCITestCov)
+		body, ct := civMultipart(t, []civPart{
+			{Name: "event", ContentType: "application/json", Data: []byte(`{"dummy": true}`)},
+			{Name: "coveragex", ContentType: "application/msgpack", Data: coverage},
+		})
+		if w := postCT(t, e, "/api/v2/citestcov", ct, body, nil); w.Code != http.StatusAccepted {
+			t.Errorf("got %d, want 202", w.Code)
+		}
+		if got := len(Rows[storage.CICoverageRow](node)); got != 0 {
+			t.Errorf("coverage rows: got %d, want 0", got)
+		}
+		if got := len(Rows[storage.RawPayloadRow](node)); got != 1 {
+			t.Errorf("raw rows: got %d, want 1", got)
+		}
+	})
+
+	t.Run("citestcycle", func(t *testing.T) {
+		a, node := newTestServer(t)
+		e := newTestEngine(t, a, a.routeCITestCycle)
+		if w := postCT(t, e, "/api/v2/citestcycle", "application/msgpack", cycle, nil); w.Code != http.StatusAccepted {
+			t.Errorf("got %d, want 202", w.Code)
+		}
+		if got := len(Rows[storage.CITestEventRow](node)); got != 0 {
+			t.Errorf("event rows: got %d, want 0", got)
+		}
+		if got := len(Rows[storage.RawPayloadRow](node)); got != 1 {
+			t.Errorf("raw rows: got %d, want 1", got)
+		}
+	})
+}

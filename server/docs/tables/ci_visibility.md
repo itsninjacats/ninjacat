@@ -440,6 +440,19 @@ everything it does not name into `extra` — with the element stored verbatim in
 `body` regardless. `provider` is `"unknown"` when nothing says otherwise;
 never a guess that produces a real provider name.
 
+One part of the GitLab path **is** verified, and it shapes the route's
+authentication: the URL Datadog documents carries the key in the query string,
+`webhook-intake.<site>/api/v2/webhook/?dd-api-key=<key>`, because GitLab's
+generic Project Webhook UI has no field for an arbitrary header. So this host
+does not take the default `Dd-Api-Key` / `api_key` pair — `routes.go` builds it
+with `RequireAPIKeyFrom` and adds the `dd-api-key` query parameter, the same
+spelling the browser RUM SDK uses. Without it a correctly configured GitLab
+project is answered 403 by the middleware, before the handler or `storeRaw`
+runs, and every pipeline it reports is lost with no log line anywhere. The
+header stays first in the source list so a Jenkins request never parses a query
+string, and the exception stays at this one host: a key in a URL lands in every
+proxy access log, which is why `RequireAPIKey` does not offer it by default.
+
 `headers` is an allowlist, the same rule `intake/raw.go` states: a 90-day table
 must never become a place a credential is durable. `DD-API-KEY` and
 `Authorization` are absent from it, and a test asserts that.

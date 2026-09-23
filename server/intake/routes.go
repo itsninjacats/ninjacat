@@ -101,7 +101,24 @@ func (a *Server) Handler() http.Handler {
 	synthetics := a.engine(a.routeSynthetics)
 	citestcycle := a.engine(a.routeCITestCycle)
 	citestcov := a.engine(a.routeCITestCov)
-	ciwebhook := a.engine(a.routeCIWebhook)
+	// webhook-intake.<site> is the second intake whose clients cannot all set
+	// a header. Jenkins sends DD-API-KEY (DatadogApiClient.java), but the
+	// GitLab integration Datadog documents on this same URL is a plain GitLab
+	// Project Webhook, and that UI has no field for an arbitrary header — the
+	// key travels as "?dd-api-key=<key>", the same spelling the browser RUM
+	// SDK uses. Without this source that provider is answered 403 before the
+	// handler ever runs, and a whole CI provider's pipelines go missing with
+	// no log line anywhere. The header stays first, so a Jenkins request never
+	// parses a query string; "api_key" stays last for the /api/v1/validate
+	// sweep every engine answers.
+	ciwebhook := a.engineAuth(
+		RequireAPIKeyFrom(a.Store,
+			KeyFromHeader("Dd-Api-Key"),
+			KeyFromQuery("dd-api-key"),
+			KeyFromQuery("api_key"),
+		),
+		a.routeCIWebhook,
+	)
 	syntheticsAgent := a.engine(a.routeSyntheticsAgent)
 	// Data Observability is the one intake whose clients do not all send
 	// Dd-Api-Key: the OpenLineage transport uses "Authorization: Bearer <key>"

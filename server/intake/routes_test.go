@@ -308,3 +308,56 @@ func TestRUMHostAcceptsQueryStringKey(t *testing.T) {
 		t.Errorf("dd-api-key on an agent intake: status %d, want 403 — query-string auth stays with the one client that has no choice", rec.Code)
 	}
 }
+
+// webhook-intake.<site> takes a key three ways, and the query parameter is
+// not a convenience: the GitLab integration Datadog documents on this exact
+// URL is a stock GitLab Project Webhook, whose UI cannot set a header at all,
+// so "?dd-api-key=" is the only credential that provider can send. Answering
+// it 403 would drop every pipeline of a correctly configured project without
+// a single log line.
+func TestCIWebhookAcceptsQueryKeyLikeGitLab(t *testing.T) {
+	h := newTestHandler(t)
+	host := "webhook-intake." + testSite
+
+	post := func(t *testing.T, target string, header bool) int {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "http://"+host+target,
+			strings.NewReader(`[{"level":"pipeline","name":"build","status":"success"}]`))
+		req.Host = host
+		req.Header.Set("Content-Type", "application/json")
+		if header {
+			req.Header.Set("Dd-Api-Key", testKey)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	for _, tc := range []struct {
+		name, target string
+		header       bool
+		want         int
+	}{
+		{"gitlab query parameter", "/api/v2/webhook/?dd-api-key=" + testKey, false, http.StatusAccepted},
+		{"jenkins header and ?service=", "/api/v2/webhook/?service=jenkins-ci", true, http.StatusAccepted},
+		{"api_key spelling", "/api/v2/webhook?api_key=" + testKey, false, http.StatusAccepted},
+		// Widening the sources must not weaken the gate.
+		{"no key at all", "/api/v2/webhook/", false, http.StatusForbidden},
+		{"wrong key in the query", "/api/v2/webhook/?dd-api-key=nope", false, http.StatusForbidden},
+	} {
+		if got := post(t, tc.target, tc.header); got != tc.want {
+			t.Errorf("%s: status %d, want %d", tc.name, got, tc.want)
+		}
+	}
+
+	// The exception stays at this one host: query-string auth is not on by
+	// default anywhere else, because a key in a URL lands in every proxy log.
+	req := httptest.NewRequest(http.MethodPost,
+		"http://sbom-intake."+testSite+"/api/v2/sbom?dd-api-key="+testKey, nil)
+	req.Host = "sbom-intake." + testSite
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("sbom-intake with ?dd-api-key=: status %d, want 403", rec.Code)
+	}
+}
