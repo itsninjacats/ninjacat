@@ -22,18 +22,24 @@ type CheckRunRow struct {
 	Status    string // OK / WARNING / CRITICAL / UNKNOWN
 	Message   string
 	Tags      map[string][]string
+
+	// Extra holds keys datadogV1.ServiceCheck does not declare, values
+	// JSON-encoded. The agent's own struct has exactly the six declared keys,
+	// so anything here means a newer agent or a third-party client — which is
+	// precisely the case where the value is worth more than a log line.
+	Extra map[string]string
 }
 
 func (r CheckRunRow) AppendTo(b driver.Batch) error {
 	return b.Append(r.TenantID, r.Timestamp, r.CheckName, r.Host,
-		r.Status, r.Message, orEmpty(r.Tags))
+		r.Status, r.Message, orEmpty(r.Tags), orEmpty(r.Extra))
 }
 
 func init() {
 	registerWriter(ChecksWriter, WriterConfig{
 		Name: "check_runs",
 		Insert: `INSERT INTO check_runs
-			(tenant_id, timestamp, check_name, host, status, message, tags)`,
+			(tenant_id, timestamp, check_name, host, status, message, tags, extra)`,
 		// Check runs trickle in, so a small threshold and a longer timer.
 		MaxRows: 500, FlushInterval: 5 * time.Second,
 	}, CheckRunRow{})
