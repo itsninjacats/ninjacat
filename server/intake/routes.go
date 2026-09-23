@@ -262,6 +262,14 @@ func (a *Server) engineAuth(auth gin.HandlerFunc, routes ...func(*gin.RouterGrou
 	g.HEAD("/support/flare", a.HandleFlare)
 	g.POST("/support/flare", a.HandleFlare)
 
+	// mkURL in the agent's send_flare.go appends "/" + caseID to the base
+	// flare URL whenever a case id is already known (a second flare attached
+	// to an existing support case), so the same handler has to answer on the
+	// path-parameter form too — both HEAD (resolveFlarePOSTURL's redirect
+	// probe runs against this exact URL) and POST.
+	g.HEAD("/support/flare/:case_id", a.HandleFlare)
+	g.POST("/support/flare/:case_id", a.HandleFlare)
+
 	r.NoRoute(a.HandleUnknown)
 	return r
 }

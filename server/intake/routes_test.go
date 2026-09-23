@@ -70,6 +70,12 @@ func TestHostRoutingReachesOwnIntake(t *testing.T) {
 		{"7-60-0-flare.agent." + testSite, http.MethodHead, "/support/flare", http.StatusOK},
 		{"7-60-0-flare.agent." + testSite, http.MethodPost, "/support/flare", http.StatusOK},
 
+		// mkURL (send_flare.go) appends the case id to the path once one is
+		// known, so a flare attached to an existing case arrives on this
+		// path shape instead.
+		{"7-60-0-flare.agent." + testSite, http.MethodHead, "/support/flare/12345", http.StatusOK},
+		{"7-60-0-flare.agent." + testSite, http.MethodPost, "/support/flare/12345", http.StatusOK},
+
 		// /v1/input is registered by both the logs intake and the profiler.
 		// That is not a collision: each lives on its own host.
 		{"http-intake.logs." + testSite, http.MethodPost, "/v1/input", http.StatusAccepted},

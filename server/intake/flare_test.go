@@ -54,7 +54,15 @@ func buildFlareBody(t *testing.T, caseID, email, source, rcTaskUUID, archive, ag
 
 func postFlare(t *testing.T, e http.Handler, body *bytes.Buffer, contentType string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, "/support/flare", body)
+	return postFlareAt(t, e, "/support/flare", body, contentType)
+}
+
+// postFlareAt is postFlare with an explicit path, for the
+// /support/flare/:case_id variant mkURL (send_flare.go) produces when a
+// flare is attached to an already-known support case.
+func postFlareAt(t *testing.T, e http.Handler, path string, body *bytes.Buffer, contentType string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, path, body)
 	req.Header.Set("Dd-Api-Key", testAPIKey)
 	req.Header.Set("Content-Type", contentType)
 	w := httptest.NewRecorder()
@@ -172,6 +180,70 @@ func TestHandleFlareWithoutCaseIDGetsAGeneratedOne(t *testing.T) {
 	}
 	if resp.CaseID == 0 {
 		t.Errorf("case_id: got 0, want a generated non-zero id")
+	}
+}
+
+// mkURL (send_flare.go) appends "/" + caseID to the flare URL whenever a
+// flare is attached to an already-known support case, so a second attempt at
+// case 12345 arrives as POST /support/flare/12345 with no "case_id" form
+// field at all. The path value must still reach both the stored row and the
+// echoed response.
+func TestHandleFlareWithCaseIDInPathIsStored(t *testing.T) {
+	a, node := newTestServer(t)
+	e := a.engine()
+
+	body, contentType := buildFlareBody(t, "", "ops@example.test", "local", "", "zip-bytes", "7.60.0", "host-1")
+	w := postFlareAt(t, e, "/support/flare/12345", body, contentType)
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST /support/flare/12345: got %d, want 200 (%s)", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		CaseID int64 `json:"case_id"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("response is not valid JSON: %v (%s)", err, w.Body.String())
+	}
+	if resp.CaseID != 12345 {
+		t.Errorf("response case_id: got %d, want 12345 (from the path, since the form had none)", resp.CaseID)
+	}
+
+	rows := Rows[storage.AgentFlareRow](node)
+	if len(rows) != 1 {
+		t.Fatalf("agent_flares rows: got %d, want 1", len(rows))
+	}
+	if rows[0].CaseID != "12345" {
+		t.Errorf("row case_id: got %q, want %q", rows[0].CaseID, "12345")
+	}
+}
+
+// The multipart "case_id" field and the path segment can both be present
+// (SendTo writes the field independently of the URL mkURL builds); the form
+// field wins, since that is the value the agent's own analyzeResponse shows
+// the operator.
+func TestHandleFlareFormCaseIDWinsOverPath(t *testing.T) {
+	a, node := newTestServer(t)
+	e := a.engine()
+
+	body, contentType := buildFlareBody(t, "999", "ops@example.test", "local", "", "zip-bytes", "7.60.0", "host-1")
+	w := postFlareAt(t, e, "/support/flare/12345", body, contentType)
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST /support/flare/12345: got %d, want 200", w.Code)
+	}
+
+	var resp struct {
+		CaseID int64 `json:"case_id"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	if resp.CaseID != 999 {
+		t.Errorf("response case_id: got %d, want 999 (the form field, not the path's 12345)", resp.CaseID)
+	}
+
+	rows := Rows[storage.AgentFlareRow](node)
+	if len(rows) != 1 || rows[0].CaseID != "999" {
+		t.Fatalf("agent_flares rows: got %+v, want one row with case_id 999", rows)
 	}
 }
 

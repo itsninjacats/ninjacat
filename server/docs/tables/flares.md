@@ -1,11 +1,16 @@
 # agent_flares
 
-Feeds: `HEAD`/`POST /support/flare`, registered once on every intake engine
-(`intake/server.go`'s `engineAuth`, not a per-product route file) because the
-agent's flare uploader talks to whichever host its `dd_url` — or the core
-forwarder's versioned `<maj>-<min>-<patch>-flare.agent.<site>` rewrite, see
-`intake/routes.go` — happens to resolve to. `schema/migrations/0016_agent_flares.sql`
-creates the table; `apps/storage/rows_flares.go` is the writer.
+Feeds: `HEAD`/`POST /support/flare` and `/support/flare/:case_id`, registered
+once on every intake engine (`intake/routes.go`'s `engineAuth`, not a
+per-product route file) because the agent's flare uploader talks to whichever
+host its `dd_url` — or the core forwarder's versioned
+`<maj>-<min>-<patch>-flare.agent.<site>` rewrite, also `intake/routes.go` —
+happens to resolve to. The `:case_id` path variant exists because `mkURL`
+(`send_flare.go`) appends `"/" + caseID` to the URL whenever a flare is
+attached to an already-known support case; both verbs are registered for
+both path shapes, and `HandleFlare` (`intake/server.go`) answers all four.
+`schema/migrations/0016_agent_flares.sql` creates the table;
+`apps/storage/rows_flares.go` is the writer.
 
 Before this work `HandleFlare` answered `c.Status(200)` and discarded the
 body. Every upload was accepted and every archive was lost.
@@ -59,7 +64,7 @@ Read from the module cache, `comp/core/flare/helpers/send_flare.go`
 | `tenant_id` | `TenantFromContext(c)` | first `ORDER BY` column, per CLAUDE.md |
 | `received_at` | `time.Now().UTC()` | arrival time |
 | `hostname` | form field `hostname` | written after the archive on the wire |
-| `case_id` | form field `case_id`, kept **as the string sent** | empty means "new case" — see below |
+| `case_id` | form field `case_id`, falling back to the `:case_id` path param, kept **as the string sent** | empty means "new case" — see below |
 | `email` | form field `email` | |
 | `source` | form field `source` | `local` \| `remote-config` |
 | `agent_version` | form field `agent_version` | written after the archive |
@@ -72,10 +77,15 @@ Read from the module cache, `comp/core/flare/helpers/send_flare.go`
 real, distinct fact ("no case exists yet"), and coercing it to `0` would
 manufacture a case id that means something to nobody. This is separate from
 the **response** `case_id`, which the agent's `analyzeResponse` requires as a
-number: `intake/server.go`'s `flareCaseIDNumber` echoes the form value back
-when it parses as an integer, and otherwise mints one the same way
+number: `intake/server.go`'s `flareCaseIDNumber` echoes the resolved value
+back when it parses as an integer, and otherwise mints one the same way
 `HandleEvents` (`router_api.go`) mints an event id — the low 63 bits of a
 fresh UUID, kept inside `int64`, unique but not meaningful beyond that.
+
+The form field and the `:case_id` path segment can both be present at once —
+`SendTo` writes the multipart field independently of the URL `mkURL` builds —
+and `HandleFlare` prefers the form field when they disagree, since that is
+the value the agent's own `analyzeResponse` shows the operator.
 
 ## Engine / ORDER BY / PARTITION BY / TTL
 

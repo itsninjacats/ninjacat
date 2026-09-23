@@ -146,10 +146,13 @@ var flareKnownFields = map[string]bool{
 	"agent_version": true, "hostname": true,
 }
 
-// HandleFlare answers HEAD and POST /support/flare — registered once, on
-// every engine (routes.go's engineAuth), because the agent's flare uploader
-// talks to whichever host its dd_url (or the versioned "-flare.agent."
-// rewrite, see the routes.go comment) resolves to, not to a dedicated one.
+// HandleFlare answers HEAD and POST /support/flare, and the same two verbs on
+// /support/flare/:case_id — registered once, on every engine (routes.go's
+// engineAuth), because the agent's flare uploader talks to whichever host its
+// dd_url (or the versioned "-flare.agent." rewrite, see the routes.go
+// comment) resolves to, not to a dedicated one. mkURL in the agent's
+// send_flare.go appends "/" + caseID to the URL whenever a flare is attached
+// to an already-known case, so both path shapes reach this one handler.
 //
 // HEAD is resolveFlarePOSTURL's redirect probe in the agent's send_flare.go:
 // it accepts either 200 or 404 as "reachable", so 200 with no body is enough
@@ -225,15 +228,26 @@ func (a *Server) HandleFlare(c *gin.Context) {
 		return
 	}
 
+	// mkURL (send_flare.go) appends the case id to the PATH whenever a flare
+	// is attached to an already-known support case; the multipart "case_id"
+	// field carries the same value independently (getFlareReader writes both
+	// when SendTo was called with one). The form field wins on the rare
+	// chance the two ever disagree — it is the value the agent's own
+	// analyzeResponse would echo back to the operator.
+	caseIDStr := named["case_id"]
+	if caseIDStr == "" {
+		caseIDStr = c.Param("case_id")
+	}
+
 	reqUUID := uuid.NewString()
-	caseID := flareCaseIDNumber(named["case_id"])
+	caseID := flareCaseIDNumber(caseIDStr)
 
 	if tenant := TenantFromContext(c); tenant != "" {
 		a.store(storage.AgentFlaresWriter, storage.WriteAgentFlares{Flares: []storage.AgentFlareRow{{
 			TenantID:     tenant,
 			ReceivedAt:   time.Now().UTC(),
 			Hostname:     named["hostname"],
-			CaseID:       named["case_id"],
+			CaseID:       caseIDStr,
 			Email:        named["email"],
 			Source:       named["source"],
 			AgentVersion: named["agent_version"],
