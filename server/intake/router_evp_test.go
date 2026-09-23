@@ -2,6 +2,7 @@ package intake
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -119,16 +120,54 @@ func TestAgentDiscoveryRows(t *testing.T) {
 	if pg.ConfigFormats[0] != "PAYLOAD_FORMAT_YAML" || pg.ConfigFormats[1] != "PAYLOAD_FORMAT_UNKNOWN" {
 		t.Errorf("config_formats: got %v", pg.ConfigFormats)
 	}
-	if pg.EnvVars["PGPASSWORD"] != "hunter2" || pg.EnvVars["PGHOST"] != "db" {
-		t.Errorf("env_vars: got %v, want values kept, not just names", pg.EnvVars)
+	if len(pg.EnvVarNames) != 2 || pg.EnvVarNames[0] != "PGPASSWORD" || pg.EnvVarNames[1] != "PGHOST" {
+		t.Errorf("env_var_names: got %v, want [PGPASSWORD PGHOST] in wire order", pg.EnvVarNames)
+	}
+	if len(pg.EnvVarValues) != 2 || pg.EnvVarValues[0] != "hunter2" || pg.EnvVarValues[1] != "db" {
+		t.Errorf("env_var_values: got %v, want values kept, not just names", pg.EnvVarValues)
 	}
 
 	redis := rows[1]
 	if redis.IngestionTimestamp != nil {
 		t.Errorf("ingestion_timestamp with no wire value: got %v, want nil (not epoch)", redis.IngestionTimestamp)
 	}
-	if redis.EnvVars != nil {
-		t.Errorf("env_vars with none sent: got %v, want nil", redis.EnvVars)
+	if redis.EnvVarNames != nil || redis.EnvVarValues != nil {
+		t.Errorf("env_vars with none sent: got names=%v values=%v, want nil", redis.EnvVarNames, redis.EnvVarValues)
+	}
+}
+
+// EnvVars is a REPEATED field on the wire, not a map: a duplicate name must
+// not collapse to its last value, and the original order must survive —
+// exactly what a map[string]string representation would silently lose.
+func TestAgentDiscoveryRowsPreservesDuplicateEnvVarNames(t *testing.T) {
+	now := time.Date(2026, 9, 23, 10, 30, 0, 0, time.UTC)
+	batch := &agentdiscovery.AgentDiscoveryPayloadBatch{
+		HostId: "host-1",
+		Payloads: []*agentdiscovery.AgentDiscoveryPayload{
+			{
+				Integration: "postgres", Runtime: "python",
+				EnvVars: []*agentdiscovery.AgentDiscoveryEnvVar{
+					{Name: "PATH", Value: "/usr/bin"},
+					{Name: "PATH", Value: "/opt/datadog/bin"}, // duplicate name, later value
+				},
+			},
+		},
+	}
+
+	rows := agentDiscoveryRows("acme", now, batch)
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+	row := rows[0]
+	if len(row.EnvVarNames) != 2 || len(row.EnvVarValues) != 2 {
+		t.Fatalf("env_vars: got %d names / %d values, want 2 each — a map would have collapsed the duplicate",
+			len(row.EnvVarNames), len(row.EnvVarValues))
+	}
+	if row.EnvVarNames[0] != "PATH" || row.EnvVarValues[0] != "/usr/bin" {
+		t.Errorf("env_vars[0]: got %s=%s, want PATH=/usr/bin (wire order preserved)", row.EnvVarNames[0], row.EnvVarValues[0])
+	}
+	if row.EnvVarNames[1] != "PATH" || row.EnvVarValues[1] != "/opt/datadog/bin" {
+		t.Errorf("env_vars[1]: got %s=%s, want PATH=/opt/datadog/bin (both values kept)", row.EnvVarNames[1], row.EnvVarValues[1])
 	}
 }
 
@@ -178,7 +217,7 @@ func TestHealthReportRows(t *testing.T) {
 		},
 	}
 
-	reportRow, issueRows := healthReportRows("acme", now, reportID, report)
+	reportRow, issueRows := healthReportRows("acme", now, reportID, report, nil)
 
 	if reportRow.Host != "web-1" || len(reportRow.ParIDs) != 1 || reportRow.ParIDs[0] != "par-1" {
 		t.Errorf("host/par_ids: got %q/%v", reportRow.Host, reportRow.ParIDs)
@@ -234,6 +273,43 @@ func TestHealthReportRows(t *testing.T) {
 	}
 }
 
+// Issue.Extra is a structpb.Struct on the wire, and structpb.Value's own
+// generated type stores every JSON number as float64 — a rounding that
+// happens inside structpb's UnmarshalJSON, before this intake's own
+// UseNumber decoder ever runs. A probe id above 2^53 must still survive
+// exactly, via the parallel raw decode healthReportRows is given.
+func TestHealthReportRowsExtraPrecision(t *testing.T) {
+	now := time.Date(2026, 9, 23, 10, 30, 0, 0, time.UTC)
+	reportID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	body := []byte(`{
+		"issues": {
+			"conn-refused": {
+				"id": "conn-refused",
+				"extra": {"probe": "tcp", "probe_pid": 9007199254740993}
+			}
+		}
+	}`)
+
+	var report healthplatform.HealthReport
+	if err := json.Unmarshal(body, &report); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+
+	_, issueRows := healthReportRows("acme", now, reportID, &report, evpHealthIssuesRaw(body))
+	if len(issueRows) != 1 {
+		t.Fatalf("got %d issue rows, want 1", len(issueRows))
+	}
+
+	// A float64 round trip would render this as 9007199254740992 (or
+	// scientific notation) — only the exact literal proves UseNumber, not
+	// structpb, produced this string.
+	if !contains(issueRows[0].Extra, "9007199254740993") {
+		t.Errorf("extra: got %q, want it to contain the exact literal 9007199254740993, not a float64-rounded value",
+			issueRows[0].Extra)
+	}
+}
+
 func contains(haystack, needle string) bool {
 	return len(haystack) >= len(needle) && (haystack == needle || len(needle) == 0 ||
 		indexOf(haystack, needle) >= 0)
@@ -259,6 +335,7 @@ func TestEventManagementRow(t *testing.T) {
 	body := []byte(`{
 		"data": {
 			"type": "event",
+			"id": "evt-123",
 			"attributes": {
 				"host": "web-1",
 				"title": "High CPU",
@@ -272,7 +349,8 @@ func TestEventManagementRow(t *testing.T) {
 				"attributes": {"status": "warn", "priority": "high"},
 				"unknown_field": {"nested": true}
 			}
-		}
+		},
+		"meta": {"page": 1}
 	}`)
 
 	m, ok := evpObject("test", body)
@@ -303,6 +381,15 @@ func TestEventManagementRow(t *testing.T) {
 	if _, stillThere := row.OuterExtra["host"]; stillThere {
 		t.Errorf("outer_extra leaked a known key: %v", row.OuterExtra)
 	}
+	// data.id (a sibling of "attributes", not inside it) and the envelope's
+	// own "meta" (a sibling of "data") must both still reach OuterExtra,
+	// prefixed so neither can be confused with an attributes-level key.
+	if row.OuterExtra["data.id"] != `"evt-123"` {
+		t.Errorf("outer_extra[data.id]: got %v, want the JSON:API data.id to survive", row.OuterExtra)
+	}
+	if row.OuterExtra["top.meta"] != `{"page":1}` {
+		t.Errorf("outer_extra[top.meta]: got %v, want the envelope-level meta to survive", row.OuterExtra)
+	}
 
 	// data.attributes missing entirely — the shape this track's envelope
 	// requires and does not have.
@@ -322,6 +409,7 @@ func TestHostSoftwareRows(t *testing.T) {
 		"hostname": "web-1",
 		"extra_payload_field": "seen",
 		"host_software": {
+			"collected_at": "2026-09-23T10:00:00Z",
 			"software": [
 				{"software_type": "package", "name": "curl", "version": "7.88.1",
 				 "publisher": "curl", "deployment_status": "installed",
@@ -360,6 +448,12 @@ func TestHostSoftwareRows(t *testing.T) {
 	}
 	if curl.PayloadExtra["extra_payload_field"] != `"seen"` {
 		t.Errorf("payload_extra: got %v", curl.PayloadExtra)
+	}
+	// A key on host_software itself (a sibling of "software", one level
+	// deeper than the payload's own hostname/host_software) must still reach
+	// PayloadExtra, prefixed so it cannot be confused with a payload-level key.
+	if curl.PayloadExtra["host_software.collected_at"] != `"2026-09-23T10:00:00Z"` {
+		t.Errorf("payload_extra[host_software.collected_at]: got %v", curl.PayloadExtra)
 	}
 
 	if mystery.Is64Bit != nil {
@@ -448,6 +542,21 @@ func TestSyntheticsResultRow(t *testing.T) {
 	fr := syntheticsResultRow(withFailure)
 	if fr.FailureCode == nil || *fr.FailureCode != "TIMEOUT" {
 		t.Errorf("failure_code: got %v, want TIMEOUT", fr.FailureCode)
+	}
+}
+
+// An unknown key directly on the result object — a sibling of id/status/
+// duration/assertions/config/..., not inside any of them — must still reach
+// Extra rather than disappearing; before this, only top-level keys (test,
+// location, result, _dd, enrichment, v) had a catch-all at all.
+func TestSyntheticsResultRowUnknownResultKey(t *testing.T) {
+	m, ok := evpObject("test", []byte(`{"result":{"status":"passed","region":"eu-west-1"}}`))
+	if !ok {
+		t.Fatalf("evpObject failed to decode the fixture")
+	}
+	row := syntheticsResultRow(m)
+	if row.Extra["result.region"] != `"eu-west-1"` {
+		t.Errorf("extra: got %v, want result.region to hold the undeclared key", row.Extra)
 	}
 }
 
@@ -649,7 +758,7 @@ func TestEVPTablesRoundTrip(t *testing.T) {
 			HostID: "host-1", Integration: "postgres", Runtime: "python", RuntimeID: "rt-1",
 			ConfigPaths: []string{"/etc/x.yaml"}, ConfigContents: []string{"a: 1"},
 			ConfigTruncated: []uint8{0}, ConfigFormats: []string{"PAYLOAD_FORMAT_YAML"},
-			EnvVars: map[string]string{"PGPASSWORD": "hunter2"},
+			EnvVarNames: []string{"PGPASSWORD"}, EnvVarValues: []string{"hunter2"},
 		},
 	})
 	storagetest.Insert(t, conn, storage.AgentHealthReportsWriter, []storage.Row{
@@ -696,9 +805,9 @@ func TestEVPTablesRoundTrip(t *testing.T) {
 
 	// Values, not just counts: the multiset tag map and the sensitive env
 	// var value both need to survive the round trip intact.
-	row := storagetest.QueryRow(t, conn, "SELECT integration, env_vars['PGPASSWORD'] FROM agent_discovery")
-	if row[0] != "postgres" || row[1] != "hunter2" {
-		t.Errorf("agent_discovery: got integration=%v env_var=%v", row[0], row[1])
+	row := storagetest.QueryRow(t, conn, "SELECT integration, env_var_names[1], env_var_values[1] FROM agent_discovery")
+	if row[0] != "postgres" || row[1] != "PGPASSWORD" || row[2] != "hunter2" {
+		t.Errorf("agent_discovery: got integration=%v env_var_name=%v env_var_value=%v", row[0], row[1], row[2])
 	}
 
 	row = storagetest.QueryRow(t, conn, "SELECT has(tags['env'], 'staging') FROM agent_health_issues")

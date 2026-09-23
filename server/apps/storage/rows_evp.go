@@ -28,8 +28,11 @@ func (m WriteAgentDiscovery) rows() []Row { return toRows(m.Rows) }
 // AgentDiscoveryPayloadBatch — HostId repeats onto every payload's row since
 // the batch itself has no other identity worth a separate table.
 //
-// EnvVars keeps VALUES, credential-shaped as they are — see the migration's
-// header comment for why that is a deliberate choice, not an oversight.
+// EnvVarNames/EnvVarValues keep VALUES, credential-shaped as they are — see
+// the migration's header comment for why that is a deliberate choice, not an
+// oversight. They are two parallel arrays, not a map: EnvVars is a repeated
+// field on the wire, so a real agent CAN repeat a name, and a map would
+// silently collapse that to the last value and lose the original order.
 type AgentDiscoveryRow struct {
 	TenantID   string
 	ReceivedAt time.Time
@@ -46,7 +49,10 @@ type AgentDiscoveryRow struct {
 	ConfigTruncated []uint8
 	ConfigFormats   []string
 
-	EnvVars map[string]string
+	// Parallel arrays, index-aligned with each other: EnvVarNames[i] pairs
+	// with EnvVarValues[i]. See the type comment above for why not a map.
+	EnvVarNames  []string
+	EnvVarValues []string
 }
 
 func (r AgentDiscoveryRow) AppendTo(b driver.Batch) error {
@@ -54,7 +60,7 @@ func (r AgentDiscoveryRow) AppendTo(b driver.Batch) error {
 		r.HostID, r.Integration, r.Runtime, r.RuntimeID, r.IngestionTimestamp,
 		orEmptySlice(r.ConfigPaths), orEmptySlice(r.ConfigContents),
 		orEmptySlice(r.ConfigTruncated), orEmptySlice(r.ConfigFormats),
-		orEmpty(r.EnvVars))
+		orEmptySlice(r.EnvVarNames), orEmptySlice(r.EnvVarValues))
 }
 
 func init() {
@@ -63,7 +69,7 @@ func init() {
 		Insert: `INSERT INTO agent_discovery
 			(tenant_id, received_at, host_id, integration, runtime, runtime_id,
 			 ingestion_timestamp, config_paths, config_contents, config_truncated,
-			 config_formats, env_vars)`,
+			 config_formats, env_var_names, env_var_values)`,
 		// Bulky-document class, like k8s_manifests/raw_payloads: a row can
 		// carry whole config files, content included, so counts here stand
 		// for a document's worth of bytes rather than a metric point.
@@ -141,8 +147,11 @@ type AgentHealthIssueRow struct {
 	ScriptLanguage        string
 	ScriptLanguageVersion string
 	ScriptFilename        string
-	ScriptRequiresRoot    uint8
-	ScriptContent         string
+	// ptr-optional: nil means "no script at all", distinct from a script that
+	// explicitly reports requires_root=false — both would be indistinguishable
+	// 0s otherwise.
+	ScriptRequiresRoot *uint8
+	ScriptContent      string
 
 	Tags map[string][]string
 

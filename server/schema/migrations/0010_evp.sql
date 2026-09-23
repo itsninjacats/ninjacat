@@ -32,13 +32,19 @@
 -- parallel-array storage with none of the flexibility, and this table
 -- has no second nested structure competing for the name.
 --
--- env_vars keeps VALUES, not just names: HandleAgentDiscovery's own log line
--- redacts them (names only) precisely because they are credential-shaped
--- (API keys, DB passwords an integration config embeds), but the row is the
--- one thing this endpoint exists to capture — see server/intake/router_evp.go.
--- This is an explicit product decision, not an oversight: the operator who
--- runs this table owns what reads it. Flagged sensitive below and in the
--- docs table.
+-- env_var_names/env_var_values keep VALUES, not just names: HandleAgentDiscovery's
+-- own log line redacts them (names only) precisely because they are
+-- credential-shaped (API keys, DB passwords an integration config embeds),
+-- but the row is the one thing this endpoint exists to capture — see
+-- server/intake/router_evp.go. This is an explicit product decision, not an
+-- oversight: the operator who runs this table owns what reads it. Flagged
+-- sensitive below and in the docs table.
+--
+-- Two parallel arrays, not a Map: EnvVars is a REPEATED field on the wire,
+-- not a map, so a real agent can send the same name twice (a raw environ
+-- block is not itself deduplicated). A Map(String,String) would silently
+-- collapse a duplicate name to whichever value proto iterated over last and
+-- lose the original order entirely — arrays preserve both.
 --
 -- What is NOT recoverable: proto.Unmarshal discards fields the linked
 -- agent-payload version does not declare, and there is no unknown-field
@@ -66,7 +72,10 @@ CREATE TABLE IF NOT EXISTS agent_discovery
     config_formats     Array(LowCardinality(String)),
 
     -- SENSITIVE: values, not just names — see the header comment above.
-    env_vars           Map(String, String) CODEC(ZSTD(3))
+    -- Parallel arrays, index-aligned: env_var_names[i] pairs with
+    -- env_var_values[i].
+    env_var_names      Array(String),
+    env_var_values     Array(String) CODEC(ZSTD(3))
 )
 ENGINE = MergeTree
 PARTITION BY toDate(received_at)
@@ -129,7 +138,12 @@ CREATE TABLE IF NOT EXISTS agent_health_issues
     detected_at               String,
     detected_at_parsed        Nullable(DateTime64(3, 'UTC')),
     source                   LowCardinality(String),
-    -- structpb.Struct, genuinely schemaless per issue — JSON, not columns.
+    -- Issue.Extra (a structpb.Struct on the wire), genuinely schemaless per
+    -- issue — JSON, not columns. Rendered from a parallel, UseNumber-decoded
+    -- read of the same body rather than from the structpb value itself:
+    -- structpb.Value's own generated type stores every JSON number as
+    -- float64, which would round a large id or counter before this table
+    -- ever saw it (see evpHealthIssuesRaw in server/intake/router_evp.go).
     extra                    String CODEC(ZSTD(3)),
 
     remediation_summary      String CODEC(ZSTD(1)),
@@ -140,7 +154,12 @@ CREATE TABLE IF NOT EXISTS agent_health_issues
     script_language          LowCardinality(String),
     script_language_version  LowCardinality(String),
     script_filename          String,
-    script_requires_root     UInt8,
+    -- Nullable, not a plain UInt8: NULL means "no script was reported at
+    -- all", distinct from a script that explicitly reports
+    -- requires_root=false. A default of 0 would make the two indistinguishable
+    -- — the same absent-vs-zero rule every other optional scalar in this
+    -- table follows (is_64_bit, agent_version, resolved_at, failure_*, ...).
+    script_requires_root     Nullable(UInt8),
     script_content           String CODEC(ZSTD(3)),
 
     tags                     Map(LowCardinality(String), Array(LowCardinality(String))) CODEC(ZSTD(3)),
@@ -170,10 +189,14 @@ TTL toDateTime(received_at) + INTERVAL 90 DAY;
 -- outer columns: the two share the key name "attributes" by the wire's own
 -- design, and flattening them would let one clobber the other.
 --
--- outer_extra catches keys at the data.attributes level this table does not
--- name a column for — every producer-specific key that is not one of the
--- ones the intake documents (host, title, category, integration_id, message,
--- timestamp, tags, aggregation_key, attributes, "system-notable-events").
+-- outer_extra catches undeclared keys at THREE levels of the envelope, not
+-- just data.attributes: the attributes level itself (host, title, category,
+-- integration_id, message, timestamp, tags, aggregation_key, attributes,
+-- "system-notable-events" are the ones this intake documents), data's own
+-- siblings of "attributes" (e.g. a JSON:API "id"), prefixed "data.", and the
+-- envelope's own siblings of "data" (e.g. JSON:API "meta"), prefixed "top." —
+-- the prefixes exist so a key from one level cannot silently shadow a
+-- same-named key from another.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS event_management_events
 (
@@ -218,10 +241,12 @@ TTL toDateTime(received_at) + INTERVAL 90 DAY;
 -- extra holds undeclared keys on the SOFTWARE ENTRY (per pkg/inventory/
 -- software, beyond software_type/name/version/publisher/deployment_status/
 -- deployment_time/product_code/is_64_bit/install_paths); payload_extra holds
--- undeclared keys at the PAYLOAD level (beyond hostname/host_software). Both
--- are JSON-per-key maps, repeated onto every row of the payload they came
--- from — see docs/tables/evp.md for why that repetition is the right
--- trade-off here.
+-- undeclared keys at the PAYLOAD level (beyond hostname/host_software) MERGED
+-- with undeclared keys on the host_software object itself (beyond
+-- "software"), the latter prefixed "host_software." so it cannot collide
+-- with a payload-level key of the same name. Both extra columns are
+-- JSON-per-key maps, repeated onto every row of the payload they came from —
+-- see docs/tables/evp.md for why that repetition is the right trade-off here.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS host_software
 (
@@ -262,6 +287,12 @@ TTL toDateTime(received_at) + INTERVAL 30 DAY;
 -- config.request has fields beyond host/port that the source comment for
 -- this track leaves as "..." — genuinely unenumerated upstream, so the whole
 -- result.config object is kept as JSON rather than guessing a partial shape.
+--
+-- extra catches undeclared keys at TWO levels: the top level (test, location,
+-- result, _dd, enrichment, v) and the result object's own (id, initialId,
+-- status, runType, duration, testStartedAt/FinishedAt/TriggeredAt,
+-- assertions, failure, config, netstats, netpath) — the latter prefixed
+-- "result." so it cannot collide with a top-level key of the same name.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS synthetics_results
 (

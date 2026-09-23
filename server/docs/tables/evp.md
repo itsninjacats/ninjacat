@@ -54,16 +54,23 @@ own identity and repeats onto every row.
 | `integration`, `runtime`, `runtime_id` | `AgentDiscoveryPayload.{Integration,Runtime,RuntimeId}` |
 | `ingestion_timestamp` | `AgentDiscoveryPayload.IngestionTimestamp` (ptr-optional; `NULL` when absent, never epoch) |
 | `config_paths`, `config_contents`, `config_truncated`, `config_formats` | `ConfigFiles[]`, four parallel arrays, index-aligned. `config_formats[i]` is `PayloadFormat.String()` (e.g. `PAYLOAD_FORMAT_YAML`) |
-| `env_vars` | `EnvVars[]`, **name → value** |
+| `env_var_names`, `env_var_values` | `EnvVars[]`, two parallel arrays, index-aligned |
 
-**Sensitive column: `env_vars` keeps VALUES, not just names.** The handler's
-own log line redacts them (names only) because they are credential-shaped —
-API keys, database passwords an integration config embeds — but the row is
-the reason this endpoint is captured at all: an operator debugging "why is
-this integration not picking up config X" needs the actual value. This is a
-deliberate product decision, not an oversight; an operator who wants a
-shorter retention on this specific exposure should shorten this table's TTL
-independently of the others.
+**Sensitive columns: `env_var_names`/`env_var_values` keep VALUES, not just
+names.** The handler's own log line redacts them (names only) because they
+are credential-shaped — API keys, database passwords an integration config
+embeds — but the row is the reason this endpoint is captured at all: an
+operator debugging "why is this integration not picking up config X" needs
+the actual value. This is a deliberate product decision, not an oversight; an
+operator who wants a shorter retention on this specific exposure should
+shorten this table's TTL independently of the others.
+
+**Two parallel arrays, not a `Map`:** `EnvVars` is a *repeated* field on the
+wire, not a map, so a real agent can send the same name twice (a raw environ
+block is not itself deduplicated). A `Map(String,String)` would silently
+collapse a duplicate name to whichever value proto iterated over last and
+lose the original order entirely; the arrays preserve both, the same way
+`config_paths`/`config_contents` above do for `ConfigFiles`.
 
 **Not recoverable:** `proto.Unmarshal` silently drops fields the linked
 `agent-payload` version does not declare — there is no unknown-field sink at
@@ -108,8 +115,8 @@ order — a diff between the two is meaningful instead of noise.
 | `id`, `issue_name`, `title`, `description`, `category`, `location`, `source`, `issue_type` | `Issue.*` |
 | `severity` | `Issue.Severity.String()` (e.g. `ISSUE_SEVERITY_HIGH`) |
 | `detected_at` / `detected_at_parsed` | `Issue.DetectedAt`, parsed when RFC3339 |
-| `extra` | `Issue.Extra` (`structpb.Struct`), rendered as JSON — genuinely schemaless per issue |
-| `remediation_summary`, `remediation_step_order`, `remediation_step_text`, `script_*` | `Issue.Remediation.*`; steps are two parallel arrays |
+| `extra` | `Issue.Extra` (`structpb.Struct`), rendered as JSON — genuinely schemaless per issue. Rendered from a **parallel, `UseNumber`-decoded read of the same body**, not from the `structpb.Struct` itself: `structpb.Value`'s own generated type stores every JSON number as `float64`, which would silently round a large probe id or counter before this table ever saw it. See `evpHealthIssuesRaw`/`evpIssueExtra` in `router_evp.go`. |
+| `remediation_summary`, `remediation_step_order`, `remediation_step_text`, `script_*` | `Issue.Remediation.*`; steps are two parallel arrays. `script_requires_root` is `Nullable(UInt8)`: `NULL` means "no script was reported at all", distinct from a script that explicitly reports `requires_root=false` |
 | `tags` | `Issue.Tags`, a multiset — `tagsToMultiMap` |
 | `persisted_state`, `first_seen`, `last_seen`, `resolved_at`, `issue_type` | `Issue.PersistedIssue.*` |
 
@@ -135,7 +142,7 @@ no Go type — each producer builds its own `map[string]any`).
 | `tags` | `data.attributes.tags`, a multiset |
 | `notable_event_type` | `data.attributes."system-notable-events".event_type` — the hyphenated key travels as a raw map key, never guessed at as a struct tag |
 | `attributes` | the **inner** `data.attributes.attributes` object, JSON, kept nested |
-| `outer_extra` | keys of `data.attributes` this table has no column for (JSON per key) |
+| `outer_extra` | undeclared keys at **three** levels of the envelope, merged into one map — see below |
 
 **Semantics worth knowing:** the wire uses the key `attributes` twice — once
 at `data.attributes` (the envelope) and once nested inside it,
@@ -144,6 +151,13 @@ custom}` for notable events, `{changed_resource, author, prev_value, ...}`
 for change events). These are kept as two separate columns (`attributes` is
 the inner one) rather than merged, because flattening them would let one
 clobber the other.
+
+`outer_extra` catches undeclared keys at three levels, not just
+`data.attributes`: the attributes level itself (unprefixed, as before), keys
+of `data` that are siblings of `attributes` (e.g. a JSON:API `id`), prefixed
+`data.`, and keys of the envelope that are siblings of `data` (e.g. JSON:API
+`meta`/`included`), prefixed `top.`. The prefixes exist so a key from one
+level cannot silently shadow a same-named key from another.
 
 ### host_software
 
@@ -164,7 +178,7 @@ row-per-entry, not an array column.
 | `is_64_bit` | entry `is_64_bit`, `Nullable(UInt8)` |
 | `install_paths` | entry `install_paths` |
 | `extra` | undeclared keys **on the software entry**, JSON per key |
-| `payload_extra` | undeclared keys **at the payload level** (beyond `hostname`/`host_software`), repeated onto every row that payload produced |
+| `payload_extra` | undeclared keys **at the payload level** (beyond `hostname`/`host_software`) merged with undeclared keys **on the `host_software` object itself** (beyond `software`), the latter prefixed `host_software.` so it cannot collide with a payload-level key of the same name; both repeated onto every row that payload produced |
 
 `is_64_bit` is `Nullable`, not defaulted to `false`: "the agent never
 determined the architecture" and "32-bit" are different facts, and collapsing
@@ -198,7 +212,7 @@ result.
 | `netstats_*` | `result.netstats.*`, `Nullable(Int64)`/`Nullable(Float64)` via `json.Number` |
 | `netpath` | `result.netpath`, JSON — "the same type netpath-intake carries" |
 | `dd`, `enrichment`, `v` | top-level `_dd`, `enrichment`, `v` |
-| `extra` | undeclared top-level keys, JSON per key |
+| `extra` | undeclared keys at **two** levels: top-level (unprefixed) and on the `result` object itself (prefixed `result.`, so it cannot collide with a top-level key of the same name) |
 
 ### openlineage_events
 

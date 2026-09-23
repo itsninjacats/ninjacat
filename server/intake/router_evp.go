@@ -400,6 +400,25 @@ func evpUnknownMap(m map[string]any, known map[string]bool) map[string]string {
 	return out
 }
 
+// evpMergeExtra merges b into a, prefixing b's keys so they cannot collide
+// with a's — used when two different nesting levels each carry undeclared
+// keys that must land in the same repeated per-row catch-all column. Returns
+// nil (not an empty map) when both inputs are empty, matching evpUnknownMap's
+// contract.
+func evpMergeExtra(a, b map[string]string, prefix string) map[string]string {
+	if len(a) == 0 && len(b) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(a)+len(b))
+	for k, v := range a {
+		out[k] = v
+	}
+	for k, v := range b {
+		out[prefix+k] = v
+	}
+	return out
+}
+
 // evpSortedKeys lists an object's top-level keys, sorted — the stored
 // counterpart of evpKeys, which renders them joined for a log line.
 func evpSortedKeys(m map[string]any) []string {
@@ -511,8 +530,8 @@ func agentDiscoveryRows(tenant string, receivedAt time.Time, batch *agentdiscove
 			Runtime:            p.GetRuntime(),
 			RuntimeID:          p.GetRuntimeId(),
 			IngestionTimestamp: evpTimestampPtr(p.GetIngestionTimestamp()),
-			EnvVars:            agentDiscoveryEnvVars(p.GetEnvVars()),
 		}
+		row.EnvVarNames, row.EnvVarValues = agentDiscoveryEnvVars(p.GetEnvVars())
 		for _, f := range p.GetConfigFiles() {
 			if f == nil {
 				continue
@@ -529,18 +548,20 @@ func agentDiscoveryRows(tenant string, receivedAt time.Time, batch *agentdiscove
 
 // agentDiscoveryEnvVars keeps VALUES, not just names — see the migration's
 // header comment for why that is deliberate rather than an oversight.
-func agentDiscoveryEnvVars(vars []*agentdiscovery.AgentDiscoveryEnvVar) map[string]string {
-	if len(vars) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(vars))
+//
+// Two parallel arrays, not a map: EnvVars is a repeated field on the wire
+// (like ConfigFiles above), not a map, so a real agent CAN send the same name
+// twice. A map would silently collapse that to the last value and lose the
+// original order — arrays preserve both.
+func agentDiscoveryEnvVars(vars []*agentdiscovery.AgentDiscoveryEnvVar) (names, values []string) {
 	for _, v := range vars {
 		if v == nil {
 			continue
 		}
-		out[v.GetName()] = v.GetValue()
+		names = append(names, v.GetName())
+		values = append(values, v.GetValue())
 	}
-	return out
+	return names, values
 }
 
 // ---------------------------------------------------------------------------
@@ -611,7 +632,7 @@ func (a *Server) HandleAgentHealth(c *gin.Context) {
 	if tenant == "" {
 		return
 	}
-	reportRow, issueRows := healthReportRows(tenant, time.Now().UTC(), uuid.New(), &report)
+	reportRow, issueRows := healthReportRows(tenant, time.Now().UTC(), uuid.New(), &report, evpHealthIssuesRaw(body))
 	a.store(storage.AgentHealthReportsWriter,
 		storage.WriteAgentHealthReports{Rows: []storage.AgentHealthReportRow{reportRow}}, 1)
 	a.store(storage.AgentHealthIssuesWriter,
@@ -626,7 +647,7 @@ func (a *Server) HandleAgentHealth(c *gin.Context) {
 // Issue keys are sorted before rows are built: Go map iteration order is
 // random, and two ingests of the same report must produce the same row
 // order, or a diff between them would be meaningless.
-func healthReportRows(tenant string, receivedAt time.Time, reportID uuid.UUID, report *healthplatform.HealthReport) (storage.AgentHealthReportRow, []storage.AgentHealthIssueRow) {
+func healthReportRows(tenant string, receivedAt time.Time, reportID uuid.UUID, report *healthplatform.HealthReport, rawIssues map[string]any) (storage.AgentHealthReportRow, []storage.AgentHealthIssueRow) {
 	var hostname string
 	var agentVersion *string
 	var parIDs []string
@@ -661,13 +682,51 @@ func healthReportRows(tenant string, receivedAt time.Time, reportID uuid.UUID, r
 
 	issueRows := make([]storage.AgentHealthIssueRow, 0, len(ids))
 	for _, id := range ids {
-		issueRows = append(issueRows, healthIssueRow(tenant, receivedAt, reportID, id, issues[id]))
+		raw, _ := rawIssues[id].(map[string]any)
+		issueRows = append(issueRows, healthIssueRow(tenant, receivedAt, reportID, id, issues[id], raw))
 	}
 	return reportRow, issueRows
 }
 
-// healthIssueRow converts one entry of a HealthReport's Issues map.
-func healthIssueRow(tenant string, receivedAt time.Time, reportID uuid.UUID, key string, issue *healthplatform.Issue) storage.AgentHealthIssueRow {
+// evpHealthIssuesRaw decodes agenthealth's body a SECOND time, generically
+// and with UseNumber, to recover Issue.Extra without precision loss: Extra is
+// a *structpb.Struct on the typed side, and structpb.Value's generated type
+// stores every JSON number as float64 — a rounding that happens inside
+// structpb's own UnmarshalJSON, before evpObject's UseNumber decoder ever
+// gets a chance to run. The typed decode in HandleAgentHealth has already
+// succeeded by the time this is called, so the body is valid JSON and this
+// generic decode does not fail in practice; nil (a safe "nothing recovered")
+// is only a defensive fallback.
+func evpHealthIssuesRaw(body []byte) map[string]any {
+	m, ok := evpObject("agenthealth", body)
+	if !ok {
+		return nil
+	}
+	issues, _ := m["issues"].(map[string]any)
+	return issues
+}
+
+// evpIssueExtra renders Issue.Extra as JSON text, preferring the raw,
+// UseNumber-decoded value (rawIssue["extra"]) over the structpb-decoded one
+// — see evpHealthIssuesRaw for why the structpb path alone would round a
+// large id or counter through float64. rawIssue is nil, or has no "extra"
+// key, exactly when nothing could be recovered generically (a body that
+// somehow parses two different ways), in which case the structpb rendering
+// is what is left to report.
+func evpIssueExtra(extra *structpb.Struct, rawIssue map[string]any) string {
+	if rawIssue != nil {
+		if raw, ok := rawIssue["extra"]; ok {
+			return evpJSON(raw)
+		}
+	}
+	return evpStructJSON(extra)
+}
+
+// healthIssueRow converts one entry of a HealthReport's Issues map. rawIssue
+// is this issue's own entry from a generic, UseNumber decode of the same
+// body — nil when none was recovered — used only to render Extra losslessly;
+// every other field still comes from the typed proto.
+func healthIssueRow(tenant string, receivedAt time.Time, reportID uuid.UUID, key string, issue *healthplatform.Issue, rawIssue map[string]any) storage.AgentHealthIssueRow {
 	detectedAt := issue.GetDetectedAt()
 	row := storage.AgentHealthIssueRow{
 		TenantID:         tenant,
@@ -684,7 +743,7 @@ func healthIssueRow(tenant string, receivedAt time.Time, reportID uuid.UUID, key
 		DetectedAt:       detectedAt,
 		DetectedAtParsed: evpParseTime(detectedAt),
 		Source:           issue.GetSource(),
-		Extra:            evpStructJSON(issue.GetExtra()),
+		Extra:            evpIssueExtra(issue.GetExtra(), rawIssue),
 		Tags:             tagsToMultiMap(issue.GetTags()),
 		IssueType:        issue.GetIssueType(),
 	}
@@ -702,7 +761,8 @@ func healthIssueRow(tenant string, receivedAt time.Time, reportID uuid.UUID, key
 			row.ScriptLanguage = script.GetLanguage()
 			row.ScriptLanguageVersion = script.GetLanguageVersion()
 			row.ScriptFilename = script.GetFilename()
-			row.ScriptRequiresRoot = boolToUint8(script.GetRequiresRoot())
+			requiresRoot := boolToUint8(script.GetRequiresRoot())
+			row.ScriptRequiresRoot = &requiresRoot
 			row.ScriptContent = script.GetContent()
 		}
 	}
@@ -761,6 +821,17 @@ var eventManagementKnownKeys = map[string]bool{
 	"message": true, "timestamp": true, "tags": true, "aggregation_key": true,
 	"attributes": true, "system-notable-events": true,
 }
+
+// eventManagementDataKnownKeys are the data-level keys (siblings of
+// "attributes", e.g. a JSON:API "id" or "relationships") this intake
+// documents; anything else is merged into OuterExtra, prefixed "data." so it
+// cannot collide with an attributes-level key of the same name.
+var eventManagementDataKnownKeys = map[string]bool{"type": true, "attributes": true}
+
+// eventManagementEnvelopeKnownKeys are the top-level envelope keys (siblings
+// of "data", e.g. JSON:API "meta"/"included") this intake documents; anything
+// else is merged into OuterExtra, prefixed "top." for the same reason.
+var eventManagementEnvelopeKnownKeys = map[string]bool{"data": true}
 
 // Event Management: notable events, logon duration, anomaly notifications.
 //
@@ -825,16 +896,31 @@ func (a *Server) HandleEventManagement(c *gin.Context) {
 // eventManagementRow converts one decoded envelope. TenantID/ReceivedAt are
 // left zero-valued — the caller fills them once the tenant is known, so this
 // function stays testable without a context.
+//
+// OuterExtra catches undeclared keys at THREE levels, not just
+// data.attributes: the attributes level itself, data's own siblings of
+// "attributes" (e.g. a JSON:API "id"), and the envelope's own siblings of
+// "data" (e.g. JSON:API "meta"). The latter two are merged in with a "data."/
+// "top." prefix so a key from one level cannot silently shadow a same-named
+// key from another.
 func eventManagementRow(m map[string]any) (storage.EventManagementEventRow, bool) {
-	attrs, ok := evpPath(m, "data", "attributes").(map[string]any)
+	data, ok := m["data"].(map[string]any)
+	if !ok {
+		return storage.EventManagementEventRow{}, false
+	}
+	attrs, ok := data["attributes"].(map[string]any)
 	if !ok {
 		return storage.EventManagementEventRow{}, false
 	}
 	inner, _ := attrs["attributes"].(map[string]any)
 	timestamp := evpFieldStr(attrs, "timestamp")
 
+	extra := evpUnknownMap(attrs, eventManagementKnownKeys)
+	extra = evpMergeExtra(extra, evpUnknownMap(data, eventManagementDataKnownKeys), "data.")
+	extra = evpMergeExtra(extra, evpUnknownMap(m, eventManagementEnvelopeKnownKeys), "top.")
+
 	row := storage.EventManagementEventRow{
-		DataType:         evpPathStr(m, "data", "type"),
+		DataType:         evpFieldStr(data, "type"),
 		Host:             evpFieldStr(attrs, "host"),
 		Title:            evpFieldStr(attrs, "title"),
 		Category:         evpFieldStr(attrs, "category"),
@@ -846,7 +932,7 @@ func eventManagementRow(m map[string]any) (storage.EventManagementEventRow, bool
 		AggregationKey:   evpFieldStr(attrs, "aggregation_key"),
 		NotableEventType: evpPathStr(attrs, "system-notable-events", "event_type"),
 		Attributes:       evpJSON(inner),
-		OuterExtra:       evpUnknownMap(attrs, eventManagementKnownKeys),
+		OuterExtra:       extra,
 	}
 	return row, true
 }
@@ -865,6 +951,12 @@ var softinvEntryKnownKeys = map[string]bool{
 // softinvPayloadKnownKeys are the payload-level fields this intake
 // documents; anything else lands in PayloadExtra.
 var softinvPayloadKnownKeys = map[string]bool{"hostname": true, "host_software": true}
+
+// hostSoftwareObjKnownKeys are the host_software object's own keys (siblings
+// of "software") this intake documents; anything else is merged into
+// PayloadExtra, prefixed "host_software." so it cannot collide with a
+// payload-level key of the same name.
+var hostSoftwareObjKnownKeys = map[string]bool{"software": true}
 
 // Software inventory: installed packages per host.
 //
@@ -940,9 +1032,17 @@ func (a *Server) HandleSoftwareInventory(c *gin.Context) {
 // hostSoftwareRows converts one decoded softinv payload into one row per
 // software entry. A software entry that is not itself a JSON object is
 // skipped — see docs/tables/evp.md's dropped_by_decision list.
+//
+// PayloadExtra catches undeclared keys at TWO levels: the payload's own
+// (hostname/host_software) and host_software's own (siblings of "software"),
+// the latter prefixed "host_software." so it cannot collide with a
+// payload-level key of the same name.
 func hostSoftwareRows(tenant string, receivedAt time.Time, payload map[string]any) []storage.HostSoftwareRow {
 	hostname := evpFieldStr(payload, "hostname")
-	payloadExtra := evpUnknownMap(payload, softinvPayloadKnownKeys)
+	hostSoftwareObj, _ := payload["host_software"].(map[string]any)
+	payloadExtra := evpMergeExtra(
+		evpUnknownMap(payload, softinvPayloadKnownKeys),
+		evpUnknownMap(hostSoftwareObj, hostSoftwareObjKnownKeys), "host_software.")
 
 	entries, _ := evpPath(payload, "host_software", "software").([]any)
 	rows := make([]storage.HostSoftwareRow, 0, len(entries))
@@ -981,6 +1081,20 @@ func hostSoftwareRows(tenant string, receivedAt time.Time, payload map[string]an
 var syntheticsKnownKeys = map[string]bool{
 	"test": true, "location": true, "result": true, "_dd": true,
 	"enrichment": true, "v": true,
+}
+
+// syntheticsResultKnownKeys are the result object's own keys this intake
+// documents; anything else is merged into Extra, prefixed "result." so it
+// cannot collide with a top-level key of the same name. This is one level
+// deeper than syntheticsKnownKeys above — result.config keeps its own
+// unenumerated fields as opaque JSON (see the header comment), but an
+// unknown key directly ON result (a sibling of id/status/duration/...) had no
+// catch-all at all before this.
+var syntheticsResultKnownKeys = map[string]bool{
+	"id": true, "initialId": true, "status": true, "runType": true,
+	"duration": true, "testStartedAt": true, "testFinishedAt": true,
+	"testTriggeredAt": true, "assertions": true, "failure": true,
+	"config": true, "netstats": true, "netpath": true,
 }
 
 // Synthetics: results of network tests the agent ran on the server's behalf.
@@ -1146,7 +1260,8 @@ func syntheticsResultRow(m map[string]any) storage.SyntheticsResultRow {
 		DD:         evpJSON(evpFieldValue(m, "_dd")),
 		Enrichment: evpJSON(evpFieldValue(m, "enrichment")),
 		V:          evpAsString(evpFieldValue(m, "v")),
-		Extra:      evpUnknownMap(m, syntheticsKnownKeys),
+		Extra: evpMergeExtra(evpUnknownMap(m, syntheticsKnownKeys),
+			evpUnknownMap(res, syntheticsResultKnownKeys), "result."),
 	}
 }
 
