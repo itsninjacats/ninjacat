@@ -3,85 +3,107 @@ package intake
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"errors"
+	"fmt"
+	"io"
 	"log"
 	"net"
 	"sync"
 	"time"
 
+	"github.com/DataDog/agent-payload/v5/pb"
 	"github.com/itsninjacats/server/apps/storage"
 )
 
-// agent-intake.logs.<site> — the Datadog Agent's legacy TCP transport for
-// logs.
+// agent-intake.logs.<site> — the Datadog Agent's TCP transport for logs.
 //
 //	config: logs_config.logs_dd_url / DD_LOGS_CONFIG_LOGS_DD_URL, with
 //	        logs_config.use_http NOT forced true and HTTPS unreachable at
-//	        agent startup (see the force_use_http doc in the vendored
-//	        pkg/config/config_template.yaml, quoted below).
+//	        agent startup (see router_logs.go's header comment).
 //
 // This is a raw TCP(+TLS) byte stream, not HTTP: it never reaches routes.go
 // or a gin.Engine, which is why it gets its OWN listener in apps/httpapi
-// (see TCPServer/tcpMeta there) instead of a route in Server.Handler(). What
-// it stores is identical to http-intake.logs.<site> (router_logs.go) — same
-// LogRow fields, same storage.LogsWriter, same tenant-from-key model —
-// because every line goes through the exact same decodeLogItemJSON + logRow
-// conversion that HTTP batch items do.
+// (see TCPServer/tcpMeta there) instead of a route in Server.Handler().
 //
-// FRAMING — one log per line: "<api_key> <json>\n". The api key (Datadog-
-// shaped, 32 hex chars) and the JSON-encoded log are separated by exactly one
-// space (0x20), and the message ends with exactly one \n (0x0A). This is the
-// agent's own "prefixer" (glues the key on) followed by its
-// "lineBreakDelimiter" (marks message boundaries with \n), per
-// server/docs/spis-endpointow-datadoga.md §4.8 — the project's own
-// reverse-engineering notes on comp/logs-library/client/tcp/, and the ONLY
-// description of this transport available anywhere in this codebase or its
-// module cache (see the gap below). The agent never reads back from this
-// socket once connected — no ack, no handshake — it only notices the
-// connection dying, which shapes the UNKNOWN KEY behaviour below.
+// TWO FRAMINGS, DETECTED PER CONNECTION — server/docs/spis-endpointow-datadoga.md
+// §4.8, reverse-engineering the agent's own comp/logs-library/client/tcp/:
 //
-// GAP — NOT VERIFIED, NOT IMPLEMENTED: that same doc says the agent's real
-// default (dev_mode_use_proto: true) is a DIFFERENT framing — 4-byte
-// big-endian length prefix counting "<api_key> " + a protobuf-encoded
-// message, not a \n-delimited JSON line. This file does not implement it.
-// Checked before deciding that: this module's go.mod depends on exactly
-// three narrow datadog-agent payload packages (pkg/proto,
-// comp/netflow/payload, pkg/networkpath/payload) plus pkg/network/payload
-// indirectly — none of them carry a logs message type. A second, full
-// pseudo-version checkout of github.com/DataDog/datadog-agent found
-// separately in GOMODCACHE (not a dependency of this module) was grepped
-// for confirmation and has neither pkg/logs/client/tcp nor
-// comp/logs-library nor pkg/config/setup at all — zero hits across its
-// ~17900 files for "lengthPrefixDelimiter", "dev_mode_use_proto" or
-// "prefixer". That flag is also absent from that checkout's
-// pkg/config/config_template.yaml, the file documenting every user-facing
-// logs_config.* default — consistent with it being an internal/dev-only
-// switch, but not a way to confirm which framing a production agent
-// actually opens with. Implementing a binary framing with no schema to
-// check field numbers against would be guessing, which CLAUDE.md and this
-// task both rule out; the byte-level facts used above (the single 0x20, the
-// single 0x0A) are not guesses — they come straight from the doc's own
-// research. An operator who needs this listener to work should set
-// logs_config.dev_mode_use_proto: false explicitly (undocumented, but
-// readable by any agent build) until the protobuf path is verified against
-// real agent source and added here.
+//	dev_mode_use_proto: true  (§4.8: "DOMYŚLNE" — the agent's DEFAULT)
+//	    → proto encoder + lengthPrefixDelimiter:
+//	      [4B big-endian uint32 len][<api_key> ][proto.Marshal(pb.Log)]
+//	      "4-bajtowy big-endian uint32 liczący apikey + spacja + protobuf" —
+//	      the length counts everything AFTER itself, key+space+payload.
+//	dev_mode_use_proto: false (§4.8: "nietypowe", unusual)
+//	    → raw encoder + lineBreakDelimiter:
+//	      <api_key> <payload>\n — one 0x0A per message, nothing else.
 //
-// UNKNOWN KEY: the agent never reads back from this socket, so there is no
-// per-message channel to answer a 403 on the way RequireAPIKey does for
-// HTTP. A key that does not resolve in apikeys.Store closes the WHOLE
-// connection right after logging it — continuing to accept bytes under a
-// key nobody issued is not a decision this server gets to make quietly.
+// Both share the same prefixer regardless of which delimiter follows:
+// exactly one space (0x20) glued between the api key and the payload — see
+// §4.8: "`prefixer` dokleja `<api_key>` + spację (0x20)". The agent never
+// reads back from this socket once connected (no ack, no handshake) — it
+// only notices the connection dying, which shapes the UNKNOWN KEY behaviour
+// below.
 //
-// UNDECODABLE JSON: kept, never dropped, mirroring storeRaw's rule in
-// raw.go — but with a single reason, "decode_error", rather than HTTP's
-// "decode_error" vs. "unexpected_shape" split: a bare TCP line has no
-// gin.Context to build the richer note from, and the extra distinction is
-// not needed to satisfy the "never dropped" contract raw_payloads exists
-// for.
+// dev_mode_use_proto is a per-agent-process setting, not a per-message one,
+// so this listener decides the framing ONCE PER CONNECTION rather than per
+// line: detectTCPFraming peeks the first 33 bytes without consuming them.
+// 32 hex characters followed by a space is the raw encoder's shape — an API
+// key (Datadog-shaped, 32 hex chars) is never anything else at that
+// position, and a valid 4-byte length whose bytes also happen to satisfy
+// that exact pattern is vanishingly unlikely, and would in any case desync
+// at the very next read the same way any other malformed frame does here.
+// Anything that does not match is read as the length-prefixed default.
 //
-// BATCHING: one storage.Send per line would turn a busy connection into a
-// storm of single-row messages. Buffered per connection and flushed at 500
-// lines or 1s, whichever comes first — see tcpLogsMaxBatch /
+// pb.Log (github.com/DataDog/agent-payload/v5/pb, generated from
+// proto/logs/agent_logs_payload.proto — agent-payload is already a direct
+// dependency of this module, see go.mod) declares exactly seven fields:
+// message, status, timestamp, hostname, service, source, tags. Every one of
+// them already has a column of its own on LogRow (see logRowFromProto), so
+// nothing is left to put in `attributes` — it stays "{}" for a proto-sourced
+// row, honestly, rather than being padded with something invented.
+// Timestamp has no unit comment on the .proto field itself; read as
+// milliseconds since epoch, matching every other numeric Datadog log
+// timestamp on this path (the HTTP body's own `timestamp` is documented as
+// milliseconds, §4.8: "timestamp (ms)", and logTimestamp in router_logs.go
+// already treats a bare numeric timestamp/date the same way).
+//
+// THE RAW ENCODER'S OUTPUT IS NOT DOCUMENTED AS JSON. §4.8 describes the
+// HTTP body's JSON shape SEPARATELY from this transport ("Ciało HTTP:
+// tablica JSON obiektów..."), and never says the TCP raw encoder produces
+// JSON at all — "raw", as opposed to the proto encoder, reads as "the log
+// line's message text, unwrapped". decodeLogItemJSON (router_logs.go) is
+// tried first regardless, so a sender that DOES ship JSON on this framing
+// keeps every structured field HTTP would give it; anything that fails to
+// parse, or parses but does not fit datadogV2.HTTPLogItem, becomes a LogRow
+// whose Message is the WHOLE line rather than an error — see rawLineLogRow
+// and docs/tables/logs.md's "TCP transport" section for why this is a
+// deliberate fallback, not a decode failure.
+//
+// UNKNOWN KEY: closes the WHOLE connection right after logging it, for
+// either framing — there is no per-message channel to answer a 403 on, and
+// continuing to accept bytes under a key nobody issued is not a decision
+// this server gets to make quietly.
+//
+// UNDECODABLE PROTO: a length-prefixed frame whose payload fails
+// proto.Unmarshal (bad bytes, not a bad connection) goes to raw_payloads as
+// ("logs-tcp", "decode_error") with the remote address in headers, since
+// there is no gin.Context or Host header to build the usual note from. The
+// raw encoder has no equivalent path — see the note above.
+//
+// FRAME SAFETY: a length-prefixed frame declaring more than
+// tcpLogsMaxFrameLen is rejected WITHOUT reading its body (no allocation for
+// a length nobody should ever send), and any I/O error that lands mid-frame
+// — the 4-byte length only partly read, or the frame body cut short by a
+// timeout or the connection closing — is treated as unrecoverable: once
+// bytes belonging to an in-progress frame are abandoned, the stream's byte
+// alignment can no longer be trusted, so the connection is closed rather
+// than resumed (see readTCPFrame). A read timeout with NOTHING yet consumed
+// toward a new frame is the ordinary idle case and just triggers a flush.
+//
+// BATCHING: one storage.Send per message would turn a busy connection into
+// a storm of single-row messages. Buffered per connection and flushed at
+// 500 lines or 1s, whichever comes first — see tcpLogsMaxBatch /
 // tcpLogsFlushInterval below.
 
 const (
@@ -90,10 +112,21 @@ const (
 	tcpLogsMaxBatch      = 500
 	tcpLogsFlushInterval = time.Second
 
-	// tcpLogsReadBuffer is headroom for one line: a log message plus its
-	// attributes JSON comfortably fits, and bufio.Reader grows past this on
-	// its own if one line genuinely needs more.
+	// tcpLogsReadBuffer is headroom for one raw-encoder line: a log message
+	// plus its attributes JSON comfortably fits, and bufio.Reader grows past
+	// this on its own if one line genuinely needs more. It must also be at
+	// least tcpLogsAPIKeyLen+1 for detectTCPFraming's Peek.
 	tcpLogsReadBuffer = 64 * 1024
+
+	// tcpLogsAPIKeyLen is the length of a Datadog-shaped API key (hex — see
+	// CLAUDE.md: "API keys are Datadog-shaped (32 hex chars)"). Both
+	// detectTCPFraming and the frame/line key-payload split rely on the
+	// prefixer always gluing on exactly this many hex characters.
+	tcpLogsAPIKeyLen = 32
+
+	// tcpLogsMaxFrameLen bounds a length-prefixed frame's DECLARED size,
+	// checked before any allocation for it — see the FRAME SAFETY note.
+	tcpLogsMaxFrameLen = 1 << 20 // 1 MiB
 )
 
 // TCPLogsServer accepts agent-intake.logs.<site> connections.
@@ -193,12 +226,22 @@ func (t *TCPLogsServer) trackConn(c net.Conn, add bool) {
 	}
 }
 
-// handleConn owns one connection end to end: read a line, resolve its key,
-// decode it, buffer the row, and flush on the batch/interval limits above.
-// It never returns an error — a broken connection is simply a closed
-// connection, logged where the reason matters, because there is nobody
-// upstream to propagate an error to: Serve has already moved on to the next
-// Accept.
+// errTCPLogsIdleTimeout signals that the read deadline for a WHOLE NEW
+// frame fired before any byte of it arrived — nothing was lost, so the
+// caller is free to flush its batch and wait again. readTCPFrame returns
+// any OTHER error, timeout included, when bytes belonging to an
+// already-started frame were consumed and then abandoned: the stream's byte
+// alignment can no longer be trusted after that (see the FRAME SAFETY note
+// atop this file), so the caller must close the connection rather than
+// resume it.
+var errTCPLogsIdleTimeout = errors.New("tcplogs: idle timeout, no frame in progress")
+
+// handleConn owns one connection end to end: detect its framing once, then
+// read a frame, resolve its key, decode it, buffer the row, and flush on
+// the batch/interval limits above. It never returns an error — a broken
+// connection is simply a closed connection, logged where the reason
+// matters, because there is nobody upstream to propagate an error to:
+// Serve has already moved on to the next Accept.
 func (t *TCPLogsServer) handleConn(conn net.Conn) {
 	remote := conn.RemoteAddr().String()
 	defer func() {
@@ -216,6 +259,13 @@ func (t *TCPLogsServer) handleConn(conn net.Conn) {
 
 	r := bufio.NewReaderSize(conn, tcpLogsReadBuffer)
 
+	// The framing decision reads ahead without consuming anything (Peek), so
+	// it needs its own deadline before the main loop's begins — an agent
+	// that connects and then sends nothing must not hang this goroutine
+	// forever.
+	_ = conn.SetReadDeadline(time.Now().Add(tcpLogsFlushInterval))
+	useProto := detectTCPFraming(r)
+
 	var logBuf []storage.LogRow
 	var rawBuf []storage.RawPayloadRow
 	flush := func() {
@@ -231,17 +281,16 @@ func (t *TCPLogsServer) handleConn(conn net.Conn) {
 	defer flush()
 
 	for {
-		// The read deadline doubles as the flush timer: ReadBytes returns a
-		// timeout error once nothing has arrived for tcpLogsFlushInterval,
-		// which is exactly when a partial batch should stop waiting for
-		// company. An idle connection still flushes on time; a busy one
+		// The read deadline doubles as the flush timer: an idle timeout
+		// (nothing consumed toward a new frame yet) is exactly when a
+		// partial batch should stop waiting for company. A busy connection
 		// flushes at tcpLogsMaxBatch instead, well before the deadline ever
 		// matters.
 		_ = conn.SetReadDeadline(time.Now().Add(tcpLogsFlushInterval))
 
-		line, readErr := r.ReadBytes('\n')
-		if len(line) > 0 {
-			res := t.handleLine(bytes.TrimSuffix(line, []byte("\n")), remote)
+		frame, err := readTCPFrame(r, useProto)
+		if err == nil {
+			res := t.handleFrame(frame, remote, useProto)
 			if res.hasRow {
 				logBuf = append(logBuf, res.row)
 			}
@@ -253,27 +302,122 @@ func (t *TCPLogsServer) handleConn(conn net.Conn) {
 			}
 			if res.closeConn {
 				// UNKNOWN KEY — see the file-level note. The deferred
-				// flush() above still runs, so lines already buffered from
-				// earlier in this connection are not lost.
+				// flush() above still runs, so frames already buffered
+				// from earlier in this connection are not lost.
 				return
 			}
+			continue
 		}
 
-		if readErr != nil {
-			var ne net.Error
-			if errors.As(readErr, &ne) && ne.Timeout() {
-				flush()
-				continue
-			}
-			// EOF (the agent closed the connection cleanly) or any other
-			// read error: nothing more is coming either way.
-			return
+		if errors.Is(err, errTCPLogsIdleTimeout) {
+			flush()
+			continue
 		}
+		// EOF (the agent closed the connection cleanly), a hard read error,
+		// an absurd declared length, or a frame abandoned mid-read: nothing
+		// more can be safely read from this connection either way.
+		if !errors.Is(err, io.EOF) {
+			log.Printf("[logs-tcp] %s: closing connection: %v", remote, err)
+		}
+		return
 	}
 }
 
-// lineResult is what one framed line produced: at most one row (a LogRow
-// for storage.LogsWriter or a RawPayloadRow for storage.RawPayloadsWriter,
+// detectTCPFraming peeks the first tcpLogsAPIKeyLen+1 bytes of a connection
+// to tell which of §4.8's two encodings is in use, WITHOUT consuming them —
+// bufio.Reader.Peek leaves the bytes in the buffer for the real read that
+// follows. See the file-level "TWO FRAMINGS" note for the reasoning.
+//
+// A short or failed Peek (fewer than tcpLogsAPIKeyLen+1 bytes ever arrive)
+// cannot confirm the raw encoder's shape, so it falls through to the
+// length-prefixed default — the same "otherwise" the file-level note
+// describes — and readTCPFrame will fail fast and close the connection if
+// that guess was wrong for a connection that never sends anything usable.
+func detectTCPFraming(r *bufio.Reader) (useProto bool) {
+	peek, _ := r.Peek(tcpLogsAPIKeyLen + 1)
+	if len(peek) == tcpLogsAPIKeyLen+1 &&
+		isHexKeyPrefix(peek[:tcpLogsAPIKeyLen]) &&
+		peek[tcpLogsAPIKeyLen] == ' ' {
+		return false
+	}
+	return true
+}
+
+func isHexKeyPrefix(b []byte) bool {
+	for _, c := range b {
+		switch {
+		case c >= '0' && c <= '9':
+		case c >= 'a' && c <= 'f':
+		case c >= 'A' && c <= 'F':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// isTimeout reports whether err is a net.Error that timed out — the only
+// distinction readTCPFrame's callers need between "nothing arrived in time"
+// and every other kind of failure.
+func isTimeout(err error) bool {
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
+}
+
+// readTCPFrame reads one message off the wire according to useProto (the
+// framing detected once for this connection, see detectTCPFraming): a
+// \n-terminated line for the raw encoder, or a 4-byte big-endian length
+// followed by that many bytes for the proto encoder's lengthPrefixDelimiter
+// (§4.8). The returned bytes exclude the delimiter/length prefix itself in
+// both cases — what is left is always "<api_key><space><payload>", ready
+// for handleFrame's bytes.Cut.
+//
+// Every error path distinguishes "nothing consumed yet" (safe to retry —
+// returns errTCPLogsIdleTimeout) from "some bytes of this frame were read
+// and then the rest could not be" (unsafe to retry — returns a plain error
+// instead, which handleConn treats as fatal). See the file-level FRAME
+// SAFETY note for why a partially-read frame can never be resumed.
+func readTCPFrame(r *bufio.Reader, useProto bool) ([]byte, error) {
+	if !useProto {
+		line, err := r.ReadBytes('\n')
+		if err != nil {
+			if len(line) == 0 && isTimeout(err) {
+				return nil, errTCPLogsIdleTimeout
+			}
+			if len(line) == 0 {
+				return nil, err
+			}
+			return nil, fmt.Errorf("line abandoned after %d bytes: %w", len(line), err)
+		}
+		return bytes.TrimSuffix(line, []byte("\n")), nil
+	}
+
+	var lenBuf [4]byte
+	n, err := io.ReadFull(r, lenBuf[:])
+	if err != nil {
+		if n == 0 && isTimeout(err) {
+			return nil, errTCPLogsIdleTimeout
+		}
+		if n == 0 {
+			return nil, err
+		}
+		return nil, fmt.Errorf("length prefix abandoned after %d of 4 bytes: %w", n, err)
+	}
+
+	frameLen := binary.BigEndian.Uint32(lenBuf[:])
+	if frameLen > tcpLogsMaxFrameLen {
+		return nil, fmt.Errorf("frame declares %d bytes, over the %d byte limit", frameLen, tcpLogsMaxFrameLen)
+	}
+
+	frame := make([]byte, frameLen)
+	if _, err := io.ReadFull(r, frame); err != nil {
+		return nil, fmt.Errorf("frame body abandoned after the length prefix: %w", err)
+	}
+	return frame, nil
+}
+
+// lineResult is what one frame produced: at most one row (a LogRow for
+// storage.LogsWriter or a RawPayloadRow for storage.RawPayloadsWriter,
 // never both), plus whether the caller must close the connection.
 type lineResult struct {
 	row       storage.LogRow
@@ -283,21 +427,21 @@ type lineResult struct {
 	closeConn bool
 }
 
-// handleLine turns one line — already stripped of its trailing \n — into a
-// lineResult. See the file-level FRAMING, UNKNOWN KEY and UNDECODABLE JSON
-// notes for the rules implemented here.
-func (t *TCPLogsServer) handleLine(line []byte, remote string) lineResult {
-	if len(line) == 0 {
+// handleFrame turns one message — already framed and stripped of its
+// delimiter/length prefix by readTCPFrame — into a lineResult. See the
+// file-level notes for the rules implemented here.
+func (t *TCPLogsServer) handleFrame(frame []byte, remote string, useProto bool) lineResult {
+	if len(frame) == 0 {
 		return lineResult{}
 	}
 
-	key, payload, ok := bytes.Cut(line, []byte(" "))
+	key, payload, ok := bytes.Cut(frame, []byte(" "))
 	if !ok {
-		// Not the "<api_key> <json>" shape at all. With no key there is no
-		// tenant to file a raw_payloads row under — raw.go's own rule: a
+		// Not the "<api_key> <payload>" shape at all. With no key there is
+		// no tenant to file a raw_payloads row under — raw.go's own rule: a
 		// made-up tenant would put the row where no query ever looks — so
 		// this is logged and dropped, not stored.
-		log.Printf("[logs-tcp] %s: line has no api key prefix, dropped (%d B)", remote, len(line))
+		log.Printf("[logs-tcp] %s: frame has no api key prefix, dropped (%d B)", remote, len(frame))
 		return lineResult{}
 	}
 
@@ -308,32 +452,77 @@ func (t *TCPLogsServer) handleLine(line []byte, remote string) lineResult {
 	}
 	tenant := info.TenantID
 
-	rawResult := func(note string) lineResult {
-		return lineResult{hasRaw: true, raw: storage.RawPayloadRow{
-			TenantID:    tenant,
-			ReceivedAt:  time.Now().UTC(),
-			Intake:      "logs-tcp",
-			Reason:      "decode_error",
-			Method:      "TCP",
-			ContentType: "application/json",
-			Headers:     map[string]string{"Remote-Addr": remote},
-			Body:        string(payload),
-			BodyBytes:   uint64(len(payload)),
-			Note:        note,
-		}}
+	if useProto {
+		var item pb.Log
+		if err := item.Unmarshal(payload); err != nil {
+			return lineResult{hasRaw: true, raw: storage.RawPayloadRow{
+				TenantID:    tenant,
+				ReceivedAt:  time.Now().UTC(),
+				Intake:      "logs-tcp",
+				Reason:      "decode_error",
+				Method:      "TCP",
+				ContentType: "application/x-protobuf",
+				Headers:     map[string]string{"Remote-Addr": remote},
+				Body:        string(payload),
+				BodyBytes:   uint64(len(payload)),
+				Note:        "length-prefixed proto: " + err.Error(),
+			}}
+		}
+		return lineResult{hasRow: true, row: logRowFromProto(tenant, &item, time.Now().UTC())}
 	}
 
+	// The raw encoder (§4.8) is not documented as JSON the way the HTTP body
+	// is — decodeLogItemJSON is tried first so a sender that DOES ship JSON
+	// keeps every structured field, but anything that does not decode, or
+	// does not fit datadogV2.HTTPLogItem, falls back to a LogRow carrying
+	// the WHOLE line as its message rather than being treated as an error.
+	// See the file-level note and docs/tables/logs.md "TCP transport".
 	item, _, err := decodeLogItemJSON(payload)
 	if err != nil {
-		// TCP collapses HTTP's decode_error/unexpected_shape split into one
-		// reason — see the file-level UNDECODABLE JSON note.
-		return rawResult(err.Error())
+		return lineResult{hasRow: true, row: rawLineLogRow(tenant, payload)}
 	}
-
 	row, err := logRow(tenant, item, time.Now().UTC(), "", "", "", nil)
 	if err != nil {
-		return rawResult("attributes: " + err.Error())
+		return lineResult{hasRow: true, row: rawLineLogRow(tenant, payload)}
+	}
+	return lineResult{hasRow: true, row: row}
+}
+
+// rawLineLogRow builds the fallback row for the raw encoder's non-JSON (or
+// non-log-shaped) output: the whole payload becomes Message verbatim,
+// arrival time stands in for a timestamp the raw encoder does not carry,
+// and nothing else about it is guessed at.
+func rawLineLogRow(tenant string, payload []byte) storage.LogRow {
+	return storage.LogRow{
+		TenantID:        tenant,
+		Timestamp:       time.Now().UTC(),
+		Message:         string(payload),
+		TimestampSource: "arrival",
+	}
+}
+
+// logRowFromProto turns one decoded pb.Log into the row the length-prefixed
+// framing carries. pb.Log declares exactly message, status, timestamp,
+// hostname, service, source, tags — see the file-level note for where each
+// one lands and why nothing is left for `attributes`.
+func logRowFromProto(tenant string, item *pb.Log, arrival time.Time) storage.LogRow {
+	ts := arrival
+	source := "arrival"
+	if item.Timestamp > 0 {
+		// Milliseconds since epoch — see the file-level Timestamp note.
+		ts = time.UnixMilli(item.Timestamp).UTC()
+		source = "tcp_proto_ms"
 	}
 
-	return lineResult{hasRow: true, row: row}
+	return storage.LogRow{
+		TenantID:        tenant,
+		Timestamp:       ts,
+		Host:            item.Hostname,
+		Service:         item.Service,
+		Source:          item.Source,
+		Status:          item.Status,
+		Message:         item.Message,
+		Tags:            tagsToMultiMap(item.Tags),
+		TimestampSource: source,
+	}
 }

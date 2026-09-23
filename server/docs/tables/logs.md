@@ -111,19 +111,47 @@ also reading the fine print. Before this listener existed, those installs
 lost every log with no error on either side — the agent believed it was
 shipping, the HTTP intake never saw a connection.
 
-**Framing.** One log per line: `<api_key> <json>\n` — the api key, one space
-(`0x20`), the JSON-encoded log, one `\n` (`0x0A`). Sourced from
+**Two framings, both implemented, detected per connection.** Sourced from
 `server/docs/spis-endpointow-datadoga.md` §4.8's reverse-engineering notes on
-the agent's own `comp/logs-library/client/tcp/` (prefixer + delimiter); see
-`intake/tcplogs.go`'s header comment for what could and could not be
-independently verified against agent source in this module's cache. The
-agent's other framing for this transport — a 4-byte big-endian length prefix
-around a protobuf payload, behind an undocumented `dev_mode_use_proto` flag —
-is **not implemented**; that doc's research reads it as the default, which
-this codebase could not confirm one way or the other with the sources
-available to it (see the GAP note in `tcplogs.go`). Until it is verified and
-added, `logs_config.dev_mode_use_proto: false` is required for this listener
-to understand what an agent sends.
+the agent's own `comp/logs-library/client/tcp/` (prefixer + delimiter):
+
+| `logs_config.dev_mode_use_proto` | encoder | delimiter | wire shape |
+|---|---|---|---|
+| `true` (§4.8: **DOMYŚLNE** — the agent's default) | proto | length-prefixed | `[4B big-endian uint32 len][<api_key> ][proto.Marshal(pb.Log)]` — the length counts the key, the space, and the payload together |
+| `false` (§4.8: "nietypowe", unusual) | raw | line-break | `<api_key> <payload>\n` — one `0x0A` per message |
+
+Both share the same prefixer regardless of encoder: exactly one space
+(`0x20`) glued between the api key and the payload. `pb.Log`
+(`github.com/DataDog/agent-payload/v5/pb`, generated from
+`proto/logs/agent_logs_payload.proto` — already a direct dependency of this
+module) declares exactly `message`, `status`, `timestamp`, `hostname`,
+`service`, `source`, `tags`; every one of them already has a column on
+`LogRow`, so a proto-sourced row's `attributes` stays `{}` — nothing is left
+over to put there. `timestamp` carries no unit comment in the `.proto`
+itself; read as milliseconds since epoch, matching every other numeric
+Datadog log timestamp on this path (the HTTP body's own `timestamp` is
+documented as milliseconds, and `logTimestamp` treats a bare numeric
+timestamp/date the same way) — recorded as `timestamp_source: "tcp_proto_ms"`
+so a reader can tell this assumption produced the row.
+
+Since `dev_mode_use_proto` is a per-agent-process setting, not a per-message
+one, `intake/tcplogs.go`'s `detectTCPFraming` decides the framing ONCE PER
+CONNECTION by peeking (not consuming) the first 33 bytes: 32 hex characters
+followed by a space is the raw encoder's shape — an API key is never
+anything else at that position — and anything else is read as the
+length-prefixed default.
+
+**The raw encoder's output is not documented as JSON.** §4.8 describes the
+HTTP body's JSON shape separately from this transport and never says the raw
+encoder produces JSON at all — "raw" reads as "the log line's message text,
+unwrapped", as opposed to the proto encoder. `tcplogs.go` still tries the
+same JSON decode HTTP uses first, so a sender that DOES ship JSON on this
+framing keeps every structured field; anything that fails to parse, or
+parses but does not fit `datadogV2.HTTPLogItem`, is stored as a `LogRow`
+whose `message` is the WHOLE line verbatim (`timestamp_source: "arrival"`,
+every other column empty) rather than being treated as a decode failure.
+This is a deliberate design choice for this transport, not the HTTP
+`decode_error`/`unexpected_shape` behaviour carried over.
 
 **TLS vs. plain.** TLS on port 10516 is the agent's own default for this
 transport; set `logs_config.logs_no_ssl: true` on the agent to talk plain
@@ -140,12 +168,14 @@ default `:10516`; set it to `off` to disable the listener entirely.
 | `logs_config.logs_dd_url` | `host:10516` (or your `NINJACAT_LOGS_TCP_ADDR` port) |
 | `logs_config.logs_no_ssl` | `true` to match a plain (no cert configured) listener |
 | `logs_config.use_http` | must NOT be `true` — that would send this agent to `http-intake.logs.<site>` instead |
+| `logs_config.dev_mode_use_proto` | either value works — both framings are handled, and detected automatically per connection |
 
-**Identical to HTTP.** Every row goes through the exact same conversion HTTP
-items do — `decodeLogItemJSON` (shared with `router_logs.go`) into `logRow`,
-so `LogRow`'s fields, the timestamp resolution order, the `attributes` JSON
-column and the tenant-from-key model are all unchanged from the rest of this
-page. `storage.LogsWriter` is the same writer either transport sends to.
+**Identical to HTTP.** A proto-framed row and a JSON-shaped raw-encoder row
+both go through the same field mapping HTTP items do (directly for proto's
+seven fields; through the shared `decodeLogItemJSON` + `logRow` for JSON on
+the raw encoder), so `LogRow`'s fields, the tenant-from-key model, and
+`storage.LogsWriter` as the destination are unchanged from the rest of this
+page.
 
 **Different from HTTP**, because there is no `gin.Context` or `Host` header
 on a raw TCP connection:
@@ -157,11 +187,18 @@ on a raw TCP connection:
   than answering 403 to one request — the agent never reads back from this
   socket, so there is no channel to answer on, and it is not this server's
   call to keep accepting bytes under a key nobody issued.
-- Undecodable JSON is stored as a `raw_payloads` row with `intake:
-  "logs-tcp"` and always `reason: "decode_error"` (HTTP's `unexpected_shape`
-  split is not made here), with the connection's remote address in
+- A length-prefixed frame whose declared length exceeds 1 MiB is rejected
+  without reading its body at all, and any read that is cut short mid-frame
+  (by a timeout or the connection closing) closes the connection rather than
+  trying to resume — once bytes belonging to an in-progress frame are
+  abandoned, the byte stream can no longer be trusted to still be aligned on
+  a frame boundary.
+- Undecodable PROTO is stored as a `raw_payloads` row with `intake:
+  "logs-tcp"`, `reason: "decode_error"`, and a note naming the framing
+  ("length-prefixed proto: ..."), with the connection's remote address in
   `headers["Remote-Addr"]` standing in for the `Host` header HTTP would have
-  recorded.
+  recorded. The raw encoder has no equivalent path — see "not documented as
+  JSON" above; nothing it sends is treated as undecodable.
 
 ## Undecodable input
 
