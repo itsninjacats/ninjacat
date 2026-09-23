@@ -100,6 +100,69 @@ of any decoded item.
 The body wins for the scalars. `ddtags` is the exception and MERGES, with the
 query's tags first: the query form tags a whole batch, each item tags itself.
 
+## TCP transport
+
+`agent-intake.logs.<site>`, handled by `intake/tcplogs.go`, not this file —
+the Datadog Agent's other logs transport. An agent falls back to it whenever
+`logs_config.logs_dd_url` points at a custom endpoint and
+`logs_config.use_http` is not forced true (and HTTPS was not reachable at
+startup), which is the common case for anyone who set `logs_dd_url` without
+also reading the fine print. Before this listener existed, those installs
+lost every log with no error on either side — the agent believed it was
+shipping, the HTTP intake never saw a connection.
+
+**Framing.** One log per line: `<api_key> <json>\n` — the api key, one space
+(`0x20`), the JSON-encoded log, one `\n` (`0x0A`). Sourced from
+`server/docs/spis-endpointow-datadoga.md` §4.8's reverse-engineering notes on
+the agent's own `comp/logs-library/client/tcp/` (prefixer + delimiter); see
+`intake/tcplogs.go`'s header comment for what could and could not be
+independently verified against agent source in this module's cache. The
+agent's other framing for this transport — a 4-byte big-endian length prefix
+around a protobuf payload, behind an undocumented `dev_mode_use_proto` flag —
+is **not implemented**; that doc's research reads it as the default, which
+this codebase could not confirm one way or the other with the sources
+available to it (see the GAP note in `tcplogs.go`). Until it is verified and
+added, `logs_config.dev_mode_use_proto: false` is required for this listener
+to understand what an agent sends.
+
+**TLS vs. plain.** TLS on port 10516 is the agent's own default for this
+transport; set `logs_config.logs_no_ssl: true` on the agent to talk plain
+instead. This server mirrors that choice rather than picking one: the
+listener is plain unless both `NINJACAT_TLS_CERT` and `NINJACAT_TLS_KEY` are
+set (env vars read once in `cmd/ninjacat/main.go`), in which case it serves
+TLS with that certificate. Listener address: `NINJACAT_LOGS_TCP_ADDR`,
+default `:10516`; set it to `off` to disable the listener entirely.
+
+**Agent-side config, for `logs_dd_url: <endpoint>:<port>`:**
+
+| key | for this transport |
+|---|---|
+| `logs_config.logs_dd_url` | `host:10516` (or your `NINJACAT_LOGS_TCP_ADDR` port) |
+| `logs_config.logs_no_ssl` | `true` to match a plain (no cert configured) listener |
+| `logs_config.use_http` | must NOT be `true` — that would send this agent to `http-intake.logs.<site>` instead |
+
+**Identical to HTTP.** Every row goes through the exact same conversion HTTP
+items do — `decodeLogItemJSON` (shared with `router_logs.go`) into `logRow`,
+so `LogRow`'s fields, the timestamp resolution order, the `attributes` JSON
+column and the tenant-from-key model are all unchanged from the rest of this
+page. `storage.LogsWriter` is the same writer either transport sends to.
+
+**Different from HTTP**, because there is no `gin.Context` or `Host` header
+on a raw TCP connection:
+
+- Batching is per CONNECTION, not per request: rows are buffered and flushed
+  at 500 lines or 1 second, whichever comes first, rather than once per
+  HTTP body.
+- An unknown API key CLOSES THE CONNECTION right after logging it, rather
+  than answering 403 to one request — the agent never reads back from this
+  socket, so there is no channel to answer on, and it is not this server's
+  call to keep accepting bytes under a key nobody issued.
+- Undecodable JSON is stored as a `raw_payloads` row with `intake:
+  "logs-tcp"` and always `reason: "decode_error"` (HTTP's `unexpected_shape`
+  split is not made here), with the connection's remote address in
+  `headers["Remote-Addr"]` standing in for the `Host` header HTTP would have
+  recorded.
+
 ## Undecodable input
 
 | intake | reason | when |
@@ -124,6 +187,8 @@ cannot be resolved stores nothing, as everywhere else.
    `RequireAPIKey` looks at the header and the query, so a request that reaches
    the handler was already authenticated by one of those, and the path segment
    is a duplicate credential. Storing it would put a key in a table.
-3. **TCP-mode logs.** Not a decision of this handler: without
-   `logs_config.use_http=true` the agent uses its own TCP+TLS transport and
-   never reaches an HTTP endpoint at all.
+3. **TCP-mode logs, from this handler's point of view.** Not a decision of
+   `router_logs.go`: without `logs_config.use_http=true` the agent uses its
+   own TCP+TLS transport and never reaches this file's HTTP endpoints at
+   all. It is not dropped overall — see "TCP transport" above for where it
+   actually goes (`intake/tcplogs.go`).

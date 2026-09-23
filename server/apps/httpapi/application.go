@@ -23,15 +23,33 @@ type Config struct {
 
 	InternalAddr    string
 	InternalHandler http.Handler
+
+	// LogsTCPAddr is where agent-intake.logs.<site> listens for the Datadog
+	// Agent's TCP logs transport (see intake/tcplogs.go and
+	// docs/tables/logs.md's "TCP transport" section). "" or "off" disables
+	// the listener entirely — an agent using logs_config.use_http never
+	// needs it, and the port is otherwise idle for nothing.
+	LogsTCPAddr   string
+	LogsTCPServer TCPServer
+
+	// TLS for the TCP listener ONLY. Unset (either empty) means a plain
+	// listener, which is what the agent needs logs_config.logs_no_ssl: true
+	// for — its TCP client defaults to TLS on port 10516 otherwise. The two
+	// HTTP servers above are unaffected by these fields; nothing here
+	// changes them.
+	LogsTCPCertFile string
+	LogsTCPKeyFile  string
 }
 
-// App exposes both HTTP servers as supervised meta-processes.
+// App exposes both HTTP servers, plus the TCP logs listener when configured,
+// as supervised meta-processes.
 //
 //	httpapi (application)
 //	  └── httpapi_sup (supervisor, one_for_one)
 //	        └── httpapi_gateway (actor)
 //	              ├── meta: agent intake   (:8080)
-//	              └── meta: panel API      (:8081)
+//	              ├── meta: panel API      (:8081)
+//	              └── meta: logs TCP       (:10516, optional)
 type App struct {
 	app.Application
 	cfg Config
@@ -121,6 +139,21 @@ func (b *Gateway) Init(args ...any) error {
 			gen.MetaOptions{},
 		); err != nil {
 			return fmt.Errorf("gateway: panel API server: %w", err)
+		}
+	}
+
+	if cfg.LogsTCPServer != nil && cfg.LogsTCPAddr != "" && cfg.LogsTCPAddr != "off" {
+		if _, err := b.SpawnMeta(
+			&tcpMeta{
+				name:     "logs TCP",
+				addr:     cfg.LogsTCPAddr,
+				certFile: cfg.LogsTCPCertFile,
+				keyFile:  cfg.LogsTCPKeyFile,
+				server:   cfg.LogsTCPServer,
+			},
+			gen.MetaOptions{},
+		); err != nil {
+			return fmt.Errorf("gateway: logs TCP server: %w", err)
 		}
 	}
 
