@@ -42,6 +42,9 @@ import (
 //	cws-intake.<site>           activity_dump remote_storage  router_security.go
 //	runtime-security-http-intake.logs.<site>                  router_security.go
 //	cspm-intake.<site>          compliance_config             router_security.go
+//	citestcycle-intake.<site>   CI Visibility (tracers)       router_civisibility.go
+//	citestcov-intake.<site>     CI Visibility code coverage   router_civisibility.go
+//	webhook-intake.<site>       CI provider webhooks          router_ciwebhook.go
 //	sbom-intake.<site>          (event platform)              router_security.go
 //	sds-intake.<site>           (event platform)              router_security.go
 //	agentdiscovery-intake.<site>                              router_evp.go
@@ -49,6 +52,7 @@ import (
 //	event-management-intake.<site>                            router_evp.go
 //	softinv-intake.<site>       (event platform)              router_evp.go
 //	http-synthetics.<site>      (event platform)              router_evp.go
+//	intake.synthetics.<site>    synthetics.collector.enabled  router_ciwebhook.go
 //	data-obs-intake.<site>      ol_proxy_config.dd_url        router_evp.go
 //	eudm-intake.<site>          (via local evp_proxy)         router_install.go
 //	llmobs-intake.<site>        (diagnose probe only)         router_install.go
@@ -65,7 +69,12 @@ import (
 // Anything else is refused by name, so a misconfigured DD_SITE fails loudly
 // instead of landing on the wrong decoder.
 func (a *Server) Handler() http.Handler {
-	api := a.engine(a.routeAPI)
+	// api.<site> carries the forwarder AND the CI Visibility endpoints a
+	// tracer or datadog-ci consults — Datadog puts both on the default
+	// subdomain, so they are two route sets on one engine rather than a new
+	// host. app.<site> deliberately does NOT get them: nothing sends CI
+	// Visibility traffic to the forwarder's versioned rewrite.
+	api := a.engine(a.routeAPI, a.routeCIVisibilityAPI)
 	app := a.engine(a.routeAPI, a.routeApp)
 	trace := a.engine(a.routeTrace)
 	logs := a.engine(a.routeLogs)
@@ -90,6 +99,10 @@ func (a *Server) Handler() http.Handler {
 	events := a.engine(a.routeEventManagement)
 	softinv := a.engine(a.routeSoftwareInventory)
 	synthetics := a.engine(a.routeSynthetics)
+	citestcycle := a.engine(a.routeCITestCycle)
+	citestcov := a.engine(a.routeCITestCov)
+	ciwebhook := a.engine(a.routeCIWebhook)
+	syntheticsAgent := a.engine(a.routeSyntheticsAgent)
 	// Data Observability is the one intake whose clients do not all send
 	// Dd-Api-Key: the OpenLineage transport uses "Authorization: Bearer <key>"
 	// and the trace-agent's lineage proxy forwards it unchanged, so this route
@@ -190,6 +203,17 @@ func (a *Server) Handler() http.Handler {
 			softinv.ServeHTTP(w, r)
 		case strings.HasPrefix(host, "http-synthetics."):
 			synthetics.ServeHTTP(w, r)
+		// intake.synthetics.<site> is the poller the agent READS its test
+		// list from, the other direction from http-synthetics.<site>, which
+		// is where the results of running them come back.
+		case strings.HasPrefix(host, "intake.synthetics."):
+			syntheticsAgent.ServeHTTP(w, r)
+		case strings.HasPrefix(host, "citestcycle-intake."):
+			citestcycle.ServeHTTP(w, r)
+		case strings.HasPrefix(host, "citestcov-intake."):
+			citestcov.ServeHTTP(w, r)
+		case strings.HasPrefix(host, "webhook-intake."):
+			ciwebhook.ServeHTTP(w, r)
 		case strings.HasPrefix(host, "data-obs-intake."):
 			dataobs.ServeHTTP(w, r)
 		case strings.HasPrefix(host, "eudm-intake."):

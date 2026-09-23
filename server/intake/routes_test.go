@@ -95,6 +95,39 @@ func TestHostRoutingReachesOwnIntake(t *testing.T) {
 		{"browser-intake." + testSite, http.MethodPost, "/api/v2/profile", http.StatusAccepted},
 		{"browser-intake." + testSite, http.MethodPost, "/api/v2/debugger", http.StatusAccepted},
 
+		// CI Visibility: three new hosts, plus ten routes that share
+		// api.<site> with the forwarder. Each is a distinct wire format, so
+		// each gets its own host rather than a Content-Type switch.
+		{"citestcycle-intake." + testSite, http.MethodPost, "/api/v2/citestcycle", http.StatusAccepted},
+		{"citestcov-intake." + testSite, http.MethodPost, "/api/v2/citestcov", http.StatusAccepted},
+		{"webhook-intake." + testSite, http.MethodPost, "/api/v2/webhook", http.StatusAccepted},
+		// The Jenkins plugin's URL ends in a slash and a 301 on a POST drops
+		// the body, so both spellings are real routes.
+		{"webhook-intake." + testSite, http.MethodPost, "/api/v2/webhook/", http.StatusAccepted},
+
+		// The tracer-configuration endpoints answer a document the caller
+		// obeys, so 200 rather than 202.
+		{"api." + testSite, http.MethodPost, "/api/v2/libraries/tests/services/setting", http.StatusOK},
+		{"api." + testSite, http.MethodPost, "/api/v2/ci/tests/skippable", http.StatusOK},
+		{"api." + testSite, http.MethodPost, "/api/v2/ci/libraries/tests", http.StatusOK},
+		{"api." + testSite, http.MethodPost, "/api/v2/ci/libraries/tests/flaky", http.StatusOK},
+		{"api." + testSite, http.MethodPost, "/api/v2/test/libraries/test-management/tests", http.StatusOK},
+		{"api." + testSite, http.MethodPost, "/api/v2/git/repository/search_commits", http.StatusOK},
+		// 204 is the only status both shipped git clients call success.
+		{"api." + testSite, http.MethodPost, "/api/v2/git/repository/packfile", http.StatusNoContent},
+		{"api." + testSite, http.MethodPost, "/api/v2/ci/pipeline/tags", http.StatusAccepted},
+		{"api." + testSite, http.MethodPost, "/api/v2/ci/pipeline/metrics", http.StatusAccepted},
+		{"api." + testSite, http.MethodPost, "/api/intake/ci/custom_spans", http.StatusAccepted},
+
+		// intake.synthetics.<site> is the poller the agent READS from, and
+		// it must answer 200: anything else counts as a poll failure, and
+		// five in a row flip the poller unhealthy.
+		{"intake.synthetics." + testSite, http.MethodGet, "/api/unstable/synthetics/agents/tests", http.StatusOK},
+
+		// Multi-Region Failover splices "mrf." in after the product prefix
+		// for the CI hosts too.
+		{"citestcycle-intake.mrf." + testSite, http.MethodPost, "/api/v2/citestcycle", http.StatusAccepted},
+
 		// Port and trailing dot are stripped before matching.
 		{"sbom-intake." + testSite + ":8443", http.MethodPost, "/api/v2/sbom", http.StatusAccepted},
 		{"sbom-intake." + testSite + ".", http.MethodPost, "/api/v2/sbom", http.StatusAccepted},
@@ -122,6 +155,23 @@ func TestHostRoutingIsolatesIntakes(t *testing.T) {
 		// /api/v2/rum and /api/v2/replay belong to the RUM host alone.
 		{"http-intake.logs." + testSite, "/api/v2/rum"},
 		{"browser-intake." + testSite, "/api/v2/sbom"},
+
+		// The CI Visibility hosts are one endpoint each: the test-cycle
+		// events and the coverage upload are different wire formats and
+		// must not be reachable on each other's name.
+		{"citestcycle-intake." + testSite, "/api/v2/citestcov"},
+		{"citestcov-intake." + testSite, "/api/v2/citestcycle"},
+		{"webhook-intake." + testSite, "/api/v2/citestcycle"},
+		// The api.<site> CI routes stay on api.<site>. app.<site> shares
+		// routeAPI with it but deliberately not routeCIVisibilityAPI —
+		// nothing sends CI Visibility traffic to the forwarder's rewrite.
+		{"app." + testSite, "/api/v2/libraries/tests/services/setting"},
+		{"citestcycle-intake." + testSite, "/api/v2/ci/tests/skippable"},
+		// The two synthetics hosts are opposite directions: results come
+		// back to http-synthetics, the test list is read from
+		// intake.synthetics, and neither serves the other's path.
+		{"http-synthetics." + testSite, "/api/unstable/synthetics/agents/tests"},
+		{"intake.synthetics." + testSite, "/api/v2/synthetics"},
 	}
 	for _, tc := range cases {
 		rec := call(h, http.MethodPost, tc.host, tc.path, true)
