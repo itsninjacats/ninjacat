@@ -1345,15 +1345,6 @@ func wireTimeNanos(nanos int64) time.Time {
 	return time.Unix(0, nanos).UTC()
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 func firstIntPtr(values ...*int64) *int64 {
 	for _, v := range values {
 		if v != nil {

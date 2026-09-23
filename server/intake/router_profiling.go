@@ -944,13 +944,6 @@ func extraKeysExcept(m map[string]any, exclude ...string) []string {
 	return keys
 }
 
-func boolToUint8(b bool) uint8 {
-	if b {
-		return 1
-	}
-	return 0
-}
-
 // nested walks a decoded JSON object by key path, returning nil if any step
 // is missing or not an object.
 func nested(m map[string]any, path ...string) any {

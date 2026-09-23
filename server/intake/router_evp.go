@@ -430,13 +430,6 @@ func evpSortedKeys(m map[string]any) []string {
 	return keys
 }
 
-func boolToUint8(b bool) uint8 {
-	if b {
-		return 1
-	}
-	return 0
-}
-
 // evpTimestampPtr converts a protobuf Timestamp, ptr-optional on the wire,
 // to a *time.Time: nil stays nil rather than becoming the Unix epoch.
 func evpTimestampPtr(ts *timestamppb.Timestamp) *time.Time {
