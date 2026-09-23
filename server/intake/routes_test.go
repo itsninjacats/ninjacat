@@ -95,6 +95,39 @@ func TestHostRoutingReachesOwnIntake(t *testing.T) {
 		{"browser-intake." + testSite, http.MethodPost, "/api/v2/profile", http.StatusAccepted},
 		{"browser-intake." + testSite, http.MethodPost, "/api/v2/debugger", http.StatusAccepted},
 
+		// CI Visibility: three new hosts, plus ten routes that share
+		// api.<site> with the forwarder. Each is a distinct wire format, so
+		// each gets its own host rather than a Content-Type switch.
+		{"citestcycle-intake." + testSite, http.MethodPost, "/api/v2/citestcycle", http.StatusAccepted},
+		{"citestcov-intake." + testSite, http.MethodPost, "/api/v2/citestcov", http.StatusAccepted},
+		{"webhook-intake." + testSite, http.MethodPost, "/api/v2/webhook", http.StatusAccepted},
+		// The Jenkins plugin's URL ends in a slash and a 301 on a POST drops
+		// the body, so both spellings are real routes.
+		{"webhook-intake." + testSite, http.MethodPost, "/api/v2/webhook/", http.StatusAccepted},
+
+		// The tracer-configuration endpoints answer a document the caller
+		// obeys, so 200 rather than 202.
+		{"api." + testSite, http.MethodPost, "/api/v2/libraries/tests/services/setting", http.StatusOK},
+		{"api." + testSite, http.MethodPost, "/api/v2/ci/tests/skippable", http.StatusOK},
+		{"api." + testSite, http.MethodPost, "/api/v2/ci/libraries/tests", http.StatusOK},
+		{"api." + testSite, http.MethodPost, "/api/v2/ci/libraries/tests/flaky", http.StatusOK},
+		{"api." + testSite, http.MethodPost, "/api/v2/test/libraries/test-management/tests", http.StatusOK},
+		{"api." + testSite, http.MethodPost, "/api/v2/git/repository/search_commits", http.StatusOK},
+		// 204 is the only status both shipped git clients call success.
+		{"api." + testSite, http.MethodPost, "/api/v2/git/repository/packfile", http.StatusNoContent},
+		{"api." + testSite, http.MethodPost, "/api/v2/ci/pipeline/tags", http.StatusAccepted},
+		{"api." + testSite, http.MethodPost, "/api/v2/ci/pipeline/metrics", http.StatusAccepted},
+		{"api." + testSite, http.MethodPost, "/api/intake/ci/custom_spans", http.StatusAccepted},
+
+		// intake.synthetics.<site> is the poller the agent READS from, and
+		// it must answer 200: anything else counts as a poll failure, and
+		// five in a row flip the poller unhealthy.
+		{"intake.synthetics." + testSite, http.MethodGet, "/api/unstable/synthetics/agents/tests", http.StatusOK},
+
+		// Multi-Region Failover splices "mrf." in after the product prefix
+		// for the CI hosts too.
+		{"citestcycle-intake.mrf." + testSite, http.MethodPost, "/api/v2/citestcycle", http.StatusAccepted},
+
 		// Port and trailing dot are stripped before matching.
 		{"sbom-intake." + testSite + ":8443", http.MethodPost, "/api/v2/sbom", http.StatusAccepted},
 		{"sbom-intake." + testSite + ".", http.MethodPost, "/api/v2/sbom", http.StatusAccepted},
@@ -122,6 +155,23 @@ func TestHostRoutingIsolatesIntakes(t *testing.T) {
 		// /api/v2/rum and /api/v2/replay belong to the RUM host alone.
 		{"http-intake.logs." + testSite, "/api/v2/rum"},
 		{"browser-intake." + testSite, "/api/v2/sbom"},
+
+		// The CI Visibility hosts are one endpoint each: the test-cycle
+		// events and the coverage upload are different wire formats and
+		// must not be reachable on each other's name.
+		{"citestcycle-intake." + testSite, "/api/v2/citestcov"},
+		{"citestcov-intake." + testSite, "/api/v2/citestcycle"},
+		{"webhook-intake." + testSite, "/api/v2/citestcycle"},
+		// The api.<site> CI routes stay on api.<site>. app.<site> shares
+		// routeAPI with it but deliberately not routeCIVisibilityAPI —
+		// nothing sends CI Visibility traffic to the forwarder's rewrite.
+		{"app." + testSite, "/api/v2/libraries/tests/services/setting"},
+		{"citestcycle-intake." + testSite, "/api/v2/ci/tests/skippable"},
+		// The two synthetics hosts are opposite directions: results come
+		// back to http-synthetics, the test list is read from
+		// intake.synthetics, and neither serves the other's path.
+		{"http-synthetics." + testSite, "/api/unstable/synthetics/agents/tests"},
+		{"intake.synthetics." + testSite, "/api/v2/synthetics"},
 	}
 	for _, tc := range cases {
 		rec := call(h, http.MethodPost, tc.host, tc.path, true)
@@ -256,5 +306,58 @@ func TestRUMHostAcceptsQueryStringKey(t *testing.T) {
 	rec = call(h, http.MethodPost, "sbom-intake."+testSite, "/api/v2/sbom?dd-api-key="+testKey, false)
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("dd-api-key on an agent intake: status %d, want 403 — query-string auth stays with the one client that has no choice", rec.Code)
+	}
+}
+
+// webhook-intake.<site> takes a key three ways, and the query parameter is
+// not a convenience: the GitLab integration Datadog documents on this exact
+// URL is a stock GitLab Project Webhook, whose UI cannot set a header at all,
+// so "?dd-api-key=" is the only credential that provider can send. Answering
+// it 403 would drop every pipeline of a correctly configured project without
+// a single log line.
+func TestCIWebhookAcceptsQueryKeyLikeGitLab(t *testing.T) {
+	h := newTestHandler(t)
+	host := "webhook-intake." + testSite
+
+	post := func(t *testing.T, target string, header bool) int {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "http://"+host+target,
+			strings.NewReader(`[{"level":"pipeline","name":"build","status":"success"}]`))
+		req.Host = host
+		req.Header.Set("Content-Type", "application/json")
+		if header {
+			req.Header.Set("Dd-Api-Key", testKey)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	for _, tc := range []struct {
+		name, target string
+		header       bool
+		want         int
+	}{
+		{"gitlab query parameter", "/api/v2/webhook/?dd-api-key=" + testKey, false, http.StatusAccepted},
+		{"jenkins header and ?service=", "/api/v2/webhook/?service=jenkins-ci", true, http.StatusAccepted},
+		{"api_key spelling", "/api/v2/webhook?api_key=" + testKey, false, http.StatusAccepted},
+		// Widening the sources must not weaken the gate.
+		{"no key at all", "/api/v2/webhook/", false, http.StatusForbidden},
+		{"wrong key in the query", "/api/v2/webhook/?dd-api-key=nope", false, http.StatusForbidden},
+	} {
+		if got := post(t, tc.target, tc.header); got != tc.want {
+			t.Errorf("%s: status %d, want %d", tc.name, got, tc.want)
+		}
+	}
+
+	// The exception stays at this one host: query-string auth is not on by
+	// default anywhere else, because a key in a URL lands in every proxy log.
+	req := httptest.NewRequest(http.MethodPost,
+		"http://sbom-intake."+testSite+"/api/v2/sbom?dd-api-key="+testKey, nil)
+	req.Host = "sbom-intake." + testSite
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("sbom-intake with ?dd-api-key=: status %d, want 403", rec.Code)
 	}
 }

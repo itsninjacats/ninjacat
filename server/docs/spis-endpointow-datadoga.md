@@ -265,7 +265,7 @@ Host zawsze `api.<site>`. **Uwaga:** `dd_url` NIE przekierowuje — `ExtractSite
 | `config.` | `/datadog.config.RcEcho/RunEchoTest` | **gRPC bidi stream** | `core.RunEchoTestResponse` | tak | j.w. |
 | `config.` **:8042** | — | **raw TLS TCP, 2B LE length prefix** | bajty | n/d | j.w. |
 | `config.` | `GET /_health` | HTTP | — | n/d | diagnostyka |
-| `intake.synthetics.` | `GET /api/unstable/synthetics/agents/tests` | HTTP, JSON | `{tests:[SyntheticsTestConfig]}` | **nie** | `synthetics.collector.enabled` |
+| `intake.synthetics.` | `GET /api/unstable/synthetics/agents/tests` | HTTP, JSON | `{tests:[SyntheticsTestConfig]}` | tak (pusta lista) | `synthetics.collector.enabled` |
 | `api.` | `POST /api/v2/…/workflow-tasks/dequeue` | HTTP, JSON:API | `*types.Task` + zagnieżdżony protobuf | częściowo | `private_action_runner.enabled` |
 | `install.datadoghq.com` | OCI manifests/blobs | HTTP | manifesty OCI, warstwy tar+zstd | **nie** | `installer.registry.url` |
 | `install.datadoghq.com` | `/btfs/…` | HTTP | tar.xz + SHA256 z katalogu RC | n/d | `remote_config_btf_enabled` |
