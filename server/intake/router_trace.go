@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -1501,6 +1502,17 @@ func dsmDecodeStatsPayload(body []byte) (*dsmStatsPayload, error) {
 		return nil, fmt.Errorf("empty body")
 	}
 	r := msgp.NewReader(bytes.NewReader(body))
+	// ReadIntf (dsmUnknown) and the array readers allocate from the length
+	// prefix before reading an element, guarded only by GetMaxElements, which
+	// defaults to MaxUint32 and so never fires. Every element costs at least
+	// one wire byte, so the body length is a sound ceiling: a forged header
+	// now fails the decode (and lands in raw_payloads) instead of asking for
+	// gigabytes. Same guard as civDecodeMsgpack.
+	maxElems := uint32(math.MaxUint32)
+	if len(body) < math.MaxUint32 {
+		maxElems = uint32(len(body))
+	}
+	r.SetMaxElements(maxElems)
 	p := &dsmStatsPayload{}
 
 	err := dsmReadMap(r, func(key string) error {
