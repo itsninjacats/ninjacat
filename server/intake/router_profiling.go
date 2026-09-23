@@ -12,9 +12,11 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/pprof/profile"
+	"github.com/itsninjacats/server/apps/storage"
 )
 
 // Three hosts fed by the trace-agent proxies and the host profiler.
@@ -25,9 +27,18 @@ import (
 // parser (github.com/google/pprof/profile), and the event parts are JSON.
 // Decoded with upstream types, never with structs invented here.
 //
-// Every handler ends with the decoded payload set aside in a variable, one per
-// wire variant, complete and unconverted. The log lines along the way may
-// abbreviate (first entry, first N scopes); the variables never do.
+// What is stored where (apps/storage/rows_profiling.go,
+// schema/migrations/0012_profiling.sql, docs/tables/profiling.md):
+//
+//	intake.profile.<site>   /api/v2/profile, /v1/input   -> profiles
+//	debugger-intake.<site>  /api/v2/debugger              -> debugger_logs (json variant)
+//	                                                          debugger_diagnostics (diagnostics variant)
+//	                                                          symdb_uploads (symdb variant)
+//	sourcemap-intake.<site> /api/v2/srcmap                -> symbol_uploads
+//
+// A body that fails to decode, or a debugger multipart that is neither the
+// symdb nor the diagnostics shape, goes to storeRaw instead — see the "raw"
+// reason string passed at each call site below.
 
 // intake.profile.<site> — Continuous Profiler.
 //
@@ -50,13 +61,15 @@ func (a *Server) handleProfile(label string) gin.HandlerFunc {
 			return
 		}
 		// The raw payload outlives every path out of this handler: a decoder
-		// that fails or does not exist yet must not make the bytes disappear.
+		// that fails must not make the bytes disappear (storeRaw below).
 		defer func() { _ = body }()
 		ct := c.GetHeader("Content-Type")
 		parts, err := profParts(label, ct, body)
 		if err != nil {
 			log.Printf("[%s] not multipart (%v), raw follows", label, err)
 			describe(label, ct, body)
+			a.storeRaw(c, "profiling", "decode_error",
+				"not multipart, content-type "+orUnknown(ct)+": "+err.Error(), body)
 			return
 		}
 
@@ -80,11 +93,92 @@ func (a *Server) handleProfile(label string) gin.HandlerFunc {
 			}
 		}
 
-		// TODO(ninjacat): tables. Complete, unconverted, ready to take.
-		_ = event    // the event part, decoded (numbers as json.Number)
-		_ = profiles // form name -> *profile.Profile, one per pprof attachment
-		_ = parts    // form name -> raw bytes, every part as it came in
+		tenant := TenantFromContext(c)
+		if tenant == "" {
+			return
+		}
+		row := profileRow(tenant, label, c, parts, event, profiles)
+		a.store(storage.ProfilesWriter, storage.WriteProfiles{Profiles: []storage.ProfileRow{row}}, 1)
 	}
+}
+
+// profileRow assembles one ninjacat.profiles row from an already-parsed
+// multipart submission: event is profDecodeEvent's result (nil when the
+// "event" part was absent or not a JSON object), profs is form name -> parsed
+// pprof for every attachment that parsed. Every part other than "event"
+// becomes one attachment entry regardless of whether it parsed.
+func profileRow(tenant, label string, c *gin.Context, parts map[string][]byte,
+	event map[string]any, profs map[string]*profile.Profile) storage.ProfileRow {
+
+	row := storage.ProfileRow{
+		TenantID:           tenant,
+		ReceivedAt:         time.Now().UTC(),
+		Variant:            label,
+		DDEvpOrigin:        c.GetHeader("Dd-Evp-Origin"),
+		DDEvpOriginVersion: c.GetHeader("Dd-Evp-Origin-Version"),
+	}
+	if raw, ok := parts["event"]; ok {
+		row.Event = string(raw)
+	}
+	if event != nil {
+		row.StartRaw = rawText(event["start"])
+		row.StartParsed = profParseTimestamp(event["start"])
+		row.EndRaw = rawText(event["end"])
+		row.EndParsed = profParseTimestamp(event["end"])
+		row.Family = asString(event["family"])
+		row.Version = asString(event["version"])
+		row.Runtime = asString(event["runtime"])
+		row.Language = asString(event["language"])
+		if tags, ok := event["tags_profiler"].(string); ok {
+			row.TagsProfiler = tagsToMultiMap(splitDDTags(tags))
+		}
+	}
+
+	for _, name := range sortedKeys(parts) {
+		if name == "event" {
+			continue
+		}
+		data := parts[name]
+		row.AttachName = append(row.AttachName, name)
+		row.AttachBytes = append(row.AttachBytes, string(data))
+		row.AttachSize = append(row.AttachSize, uint64(len(data)))
+
+		var parsedFlag uint8
+		sampleTypes, sampleUnits := []string{}, []string{}
+		var sampleCount uint64
+		var timeNanos, durationNanos, period int64
+		var periodType string
+		var mappingCount, locationCount, functionCount uint32
+		if prof, ok := profs[name]; ok {
+			parsedFlag = 1
+			sampleTypes = make([]string, 0, len(prof.SampleType))
+			sampleUnits = make([]string, 0, len(prof.SampleType))
+			for _, st := range prof.SampleType {
+				sampleTypes = append(sampleTypes, st.Type)
+				sampleUnits = append(sampleUnits, st.Unit)
+			}
+			sampleCount = uint64(len(prof.Sample))
+			timeNanos = prof.TimeNanos
+			durationNanos = prof.DurationNanos
+			periodType = profPeriodUnit(prof)
+			period = prof.Period
+			mappingCount = uint32(len(prof.Mapping))
+			locationCount = uint32(len(prof.Location))
+			functionCount = uint32(len(prof.Function))
+		}
+		row.AttachParsed = append(row.AttachParsed, parsedFlag)
+		row.AttachSampleTypes = append(row.AttachSampleTypes, sampleTypes)
+		row.AttachSampleUnits = append(row.AttachSampleUnits, sampleUnits)
+		row.AttachSampleCount = append(row.AttachSampleCount, sampleCount)
+		row.AttachTimeNanos = append(row.AttachTimeNanos, timeNanos)
+		row.AttachDurationNanos = append(row.AttachDurationNanos, durationNanos)
+		row.AttachPeriodType = append(row.AttachPeriodType, periodType)
+		row.AttachPeriod = append(row.AttachPeriod, period)
+		row.AttachMappingCount = append(row.AttachMappingCount, mappingCount)
+		row.AttachLocationCount = append(row.AttachLocationCount, locationCount)
+		row.AttachFunctionCount = append(row.AttachFunctionCount, functionCount)
+	}
+	return row
 }
 
 // profDecodeEvent decodes the JSON event that heads every profile submission
@@ -203,7 +297,7 @@ func (a *Server) routeDebugger(g *gin.RouterGroup) {
 }
 
 // HandleDebugger accepts diagnostics, DI logs and symdb uploads. Each variant
-// ends with its own decoded value set aside; they never share a variable.
+// ends with its own rows going to its own table; they never share a writer.
 func (a *Server) HandleDebugger(c *gin.Context) {
 	defer c.JSON(http.StatusAccepted, gin.H{})
 	body, err := c.GetRawData()
@@ -212,21 +306,44 @@ func (a *Server) HandleDebugger(c *gin.Context) {
 		return
 	}
 	// The raw payload outlives every path out of this handler: a decoder
-	// that fails or does not exist yet must not make the bytes disappear.
+	// that fails must not make the bytes disappear (storeRaw below).
 	defer func() { _ = body }()
 
 	ct := c.GetHeader("Content-Type")
 	ddtags := c.Query("ddtags")
 	mediaType, _, _ := mime.ParseMediaType(ct)
 	if mediaType != "multipart/form-data" {
-		// JSON array straight from the dyninst logs uploader, or whatever
-		// the tracer pushed through /debugger/v2/input.
+		// JSON array or NDJSON straight from the dyninst logs uploader, or
+		// whatever the tracer pushed through /debugger/v2/input.
 		log.Printf("[debugger] variant=json ddtags=%q", ddtags)
-		logs := dbgDecodeLogs(ct, body)
+		raw := dbgDecodeLogs(ct, body)
+		if raw == nil {
+			a.storeRaw(c, "debugger", "decode_error",
+				"logs variant: not a JSON array or NDJSON, content-type "+orUnknown(ct), body)
+			return
+		}
 
-		// TODO(ninjacat): tables. Complete, unconverted, ready to take.
-		_ = logs   // []json.RawMessage, one entry per DI snapshot/log
-		_ = ddtags // the ?ddtags= query string, as sent
+		tenant := TenantFromContext(c)
+		if tenant == "" || len(raw) == 0 {
+			return
+		}
+		tags := tagsToMultiMap(splitDDTags(ddtags))
+		now := time.Now().UTC()
+		rows := make([]storage.DebuggerLogRow, 0, len(raw))
+		for _, entry := range raw {
+			var m map[string]any
+			_ = jsonDecode(entry, &m) // best-effort: on failure m stays nil, Entry still keeps the raw bytes
+			rows = append(rows, storage.DebuggerLogRow{
+				TenantID:   tenant,
+				ReceivedAt: now,
+				Service:    asString(m["service"]),
+				DDSource:   asString(m["ddsource"]),
+				DDTags:     tags,
+				Entry:      string(entry),
+				ExtraKeys:  extraKeysExcept(m, "service", "ddsource"),
+			})
+		}
+		a.store(storage.DebuggerLogsWriter, storage.WriteDebuggerLogs{Logs: rows}, len(rows))
 		return
 	}
 
@@ -234,6 +351,8 @@ func (a *Server) HandleDebugger(c *gin.Context) {
 	if err != nil {
 		log.Printf("[debugger] multipart: %v", err)
 		describe("debugger", ct, body)
+		a.storeRaw(c, "debugger", "decode_error",
+			"multipart, content-type "+orUnknown(ct)+": "+err.Error(), body)
 		return
 	}
 
@@ -243,40 +362,86 @@ func (a *Server) HandleDebugger(c *gin.Context) {
 	case hasFile && hasEvent:
 		log.Printf("[debugger] variant=symdb ddtags=%q", ddtags)
 		symdbEvent := dbgDecodeSymdbEvent(event)
-		symdb, scopes := dbgDecodeSymdbFile(file)
+		envelope, scopes, inflatedSize := dbgDecodeSymdbFile(file)
 
-		// TODO(ninjacat): tables. Complete, unconverted, ready to take.
-		_ = symdbEvent // the event part, decoded (numbers as json.Number)
-		_ = symdb      // the inflated file part: envelope key -> raw JSON, scopes included
-		_ = scopes     // the envelope's scopes, decoded; all of them, not the logged 10
-		_ = ddtags
+		tenant := TenantFromContext(c)
+		if tenant == "" {
+			return
+		}
+		row := symdbUploadRow(tenant, event, file, ddtags, symdbEvent, envelope, scopes, inflatedSize)
+		a.store(storage.SymdbUploadsWriter, storage.WriteSymdbUploads{Uploads: []storage.SymdbUploadRow{row}}, 1)
 	case hasEvent:
 		log.Printf("[debugger] variant=diagnostics ddtags=%q", ddtags)
-		diagnostics := dbgDecodeDiagnostics(event)
+		raw, diagnostics := dbgDecodeDiagnostics(event)
+		if raw == nil {
+			// dbgDecodeDiagnostics returns (nil, nil) only on a genuine decode
+			// failure (the event part is not a JSON array) — distinct from a
+			// legitimately empty "[]" batch, which decodes to a non-nil empty
+			// slice and falls through to the ordinary empty-batch return below.
+			a.storeRaw(c, "debugger", "decode_error",
+				"diagnostics variant: event part is not a JSON array", body)
+			return
+		}
 
-		// TODO(ninjacat): tables. Complete, unconverted, ready to take.
-		_ = diagnostics // []map[string]any, one per DiagnosticMessage; all of them, not the logged 20
-		_ = ddtags
+		tenant := TenantFromContext(c)
+		if tenant == "" || len(raw) == 0 {
+			return
+		}
+		tags := tagsToMultiMap(splitDDTags(ddtags))
+		now := time.Now().UTC()
+		rows := make([]storage.DebuggerDiagnosticRow, 0, len(raw))
+		for i, r := range raw {
+			rows = append(rows, debuggerDiagnosticRow(tenant, now, tags, r, diagnostics[i]))
+		}
+		a.store(storage.DebuggerDiagnosticsWriter, storage.WriteDebuggerDiagnostics{Diagnostics: rows}, len(rows))
 	default:
 		log.Printf("[debugger] variant=unknown parts=%s ddtags=%q",
 			strings.Join(sortedKeys(parts), ","), ddtags)
-
-		// TODO(ninjacat): tables. Complete, unconverted, ready to take.
-		_ = parts // form name -> raw bytes, whatever this producer sent
-		_ = ddtags
+		a.storeRaw(c, "debugger", "unexpected_shape",
+			"multipart with neither file nor event parts: "+strings.Join(sortedKeys(parts), ","), body)
 	}
 }
 
-// dbgDecodeLogs decodes a DI logs batch and returns it whole; nil when the
-// body is not a JSON array. The entries are opaque json.RawMessage upstream
-// too, so the log shows the count and the shape of the first one.
+// dbgDecodeLogs decodes a DI logs batch and returns every entry, in order;
+// nil when the body is neither a JSON array nor NDJSON (or empty).
+//
+// The dyninst logSender/tracer sends a JSON array; the browser SDK's debugger
+// track sends NDJSON instead (rum-spec.md's browser note) — sniffed off the
+// first non-whitespace byte rather than assumed, since both producers can
+// reach this same endpoint.
 func dbgDecodeLogs(contentType string, body []byte) []json.RawMessage {
+	trimmed := bytes.TrimLeft(body, " \t\r\n")
+	if len(trimmed) == 0 {
+		log.Printf("[debugger] logs: empty body")
+		return nil
+	}
+
 	var batch []json.RawMessage
-	if err := jsonDecode(body, &batch); err != nil {
-		log.Printf("[debugger] logs: not a JSON array (%v), raw follows", err)
+	switch trimmed[0] {
+	case '[':
+		if err := jsonDecode(body, &batch); err != nil {
+			log.Printf("[debugger] logs: not a JSON array (%v), raw follows", err)
+			describe("debugger", contentType, body)
+			return nil
+		}
+	case '{':
+		for _, line := range bytes.Split(trimmed, []byte("\n")) {
+			line = bytes.TrimSpace(line)
+			if len(line) == 0 {
+				continue
+			}
+			// Copied out of trimmed's backing array, which this function
+			// does not own past its return.
+			entry := make(json.RawMessage, len(line))
+			copy(entry, line)
+			batch = append(batch, entry)
+		}
+	default:
+		log.Printf("[debugger] logs: not JSON (first byte %q), raw follows", trimmed[0])
 		describe("debugger", contentType, body)
 		return nil
 	}
+
 	log.Printf("[debugger] logs: %d entries, %d B", len(batch), len(body))
 	if len(batch) == 0 {
 		return batch
@@ -291,22 +456,35 @@ func dbgDecodeLogs(contentType string, body []byte) []json.RawMessage {
 	return batch
 }
 
-// dbgDecodeDiagnostics decodes probe status messages and returns them whole;
-// nil when the part is not a JSON array. The wire shape is
+// dbgDecodeDiagnostics decodes probe status messages and returns each one
+// both as its raw bytes and as a best-effort decode; both slices are nil
+// together when the body is not a JSON array. The wire shape is
 // uploader.DiagnosticMessage: service, ddsource, timestamp, and the probe
 // under debugger.diagnostics (runtimeId, probeId, status, probeVersion,
-// optional exception). The log stops after 20; the slice does not.
-func dbgDecodeDiagnostics(data []byte) []map[string]any {
-	var batch []map[string]any
-	if err := jsonDecode(data, &batch); err != nil {
+// optional exception). An entry that itself fails to decode gets a nil
+// decoded[i] rather than dropping the whole batch — raw[i] still carries its
+// bytes. The log stops after 20; the slices do not.
+func dbgDecodeDiagnostics(data []byte) ([]json.RawMessage, []map[string]any) {
+	var raw []json.RawMessage
+	if err := jsonDecode(data, &raw); err != nil {
 		log.Printf("[debugger] diagnostics: %v", err)
-		return nil
+		return nil, nil
 	}
-	log.Printf("[debugger] diagnostics: %d messages", len(batch))
+	decoded := make([]map[string]any, len(raw))
+	for i, r := range raw {
+		var m map[string]any
+		if err := jsonDecode(r, &m); err != nil {
+			log.Printf("[debugger] diagnostics: entry %d: %v", i, err)
+			continue
+		}
+		decoded[i] = m
+	}
+
+	log.Printf("[debugger] diagnostics: %d messages", len(raw))
 	const show = 20
-	for i, msg := range batch {
+	for i, msg := range decoded {
 		if i == show {
-			log.Printf("   ... and %d more", len(batch)-show)
+			log.Printf("   ... and %d more", len(decoded)-show)
 			break
 		}
 		diag, _ := nested(msg, "debugger", "diagnostics").(map[string]any)
@@ -317,7 +495,35 @@ func dbgDecodeDiagnostics(data []byte) []map[string]any {
 			log.Printf("      exception %v: %v", exc["type"], exc["message"])
 		}
 	}
-	return batch
+	return raw, decoded
+}
+
+// debuggerDiagnosticRow converts one decoded DiagnosticMessage into its row.
+// msg may be nil when that one entry failed to decode (dbgDecodeDiagnostics
+// keeps going past a single bad entry) — every extracted column is then
+// empty/NULL, but raw (and so Message) still carries the original bytes.
+func debuggerDiagnosticRow(tenant string, arrival time.Time, ddtags map[string][]string, raw json.RawMessage, msg map[string]any) storage.DebuggerDiagnosticRow {
+	diag, _ := nested(msg, "debugger", "diagnostics").(map[string]any)
+	row := storage.DebuggerDiagnosticRow{
+		TenantID:     tenant,
+		ReceivedAt:   arrival,
+		Timestamp:    profParseTimestamp(msg["timestamp"]),
+		Service:      asString(msg["service"]),
+		DDSource:     asString(msg["ddsource"]),
+		DDTags:       ddtags,
+		RuntimeID:    asString(diag["runtimeId"]),
+		ProbeID:      asString(diag["probeId"]),
+		Status:       asString(diag["status"]),
+		ProbeVersion: asString(diag["probeVersion"]),
+		Message:      string(raw),
+	}
+	if exc, ok := diag["exception"].(map[string]any); ok {
+		t := asString(exc["type"])
+		m := asString(exc["message"])
+		row.ExceptionType = &t
+		row.ExceptionMessage = &m
+	}
+	return row
 }
 
 // dbgDecodeSymdbEvent decodes the event part of a symdb upload — the metadata
@@ -337,22 +543,22 @@ func dbgDecodeSymdbEvent(event []byte) map[string]any {
 
 // dbgDecodeSymdbFile inflates the file part of a symdb upload and returns the
 // JSON envelope — {service, version, language, upload_id, batch_num,
-// scopes: [...], final} — as key -> raw JSON, plus the scopes decoded, one
-// package scope per entry. The envelope is nil when the part is not gzip or
-// not a JSON object; the scopes are nil when that key is missing or malformed
-// while the envelope still stands. The log stops after 10 scopes; the slice
-// does not.
-func dbgDecodeSymdbFile(file []byte) (map[string]json.RawMessage, []map[string]any) {
+// scopes: [...], final} — as key -> raw JSON, the scopes decoded (one package
+// scope per entry), and the inflated size. The envelope is nil when the part
+// is not gzip or not a JSON object; the scopes are nil when that key is
+// missing or malformed while the envelope still stands. The log stops after
+// 10 scopes; the slice does not.
+func dbgDecodeSymdbFile(file []byte) (map[string]json.RawMessage, []map[string]any, int) {
 	raw, err := gunzip(file)
 	if err != nil {
 		log.Printf("[debugger] symdb file: %v, %d B", err, len(file))
-		return nil, nil
+		return nil, nil, 0
 	}
 	var env map[string]json.RawMessage
 	if err := jsonDecode(raw, &env); err != nil {
 		log.Printf("[debugger] symdb file: gzip ok (%d B -> %d B) but not a JSON object: %v",
 			len(file), len(raw), err)
-		return nil, nil
+		return nil, nil, len(raw)
 	}
 	var scopes []map[string]any
 	if rawScopes, ok := env["scopes"]; !ok {
@@ -375,7 +581,54 @@ func dbgDecodeSymdbFile(file []byte) (map[string]json.RawMessage, []map[string]a
 		children, _ := sc["scopes"].([]any)
 		log.Printf("   %v %v: %d nested scopes", sc["scope_type"], sc["name"], len(children))
 	}
-	return env, scopes
+	return env, scopes, len(raw)
+}
+
+// symdbUploadRow assembles one ninjacat.symdb_uploads row. rawEvent is the
+// event part's bytes exactly as received — kept whole regardless of whether
+// decoded parses it, the same lossless-copy contract every sibling table in
+// this file follows. decoded is dbgDecodeSymdbEvent's result (nil on decode
+// failure); envelope/scopes are dbgDecodeSymdbFile's — independently
+// nilable, see that function's doc comment.
+func symdbUploadRow(tenant string, rawEvent, file []byte, ddtags string, decoded map[string]any,
+	envelope map[string]json.RawMessage, scopes []map[string]any, inflatedSize int) storage.SymdbUploadRow {
+
+	row := storage.SymdbUploadRow{
+		TenantID:     tenant,
+		ReceivedAt:   time.Now().UTC(),
+		Event:        string(rawEvent),
+		DDTags:       tagsToMultiMap(splitDDTags(ddtags)),
+		File:         string(file),
+		InflatedSize: uint64(inflatedSize),
+		ScopeCount:   uint32(len(scopes)),
+	}
+	if scopes != nil {
+		row.ScopesOK = 1
+	}
+	if decoded != nil {
+		row.Service = asString(decoded["service"])
+		row.Version = asString(decoded["version"])
+		row.Language = asString(decoded["language"])
+		row.RuntimeID = asString(decoded["runtimeId"])
+		// UploadID and BatchNum both travel as the wire's literal text
+		// (rawText, not asString) — a producer that sends uploadId as a bare
+		// JSON number must not lose it to asString's string-only check, and
+		// both fields need the exact same handling since they are the same
+		// kind of identifier.
+		row.UploadID = rawText(decoded["uploadId"])
+		row.BatchNum = rawText(decoded["batchNum"])
+		row.Final = asBool(decoded["final"])
+		row.AttachmentSize = asUint64(decoded["attachmentSize"])
+	}
+	if envelope != nil {
+		row.EnvService = rawJSONText(envelope, "service")
+		row.EnvVersion = rawJSONText(envelope, "version")
+		row.EnvLanguage = rawJSONText(envelope, "language")
+		row.EnvUploadID = rawJSONText(envelope, "upload_id")
+		row.EnvBatchNum = rawJSONText(envelope, "batch_num")
+		row.EnvFinal = rawJSONText(envelope, "final")
+	}
+	return row
 }
 
 // symdbMaxInflated bounds what we are willing to inflate from one batch. The
@@ -423,13 +676,15 @@ func (a *Server) HandleSourcemap(c *gin.Context) {
 		return
 	}
 	// The raw payload outlives every path out of this handler: a decoder
-	// that fails or does not exist yet must not make the bytes disappear.
+	// that fails must not make the bytes disappear (storeRaw below).
 	defer func() { _ = body }()
 	ct := c.GetHeader("Content-Type")
 	parts, err := profParts("srcmap", ct, body)
 	if err != nil {
 		log.Printf("[srcmap] multipart: %v", err)
 		describe("srcmap", ct, body)
+		a.storeRaw(c, "srcmap", "decode_error",
+			"multipart, content-type "+orUnknown(ct)+": "+err.Error(), body)
 		return
 	}
 
@@ -447,32 +702,85 @@ func (a *Server) HandleSourcemap(c *gin.Context) {
 		}
 	}
 
-	elf, hasELF := parts["elf_symbol_file"]
-	if hasELF {
+	if elf, ok := parts["elf_symbol_file"]; ok {
 		log.Printf("[srcmap] elf_symbol_file %d B, %s", len(elf), elfHeader(elf))
 	}
 
-	// TODO(ninjacat): tables. Complete, unconverted, ready to take.
-	_ = meta  // the event part, decoded (numbers as json.Number)
-	_ = elf   // the ELF symbol file, raw bytes, unparsed; nil when absent
-	_ = parts // form name -> raw bytes, every part as it came in
+	tenant := TenantFromContext(c)
+	if tenant == "" {
+		return
+	}
+	row := symbolUploadRow(tenant, parts, meta)
+	a.store(storage.SymbolUploadsWriter, storage.WriteSymbolUploads{Uploads: []storage.SymbolUploadRow{row}}, 1)
 }
 
-// elfHeader checks the ELF ident bytes without parsing the file: magic, then
-// class (32/64-bit) and data encoding (endianness).
+// symbolUploadRow assembles one ninjacat.symbol_uploads row. meta is the
+// event part's decode (nil when absent or malformed). OtherParts carries
+// every multipart part besides "event" and "elf_symbol_file" verbatim, so a
+// producer sending an extra part is still visible even though this handler
+// does not name it.
+func symbolUploadRow(tenant string, parts map[string][]byte, meta map[string]any) storage.SymbolUploadRow {
+	elf, hasELF := parts["elf_symbol_file"]
+	row := storage.SymbolUploadRow{
+		TenantID:   tenant,
+		ReceivedAt: time.Now().UTC(),
+		Meta:       string(parts["event"]),
+		HasELF:     boolToUint8(hasELF),
+		ELF:        string(elf),
+		ELFSize:    uint64(len(elf)),
+	}
+	if hasELF {
+		row.ELFClass, row.ELFEndianness = elfInfo(elf)
+	}
+	if meta != nil {
+		row.Type = asString(meta["type"])
+		row.Arch = asString(meta["arch"])
+		row.GNUBuildID = asString(meta["gnu_build_id"])
+		row.GoBuildID = asString(meta["go_build_id"])
+		row.FileHash = asString(meta["file_hash"])
+		row.SymbolSource = asString(meta["symbol_source"])
+		row.Origin = asString(meta["origin"])
+		row.OriginVersion = asString(meta["origin_version"])
+		row.Filename = asString(meta["filename"])
+	}
+
+	other := make(map[string]string, len(parts))
+	for name, data := range parts {
+		if name == "event" || name == "elf_symbol_file" {
+			continue
+		}
+		other[name] = string(data)
+	}
+	row.OtherParts = other
+	return row
+}
+
+// elfInfo sniffs the ELF ident bytes without parsing the file: magic, then
+// class (32/64-bit) and data encoding (endianness). Both results are "" when
+// the bytes are not ELF at all — the caller already knows that from hasELF/
+// HasELF, so this never invents a value to fill the column with.
+func elfInfo(data []byte) (class, endianness string) {
+	if len(data) < 6 || !bytes.HasPrefix(data, []byte{0x7f, 'E', 'L', 'F'}) {
+		return "", ""
+	}
+	class = map[byte]string{1: "ELF32", 2: "ELF64"}[data[4]]
+	if class == "" {
+		class = "ELF?"
+	}
+	endianness = map[byte]string{1: "LE", 2: "BE"}[data[5]]
+	if endianness == "" {
+		endianness = "?"
+	}
+	return class, endianness
+}
+
+// elfHeader is elfInfo rendered for a log line.
 func elfHeader(data []byte) string {
 	if len(data) < 6 || !bytes.HasPrefix(data, []byte{0x7f, 'E', 'L', 'F'}) {
 		return fmt.Sprintf("not ELF, first bytes %x", data[:min(len(data), 4)])
 	}
-	class := map[byte]string{1: "ELF32", 2: "ELF64"}[data[4]]
-	if class == "" {
-		class = "ELF?"
-	}
-	endian := map[byte]string{1: "LE", 2: "BE"}[data[5]]
-	if endian == "" {
-		endian = "?"
-	}
-	return class + " " + endian
+	class, endianness := elfInfo(data)
+	return class + " " + endianness
 }
 
 // jsonDecode unmarshals one JSON value into v with numbers kept as
@@ -498,6 +806,149 @@ func orUnset(v any) any {
 		return "unset"
 	}
 	return v
+}
+
+// rawText renders a decoded JSON value as text, verbatim: a json.Number
+// prints as the exact digits it decoded from (json.Number.String is the
+// original text, so this never rounds through float64), a string prints
+// unquoted, anything else uses Go's %v. "" for a nil/absent value — the
+// caller pairs this with a Nullable(*) parse of the same value, so nothing is
+// lost by using "" here rather than a sentinel.
+func rawText(v any) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return fmt.Sprintf("%v", v)
+}
+
+// asString returns v as a string when it decoded as one, "" otherwise — for
+// reading a field off a map[string]any built by jsonDecode, where the caller
+// cannot assume the producer sent the type it expects.
+func asString(v any) string {
+	s, _ := v.(string)
+	return s
+}
+
+// asBool reports a JSON boolean as a Nullable(UInt8): 1/0 when the key
+// decoded as a real bool, nil when it was absent or some other type — so
+// "not sent" and "sent false" stay distinguishable in the Nullable column.
+func asBool(v any) *uint8 {
+	b, ok := v.(bool)
+	if !ok {
+		return nil
+	}
+	var n uint8
+	if b {
+		n = 1
+	}
+	return &n
+}
+
+// asUint64 reads a json.Number as a Nullable(UInt64) — nil when the key was
+// absent, not a number, or negative, which are the only ways a byte count
+// could legitimately fail to be "not reported".
+func asUint64(v any) *uint64 {
+	n, ok := v.(json.Number)
+	if !ok {
+		return nil
+	}
+	i, err := n.Int64()
+	if err != nil || i < 0 {
+		return nil
+	}
+	u := uint64(i)
+	return &u
+}
+
+// profParseTimestamp reads a profiler event's start/end, or a debugger
+// diagnostic's timestamp, off the wire. Datadog's profiler sends these as
+// RFC3339 strings; some producers send epoch numbers instead, in seconds,
+// milliseconds, microseconds or nanoseconds depending on the client — the
+// magnitude bands below are the same heuristic a human reading the raw number
+// would use. nil means "could not tell", never a guessed time: the caller
+// always keeps the original value fully readable next to this parse (a *_raw
+// column, or the row's own raw JSON), so a nil here is a missed convenience
+// column, never a lost fact.
+func profParseTimestamp(v any) *time.Time {
+	switch val := v.(type) {
+	case string:
+		for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+			if t, err := time.Parse(layout, val); err == nil {
+				t = t.UTC()
+				return &t
+			}
+		}
+		return nil
+	case json.Number:
+		i, err := val.Int64()
+		if err != nil || i <= 0 {
+			return nil
+		}
+		var t time.Time
+		switch {
+		case i >= 1e18:
+			t = time.Unix(0, i) // nanoseconds
+		case i >= 1e15:
+			t = time.UnixMicro(i)
+		case i >= 1e12:
+			t = time.UnixMilli(i)
+		default:
+			t = time.Unix(i, 0) // seconds
+		}
+		t = t.UTC()
+		return &t
+	default:
+		return nil
+	}
+}
+
+// rawJSONText renders one key of a decoded JSON object as plain text: a JSON
+// string unquotes to its bare value, anything else (number, bool, null,
+// nested object/array) keeps its literal JSON form. Used for the symdb file
+// envelope, whose fields travel as json.RawMessage because the whole object
+// is read generically (dbgDecodeSymdbFile) — "" when the key is absent.
+func rawJSONText(m map[string]json.RawMessage, key string) string {
+	raw, ok := m[key]
+	if !ok {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	return string(raw)
+}
+
+// extraKeysExcept returns m's keys, sorted, minus the ones the caller already
+// reads into their own columns — the same "record the names, not the values"
+// pattern K8sActionRow.ExtraKeys uses for a payload with no fixed schema of
+// its own.
+func extraKeysExcept(m map[string]any, exclude ...string) []string {
+	if len(m) == 0 {
+		return nil
+	}
+	skip := make(map[string]bool, len(exclude))
+	for _, k := range exclude {
+		skip[k] = true
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		if !skip[k] {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func boolToUint8(b bool) uint8 {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // nested walks a decoded JSON object by key path, returning nil if any step
