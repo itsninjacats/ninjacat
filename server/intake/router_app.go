@@ -41,10 +41,11 @@ import (
 //	Count / Rate / Gauge series -> storage.MetricsWriter  -> metrics
 //	Sketch series               -> storage.SketchesWriter -> sketches
 //
-// A body that does not decode, a payload that decodes to no series, and a
-// column walk that runs off the end of a column all go to raw_payloads
-// (intake/raw.go). docs/tables/metrics_v3.md has the column mapping and what
-// v3 carries that neither table has a home for.
+// A body that does not decode, a payload that decodes to no series, a
+// per-series column that is short or missing altogether, and a walk that runs
+// off the end of a value column all go to raw_payloads (intake/raw.go).
+// docs/tables/metrics_v3.md has the column mapping and what v3 carries that
+// neither table has a home for.
 func (a *Server) routeApp(g *gin.RouterGroup) {
 	g.POST("/api/intake/metrics/v3/series", a.handleAppV3("v3series"))
 	g.POST("/api/intake/metrics/v3/sketches", a.handleAppV3("v3sketches"))
@@ -284,10 +285,24 @@ func appV3Decode(tenant string, payload *intake_v3.Payload) appV3Result {
 	sourceRefs, originRefs := md.GetSourceTypeNameRefs(), md.GetOriginInfoRefs()
 	unitRefs, intervals := md.GetUnitRefs(), md.GetIntervals()
 
-	// A column present but SHORTER than Types is a broken payload. A column
-	// that is absent altogether is a sender that never writes it — older
-	// encoders have no unit and no origin column at all — and absent reads as
-	// "empty" for every series, which cannot misalign anything.
+	// Each of these columns carries one entry per series, unconditionally.
+	// The agent's own reader (MetricDataReader.NextMetric) refuses the whole
+	// payload the moment the series index passes the end of ANY of them, a
+	// column of length zero included, so an empty column is not a sender that
+	// never writes the field — it is a payload nobody can read. Treating it as
+	// "empty for every series" is what corrupts silently: an absent nameRefs
+	// files every series under the empty name, an absent numPoints walks no
+	// points at all and acks a body that contributed nothing, and an absent
+	// tagsetRefs or resourcesRefs strips the tags and the host off rows that
+	// otherwise look perfectly normal.
+	//
+	// unitRefs is the one column the proto really does mark conditional
+	// ("value present if flagHasUnit is set"); appV3UnitMode handles it and is
+	// the only place an absent column is legal.
+	//
+	// As everywhere else in this walk, the error does not stop the rows: it
+	// sends the payload to raw_payloads, so whatever we misread stays
+	// recoverable while the series we could read still reach the tables.
 	for _, col := range []struct {
 		name string
 		n    int
@@ -297,7 +312,7 @@ func appV3Decode(tenant string, payload *intake_v3.Payload) appV3Result {
 		{"sourceTypeNameRefs", len(sourceRefs)}, {"originInfoRefs", len(originRefs)},
 		{"intervals", len(intervals)},
 	} {
-		if col.n != 0 && col.n < len(types) {
+		if col.n < len(types) {
 			fail(fmt.Errorf("%s has %d entries for %d series", col.name, col.n, len(types)))
 		}
 	}
@@ -732,9 +747,11 @@ func appV3Str(dict []string, ref int64) (string, bool) {
 	return dict[ref], true
 }
 
-// appV3At reads a per-series column the sender may have omitted whole. An
-// absent column reads as a zero delta for every series, which is exactly what
-// "this sender never writes that field" means.
+// appV3At reads a per-series column without trusting its length. A column too
+// short for the series array has already been reported by the validation loop
+// in appV3Decode — which is what keeps the payload — so this only has to hand
+// the walk a neutral delta instead of panicking on the way to the rows it can
+// still read.
 func appV3At(col []int64, i int) int64 {
 	if i < len(col) {
 		return col[i]

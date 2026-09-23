@@ -97,7 +97,21 @@ like every other intake, so the row gets arrival time. Once stored, "the sender
 sent 0" and "the sender sent nothing" are indistinguishable — the same
 documented limitation the v1/v2/logs paths have.
 
-**`UnitRefs` is the one ambiguous column in the format.** The proto says only
+**A per-series column that is missing entirely is a broken payload, not an
+older sender.** `NameRefs`, `TagsetRefs`, `ResourcesRefs`, `SourceTypeNameRefs`,
+`OriginInfoRefs`, `Intervals` and `NumPoints` carry one entry per series
+unconditionally: the agent's own reader (`MetricDataReader.NextMetric`) refuses
+the payload as soon as the series index passes the end of any of them, a column
+of length zero included. So a length-0 column is treated exactly like a short
+one — reported, which sends the body to `raw_payloads`, while the walk goes on
+with what it can read. Reading an absent column as "empty for every series"
+instead is what corrupts quietly: an absent `NameRefs` files every series under
+the empty metric name, an absent `NumPoints` walks no points at all and acks a
+body that contributed nothing, and an absent `TagsetRefs` or `ResourcesRefs`
+strips the tags and the host off rows that otherwise look normal.
+
+**`UnitRefs` is the one ambiguous column in the format**, and the only one whose
+absence is legal. The proto says only
 "value present if flagHasUnit is set, entire array is delta encoded", which
 reads either as one entry per series or one entry per *flagged* series, and the
 agent's reference reader predates the column entirely. Picking wrong puts every
@@ -113,7 +127,7 @@ third case, the stored payload settles the question.
 | `reason` | when |
 |---|---|
 | `decode_error` | `proto.Unmarshal` refused the body |
-| `unexpected_shape` | the payload decoded to zero series (usually a still-compressed body — `proto.Unmarshal` fails open on this format), an odd `Metadata.Resources` list, a per-series column shorter than `Types`, a reference outside its dictionary, a truncated dictionary, an unreadable `UnitRefs` length, or a value column that ran out mid-walk |
+| `unexpected_shape` | the payload decoded to zero series (usually a still-compressed body — `proto.Unmarshal` fails open on this format), an odd `Metadata.Resources` list, a per-series column shorter than `Types` (an empty one included), a reference outside its dictionary, a truncated dictionary, an unreadable `UnitRefs` length, or a value column that ran out mid-walk |
 | `int64_precision` | the walk widened a `sint64` past 2^53 into the `Float64` value column — the rows are still written, rounded, and the payload keeps the exact integers |
 
 `int64_precision` extends the three-word vocabulary migration `0002` documents

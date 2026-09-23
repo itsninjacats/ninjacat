@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -95,6 +96,34 @@ func v3Type(t intake_v3.MetricType, v intake_v3.ValueType, flags ...intake_v3.Me
 		packed |= uint64(f)
 	}
 	return packed
+}
+
+// v3Fill supplies the per-series columns a fixture does not care about.
+//
+// A real payload carries every one of them for every series — the agent's own
+// reader refuses one that does not — so a fixture that leaves a column out
+// would be testing a broken payload by accident instead of the behaviour it
+// names. A zero delta repeats the previous series' reference, which for these
+// unused columns is the implicit empty entry at 0.
+func v3Fill(md *intake_v3.MetricData) *intake_v3.MetricData {
+	n := len(md.Types)
+	pad := func(col []int64) []int64 {
+		for len(col) < n {
+			col = append(col, 0)
+		}
+		return col
+	}
+	md.NameRefs, md.TagsetRefs = pad(md.NameRefs), pad(md.TagsetRefs)
+	md.ResourcesRefs = pad(md.ResourcesRefs)
+	md.SourceTypeNameRefs = pad(md.SourceTypeNameRefs)
+	md.OriginInfoRefs = pad(md.OriginInfoRefs)
+	for len(md.Intervals) < n {
+		md.Intervals = append(md.Intervals, 0)
+	}
+	for len(md.NumPoints) < n {
+		md.NumPoints = append(md.NumPoints, 0)
+	}
+	return md
 }
 
 // v3Payload is the worked example the row assertions below are written
@@ -244,7 +273,7 @@ func TestAppV3DecodeBaseOneEmptyRefs(t *testing.T) {
 			Tags:      []string{"env:prod"},
 			Resources: []string{"host", "fallback-host", "device", "sda"},
 		},
-		MetricData: &intake_v3.MetricData{
+		MetricData: v3Fill(&intake_v3.MetricData{
 			DictNameStr:   v3Dict("only.metric"),
 			Types:         []uint64{v3Type(intake_v3.MetricType_Gauge, intake_v3.ValueType_Zero)},
 			NameRefs:      v3Delta(0), // the implicit empty name
@@ -252,7 +281,7 @@ func TestAppV3DecodeBaseOneEmptyRefs(t *testing.T) {
 			ResourcesRefs: v3Delta(0),
 			NumPoints:     []uint64{1},
 			Timestamps:    v3Delta(1700000000),
-		},
+		}),
 	}
 
 	res := appV3Decode("acme", payload)
@@ -289,7 +318,7 @@ func TestAppV3DecodeCountsInt64PrecisionLoss(t *testing.T) {
 	const beyond = int64(1)<<53 + 3
 
 	payload := &intake_v3.Payload{
-		MetricData: &intake_v3.MetricData{
+		MetricData: v3Fill(&intake_v3.MetricData{
 			DictNameStr:   v3Dict("bytes.total"),
 			Types:         []uint64{v3Type(intake_v3.MetricType_Count, intake_v3.ValueType_Sint64)},
 			NameRefs:      v3Delta(1),
@@ -298,7 +327,7 @@ func TestAppV3DecodeCountsInt64PrecisionLoss(t *testing.T) {
 			NumPoints:     []uint64{2},
 			Timestamps:    v3Delta(1700000000, 1700000015),
 			ValsSint64:    []int64{beyond, 42},
-		},
+		}),
 	}
 
 	res := appV3Decode("acme", payload)
@@ -319,7 +348,7 @@ func TestAppV3DecodeCountsInt64PrecisionLoss(t *testing.T) {
 // than read: the wire does not carry it.
 func TestAppV3DecodeSketchSummaryPerValueType(t *testing.T) {
 	base := func(vt intake_v3.ValueType) *intake_v3.MetricData {
-		return &intake_v3.MetricData{
+		return v3Fill(&intake_v3.MetricData{
 			DictNameStr:   v3Dict("latency"),
 			Types:         []uint64{v3Type(intake_v3.MetricType_Sketch, vt)},
 			NameRefs:      v3Delta(1),
@@ -330,7 +359,7 @@ func TestAppV3DecodeSketchSummaryPerValueType(t *testing.T) {
 			SketchNumBins: []uint64{2},
 			SketchBinKeys: v3BinKeys(-3, 7),
 			SketchBinCnts: []uint32{4, 6},
-		}
+		})
 	}
 
 	cases := []struct {
@@ -410,7 +439,7 @@ func TestAppV3DecodeSketchSummaryPerValueType(t *testing.T) {
 // goes to raw_payloads for the rest.
 func TestAppV3DecodeStopsAtAShortColumn(t *testing.T) {
 	payload := &intake_v3.Payload{
-		MetricData: &intake_v3.MetricData{
+		MetricData: v3Fill(&intake_v3.MetricData{
 			DictNameStr:   v3Dict("a", "b"),
 			Types:         []uint64{v3Type(intake_v3.MetricType_Gauge, intake_v3.ValueType_Float64), v3Type(intake_v3.MetricType_Gauge, intake_v3.ValueType_Float64)},
 			NameRefs:      v3Delta(1, 2),
@@ -419,7 +448,7 @@ func TestAppV3DecodeStopsAtAShortColumn(t *testing.T) {
 			NumPoints:     []uint64{1, 1},
 			Timestamps:    v3Delta(1700000000, 1700000001),
 			ValsFloat64:   []float64{1.5}, // one value for two points
-		},
+		}),
 	}
 
 	res := appV3Decode("acme", payload)
@@ -431,6 +460,98 @@ func TestAppV3DecodeStopsAtAShortColumn(t *testing.T) {
 	}
 	if len(res.Points) != 1 || res.Points[0].Value != 1.5 {
 		t.Errorf("points: got %+v, want the one row the walk did read", res.Points)
+	}
+}
+
+// A per-series column that is missing ENTIRELY is the same broken payload as a
+// short one, and used to be the quiet case: the agent's reader (NextMetric)
+// refuses the payload the moment the series index passes the end of any of
+// these columns, zero length included. Read as "this sender never writes the
+// field" instead, an empty nameRefs files every series under the empty name
+// and an empty numPoints walks no points at all — rows corrupted or dropped,
+// a 202 back, and nothing in raw_payloads to recover them from.
+func TestAppV3DecodeReportsAnEmptyPerSeriesColumn(t *testing.T) {
+	full := func() *intake_v3.MetricData {
+		return &intake_v3.MetricData{
+			DictNameStr:        v3Dict("a", "b"),
+			DictSourceTypeName: v3Dict("system"),
+			DictOriginInfo:     []int32{10, 11, 42},
+			Types: []uint64{
+				v3Type(intake_v3.MetricType_Gauge, intake_v3.ValueType_Float64),
+				v3Type(intake_v3.MetricType_Gauge, intake_v3.ValueType_Float64),
+			},
+			NameRefs:           v3Delta(1, 2),
+			TagsetRefs:         v3Delta(0, 0),
+			ResourcesRefs:      v3Delta(0, 0),
+			SourceTypeNameRefs: v3Delta(1, 0),
+			OriginInfoRefs:     v3Delta(1, 0),
+			Intervals:          []uint64{15, 15},
+			NumPoints:          []uint64{1, 1},
+			Timestamps:         v3Delta(1700000000, 1700000001),
+			ValsFloat64:        []float64{1.5, 2.5},
+		}
+	}
+
+	// The control: the same payload with every column present decodes clean,
+	// so each case below differs from it in exactly one blanked column.
+	if res := appV3Decode("acme", &intake_v3.Payload{MetricData: full()}); res.Err != nil {
+		t.Fatalf("the complete payload reported %v, want a clean walk", res.Err)
+	}
+
+	cases := []struct {
+		column string
+		blank  func(*intake_v3.MetricData)
+	}{
+		{"nameRefs", func(md *intake_v3.MetricData) { md.NameRefs = nil }},
+		{"tagsetRefs", func(md *intake_v3.MetricData) { md.TagsetRefs = nil }},
+		{"resourcesRefs", func(md *intake_v3.MetricData) { md.ResourcesRefs = nil }},
+		{"numPoints", func(md *intake_v3.MetricData) { md.NumPoints = nil }},
+		{"sourceTypeNameRefs", func(md *intake_v3.MetricData) { md.SourceTypeNameRefs = nil }},
+		{"originInfoRefs", func(md *intake_v3.MetricData) { md.OriginInfoRefs = nil }},
+		{"intervals", func(md *intake_v3.MetricData) { md.Intervals = nil }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.column, func(t *testing.T) {
+			md := full()
+			tc.blank(md)
+
+			res := appV3Decode("acme", &intake_v3.Payload{MetricData: md})
+			if res.Err == nil {
+				t.Fatalf("an empty %s was accepted: the payload is never kept and the rows are wrong", tc.column)
+			}
+			if !strings.Contains(res.Err.Error(), tc.column) {
+				t.Errorf("error %q does not name the column %s that broke", res.Err, tc.column)
+			}
+		})
+	}
+}
+
+// Blanking numPoints is the worst of the seven: every other column still
+// produces rows, this one produces none at all. The payload has to survive in
+// raw_payloads or the two points in ValsFloat64 are gone for good.
+func TestHandleAppV3KeepsPayloadWithoutNumPoints(t *testing.T) {
+	a, node := newTestServer(t)
+	e := newTestEngine(t, a, a.routeApp)
+
+	md := v3Payload().MetricData
+	md.NumPoints = nil
+	body, err := proto.Marshal(&intake_v3.Payload{MetricData: md})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	if w := post(t, e, "/api/intake/metrics/v3/series", body); w.Code != http.StatusAccepted {
+		t.Fatalf("got %d, want 202 — the ack contract holds whatever the columns say", w.Code)
+	}
+	if n := len(Rows[storage.MetricPoint](node)); n != 0 {
+		t.Errorf("metric points: got %d, want 0 — no column says how many points a series has", n)
+	}
+	raw := Rows[storage.RawPayloadRow](node)
+	if len(raw) != 1 || raw[0].Reason != "unexpected_shape" {
+		t.Fatalf("raw payload rows: got %+v, want one with reason unexpected_shape", raw)
+	}
+	if raw[0].Body != string(body) {
+		t.Errorf("raw body: got %d bytes, want the %d the handler saw", len(raw[0].Body), len(body))
 	}
 }
 
@@ -461,11 +582,11 @@ func TestAppV3DecodeToleratesNils(t *testing.T) {
 func TestAppV3DecodeOddMetadataResources(t *testing.T) {
 	res := appV3Decode("acme", &intake_v3.Payload{
 		Metadata: &intake_v3.Metadata{Resources: []string{"host", "web-01", "device"}},
-		MetricData: &intake_v3.MetricData{
+		MetricData: v3Fill(&intake_v3.MetricData{
 			DictNameStr: v3Dict("m"), Types: []uint64{v3Type(intake_v3.MetricType_Gauge, intake_v3.ValueType_Zero)},
 			NameRefs: v3Delta(1), TagsetRefs: v3Delta(0), ResourcesRefs: v3Delta(0),
 			NumPoints: []uint64{1}, Timestamps: v3Delta(1700000000),
-		},
+		}),
 	})
 	if res.Err == nil {
 		t.Fatal("an odd resources list must be reported")
@@ -644,7 +765,7 @@ func TestAppV3UnitMode(t *testing.T) {
 // The compact and parallel layouts must put the same unit on the same metric.
 func TestAppV3DecodeUnitLayouts(t *testing.T) {
 	md := func(refs []int64) *intake_v3.MetricData {
-		return &intake_v3.MetricData{
+		return v3Fill(&intake_v3.MetricData{
 			DictNameStr: v3Dict("plain", "timed"),
 			DictUnitStr: v3Dict("millisecond"),
 			Types: []uint64{
@@ -654,7 +775,7 @@ func TestAppV3DecodeUnitLayouts(t *testing.T) {
 			NameRefs: v3Delta(1, 2), TagsetRefs: v3Delta(0, 0), ResourcesRefs: v3Delta(0, 0),
 			NumPoints: []uint64{1, 1}, Timestamps: v3Delta(1700000000, 1700000001),
 			UnitRefs: refs,
-		}
+		})
 	}
 
 	for _, tc := range []struct {
@@ -821,7 +942,7 @@ func TestHandleAppV3KeepsPayloadForWideInt64(t *testing.T) {
 	e := newTestEngine(t, a, a.routeApp)
 
 	body, err := proto.Marshal(&intake_v3.Payload{
-		MetricData: &intake_v3.MetricData{
+		MetricData: v3Fill(&intake_v3.MetricData{
 			DictNameStr:   v3Dict("bytes.total"),
 			Types:         []uint64{v3Type(intake_v3.MetricType_Count, intake_v3.ValueType_Sint64)},
 			NameRefs:      v3Delta(1),
@@ -830,7 +951,7 @@ func TestHandleAppV3KeepsPayloadForWideInt64(t *testing.T) {
 			NumPoints:     []uint64{1},
 			Timestamps:    v3Delta(1700000000),
 			ValsSint64:    []int64{int64(1)<<53 + 3},
-		},
+		}),
 	})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
