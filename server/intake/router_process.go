@@ -1279,14 +1279,6 @@ func unixSecondsPtr(sec int64) *time.Time {
 	return &t
 }
 
-// boolToUint8 is the bridge to ClickHouse's UInt8 booleans.
-func boolToUint8(b bool) uint8 {
-	if b {
-		return 1
-	}
-	return 0
-}
-
 // resCollectorResponse assembles the reply the process-agent expects.
 //
 // The Status field is NOT optional in practice, however much the schema says
