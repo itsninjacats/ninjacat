@@ -261,7 +261,7 @@ func TestProfParseTimestamp(t *testing.T) {
 		want *time.Time
 	}{
 		{"RFC3339", "2025-09-23T10:30:00Z", &want},
-		{"RFC3339Nano with fraction", "2025-09-23T10:30:00.5Z", timePtr(want.Add(500 * time.Millisecond))},
+		{"RFC3339Nano with fraction", "2025-09-23T10:30:00.5Z", profTimePtr(want.Add(500 * time.Millisecond))},
 		{"epoch seconds", jsonNum("1758623400"), &want},
 		{"epoch millis", jsonNum("1758623400000"), &want},
 		{"epoch micros", jsonNum("1758623400000000"), &want},
@@ -867,7 +867,7 @@ func isNullColumn(v any) bool {
 	return rv.Kind() == reflect.Ptr && rv.IsNil()
 }
 
-func timePtr(t time.Time) *time.Time { return &t }
+func profTimePtr(t time.Time) *time.Time { return &t }
 
 // jsonNum builds a json.Number the way jsonDecode would have (from decoding
 // a bare number with UseNumber), for tests that exercise the epoch-number

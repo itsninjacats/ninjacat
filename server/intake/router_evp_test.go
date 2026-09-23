@@ -263,7 +263,7 @@ func TestHealthReportRows(t *testing.T) {
 	if len(withLifecycle.Tags["env"]) != 2 || withLifecycle.Tags["env"][0] != "prod" || withLifecycle.Tags["env"][1] != "staging" {
 		t.Errorf("tags: got %v, want %v (multi-valued, order preserved)", withLifecycle.Tags, wantTags)
 	}
-	if withLifecycle.Extra == "" || !contains(withLifecycle.Extra, "probe") {
+	if withLifecycle.Extra == "" || !evpContains(withLifecycle.Extra, "probe") {
 		t.Errorf("extra (structpb as JSON): got %q, want it to contain the Struct's fields", withLifecycle.Extra)
 	}
 	for i := range issueRows {
@@ -304,13 +304,13 @@ func TestHealthReportRowsExtraPrecision(t *testing.T) {
 	// A float64 round trip would render this as 9007199254740992 (or
 	// scientific notation) — only the exact literal proves UseNumber, not
 	// structpb, produced this string.
-	if !contains(issueRows[0].Extra, "9007199254740993") {
+	if !evpContains(issueRows[0].Extra, "9007199254740993") {
 		t.Errorf("extra: got %q, want it to contain the exact literal 9007199254740993, not a float64-rounded value",
 			issueRows[0].Extra)
 	}
 }
 
-func contains(haystack, needle string) bool {
+func evpContains(haystack, needle string) bool {
 	return len(haystack) >= len(needle) && (haystack == needle || len(needle) == 0 ||
 		indexOf(haystack, needle) >= 0)
 }
