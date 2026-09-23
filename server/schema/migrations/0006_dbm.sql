@@ -100,6 +100,11 @@ CREATE TABLE IF NOT EXISTS dbm_events
     -- Length of db.plan.definition (the list of plan steps), not the byte
     -- size of the plan — a genuine 0-step plan and "no plan was sent at all"
     -- are different facts, so this stays Nullable rather than defaulting to 0.
+    -- A THIRD fact -- "a plan was sent but its definition did not parse as a
+    -- step array" -- also leaves this column NULL (it has no way to encode
+    -- "malformed" itself) but is not silently the same as "no plan sent":
+    -- intake/router_dbm.go's dbmEventRow records "db.plan.definition" in
+    -- undecoded_keys for that case, and the raw bytes are always in `event`.
     plan_definition_steps Nullable(UInt32),
 
     INDEX idx_tag_keys   mapKeys(tags)   TYPE bloom_filter(0.01) GRANULARITY 4,

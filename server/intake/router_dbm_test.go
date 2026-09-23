@@ -184,29 +184,57 @@ func TestDBMTimestamp(t *testing.T) {
 
 func timePtr(t time.Time) *time.Time { return &t }
 
-// dbmPlanDefinitionSteps must tell "no plan was sent" (nil Definition) apart
-// from "a plan was sent with zero steps" (an empty array) — collapsing both
-// into 0 would invent a step count nobody reported.
+// dbmPlanDefinitionSteps must tell three facts apart: "no plan was sent"
+// (nil Definition), "a plan was sent with zero steps" (an empty array), and
+// "a plan was sent but its definition is not a step array at all" — folding
+// the last case into the first would misrepresent what the producer actually
+// sent, not just lose precision (see dbmPlanStepsMalformed's doc comment).
 func TestDBMPlanDefinitionSteps(t *testing.T) {
 	cases := []struct {
 		name       string
 		definition json.RawMessage
 		wantSteps  uint32
-		wantOK     bool
+		wantState  dbmPlanStepsState
 	}{
-		{"absent", nil, 0, false},
-		{"empty array", json.RawMessage(`[]`), 0, true},
-		{"three steps", json.RawMessage(`[{"id":1},{"id":2},{"id":3}]`), 3, true},
-		{"not an array", json.RawMessage(`"oops"`), 0, false},
+		{"absent", nil, 0, dbmPlanStepsAbsent},
+		{"empty array", json.RawMessage(`[]`), 0, dbmPlanStepsOK},
+		{"three steps", json.RawMessage(`[{"id":1},{"id":2},{"id":3}]`), 3, dbmPlanStepsOK},
+		{"not an array", json.RawMessage(`"oops"`), 0, dbmPlanStepsMalformed},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			steps, ok := dbmPlanDefinitionSteps(tc.definition)
-			if ok != tc.wantOK || steps != tc.wantSteps {
+			steps, state := dbmPlanDefinitionSteps(tc.definition)
+			if state != tc.wantState || steps != tc.wantSteps {
 				t.Errorf("dbmPlanDefinitionSteps(%s) = (%d, %v), want (%d, %v)",
-					tc.definition, steps, ok, tc.wantSteps, tc.wantOK)
+					tc.definition, steps, state, tc.wantSteps, tc.wantState)
 			}
 		})
+	}
+}
+
+// A plan sent with a malformed (non-array) definition must leave
+// plan_definition_steps NULL (same as "no plan sent" — the column has no
+// third state) but must NOT be indistinguishable from "no plan sent": it is
+// recorded in undecoded_keys instead, and the raw bytes stay in `event`.
+func TestDBMEventRowPlanDefinitionMalformed(t *testing.T) {
+	body := `{"timestamp":1758326400000,"host":"db1","database_instance":"db1/orcl",
+		"dbm_type":"plan",
+		"db":{"instance":"orcl","plan":{"signature":"plan-xyz","definition":"oops"}}}`
+
+	var ev dbmEnvelope
+	if err := json.Unmarshal([]byte(body), &ev); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	row := dbmEventRow("test-tenant", "databasequery", time.Now(), dbmEvent{Raw: json.RawMessage(body), Env: ev})
+
+	if row.PlanDefinitionSteps != nil {
+		t.Errorf("plan_definition_steps = %v, want nil — the column has no way to encode \"malformed\"", row.PlanDefinitionSteps)
+	}
+	if row.PlanSignature == nil || *row.PlanSignature != "plan-xyz" {
+		t.Errorf("plan_signature = %v, want plan-xyz — a malformed definition must not take the rest of the plan down with it", row.PlanSignature)
+	}
+	if !contains(row.UndecodedKeys, "db.plan.definition") {
+		t.Errorf("undecoded_keys = %v, want db.plan.definition so \"malformed\" is not silently the same as \"absent\"", row.UndecodedKeys)
 	}
 }
 
@@ -530,6 +558,42 @@ func TestHandleDBMStoresRawOnDecodeError(t *testing.T) {
 			if r.Intake != "dbm" || r.Reason != "decode_error" {
 				t.Errorf("intake/reason: got %q/%q, want dbm/decode_error", r.Intake, r.Reason)
 			}
+		}
+	})
+
+	// encoding/json special-cases a literal `null` for a map target: unlike
+	// "not an object" or 42 above (both correctly error), null unmarshals
+	// into dbmEnvelope's field map with no error at all. Without an explicit
+	// check for it, this element would silently become a zero-value row in
+	// dbm_events instead of going to storeRaw like every other undecodable
+	// element in the same batch.
+	t.Run("a literal null element beside one good one", func(t *testing.T) {
+		a, node := newTestServer(t)
+		e := newTestEngine(t, a, a.routeDBM)
+
+		body := `[{"host":"db1","database_instance":"db1/orcl"}, null]`
+		w := post(t, e, "/api/v2/dbmactivity", []byte(body))
+		if w.Code != http.StatusAccepted {
+			t.Fatalf("got %d, want 202", w.Code)
+		}
+
+		events := Rows[storage.DBMEventRow](node)
+		if len(events) != 1 {
+			t.Fatalf("dbm_events rows: got %d, want 1 (the one decodable element) — a null element must not become a zero-value row", len(events))
+		}
+		if events[0].Host != "db1" {
+			t.Errorf("host: got %q", events[0].Host)
+		}
+
+		raw := Rows[storage.RawPayloadRow](node)
+		if len(raw) != 1 {
+			t.Fatalf("raw_payloads rows: got %d, want 1 (the null element)", len(raw))
+		}
+		if raw[0].Intake != "dbm" || raw[0].Reason != "decode_error" {
+			t.Errorf("intake/reason: got %q/%q, want dbm/decode_error", raw[0].Intake, raw[0].Reason)
+		}
+		if raw[0].Body != "null" {
+			t.Errorf("body: got %q, want the literal null element", raw[0].Body)
 		}
 	})
 }

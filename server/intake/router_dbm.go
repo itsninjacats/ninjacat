@@ -1,6 +1,7 @@
 package intake
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -140,6 +141,15 @@ func (t *dbmTags) UnmarshalJSON(data []byte) error {
 // value cannot take the others down with it: a key that fails to decode is
 // recorded in Undecoded and left in Extra together with every unknown key.
 func (e *dbmEnvelope) UnmarshalJSON(data []byte) error {
+	// encoding/json special-cases a literal `null` for a map target: it
+	// succeeds with a nil map instead of erroring the way any other
+	// non-object value (a string, a number) already does here. Left
+	// unchecked, a `null` batch element would decode into a fully
+	// zero-value envelope and be stored as a garbage row instead of going
+	// to storeRaw like every other undecodable element (see dbmBatch).
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		return fmt.Errorf("event is null, not a JSON object")
+	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
@@ -419,8 +429,20 @@ func dbmEventRow(tenant, track string, receivedAt time.Time, ev dbmEvent) storag
 				if sample.Plan.Signature != "" {
 					row.PlanSignature = &sample.Plan.Signature
 				}
-				if steps, ok := dbmPlanDefinitionSteps(sample.Plan.Definition); ok {
+				switch steps, state := dbmPlanDefinitionSteps(sample.Plan.Definition); state {
+				case dbmPlanStepsOK:
 					row.PlanDefinitionSteps = &steps
+				case dbmPlanStepsMalformed:
+					// A plan WAS sent but its definition did not parse as a
+					// step array — a third fact, distinct from "no plan
+					// sent" (nil Definition). The column can only ever be
+					// NULL or a count, so it cannot carry that distinction
+					// itself; record it in undecoded_keys instead of
+					// silently folding it into "no plan", the same pattern
+					// dbmEnvelope.UnmarshalJSON already uses for a
+					// top-level field with an unexpected shape. The raw
+					// bytes are still in `event` regardless.
+					row.UndecodedKeys = append(row.UndecodedKeys, "db.plan.definition")
 				}
 			}
 		}
@@ -429,20 +451,33 @@ func dbmEventRow(tenant, track string, receivedAt time.Time, ev dbmEvent) storag
 	return row
 }
 
-// dbmPlanDefinitionSteps counts the steps in db.plan.definition. The second
-// return value is false when the definition was never sent at all — a plan
-// with zero steps and "no plan was sent" are different facts, and the
-// caller keeps that distinction by leaving the row's pointer nil rather than
-// storing 0.
-func dbmPlanDefinitionSteps(definition json.RawMessage) (uint32, bool) {
+// dbmPlanStepsState is dbmPlanDefinitionSteps' outcome: three facts a plain
+// bool cannot tell apart. Both dbmPlanStepsAbsent and dbmPlanStepsMalformed
+// leave the row's PlanDefinitionSteps column nil (it can only ever be NULL
+// or a count) — the caller surfaces dbmPlanStepsMalformed separately via
+// undecoded_keys so it is not silently indistinguishable from "no plan was
+// sent at all".
+type dbmPlanStepsState int
+
+const (
+	dbmPlanStepsAbsent dbmPlanStepsState = iota
+	dbmPlanStepsMalformed
+	dbmPlanStepsOK
+)
+
+// dbmPlanDefinitionSteps counts the steps in db.plan.definition. A plan with
+// zero steps (dbmPlanStepsOK, 0), "no plan was sent" (dbmPlanStepsAbsent,
+// definition genuinely empty) and "a plan was sent but its definition is not
+// a JSON array" (dbmPlanStepsMalformed) are three different facts.
+func dbmPlanDefinitionSteps(definition json.RawMessage) (uint32, dbmPlanStepsState) {
 	if len(definition) == 0 {
-		return 0, false
+		return 0, dbmPlanStepsAbsent
 	}
 	var steps []json.RawMessage
 	if err := json.Unmarshal(definition, &steps); err != nil {
-		return 0, false
+		return 0, dbmPlanStepsMalformed
 	}
-	return uint32(len(steps)), true
+	return uint32(len(steps)), dbmPlanStepsOK
 }
 
 // dbmTimestamp turns the envelope's wire timestamp into the value the

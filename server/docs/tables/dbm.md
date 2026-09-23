@@ -85,7 +85,7 @@ table sits with the high-cardinality tables (`metrics`, `sketches`,
 | `query_signature` | `db.query_signature` | `Nullable` |
 | `statement` | `db.statement` | `Nullable`, `CODEC(ZSTD(3))` — full SQL text, can be large |
 | `plan_signature` | `db.plan.signature` | `Nullable`; only on `dbm_type=plan` events |
-| `plan_definition_steps` | `len(db.plan.definition)` | `Nullable(UInt32)`; `NULL` when no plan was sent, `0` when a plan was sent with zero steps — different facts, kept distinct |
+| `plan_definition_steps` | `len(db.plan.definition)` | `Nullable(UInt32)`; `NULL` when no plan was sent, `0` when a plan was sent with zero steps — different facts, kept distinct. A third case, a plan sent with a `definition` that is not a JSON array, also stores `NULL` (the column cannot represent "malformed") but is not silently folded into "no plan sent": it is recorded in `undecoded_keys` as `db.plan.definition` instead |
 
 ## Semantics worth knowing
 
@@ -112,7 +112,11 @@ table sits with the high-cardinality tables (`metrics`, `sketches`,
   (`raw_payloads`), not dropped.
 - A batch element that is not a JSON object → `storeRaw` with that one
   element's raw bytes, reason `decode_error`. The rest of the batch is
-  still decoded and stored normally.
+  still decoded and stored normally. This includes a literal JSON `null`
+  element: `encoding/json` special-cases `null` for a map target (no error,
+  unlike a string or a number), so `dbmEnvelope.UnmarshalJSON` checks for it
+  explicitly — otherwise it would silently become a zero-value row instead
+  of reaching `storeRaw`.
 - `dbmEnvelope`'s own `UnmarshalJSON` never fails an event over one bad
   field — a field that does not fit its declared type is recorded in
   `undecoded_keys` and its raw value kept in `extra_keys`/`event` instead.
