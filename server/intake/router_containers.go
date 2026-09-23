@@ -28,7 +28,10 @@ import (
 // module we already use for metrics and processes.
 //
 // Lifecycle events land in ninjacat.container_events, the image inventory in
-// ninjacat.container_images.
+// ninjacat.container_images — both in full: every field of both payloads has
+// a column, including the structured state transitions and the per-layer
+// build history. A body that does not decode, or that decodes to nothing,
+// goes to raw_payloads instead of disappearing.
 func (a *Server) routeContainers(g *gin.RouterGroup) {
 	g.POST("/api/v2/contlcycle", a.HandleContainerLifecycle)
 	g.POST("/api/v2/contimage", a.HandleContainerImages)
@@ -50,13 +53,11 @@ func (a *Server) HandleContainerLifecycle(c *gin.Context) {
 		log.Printf("[contlcycle] cannot read body: %v", err)
 		return
 	}
-	// The raw payload outlives every path out of this handler: a decoder
-	// that fails or does not exist yet must not make the bytes disappear.
-	defer func() { _ = body }()
 
 	var payload contlcycle.EventsPayload
 	if err := proto.Unmarshal(body, &payload); err != nil {
 		log.Printf("[contlcycle] protobuf: %v (%d bytes)", err, len(body))
+		a.storeRaw(c, "contlcycle", "decode_error", err.Error(), body)
 		return
 	}
 
@@ -64,8 +65,11 @@ func (a *Server) HandleContainerLifecycle(c *gin.Context) {
 		// proto.Unmarshal fails OPEN: unknown fields are skipped, so a
 		// payload meant for another endpoint decodes "successfully" into an
 		// empty struct. Protobuf carries no type marker — the path is the
-		// only contract — so an empty decode is the one signal we get.
+		// only contract — so an empty decode is the one signal we get, and
+		// the bytes are exactly what a future decoder needs.
 		log.Printf("[contlcycle] decoded to zero events (%d bytes) — wrong payload type?", len(body))
+		a.storeRaw(c, "contlcycle", "unexpected_shape",
+			"EventsPayload decoded with no events", body)
 		return
 	}
 
@@ -103,12 +107,25 @@ func lcRows(p *contlcycle.EventsPayload, tenant string, now time.Time) []storage
 			ClusterID:  p.GetClusterId(),
 			ObjectKind: p.GetObjectKind().String(),
 			EventType:  e.GetEventType().String(),
+			// The payload's own schema version, and which arm of the oneof
+			// this row came from. Without the variant an unknown arm looks
+			// exactly like a typed event whose fields happened to be empty.
+			PayloadVersion: p.GetVersion(),
+			EventVariant:   "unknown",
 		}
 		switch {
 		case e.GetContainer() != nil:
 			ev := e.GetContainer()
+			row.EventVariant = "container"
 			row.ContainerID = ev.GetContainerID()
 			row.ContainerName = ev.GetContainerName()
+			// ContainerName is a proto3 optional: "never set" and "set to
+			// empty" are different wire states that the getter collapses.
+			// The column cannot become Nullable in place, so presence
+			// travels beside it. See 0015_k8s_fidelity.sql.
+			if ev.ContainerName != nil {
+				row.ContainerNamePresent = 1
+			}
 			row.Source = ev.GetSource()
 			// The oneof is read for presence, not value: nil means the
 			// runtime never reported a code, and that must reach ClickHouse
@@ -124,13 +141,23 @@ func lcRows(p *contlcycle.EventsPayload, tenant string, now time.Time) []storage
 			}
 			if tr := ev.GetTransition(); tr != nil {
 				// Same formatter as the log line, so the stored state and
-				// the logged state cannot drift apart.
+				// the logged state cannot drift apart. The structured
+				// columns beside them are what a query needs — "every OOM
+				// kill with signal 9" cannot be asked of a formatted string.
 				row.OldState = lcContainerState(tr.GetLastObservedState())
 				row.NewState = lcContainerState(tr.GetNewState())
 				row.TransitionAt = lcTimePtr(true, tr.GetTransitionTimestamp())
+				row.ContainerKind = tr.GetContainerKind().String()
+				row.Precision = tr.GetPrecision().String()
+				row.MissedIntermediate = tr.GetMissedIntermediate().String()
+				row.OldStateKind, row.OldReason, row.OldExitCode, row.OldSignal =
+					lcContainerStateFields(tr.GetLastObservedState())
+				row.NewStateKind, row.NewReason, row.NewExitCode, row.NewSignal =
+					lcContainerStateFields(tr.GetNewState())
 			}
 		case e.GetPod() != nil:
 			ev := e.GetPod()
+			row.EventVariant = "pod"
 			row.PodUID = ev.GetPodUID()
 			row.Source = ev.GetSource()
 			row.CreatedAt = lcTimePtr(ev.CreationTimestamp != nil, ev.GetCreationTimestamp())
@@ -139,9 +166,21 @@ func lcRows(p *contlcycle.EventsPayload, tenant string, now time.Time) []storage
 				row.OldState = lcPodStatus(tr.GetLastObservedState())
 				row.NewState = lcPodStatus(tr.GetNewState())
 				row.TransitionAt = lcTimePtr(true, tr.GetTransitionTimestamp())
+				row.PodStatusField = tr.GetField().String()
+				row.Precision = tr.GetPrecision().String()
+				row.MissedIntermediate = tr.GetMissedIntermediate().String()
+				was := lcPodStatusFields(tr.GetLastObservedState())
+				became := lcPodStatusFields(tr.GetNewState())
+				row.OldStateVariant, row.OldPhase = was.variant, was.phase
+				row.OldConditionType, row.OldConditionStatus = was.condType, was.condStatus
+				row.OldConditionReason, row.OldConditionMessage = was.condReason, was.condMessage
+				row.NewStateVariant, row.NewPhase = became.variant, became.phase
+				row.NewConditionType, row.NewConditionStatus = became.condType, became.condStatus
+				row.NewConditionReason, row.NewConditionMessage = became.condReason, became.condMessage
 			}
 		case e.GetTask() != nil:
 			ev := e.GetTask()
+			row.EventVariant = "task"
 			row.TaskARN = ev.GetTaskARN()
 			row.Source = ev.GetSource()
 			row.ExitedAt = lcTimePtr(ev.ExitTimestamp != nil, ev.GetExitTimestamp())
@@ -296,6 +335,65 @@ func lcPodStatus(st *contlcycle.PodStatusValue) string {
 	return lcOrDash(st.GetPhase())
 }
 
+// lcContainerStateFields reads a container state value into the four columns
+// that hold it structurally: the kind (an enum, so always present when there
+// is a state at all) and the three proto3 optionals beside it.
+//
+// The pointers are returned as they arrive. Reason, ExitCode and Signal are
+// optional on purpose upstream — TERMINATED carries a code and a signal,
+// RUNNING carries neither — and collapsing "not reported" into "" or 0 is
+// exactly the distinction that made the old flattened string unqueryable.
+func lcContainerStateFields(st *contlcycle.ContainerStateValue) (kind string, reason *string, exitCode, signal *int32) {
+	if st == nil {
+		return "", nil, nil, nil
+	}
+	return st.GetKind().String(), st.Reason, st.ExitCode, st.Signal
+}
+
+// lcPodStatusValue is one arm of the PodStatusValue oneof, unpacked.
+//
+// variant says which arm was populated ("phase", "condition", or "" for a nil
+// value), because the two arms use different columns and a reader has to know
+// which are meaningful. Everything else is a pointer: a phase row has no
+// condition and vice versa, and NULL says so without inventing an empty
+// string that would sort next to a real one.
+type lcPodStatusValue struct {
+	variant                                       string
+	phase                                         *string
+	condType, condStatus, condReason, condMessage *string
+}
+
+// lcPodStatusFields unpacks a pod status value.
+//
+// Message is the field this used to lose entirely: lcPodStatus never read it,
+// so "PodScheduled=False" survived and "0/3 nodes are available: insufficient
+// memory" did not — which is the half that says what to do about it.
+func lcPodStatusFields(st *contlcycle.PodStatusValue) lcPodStatusValue {
+	if st == nil {
+		return lcPodStatusValue{}
+	}
+	if cond := st.GetCondition(); cond != nil {
+		t, s := cond.GetType(), cond.GetStatus()
+		return lcPodStatusValue{
+			variant:    "condition",
+			condType:   &t,
+			condStatus: &s,
+			// Reason and Message are proto3 optionals; pass the pointers
+			// through rather than the getters so absent stays absent.
+			condReason:  cond.Reason,
+			condMessage: cond.Message,
+		}
+	}
+	// The other arm. A PodStatusValue whose oneof is unset reaches here too,
+	// which is why the phase arm is only claimed when the wrapper is really
+	// the phase one.
+	if _, ok := st.GetValue().(*contlcycle.PodStatusValue_Phase); !ok {
+		return lcPodStatusValue{}
+	}
+	phase := st.GetPhase()
+	return lcPodStatusValue{variant: "phase", phase: &phase}
+}
+
 // lcTimePtr converts a Unix-seconds timestamp off the wire into a value for a
 // Nullable(DateTime) column.
 //
@@ -331,13 +429,10 @@ func (a *Server) HandleContainerImages(c *gin.Context) {
 		log.Printf("[contimage] cannot read body: %v", err)
 		return
 	}
-	// The raw payload outlives every path out of this handler: a decoder
-	// that fails or does not exist yet must not make the bytes disappear.
-	defer func() { _ = body }()
-
 	var payload contimage.ContainerImagePayload
 	if err := proto.Unmarshal(body, &payload); err != nil {
 		log.Printf("[contimage] protobuf: %v (%d bytes)", err, len(body))
+		a.storeRaw(c, "contimage", "decode_error", err.Error(), body)
 		return
 	}
 
@@ -345,6 +440,8 @@ func (a *Server) HandleContainerImages(c *gin.Context) {
 		// See the note in HandleContainerLifecycle: an empty decode is the
 		// only hint protobuf gives that the wrong message arrived.
 		log.Printf("[contimage] decoded to zero images (%d bytes) — wrong payload type?", len(body))
+		a.storeRaw(c, "contimage", "unexpected_shape",
+			"ContainerImagePayload decoded with no images", body)
 		return
 	}
 
@@ -400,13 +497,72 @@ func ciRows(p *contimage.ContainerImagePayload, tenant string, now time.Time) (r
 			skipped++
 			continue
 		}
-		// Same sum as ciLogImage, so the stored total and the logged total
-		// cannot disagree.
+		// The same sum ciLogImage prints, with one difference the log does
+		// not need: layer_bytes is an unsigned column, so a negative layer
+		// size is the size_bytes trap one level down — it either wraps the
+		// cast to ~18 exabytes or silently shrinks the total, and either way
+		// every SUM over the table is wrong afterwards. The sum is clamped
+		// and the flag rises on ANY negative layer, because a negative layer
+		// inside a still-positive sum is just as wrong and far quieter.
+		// layer_sizes keeps the raw signed values, so the claim stays
+		// readable.
 		layers := img.GetLayers()
-		var layerBytes int64
+		var (
+			layerBytes    int64
+			layerNegative uint8
+		)
 		for _, l := range layers {
+			if l.GetSize() < 0 {
+				layerNegative = 1
+			}
 			layerBytes += l.GetSize()
 		}
+		if layerBytes < 0 {
+			layerBytes = 0
+		}
+
+		// The layer stack, as parallel arrays in wire order. An image IS its
+		// ordered layer list, so nothing here is sorted or deduplicated, and
+		// the inner URL slice is filled even when empty — the driver rejects
+		// a nil inside an Array(Array(String)).
+		var (
+			mediaTypes  = make([]string, 0, len(layers))
+			digests     = make([]string, 0, len(layers))
+			sizes       = make([]int64, 0, len(layers))
+			urls        = make([][]string, 0, len(layers))
+			hCreated    = make([]*time.Time, 0, len(layers))
+			hCreatedBy  = make([]string, 0, len(layers))
+			hAuthor     = make([]string, 0, len(layers))
+			hComment    = make([]string, 0, len(layers))
+			hEmptyLayer = make([]uint8, 0, len(layers))
+		)
+		for _, l := range layers {
+			mediaTypes = append(mediaTypes, l.GetMediaType())
+			digests = append(digests, l.GetDigest())
+			sizes = append(sizes, l.GetSize())
+			u := l.GetUrls()
+			if u == nil {
+				u = []string{}
+			}
+			urls = append(urls, u)
+			h := l.GetHistory()
+			hCreated = append(hCreated, ciTimePtr(h.GetCreated()))
+			hCreatedBy = append(hCreatedBy, h.GetCreatedBy())
+			hAuthor = append(hAuthor, h.GetAuthor())
+			hComment = append(hComment, h.GetComment())
+			hEmptyLayer = append(hEmptyLayer, boolToUint8(h.GetEmptyLayer()))
+		}
+
+		// size_bytes is unsigned and the wire field is signed. A negative
+		// size cannot happen on a healthy agent and wraps to ~18 exabytes if
+		// cast blindly, poisoning every SUM over the table — so it is
+		// clamped and the clamp is recorded. Same guard orchVersionSpread
+		// already applies to the cluster version counts.
+		size, negative := img.GetSize(), uint8(0)
+		if size < 0 {
+			size, negative = 0, 1
+		}
+
 		rows = append(rows, storage.ContainerImageRow{
 			TenantID:    tenant,
 			CollectedAt: now,
@@ -422,7 +578,7 @@ func ciRows(p *contimage.ContainerImagePayload, tenant string, now time.Time) (r
 			Registry:     img.GetRegistry(),
 			RepoTags:     img.GetRepoTags(),
 			RepoDigests:  img.GetRepoDigests(),
-			SizeBytes:    uint64(img.GetSize()),
+			SizeBytes:    uint64(size),
 			OSName:       img.GetOs().GetName(),
 			OSVersion:    img.GetOs().GetVersion(),
 			Architecture: img.GetOs().GetArchitecture(),
@@ -431,6 +587,24 @@ func ciRows(p *contimage.ContainerImagePayload, tenant string, now time.Time) (r
 			BuiltAt:      ciTimePtr(img.GetBuiltAt()),
 			PublishedAt:  ciTimePtr(img.GetPublishedAt()),
 			DDTags:       tagsToMultiMap(img.GetDdTags()),
+
+			// Which pipeline produced this inventory, kept as the pointer it
+			// arrives as: "the sender did not say" is a real answer.
+			PayloadVersion: p.GetVersion(),
+			Source:         p.Source,
+
+			LayerMediaTypes:        mediaTypes,
+			LayerDigests:           digests,
+			LayerSizes:             sizes,
+			LayerURLs:              urls,
+			LayerHistoryCreated:    hCreated,
+			LayerHistoryCreatedBy:  hCreatedBy,
+			LayerHistoryAuthor:     hAuthor,
+			LayerHistoryComment:    hComment,
+			LayerHistoryEmptyLayer: hEmptyLayer,
+
+			SizeNegative:      negative,
+			LayerSizeNegative: layerNegative,
 		})
 	}
 	return rows, skipped
@@ -528,4 +702,14 @@ func lcOrDash(s string) string {
 		return "-"
 	}
 	return s
+}
+
+// boolToUint8 renders a wire bool for a UInt8 column. ClickHouse has Bool,
+// but every flag column in this schema is UInt8 and consistency is worth more
+// than the byte.
+func boolToUint8(b bool) uint8 {
+	if b {
+		return 1
+	}
+	return 0
 }

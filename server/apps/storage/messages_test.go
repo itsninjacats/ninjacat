@@ -34,9 +34,12 @@ func (c *captureBatch) Close() error                  { return nil }
 // A multi-valued tag must ride AppendTo intact and land in the argument slot
 // its INSERT list declares for the tag column. The positions asserted here
 // mirror the INSERT lists: metrics at 10 of 15, hosts at 9 of 27 (and
-// host_tags at 24 of the same row), k8s_resources at position 21 of 24,
-// container_images (dd_tags) last of 21, external_host_tags last of 5,
-// action_connections at 5 of 8.
+// host_tags at 24 of the same row), k8s_resources at position 21 of 85,
+// container_images (dd_tags) 21st of 34, external_host_tags last of 5,
+// action_connections at 5 of 8. The rows that grew in 0014_api_fidelity.sql
+// and 0015_k8s_fidelity.sql kept their tag index because every new column
+// was APPENDED, which is the rule that makes an ALTER TABLE safe for a
+// positional AppendTo.
 func TestAppendToCarriesMultiValuedTags(t *testing.T) {
 	now := time.Unix(1700000000, 0).UTC()
 	tags := map[string][]string{"kube_service": {"a", "b"}}
@@ -61,12 +64,12 @@ func TestAppendToCarriesMultiValuedTags(t *testing.T) {
 		{
 			name: "k8s_resources",
 			row:  K8sResourceRow{TenantID: "t", CollectedAt: now, Tags: tags},
-			argN: 24, tagsAt: 20,
+			argN: 85, tagsAt: 20,
 		},
 		{
 			name: "container_images",
 			row:  ContainerImageRow{TenantID: "t", CollectedAt: now, DDTags: tags},
-			argN: 21, tagsAt: 20,
+			argN: 34, tagsAt: 20,
 		},
 		{
 			// The V5 collector's external host tags: one row per (host,
