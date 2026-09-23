@@ -96,6 +96,20 @@ func (a *Server) HandleTraces(c *gin.Context) {
 		return
 	}
 
+	if len(payload.GetTracerPayloads()) == 0 && len(payload.GetIdxTracerPayloads()) == 0 {
+		// proto.Unmarshal fails OPEN: unknown fields are skipped, so a body
+		// meant for another endpoint — or any other protobuf message, since
+		// the wire carries no type marker — decodes "successfully" into an
+		// empty AgentPayload. Neither wire shape being populated is the one
+		// signal we get, the same guard as HandleContainerLifecycle in
+		// router_containers.go, and the bytes are exactly what a future
+		// decoder needs.
+		log.Printf("[traces] protobuf decoded to zero tracer payloads (%d bytes) — wrong payload type?", len(body))
+		a.storeRaw(c, traceIntake, "unexpected_shape",
+			"AgentPayload decoded with no TracerPayloads and no IdxTracerPayloads", body)
+		return
+	}
+
 	traceLogPayload(&payload)
 	for _, tp := range payload.GetTracerPayloads() {
 		traceLogTracerPayload(tp)

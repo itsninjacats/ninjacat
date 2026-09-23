@@ -73,6 +73,9 @@ import (
 //	                                      action_connections
 //	GET /api/v1/query                     nothing: a read endpoint with no
 //	                                      query engine behind it yet
+//	POST /api/v2/validate                 nothing: the trace-agent's OPM probe,
+//	                                      answered but not stored — see
+//	                                      HandleOPMValidate
 
 func (a *Server) routeAPI(g *gin.RouterGroup) {
 	g.POST("/intake/", a.HandleIntake)
@@ -90,6 +93,7 @@ func (a *Server) routeAPI(g *gin.RouterGroup) {
 	g.POST("/api/v2/intake-key", a.HandleIntakeKey)
 	g.GET("/api/v1/query", a.HandleQuery)
 	g.POST("/api/v2/profiles/symbols/query", a.HandleSymbolsQuery)
+	g.POST("/api/v2/validate", a.HandleOPMValidate)
 
 	// Private Action Runner. Enrollment and connections are JSON:API with
 	// Content-Type application/vnd.api+json; the OPMS loop sends
@@ -1471,6 +1475,30 @@ func metadataDecodeGPU(raw json.RawMessage) []map[string]any {
 // There is no body on this request, so there is nothing to hand over.
 func (a *Server) HandleValidate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"valid": true})
+}
+
+// HandleOPMValidate answers POST /api/v2/validate — the trace-agent's OPM
+// (On-Prem Management, the Private Action Runner) reachability probe.
+//
+// cfg.EnableOPMFetch is hardcoded true in the trace-agent's own setup
+// (comp/trace/config/impl/setup.go) — there is no config key that turns this
+// probe off — and cfg.OPMValidateURL is built from the CORE dd_url, not
+// apm_config.apm_dd_url, so this lives on api.<site> rather than
+// trace.agent.<site> despite being trace-agent code. On failure the agent
+// retries four times (1s/2s/4s backoff) and then gives up on OPM for good, so
+// answering wrong here silently disables the Private Action Runner for the
+// life of the process, not just this one request.
+//
+// docs/spis-endpointow-datadoga.md §4.2/§5.7 (read from the datadog-agent
+// checkout) states the response contract as {"data":{"id":"<non-empty>"}};
+// the receiver-side parser lives in pkg/trace, a separate Go module this
+// repo does not depend on and which is absent from the local module cache,
+// so this mirrors the documented shape rather than a line of receiver code —
+// see the report for what could and could not be verified directly. A UUID
+// is as good a non-empty id as any: nothing here claims it means anything
+// beyond "this probe succeeded".
+func (a *Server) HandleOPMValidate(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": uuid.NewString()}})
 }
 
 // HandleEvents accepts POST /api/v1/events.

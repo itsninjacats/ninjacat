@@ -129,7 +129,13 @@ func (a *Server) Handler() http.Handler {
 		case strings.HasPrefix(host, "app."), strings.Contains(host, "-app.agent."):
 			app.ServeHTTP(w, r)
 
-		case strings.HasPrefix(host, "api."):
+		// The same rewrite mechanism, with the suffix "flare" instead of
+		// "app", sends a flare upload to <maj>-<min>-<patch>-flare.agent.<site>
+		// (AddAgentVersionToDomain in the agent's flare uploader). The route
+		// itself is registered on every engine (engineAuth below), but the
+		// host still has to reach ONE of them, and api.<site> is where
+		// /support/flare's dd_url-derived base lives.
+		case strings.HasPrefix(host, "api."), strings.Contains(host, "-flare.agent."):
 			api.ServeHTTP(w, r)
 		case strings.HasPrefix(host, "trace.agent."):
 			trace.ServeHTTP(w, r)
@@ -255,6 +261,14 @@ func (a *Server) engineAuth(auth gin.HandlerFunc, routes ...func(*gin.RouterGrou
 	g.GET("/api/v1/validate", a.HandleValidate)
 	g.HEAD("/support/flare", a.HandleFlare)
 	g.POST("/support/flare", a.HandleFlare)
+
+	// mkURL in the agent's send_flare.go appends "/" + caseID to the base
+	// flare URL whenever a case id is already known (a second flare attached
+	// to an existing support case), so the same handler has to answer on the
+	// path-parameter form too — both HEAD (resolveFlarePOSTURL's redirect
+	// probe runs against this exact URL) and POST.
+	g.HEAD("/support/flare/:case_id", a.HandleFlare)
+	g.POST("/support/flare/:case_id", a.HandleFlare)
 
 	r.NoRoute(a.HandleUnknown)
 	return r

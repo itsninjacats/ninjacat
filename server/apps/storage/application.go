@@ -51,25 +51,43 @@ const (
 //
 //	storage (application)
 //	  └── storage_sup (supervisor, one_for_one)
-//	        ├── storage_checks             rows_checks.go
-//	        ├── storage_container_events   rows_containers.go
-//	        ├── storage_container_images   rows_containers.go
-//	        ├── storage_events             rows_events.go
-//	        ├── storage_hosts              rows_hosts.go
-//	        ├── storage_k8s_resources      rows_k8s.go
-//	        ├── storage_k8s_manifests      rows_k8s.go
-//	        ├── storage_k8s_cluster        rows_k8s.go
-//	        ├── storage_k8s_actions        rows_k8s.go
-//	        ├── storage_logs               rows_logs.go
-//	        ├── storage_metrics            rows_metrics.go
-//	        ├── storage_sketches           rows_metrics.go
-//	        ├── storage_processes          rows_process.go
-//	        └── storage_raw_payloads       rows_raw.go
+//	        └── one BatchWriter child per storage.Writers() entry
 //
-// There is no list of children anywhere: the supervisor asks Writers(), which
-// is built by the init() in each of those files. The order above is therefore
-// filename order, and it is cosmetic — one_for_one children neither start in a
-// meaningful sequence nor depend on each other.
+// There is no list of children here, and there used to be: every table this
+// tree ships used to mean editing this literal list, which is exactly the
+// shared-file merge conflict registry.go's per-table registration exists to
+// avoid (see that file's header). Writers() is built by the init() in each
+// rows_*.go file, so the tree below is FAMILIES — one row per file, not one
+// row per table — current as of this tree, not a promise the next table
+// keeps it updated:
+//
+//	family              file                  writers  tables
+//	metrics/sketches    rows_metrics.go             2   metrics, sketches
+//	checks              rows_checks.go              1   check_runs
+//	logs                rows_logs.go                1   logs
+//	hosts               rows_hosts.go               1   hosts
+//	events              rows_events.go              1   events
+//	process             rows_process.go             1   processes
+//	k8s                 rows_k8s.go                 4   k8s_resources, k8s_manifests, k8s_cluster, k8s_actions
+//	containers          rows_containers.go          2   container_events, container_images
+//	raw                 rows_raw.go                 1   raw_payloads
+//	traces/apm_stats/dsm rows_traces.go             6   spans, apm_stats, dsm_pipeline_stats, dsm_backlogs, dsm_bucket_transactions, dsm_messages
+//	dbm                 rows_dbm.go                 1   dbm_events
+//	ndm                 rows_ndm.go                 8   ndm_devices, ndm_interfaces, ndm_ip_addresses, ndm_metadata_objects, ndm_device_configs, snmp_traps, netflow_flows, network_paths
+//	security            rows_security.go            6   cws_activity_dumps, cws_dump_nodes, security_events, sbom_entities, sbom_components, sbom_vulnerabilities
+//	evp                 rows_evp.go                 8   agent_discovery, agent_health_reports, agent_health_issues, event_management_events, host_software, synthetics_results, openlineage_events, query_action_results
+//	apm_telemetry       rows_apm_telemetry.go       1   apm_telemetry
+//	profiling           rows_profiling.go           5   profiles, debugger_logs, debugger_diagnostics, symdb_uploads, symbol_uploads
+//	rum                 rows_rum.go                 6   rum_views, rum_events, rum_telemetry, rum_timeseries, rum_replay_segments, rum_spans
+//	api extras          rows_api_extra.go          11   agent_batch_metadata, agent_checks, external_host_tags, agent_metadata, delegated_auth_requests, symbol_queries, runner_enrollments, runner_task_updates, runner_heartbeats, runner_dequeues, action_connections
+//	ecs                 rows_ecs.go                 1   ecs_tasks
+//	flares              rows_flares.go              1   agent_flares
+//
+// 20 families, 68 writers today. The order above is filename order (see
+// registry.go's ORDERING note) and it is cosmetic for writers — one_for_one
+// children neither start in a meaningful sequence nor depend on each other —
+// though NOT cosmetic for the EDF types each file also registers; that
+// ordering rule lives in registry.go, not here.
 //
 // one_for_one matters here: a writer that dies is restarted alone, and the
 // other tables keep accepting data.

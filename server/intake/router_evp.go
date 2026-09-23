@@ -841,24 +841,31 @@ func (a *Server) routeEventManagement(g *gin.RouterGroup) {
 	g.POST("/api/v2/events", a.HandleEventManagement)
 }
 
+// eventManagementIntake is the storeRaw/log label for this track. NOT
+// "events": /api/v1/events on api.<site> (router_api.go's HandleEvents,
+// the datadog-api-client submission endpoint) already claims that label, and
+// two unrelated tracks sharing one raw_payloads label makes "what is
+// actually sending this?" unanswerable from the table alone.
+const eventManagementIntake = "event-management"
+
 // HandleEventManagement accepts one event envelope per request.
 func (a *Server) HandleEventManagement(c *gin.Context) {
 	defer c.JSON(http.StatusAccepted, gin.H{})
 
-	body, ok := evpBody(c, "events")
+	body, ok := evpBody(c, eventManagementIntake)
 	if !ok {
 		return
 	}
 
-	m, ok := evpObject("events", body)
+	m, ok := evpObject(eventManagementIntake, body)
 	if !ok {
-		describe("events", c.GetHeader("Content-Type"), body)
-		a.storeRaw(c, "events", "decode_error", "body is not a JSON object", body)
+		describe(eventManagementIntake, c.GetHeader("Content-Type"), body)
+		a.storeRaw(c, eventManagementIntake, "decode_error", "body is not a JSON object", body)
 		return
 	}
 
 	attrs, _ := evpPath(m, "data", "attributes").(map[string]any)
-	log.Printf("[events] type=%s integration=%s category=%s event_type=%s host=%s at=%s title=%s",
+	log.Printf("[event-management] type=%s integration=%s category=%s event_type=%s host=%s at=%s title=%s",
 		evpStr(m, "data", "type"), evpStr(attrs, "integration_id"),
 		evpStr(attrs, "category"), evpStr(attrs, "system-notable-events", "event_type"),
 		evpStr(attrs, "host"), evpStr(attrs, "timestamp"), evpStr(attrs, "title"))
@@ -873,7 +880,7 @@ func (a *Server) HandleEventManagement(c *gin.Context) {
 	if !ok {
 		// data.attributes was missing or not an object — the one shape this
 		// track's envelope requires and does not have.
-		a.storeRaw(c, "events", "unexpected_shape", "data.attributes is missing or not an object", body)
+		a.storeRaw(c, eventManagementIntake, "unexpected_shape", "data.attributes is missing or not an object", body)
 		return
 	}
 

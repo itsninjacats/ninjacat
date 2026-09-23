@@ -62,6 +62,20 @@ func TestHostRoutingReachesOwnIntake(t *testing.T) {
 		{"app." + testSite, http.MethodGet, "/api/v1/validate", http.StatusOK},
 		{"7-60-0-app.agent." + testSite, http.MethodGet, "/api/v1/validate", http.StatusOK},
 
+		// The flare uploader rewrites its host the same way the core
+		// forwarder rewrites app.<site>, just with "flare" as the suffix —
+		// see the routes.go comment above this case. HEAD is the redirect
+		// probe SendTo makes before POSTing; both must reach an engine that
+		// serves /support/flare, which every engine does.
+		{"7-60-0-flare.agent." + testSite, http.MethodHead, "/support/flare", http.StatusOK},
+		{"7-60-0-flare.agent." + testSite, http.MethodPost, "/support/flare", http.StatusOK},
+
+		// mkURL (send_flare.go) appends the case id to the path once one is
+		// known, so a flare attached to an existing case arrives on this
+		// path shape instead.
+		{"7-60-0-flare.agent." + testSite, http.MethodHead, "/support/flare/12345", http.StatusOK},
+		{"7-60-0-flare.agent." + testSite, http.MethodPost, "/support/flare/12345", http.StatusOK},
+
 		// /v1/input is registered by both the logs intake and the profiler.
 		// That is not a collision: each lives on its own host.
 		{"http-intake.logs." + testSite, http.MethodPost, "/v1/input", http.StatusAccepted},

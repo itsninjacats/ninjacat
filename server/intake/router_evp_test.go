@@ -684,7 +684,11 @@ func TestHandleSoftwareInventoryStoresRowsAndRawOnBadItem(t *testing.T) {
 }
 
 // An envelope with no data.attributes is the one shape event-management
-// cannot store as a row — it must go to raw_payloads, not disappear.
+// cannot store as a row — it must go to raw_payloads, not disappear. The
+// Intake label must be "event-management", not "events": that string is
+// already claimed by /api/v1/events on api.<site> (router_api.go's
+// HandleEvents), and two unrelated tracks sharing one label would make a
+// raw_payloads row impossible to attribute correctly.
 func TestHandleEventManagementUnexpectedShapeGoesToRaw(t *testing.T) {
 	a, node := newTestServer(t)
 	e := newTestEngine(t, a, a.routeEventManagement)
@@ -701,6 +705,9 @@ func TestHandleEventManagementUnexpectedShapeGoesToRaw(t *testing.T) {
 	raw := Rows[storage.RawPayloadRow](node)
 	if len(raw) != 1 || raw[0].Reason != "unexpected_shape" {
 		t.Fatalf("raw_payloads: got %+v, want one row with reason unexpected_shape", raw)
+	}
+	if raw[0].Intake != "event-management" {
+		t.Errorf("intake label: got %q, want %q — distinct from api.<site>'s /api/v1/events", raw[0].Intake, "event-management")
 	}
 }
 

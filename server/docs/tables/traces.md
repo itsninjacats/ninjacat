@@ -9,6 +9,16 @@ read in the first place — but they are no longer the only sink, and anything
 that fails to decode now goes to `raw_payloads` under the intake label
 `trace` instead of vanishing.
 
+**The zero-payload guard.** Protobuf carries no type marker and unmarshals
+"fail open" — unknown fields are silently skipped — so a body meant for a
+completely different endpoint can decode without error into an empty
+`AgentPayload`. `HandleTraces` treats a decode with both `TracerPayloads` and
+`IdxTracerPayloads` empty as that case: instead of quietly calling `store()`
+with zero rows (a no-op that looks identical to a healthy, traceless agent),
+it goes to `raw_payloads` under reason `unexpected_shape`, the same guard
+`HandleContainerLifecycle` (`intake/router_containers.go`) uses for the same
+reason. The agent still gets its `{"rate_by_service":{}}` 200 either way.
+
 | table | engine | ORDER BY | TTL | fed by |
 |---|---|---|---|---|
 | `spans` | MergeTree, `PARTITION BY toDate(start)` | `(tenant_id, service, name, start, trace_id)` | 14 days on `start` | `POST /api/v0.2/traces` |

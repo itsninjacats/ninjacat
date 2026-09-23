@@ -1355,6 +1355,36 @@ func TestRunnerEnrollWithABadBodyAnswers400AndKeepsTheBytes(t *testing.T) {
 	}
 }
 
+// The trace-agent's OPM probe (EnableOPMFetch, hardcoded true) needs a
+// non-empty data.id to consider api.<site> reachable; four failed attempts
+// (1s/2s/4s backoff) disable the Private Action Runner for the process's
+// whole life, not just this request. Nothing is stored — this is a
+// reachability probe, not telemetry.
+func TestOPMValidateAnswersNonEmptyID(t *testing.T) {
+	a, node := newTestServer(t)
+	e := newTestEngine(t, a, a.routeAPI)
+
+	w := post(t, e, "/api/v2/validate", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST /api/v2/validate: got %d, want 200", w.Code)
+	}
+
+	var resp struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("response is not valid JSON: %v (%s)", err, w.Body.String())
+	}
+	if resp.Data.ID == "" {
+		t.Errorf("data.id: got empty, want a non-empty id — an empty one reads as unreachable to the agent")
+	}
+	if n := len(node.Sends()); n != 0 {
+		t.Errorf("a reachability probe stored %d messages, want 0", n)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // storage agreement
 // ---------------------------------------------------------------------------
