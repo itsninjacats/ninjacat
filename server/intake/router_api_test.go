@@ -136,6 +136,76 @@ func TestSeriesV2StoresOriginAndNonHostResources(t *testing.T) {
 	}
 }
 
+// A series with no "metadata" field at all used to panic: the handler read
+// origin.XXX_unrecognized directly off the *Origin that GetMetadata().
+// GetOrigin() returns, and a series with no metadata makes that nil — unlike
+// the GetOriginX() calls beside it, a raw field access on a nil pointer does
+// not have a nil check built in. gin.Recovery() swallowed the panic, but
+// ackSeries is deferred FIRST, so the 202 had already gone out: the agent saw
+// success while the batch silently never reached storage.
+func TestSeriesV2WithoutMetadataDoesNotPanic(t *testing.T) {
+	a, node := newTestServer(t)
+	e := newTestEngine(t, a, a.routeAPI)
+
+	body := []byte(`{"series":[{
+		"metric":"system.cpu.idle",
+		"resources":[{"type":"host","name":"h1"}],
+		"points":[{"timestamp":1790151330,"value":0.5}]
+	}]}`)
+
+	if w := post(t, e, "/api/v2/series", body); w.Code != http.StatusAccepted {
+		t.Fatalf("got %d, want 202 (%s)", w.Code, w.Body.String())
+	}
+
+	points := Rows[storage.MetricPoint](node)
+	if len(points) != 1 {
+		t.Fatalf("points: got %d, want 1 — a series with no metadata must still be stored", len(points))
+	}
+	p := points[0]
+	if p.Host != "h1" || p.Metric != "system.cpu.idle" {
+		t.Errorf("row: %+v", p)
+	}
+	if p.OriginProduct != 0 || p.OriginCategory != 0 || p.OriginService != 0 {
+		t.Errorf("origin: got %d/%d/%d, want all zero — no metadata was sent", p.OriginProduct, p.OriginCategory, p.OriginService)
+	}
+}
+
+// The same shape over the wire the agent actually uses: protobuf with no
+// Metadata message at all, rather than JSON's missing key — proving the fix
+// is not specific to how encoding/json zeroes an absent pointer field.
+func TestSeriesV2ProtobufWithoutMetadataDoesNotPanic(t *testing.T) {
+	a, node := newTestServer(t)
+	e := newTestEngine(t, a, a.routeAPI)
+
+	payload := gogen.MetricPayload{Series: []*gogen.MetricPayload_MetricSeries{{
+		Metric:    "system.cpu.idle",
+		Resources: []*gogen.MetricPayload_Resource{{Type: "host", Name: "h1"}},
+		Points:    []*gogen.MetricPayload_MetricPoint{{Timestamp: 1790151330, Value: 0.5}},
+		// Metadata left nil deliberately: this is the shape that panicked.
+	}}}
+	body, err := payload.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/series", bytes.NewReader(body))
+	req.Header.Set("Dd-Api-Key", testAPIKey)
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	w := httptest.NewRecorder()
+	e.ServeHTTP(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("got %d, want 202 (%s)", w.Code, w.Body.String())
+	}
+
+	points := Rows[storage.MetricPoint](node)
+	if len(points) != 1 {
+		t.Fatalf("points: got %d, want 1 — a nil Metadata over protobuf must not lose the batch", len(points))
+	}
+	if p := points[0]; p.OriginProduct != 0 || p.OriginCategory != 0 || p.OriginService != 0 {
+		t.Errorf("origin: got %d/%d/%d, want all zero", p.OriginProduct, p.OriginCategory, p.OriginService)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // sketches
 // ---------------------------------------------------------------------------

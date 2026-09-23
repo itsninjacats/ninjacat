@@ -177,7 +177,11 @@ func (a *Server) HandleSeriesV2(c *gin.Context) {
 		// index") which the published proto marks reserved, so gogen parks
 		// it in XXX_unrecognized. Counted, not decoded: a reserved field has
 		// no name to decode into, so there is nothing to put in a column.
-		if len(origin.XXX_unrecognized) > 0 {
+		// origin is nil when the series carried no metadata (or metadata with
+		// no origin) at all — a request field XXX_unrecognized cannot be read
+		// off, direct field access on a nil *Origin panics, unlike the
+		// GetOriginX() calls below which are nil-safe generated methods.
+		if origin != nil && len(origin.XXX_unrecognized) > 0 {
 			noIndex++
 		}
 		for _, p := range s.Points {
