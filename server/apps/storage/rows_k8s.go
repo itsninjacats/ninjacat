@@ -268,6 +268,14 @@ type K8sManifestRow struct {
 	// []byte and a ClickHouse String is a byte string, so nothing is lost
 	// either way — but a reader deserves to know before parsing.
 	ContentIsUTF8 uint8
+
+	// Envelope is the CollectorManifest as JSON without its manifest list —
+	// the same device k8s_resources uses, and for the same reason: the
+	// envelope's SystemInfo (the reporting agent's uuid, OS, CPUs, memory)
+	// has no column of its own, and neither will the next field added to it.
+	// ManifestHost is Manifest.Host, the machine this one object was seen on.
+	Envelope     string
+	ManifestHost string
 }
 
 func (r K8sManifestRow) AppendTo(b driver.Batch) error {
@@ -278,7 +286,7 @@ func (r K8sManifestRow) AppendTo(b driver.Batch) error {
 		r.GroupID, r.GroupSize, r.HostName, r.AgentVersion, r.OriginCollector,
 		orEmpty(r.Tags), orEmpty(r.TagSources),
 		r.NodeName, r.Type, r.Version, orEmpty(r.ExtraAttributes),
-		r.ContentIsUTF8)
+		r.ContentIsUTF8, r.Envelope, r.ManifestHost)
 }
 
 // K8sClusterRow is one CollectorCluster summary in ninjacat.k8s_cluster:
@@ -450,7 +458,7 @@ func init() {
 			 org_id, subscription_id, header_timestamp, encoding,
 			 group_id, group_size, host_name, agent_version, origin_collector,
 			 tags, tag_sources, node_name, type, version, extra_attributes,
-			 content_is_utf8)`,
+			 content_is_utf8, envelope, manifest_host)`,
 		// Every row is a whole YAML document, so these row counts stand for
 		// megabytes: 200 rows can be 2 MB of insert and 5000 buffered can be
 		// tens of MB. The tight ceilings bound memory, and a single in-flight

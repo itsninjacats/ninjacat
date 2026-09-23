@@ -79,6 +79,7 @@ One row per image sighting; the table replaces on `(tenant_id, image_key, host)`
 | `image_key`, `identity_source` | the registry digest, or the image id when there is none |
 | `payload_version`, `source` | `ContainerImagePayload.Version` / `.Source` (Nullable: "the sender did not say") |
 | `size_bytes`, `size_negative` | `ContainerImage.Size`, clamped at 0 with the clamp recorded |
+| `layer_bytes`, `layer_size_negative` | the sum of `Layers[].Size`, clamped at 0, with the flag raised by ANY negative layer |
 | `layer_media_types`, `layer_digests`, `layer_sizes`, `layer_urls` | `ContainerImage.Layers[]`, parallel arrays in wire order |
 | `layer_history_created`, `_created_by`, `_author`, `_comment`, `_empty_layer` | `Layers[].History`, the build record |
 | `os_name`, `os_version`, `architecture` | `ContainerImage.Os` |
@@ -94,6 +95,12 @@ One row per image sighting; the table replaces on `(tenant_id, image_key, host)`
   thrown away before this migration, and it arrives free on every inventory pass.
 - `size_negative` is a guard, not a metric: casting a negative `int64` to
   `UInt64` produces ~18 exabytes, which then poisons every `SUM` over the table.
+- `layer_size_negative` is the same guard one level down. `layer_bytes` is the
+  sum of the layers' signed sizes cast to `UInt64`, so a single negative layer
+  either wraps the total or quietly shrinks it; the sum is clamped at 0 and the
+  flag rises as soon as any one layer reported a negative size, because a bad
+  layer inside a still-positive sum is just as wrong and far quieter.
+  `layer_sizes` keeps the raw signed values, so the original claim stays readable.
 - An image with neither digest nor id is skipped and counted through the
   `SelfImagesSkipped` self-metric — unchanged by this work.
 
@@ -165,7 +172,14 @@ conditions and metrics are filled generically and its whole message is in
   conventions are read; the time arrays are `Array(Nullable(...))` so a
   condition that never probed keeps its slot without a fabricated date.
 - Conditions and resource requirements live on the object for some kinds and
-  inside `Status` / `Spec` for others; both places are tried.
+  inside `Status` / `Spec` for others; both places are tried, and **presence in
+  the outer place does not stop the search**: a declared-but-empty slice looks
+  exactly like a present one to reflection. A `VerticalPodAutoscaler` declares
+  both — a top-level `Conditions` of `VerticalPodAutoscalerCondition` and
+  `Status.Conditions` of `VPACondition`, the latter being the list the upstream
+  Kubernetes VPA API defines and therefore the one a real autoscaler fills — so
+  both are read and concatenated, the object's first. Reading only the first
+  field that existed left `condition_*` empty for every VPA in the fleet.
 - `object` is `encoding/json`, not protojson: agent-payload's `process`
   package is gogo-generated, so its messages are not protoreflect messages.
   `encoding/json` reads the same struct tags and keeps int64 ids exact.
@@ -217,6 +231,15 @@ tags — which manifest rows carried **none of** before.
 - `content_is_utf8` is 1 when `content` is valid UTF-8. A ClickHouse `String`
   is a byte string, so nothing is corrupted either way — but a reader deserves
   to know before parsing.
+- `envelope` is the `CollectorManifest` as JSON **minus its manifest list** (the
+  list is the rows). It exists for `CollectorManifest.SystemInfo` — the
+  reporting agent's uuid, OS, CPU list and total memory — which no column holds
+  and which is the same class of field `k8s_resources.envelope` preserves for
+  the object collectors. Whatever the envelope grows next lands here too.
+- `manifest_host` is `Manifest.Host`, the machine this one object was observed
+  on, in full (id, orgId, allTags, numCpus, totalMemory). JSON rather than five
+  columns: the shape belongs to the host inventory, not to a manifest. Empty,
+  never `null`, when the sender omitted it.
 
 ## k8s_actions — `/api/v2/kubeactions`
 
@@ -252,6 +275,13 @@ Every envelope and task field is typed. Two shapes are worth naming:
 - **Four tag sets, four columns**: `envelope_tags`, `tags`, `ecs_tags`,
   `container_instance_tags`. ECS keeps them apart and so do we — the container
   instance's tags belong to the machine, not to the workload.
+- `envelope` is the `CollectorECSTask` as JSON minus its task list. The
+  envelope carries a `Host` and an `Info` (`SystemInfo`) of its **own** — the
+  machine and agent that ran the collection pass, distinct from the task's host
+  — and no typed column holds either.
+- `task_host` is `ECSTask.Host` whole. `task_host_name` is only its `Name`, and
+  a name alone cannot tell two identically named container instances in
+  different accounts apart.
 
 ---
 
@@ -291,13 +321,16 @@ on the same row, or is a duplicate of something already stored.
 | Per-object `Yaml []byte` (deprecated, on almost every kind) | `k8s_resources.object` | Deprecated upstream and superseded by `/api/v2/orchmanif`, which stores the same document in `k8s_manifests.content` with its own TTL. A column would be a second copy of a megabyte-scale field. |
 | `NodeStatus.Images` (the node-local image cache) | `k8s_resources.object`, counted in `counts['images']` | The `contimage` intake is the authoritative inventory and has a table with a digest key. A per-node duplicate would not join to it any better than the JSON does. |
 | Every `Spec`/`Status` leaf of the twenty kinds with no typed case (StorageClass parameters, NetworkPolicy rules, PVC access modes, Ingress backends, LimitRange limits, VPA targets, ServiceAccount secrets, …) | `k8s_resources.object`, whole | One generic table serves 27 kinds; a typed column per leaf would be several hundred columns, all NULL for 26 kinds out of 27. The JSON is lossless and queryable with ClickHouse's JSON functions, and any field that turns out to be asked for often can be promoted to a column later by a migration plus a line in the intake. |
-| `CollectorPod.Host`, `.Info`, `.IsTerminated`; `CollectorNode.HostAliasMapping`; per-frame extras of other collectors | `k8s_resources.envelope` | Frame-level, identical for every row of a pass. One JSON column carries all of them for all 27 kinds instead of a column per kind-specific envelope field. |
+| `CollectorPod.Host`, `.Info`, `.IsTerminated`; `CollectorNode.HostAliasMapping`; per-frame extras of other collectors | `k8s_resources.envelope` — and, for the two collectors decoded into their concrete types, `k8s_manifests.envelope` and `ecs_tasks.envelope` | Frame-level, identical for every row of a pass. One JSON column per table carries all of them instead of a column per kind-specific envelope field. Each of the three tables fed by a collector envelope has one, so no envelope field can go missing because its collector took a different code path — that is how `CollectorManifest.SystemInfo` and `CollectorECSTask.Host`/`.Info` were lost. |
 | `MessageHeader.Version` | — | Redundant: the version determines the header layout, and `encoding`, `org_id`, `subscription_id` and `header_timestamp` (present only in V3) already record what the layout yielded. |
 | `MessageHeader.Type` | implied by `kind` and by which writer received the row | The Go type the switch resolved is a strictly finer statement of the same fact. |
 | `AgentVersion.Commit` / `.Meta` | — | Pre-existing, documented decision in `agentVersionString`: a version column wants `"7.55.1"`, not a hash. |
-| `ECSTask.Host` beyond `.Name` | `ecs_tasks` keeps `task_host_name` | The rest of `process.Host` (org id, tag index, num cpus) describes the reporting machine and belongs to the host inventory, not to a task row. |
 
-Two things are explicitly **not** on this list any more, because they used to
+`ECSTask.Host` beyond `.Name` was on this list and is not any more: `task_host`
+now holds the whole message, because a name cannot tell two identically named
+container instances in different AWS accounts apart.
+
+Two further things are explicitly **not** on this list, because they used to
 be and the fidelity rule does not accept them: `k8s_actions.payloads` (the
 attachments) and the values of undeclared `kubeactions` keys. Both are small,
 both arrive once, and both are exactly what somebody debugging a failed remote

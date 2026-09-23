@@ -34,7 +34,7 @@ func (c *captureBatch) Close() error                  { return nil }
 // A multi-valued tag must ride AppendTo intact and land in the argument slot
 // its INSERT list declares for the tag column. The positions asserted here
 // mirror application.go: metrics puts tags last of ten, hosts last of nine,
-// k8s_resources at position 21 of 85, container_images (dd_tags) 21st of 33.
+// k8s_resources at position 21 of 85, container_images (dd_tags) 21st of 34.
 // The two Kubernetes/container rows grew in 0015_k8s_fidelity.sql; the tag
 // column kept its index because every new column was APPENDED, which is the
 // rule that makes an ALTER TABLE safe for a positional AppendTo.
@@ -67,7 +67,7 @@ func TestAppendToCarriesMultiValuedTags(t *testing.T) {
 		{
 			name: "container_images",
 			row:  ContainerImageRow{TenantID: "t", CollectedAt: now, DDTags: tags},
-			argN: 33, tagsAt: 20,
+			argN: 34, tagsAt: 20,
 		},
 	}
 	for _, tc := range cases {

@@ -1048,3 +1048,138 @@ func TestHandleKubeActionsStoresRowsAndRaw(t *testing.T) {
 		t.Errorf("raw_payloads = %+v", raw)
 	}
 }
+
+// A VerticalPodAutoscaler carries TWO condition lists on the wire: a
+// top-level one (VerticalPodAutoscalerCondition, Type/Status) and
+// Status.Conditions (VPACondition, ConditionType/ConditionStatus). The nested
+// one is what the upstream Kubernetes VPA API defines, so it is the one a
+// real autoscaler fills — and taking only the first field that EXISTS read
+// the empty top-level slice and stopped, leaving the typed condition columns
+// empty for every VPA in the fleet.
+func TestOrchResourceRowsVPAConditionsFromStatus(t *testing.T) {
+	rows := orchResourceRows("t", time.Now().UTC(), testFrame, &process.CollectorVerticalPodAutoscaler{
+		ClusterId: "cid",
+		VerticalPodAutoscalers: []*process.VerticalPodAutoscaler{{
+			Metadata: &process.Metadata{Name: "vpa-1", Namespace: "shop", Uid: "u-1"},
+			Status: &process.VerticalPodAutoscalerStatus{
+				Conditions: []*process.VPACondition{{
+					ConditionType:      "RecommendationProvided",
+					ConditionStatus:    "True",
+					Reason:             "",
+					Message:            "recommendation computed",
+					LastTransitionTime: 1700000000,
+				}},
+			},
+		}},
+	})
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+	r := rows[0]
+	if len(r.ConditionTypes) != 1 || r.ConditionTypes[0] != "RecommendationProvided" {
+		t.Fatalf("ConditionTypes = %v, want the Status-nested condition", r.ConditionTypes)
+	}
+	if r.ConditionStatuses[0] != "True" || r.ConditionMessages[0] != "recommendation computed" {
+		t.Errorf("condition = %q / %q", r.ConditionStatuses[0], r.ConditionMessages[0])
+	}
+	if r.ConditionLastTransition[0] == nil {
+		t.Error("LastTransitionTime dropped")
+	}
+}
+
+// When a VPA fills both lists, neither may win: they are different messages
+// describing the same object, and dropping one is dropping data.
+func TestOrchResourceRowsVPAConditionsFromBothPlaces(t *testing.T) {
+	rows := orchResourceRows("t", time.Now().UTC(), testFrame, &process.CollectorVerticalPodAutoscaler{
+		VerticalPodAutoscalers: []*process.VerticalPodAutoscaler{{
+			Metadata:   &process.Metadata{Name: "vpa-1", Uid: "u-1"},
+			Conditions: []*process.VerticalPodAutoscalerCondition{{Type: "TopLevel", Status: "True"}},
+			Status: &process.VerticalPodAutoscalerStatus{
+				Conditions: []*process.VPACondition{{ConditionType: "Nested", ConditionStatus: "False"}},
+			},
+		}},
+	})
+	if got := rows[0].ConditionTypes; len(got) != 2 || got[0] != "TopLevel" || got[1] != "Nested" {
+		t.Errorf("ConditionTypes = %v, want both lists in order", got)
+	}
+	if got := rows[0].ConditionStatuses; got[0] != "True" || got[1] != "False" {
+		t.Errorf("ConditionStatuses = %v — the parallel arrays must stay aligned", got)
+	}
+}
+
+// The manifest envelope describes the agent that sent the frame
+// (SystemInfo: uuid, OS, CPUs, memory) and each manifest names the machine it
+// was observed on. Both decoded fine and then went nowhere — no column, no
+// JSON, and no raw_payloads record, because the request itself succeeded.
+func TestOrchManifestRowsKeepEnvelopeAndHost(t *testing.T) {
+	rows := orchManifestRows("t", time.Now().UTC(), testFrame, &process.CollectorManifest{
+		ClusterId: "cid",
+		SystemInfo: &process.SystemInfo{
+			Uuid:        "agent-uuid-1",
+			Os:          &process.OSInfo{Name: "linux", Platform: "ubuntu"},
+			TotalMemory: 8 << 30,
+		},
+		Manifests: []*process.Manifest{{
+			Uid: "u-1", Kind: "Pod", Content: []byte("{}"),
+			Host: &process.Host{Id: 42, OrgId: 7, Name: "node-1", NumCpus: 8},
+		}},
+	}, nil)
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+	r := rows[0]
+	if !strings.Contains(r.Envelope, "agent-uuid-1") || !strings.Contains(r.Envelope, "ubuntu") {
+		t.Errorf("Envelope = %q, want the sender's SystemInfo", r.Envelope)
+	}
+	// The manifest list is the rows; repeating it in every row would square
+	// the payload.
+	if strings.Contains(r.Envelope, "\"manifests\"") {
+		t.Errorf("Envelope = %q, want the manifest list dropped", r.Envelope)
+	}
+	if !strings.Contains(r.ManifestHost, "node-1") || !strings.Contains(r.ManifestHost, "42") {
+		t.Errorf("ManifestHost = %q, want the whole Host message", r.ManifestHost)
+	}
+}
+
+// A manifest with no Host leaves the column empty rather than storing the
+// four bytes "null", which would be a value pretending to be a fact.
+func TestOrchManifestRowsHostAbsent(t *testing.T) {
+	rows := orchManifestRows("t", time.Now().UTC(), testFrame, &process.CollectorManifest{
+		Manifests: []*process.Manifest{{Uid: "u-1"}},
+	}, nil)
+	if rows[0].ManifestHost != "" {
+		t.Errorf("ManifestHost = %q, want empty for an absent sub-message", rows[0].ManifestHost)
+	}
+}
+
+// CollectorECSTask has a Host and an Info of its own, describing the machine
+// and agent that ran the collection pass — distinct from each task's Host,
+// and held by no column. The task's Host was kept only by Name, which cannot
+// tell two identically named container instances in different accounts apart.
+func TestOrchECSTaskRowsKeepEnvelopeAndTaskHost(t *testing.T) {
+	rows := orchECSTaskRows("t", time.Now().UTC(), testFrame, &process.CollectorECSTask{
+		ClusterId: "ecs-cid",
+		Host:      &process.Host{Id: 11, Name: "ecs-collector", AllTags: []string{"role:collector"}},
+		Info:      &process.SystemInfo{Uuid: "ecs-agent-uuid", TotalMemory: 4 << 30},
+		Tasks: []*process.ECSTask{{
+			Arn:  "arn:aws:ecs:eu-west-1:123:task/abc",
+			Host: &process.Host{Id: 99, OrgId: 7, Name: "ip-10-0-1-7", NumCpus: 4},
+		}},
+	})
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+	r := rows[0]
+	if !strings.Contains(r.Envelope, "ecs-collector") || !strings.Contains(r.Envelope, "ecs-agent-uuid") {
+		t.Errorf("Envelope = %q, want the envelope's own Host and Info", r.Envelope)
+	}
+	if strings.Contains(r.Envelope, "\"tasks\"") {
+		t.Errorf("Envelope = %q, want the task list dropped", r.Envelope)
+	}
+	if !strings.Contains(r.TaskHost, "ip-10-0-1-7") || !strings.Contains(r.TaskHost, "99") {
+		t.Errorf("TaskHost = %q, want the whole Host message", r.TaskHost)
+	}
+	if r.TaskHostName != "ip-10-0-1-7" {
+		t.Errorf("TaskHostName = %q — the convenience column stays", r.TaskHostName)
+	}
+}

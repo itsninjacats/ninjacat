@@ -186,6 +186,12 @@ type ContainerImageRow struct {
 	// ~18 exabytes, which then poisons every SUM over the table — so the
 	// clamp is recorded rather than hidden.
 	SizeNegative uint8
+
+	// LayerSizeNegative is 1 when ANY single layer reported a negative size.
+	// LayerBytes is their sum cast to uint64, so one negative layer either
+	// wraps the total or quietly shrinks it; the sum is clamped at 0 and this
+	// flag says the total cannot be trusted. LayerSizes keeps the raw values.
+	LayerSizeNegative uint8
 }
 
 func (r ContainerImageRow) AppendTo(b driver.Batch) error {
@@ -202,7 +208,7 @@ func (r ContainerImageRow) AppendTo(b driver.Batch) error {
 		orEmptySlice(r.LayerHistoryCreated), orEmptySlice(r.LayerHistoryCreatedBy),
 		orEmptySlice(r.LayerHistoryAuthor), orEmptySlice(r.LayerHistoryComment),
 		orEmptySlice(r.LayerHistoryEmptyLayer),
-		r.SizeNegative)
+		r.SizeNegative, r.LayerSizeNegative)
 }
 
 func init() {
@@ -243,7 +249,7 @@ func init() {
 			 layer_media_types, layer_digests, layer_sizes, layer_urls,
 			 layer_history_created, layer_history_created_by, layer_history_author,
 			 layer_history_comment, layer_history_empty_layer,
-			 size_negative)`,
+			 size_negative, layer_size_negative)`,
 		// Periodic full inventories: every node re-announces every image it
 		// holds, so arrivals are bursty and repetitive. ReplacingMergeTree
 		// absorbs the repetition; here we just batch the bursts, with a second

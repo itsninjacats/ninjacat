@@ -643,9 +643,11 @@ func orchResourceRows(tenant string, now time.Time, frame orchFrame, body proces
 // Conditions and resource requirements live either on the object or inside
 // its Status/Spec depending on the kind, so both places are tried.
 func orchCommonFields(e reflect.Value, row *storage.K8sResourceRow) {
-	conds := orchFindSlice(e, "Conditions", "Status")
-	if conds.IsValid() && conds.Len() > 0 {
-		n := conds.Len()
+	if lists := orchConditionSlices(e); len(lists) > 0 {
+		n := 0
+		for _, l := range lists {
+			n += l.Len()
+		}
 		row.ConditionTypes = make([]string, 0, n)
 		row.ConditionStatuses = make([]string, 0, n)
 		row.ConditionReasons = make([]string, 0, n)
@@ -653,23 +655,26 @@ func orchCommonFields(e reflect.Value, row *storage.K8sResourceRow) {
 		row.ConditionLastTransition = make([]*time.Time, 0, n)
 		row.ConditionLastUpdate = make([]*time.Time, 0, n)
 		row.ConditionLastProbe = make([]*time.Time, 0, n)
-		for i := 0; i < n; i++ {
-			cv := reflect.Indirect(conds.Index(i))
-			if !cv.IsValid() || cv.Kind() != reflect.Struct {
-				continue
+		for _, conds := range lists {
+			for i := 0; i < conds.Len(); i++ {
+				cv := reflect.Indirect(conds.Index(i))
+				if !cv.IsValid() || cv.Kind() != reflect.Struct {
+					continue
+				}
+				// Two naming conventions in one payload family: most
+				// conditions call the fields Type/Status, while
+				// HorizontalPodAutoscaler's and VPACondition's call them
+				// ConditionType/ConditionStatus. Reading both is the
+				// difference between an autoscaler's conditions arriving and
+				// arriving empty.
+				row.ConditionTypes = append(row.ConditionTypes, orchFirstString(cv, "Type", "ConditionType"))
+				row.ConditionStatuses = append(row.ConditionStatuses, orchFirstString(cv, "Status", "ConditionStatus"))
+				row.ConditionReasons = append(row.ConditionReasons, orchStringOf(cv, "Reason"))
+				row.ConditionMessages = append(row.ConditionMessages, orchStringOf(cv, "Message"))
+				row.ConditionLastTransition = append(row.ConditionLastTransition, orchTimePtr(orchInt64Of(cv, "LastTransitionTime")))
+				row.ConditionLastUpdate = append(row.ConditionLastUpdate, orchTimePtr(orchInt64Of(cv, "LastUpdateTime")))
+				row.ConditionLastProbe = append(row.ConditionLastProbe, orchTimePtr(orchInt64Of(cv, "LastProbeTime")))
 			}
-			// Two naming conventions in one payload family: most conditions
-			// call the fields Type/Status, while HorizontalPodAutoscaler's
-			// and VPACondition's call them ConditionType/ConditionStatus.
-			// Reading both is the difference between an autoscaler's
-			// conditions arriving and arriving empty.
-			row.ConditionTypes = append(row.ConditionTypes, orchFirstString(cv, "Type", "ConditionType"))
-			row.ConditionStatuses = append(row.ConditionStatuses, orchFirstString(cv, "Status", "ConditionStatus"))
-			row.ConditionReasons = append(row.ConditionReasons, orchStringOf(cv, "Reason"))
-			row.ConditionMessages = append(row.ConditionMessages, orchStringOf(cv, "Message"))
-			row.ConditionLastTransition = append(row.ConditionLastTransition, orchTimePtr(orchInt64Of(cv, "LastTransitionTime")))
-			row.ConditionLastUpdate = append(row.ConditionLastUpdate, orchTimePtr(orchInt64Of(cv, "LastUpdateTime")))
-			row.ConditionLastProbe = append(row.ConditionLastProbe, orchTimePtr(orchInt64Of(cv, "LastProbeTime")))
 		}
 	}
 
@@ -978,16 +983,50 @@ func orchInt64Of(v reflect.Value, name string) int64 {
 // PodDisruptionBudget keeps them in Status, and a Job keeps its resource
 // requirements in Spec while a Pod keeps them on the object — one lookup
 // covers both layouts.
+//
+// PRESENCE IS NOT ENOUGH: a kind can declare the field in both places and
+// fill only the inner one, and a declared-but-nil slice satisfies every check
+// a reflect.Value can make. Returning the first field that merely exists then
+// reads an empty list and never looks further, which is exactly how
+// VerticalPodAutoscaler's real conditions went missing. So a populated slice
+// wins over an empty one, whichever layer it sits in.
 func orchFindSlice(e reflect.Value, name, nested string) reflect.Value {
+	var direct reflect.Value
 	if f := orchValue(e, name); f.IsValid() && f.Kind() == reflect.Slice {
-		return f
+		if f.Len() > 0 {
+			return f
+		}
+		direct = f
 	}
 	if sub := reflect.Indirect(orchValue(e, nested)); sub.IsValid() && sub.Kind() == reflect.Struct {
-		if f := orchValue(sub, name); f.IsValid() && f.Kind() == reflect.Slice {
+		if f := orchValue(sub, name); f.IsValid() && f.Kind() == reflect.Slice && f.Len() > 0 {
 			return f
 		}
 	}
-	return reflect.Value{}
+	return direct
+}
+
+// orchConditionSlices returns every condition list the object carries.
+//
+// Most kinds keep exactly one, on the object or inside Status. A
+// VerticalPodAutoscaler declares BOTH and they are different messages:
+// VerticalPodAutoscaler.Conditions holds VerticalPodAutoscalerCondition
+// (Type/Status), while Status.Conditions holds VPACondition
+// (ConditionType/ConditionStatus) — and the nested one is the list the
+// upstream Kubernetes VPA API actually defines, so it is the one a real
+// autoscaler fills. Reading either alone drops the other, so both are read
+// and concatenated, the object's first; empty lists contribute nothing.
+func orchConditionSlices(e reflect.Value) []reflect.Value {
+	var out []reflect.Value
+	if f := orchValue(e, "Conditions"); f.IsValid() && f.Kind() == reflect.Slice && f.Len() > 0 {
+		out = append(out, f)
+	}
+	if sub := reflect.Indirect(orchValue(e, "Status")); sub.IsValid() && sub.Kind() == reflect.Struct {
+		if f := orchValue(sub, "Conditions"); f.IsValid() && f.Kind() == reflect.Slice && f.Len() > 0 {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // orchEnvelopeJSON renders the frame envelope without its object list.
@@ -1012,6 +1051,36 @@ func orchEnvelopeJSON(v reflect.Value, itemsField int) string {
 		cp.Field(i).Set(v.Field(i))
 	}
 	return orchJSON(cp.Addr().Interface())
+}
+
+// orchEnvelopeOf is orchEnvelopeJSON for a message held as a typed pointer
+// rather than reached by reflection: it locates the repeated field by name
+// and drops it, so the caller does not have to carry a field index.
+//
+// The manifest and ECS collectors need this because they are decoded into
+// their concrete types (they have per-kind logic the generic object path does
+// not), and their envelopes carry fields no column holds — SystemInfo on
+// both, Host on CollectorECSTask.
+func orchEnvelopeOf(msg any, itemsField string) string {
+	v := reflect.Indirect(reflect.ValueOf(msg))
+	if !v.IsValid() || v.Kind() != reflect.Struct {
+		return ""
+	}
+	f, ok := v.Type().FieldByName(itemsField)
+	if !ok || len(f.Index) != 1 {
+		return ""
+	}
+	return orchEnvelopeJSON(v, f.Index[0])
+}
+
+// orchJSONOf renders a sub-message only when it is there. A nil pointer would
+// marshal to the four bytes "null", which is a value pretending to be a fact;
+// an absent sub-message leaves its column empty instead.
+func orchJSONOf[T any](p *T) string {
+	if p == nil {
+		return ""
+	}
+	return orchJSON(p)
 }
 
 // orchJSON renders a decoded sub-message for a String column.
@@ -1102,6 +1171,11 @@ func orchManifestRows(tenant string, now time.Time, frame orchFrame, m *process.
 		return nil // a CRD/CR wrapper around a nil envelope — orchManifests logs it
 	}
 	envTags := m.GetTags()
+	// The envelope minus its manifest list, read once for the whole frame:
+	// CollectorManifest.SystemInfo (the reporting agent's uuid, OS, CPUs and
+	// memory) has no column, and neither will whatever the envelope grows
+	// next.
+	envelope := orchEnvelopeOf(m, "Manifests")
 	rows := make([]storage.K8sManifestRow, 0, len(m.GetManifests()))
 	for _, man := range m.GetManifests() {
 		if man == nil {
@@ -1162,6 +1236,13 @@ func orchManifestRows(tenant string, now time.Time, frame orchFrame, m *process.
 			// either way — but whoever reads the column deserves to know
 			// whether it can be parsed as text before trying.
 			ContentIsUTF8: boolToUint8(utf8.Valid(content)),
+
+			Envelope: envelope,
+			// Manifest.Host: which machine this one object was observed on,
+			// in full. Its shape belongs to the host inventory rather than to
+			// a manifest, so it stays JSON instead of spreading five columns
+			// nobody queries yet across every manifest row.
+			ManifestHost: orchJSONOf(man.GetHost()),
 		})
 	}
 	return rows
@@ -1314,6 +1395,10 @@ func (a *Server) storeOrchECSTasks(c *gin.Context, frame orchFrame, m *process.C
 func orchECSTaskRows(tenant string, now time.Time, frame orchFrame, m *process.CollectorECSTask) []storage.ECSTaskRow {
 	tasks := m.GetTasks()
 	envelopeTags := tagsToMultiMap(m.GetTags())
+	// CollectorECSTask has a Host and an Info of its OWN — the machine and
+	// the agent that reported the pass, distinct from each task's Host below
+	// — and no column holds either, so the envelope is kept whole.
+	envelope := orchEnvelopeOf(m, "Tasks")
 	rows := make([]storage.ECSTaskRow, 0, len(tasks))
 	for _, t := range tasks {
 		if t == nil {
@@ -1368,6 +1453,12 @@ func orchECSTaskRows(tenant string, now time.Time, frame orchFrame, m *process.C
 			Tags:                  tagsToMultiMap(t.GetTags()),
 			ECSTags:               tagsToMultiMap(t.GetEcsTags()),
 			ContainerInstanceTags: tagsToMultiMap(t.GetContainerInstanceTags()),
+
+			Envelope: envelope,
+			// The task's Host in full. TaskHostName is only its Name, and the
+			// rest (id, orgId, allTags, numCpus, totalMemory) is what tells
+			// two identically named container instances apart.
+			TaskHost: orchJSONOf(t.GetHost()),
 		})
 	}
 	return rows

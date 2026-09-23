@@ -156,7 +156,15 @@ ALTER TABLE container_images
     -- clamps to 0 and raises this flag, so the lie is visible rather than
     -- silently averaged in. Same guard orchVersionSpread already applies to
     -- the cluster version counts.
-    ADD COLUMN IF NOT EXISTS size_negative UInt8;
+    ADD COLUMN IF NOT EXISTS size_negative UInt8,
+    -- layer_bytes is the same trap one level down: it is the SUM of the
+    -- layers' signed sizes cast to UInt64, so one negative layer poisons it
+    -- exactly the way a negative top-level size poisons size_bytes. The sum
+    -- is clamped to 0 when it goes negative and this flag rises as soon as
+    -- ANY single layer reported a negative size — a negative layer inside an
+    -- otherwise positive sum is still a wrong total. layer_sizes keeps the
+    -- raw signed values, so the original claim stays readable.
+    ADD COLUMN IF NOT EXISTS layer_size_negative UInt8;
 
 -- ---------------------------------------------------------------------------
 -- k8s_resources (+ k8s_resources_current, which must stay column-for-column
@@ -585,7 +593,21 @@ ALTER TABLE k8s_manifests
     -- is a byte string, so nothing is corrupted either way — but a reader
     -- deserves to know before it tries to parse. 1 = the bytes are valid
     -- UTF-8 (every YAML/JSON manifest seen so far).
-    ADD COLUMN IF NOT EXISTS content_is_utf8 UInt8;
+    ADD COLUMN IF NOT EXISTS content_is_utf8 UInt8,
+
+    -- The CollectorManifest envelope as JSON, minus its manifest list (the
+    -- list IS the rows, so repeating it per row would square the payload).
+    -- It exists for CollectorManifest.SystemInfo — the reporting agent's own
+    -- uuid, OS, CPU list and total memory, the same class of field that
+    -- k8s_resources.envelope preserves for the object collectors — and for
+    -- whatever the envelope grows next, which now lands here instead of being
+    -- dropped until somebody notices.
+    ADD COLUMN IF NOT EXISTS envelope String CODEC(ZSTD(3)),
+    -- Manifest.Host: the machine the individual object was observed on (id,
+    -- orgId, allTags, numCpus, totalMemory). JSON rather than a column each,
+    -- because its shape belongs to the host inventory, not to a manifest, and
+    -- nothing joins on it yet — but "nothing yet" is not a reason to lose it.
+    ADD COLUMN IF NOT EXISTS manifest_host String CODEC(ZSTD(3));
 
 ALTER TABLE k8s_manifests
     ADD INDEX IF NOT EXISTS idx_tag_keys   mapKeys(tags)                 TYPE bloom_filter(0.01) GRANULARITY 4,
@@ -688,6 +710,16 @@ CREATE TABLE IF NOT EXISTS ecs_tasks
     tags                   Map(LowCardinality(String), Array(LowCardinality(String))) CODEC(ZSTD(3)),
     ecs_tags               Map(LowCardinality(String), Array(LowCardinality(String))) CODEC(ZSTD(3)),
     container_instance_tags Map(LowCardinality(String), Array(LowCardinality(String))) CODEC(ZSTD(3)),
+
+    -- The CollectorECSTask envelope as JSON, minus its task list. The
+    -- envelope carries a Host and an Info (SystemInfo) of its OWN, describing
+    -- the machine and agent that reported the pass — distinct from the task's
+    -- host below, and held by none of the columns above.
+    envelope         String CODEC(ZSTD(3)),
+    -- ECSTask.Host in full: task_host_name is only its Name, while the rest
+    -- (id, orgId, allTags, numCpus, totalMemory) is what tells two container
+    -- instances of the same name apart across accounts.
+    task_host        String CODEC(ZSTD(3)),
 
     INDEX idx_tag_keys   mapKeys(tags)                 TYPE bloom_filter(0.01) GRANULARITY 4,
     INDEX idx_tag_values arrayFlatten(mapValues(tags)) TYPE bloom_filter(0.01) GRANULARITY 4

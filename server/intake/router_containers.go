@@ -497,12 +497,28 @@ func ciRows(p *contimage.ContainerImagePayload, tenant string, now time.Time) (r
 			skipped++
 			continue
 		}
-		// Same sum as ciLogImage, so the stored total and the logged total
-		// cannot disagree.
+		// The same sum ciLogImage prints, with one difference the log does
+		// not need: layer_bytes is an unsigned column, so a negative layer
+		// size is the size_bytes trap one level down — it either wraps the
+		// cast to ~18 exabytes or silently shrinks the total, and either way
+		// every SUM over the table is wrong afterwards. The sum is clamped
+		// and the flag rises on ANY negative layer, because a negative layer
+		// inside a still-positive sum is just as wrong and far quieter.
+		// layer_sizes keeps the raw signed values, so the claim stays
+		// readable.
 		layers := img.GetLayers()
-		var layerBytes int64
+		var (
+			layerBytes    int64
+			layerNegative uint8
+		)
 		for _, l := range layers {
+			if l.GetSize() < 0 {
+				layerNegative = 1
+			}
 			layerBytes += l.GetSize()
+		}
+		if layerBytes < 0 {
+			layerBytes = 0
 		}
 
 		// The layer stack, as parallel arrays in wire order. An image IS its
@@ -587,7 +603,8 @@ func ciRows(p *contimage.ContainerImagePayload, tenant string, now time.Time) (r
 			LayerHistoryComment:    hComment,
 			LayerHistoryEmptyLayer: hEmptyLayer,
 
-			SizeNegative: negative,
+			SizeNegative:      negative,
+			LayerSizeNegative: layerNegative,
 		})
 	}
 	return rows, skipped

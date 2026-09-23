@@ -855,3 +855,39 @@ func TestHandleContainerPayloadsStoreRawWhenUndecodable(t *testing.T) {
 		})
 	}
 }
+
+// One layer reporting a negative size is the same trap as a negative image
+// size, a level down: layer_bytes is their unsigned sum, so a bad layer
+// either wraps the cast or quietly shrinks the total. A registry returning a
+// -1 placeholder for a layer it cannot size must not poison SUM(layer_bytes)
+// for the whole fleet, and the raw value must still be readable per layer.
+func TestImageRowsNegativeLayerSizeIsClampedAndFlagged(t *testing.T) {
+	rows, _ := ciRows(&contimage.ContainerImagePayload{
+		Images: []*contimage.ContainerImage{
+			// Sum stays positive, but one layer lied: the total is wrong and
+			// only the flag says so.
+			{Id: "a", Layers: []*contimage.ContainerImage_ContainerImageLayer{{Size: 500}, {Size: -1}}},
+			// Sum goes negative: the cast would produce ~18 exabytes.
+			{Id: "b", Layers: []*contimage.ContainerImage_ContainerImageLayer{{Size: -700}, {Size: 100}}},
+			{Id: "c", Layers: []*contimage.ContainerImage_ContainerImageLayer{{Size: 10}, {Size: 20}}},
+		},
+	}, "t", time.Now().UTC())
+	if len(rows) != 3 {
+		t.Fatalf("got %d rows, want 3", len(rows))
+	}
+	if rows[0].LayerBytes != 499 || rows[0].LayerSizeNegative != 1 {
+		t.Errorf("mixed layers = %d (flag %d), want 499 with the flag raised",
+			rows[0].LayerBytes, rows[0].LayerSizeNegative)
+	}
+	if rows[1].LayerBytes != 0 || rows[1].LayerSizeNegative != 1 {
+		t.Errorf("negative sum = %d (flag %d), want 0 with the flag raised",
+			rows[1].LayerBytes, rows[1].LayerSizeNegative)
+	}
+	if rows[2].LayerBytes != 30 || rows[2].LayerSizeNegative != 0 {
+		t.Errorf("honest layers = %d (flag %d)", rows[2].LayerBytes, rows[2].LayerSizeNegative)
+	}
+	// The clamp hides nothing: the signed values arrive as they were sent.
+	if rows[1].LayerSizes[0] != -700 {
+		t.Errorf("LayerSizes[0] = %d, want the raw -700", rows[1].LayerSizes[0])
+	}
+}

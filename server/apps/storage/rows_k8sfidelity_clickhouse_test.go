@@ -226,12 +226,13 @@ func TestContainerFidelityRoundTrip(t *testing.T) {
 			LayerHistoryComment:    []string{"base", ""},
 			LayerHistoryEmptyLayer: []uint8{0, 1},
 			SizeNegative:           0,
+			LayerSizeNegative:      0,
 		},
 	})
 
 	row = storagetest.QueryRow(t, conn, `
 		SELECT layer_history_created_by[2], layer_urls[1][1], isNull(layer_history_created[2]),
-		       source, layer_sizes[2]
+		       source, layer_sizes[2], layer_size_negative
 		FROM container_images`)
 	if row[0].(string) != "COPY . /app" {
 		t.Errorf("layer_history_created_by[2] = %q — the Dockerfile is the point", row[0])
@@ -247,6 +248,9 @@ func TestContainerFidelityRoundTrip(t *testing.T) {
 	}
 	if row[4].(int64) != 200 {
 		t.Errorf("layer_sizes[2] = %v", row[4])
+	}
+	if row[5].(uint8) != 0 {
+		t.Errorf("layer_size_negative = %v for honest layers", row[5])
 	}
 }
 
@@ -317,16 +321,27 @@ func TestOrchestratorSideTablesRoundTrip(t *testing.T) {
 			NodeName: "node-3", Type: 81, Version: "v1",
 			ExtraAttributes: map[string]string{"crd_group": "datadoghq.com"},
 			ContentIsUTF8:   1,
+			Envelope:        `{"systemInfo":{"uuid":"agent-uuid-1"}}`,
+			ManifestHost:    `{"id":42,"name":"node-3"}`,
 		},
 	})
 	row = storagetest.QueryRow(t, conn, `
-		SELECT tag_sources['wrapper'], extra_attributes['crd_group'], content_is_utf8, origin_collector
+		SELECT tag_sources['wrapper'], extra_attributes['crd_group'], content_is_utf8, origin_collector,
+		       JSONExtractString(envelope, 'systemInfo', 'uuid'), JSONExtractInt(manifest_host, 'id')
 		FROM k8s_manifests`)
 	if got, ok := row[0].([]string); !ok || len(got) != 1 || got[0] != "source:crd" {
 		t.Errorf("tag_sources['wrapper'] = %v — provenance must survive the merge", row[0])
 	}
 	if row[1].(string) != "datadoghq.com" || row[2].(uint8) != 1 || row[3].(string) != "datadogAgent" {
 		t.Errorf("manifest extras = %v / %v / %v", row[1], row[2], row[3])
+	}
+	// The envelope's SystemInfo and the manifest's own Host are JSON columns,
+	// so ClickHouse can read a field out of them without a re-parse upstream.
+	if row[4].(string) != "agent-uuid-1" {
+		t.Errorf("envelope systemInfo.uuid = %v — the sender's identity", row[4])
+	}
+	if row[5].(int64) != 42 {
+		t.Errorf("manifest_host.id = %v", row[5])
 	}
 
 	storagetest.Insert(t, conn, storage.K8sActionsWriter, []storage.Row{
@@ -371,13 +386,16 @@ func TestOrchestratorSideTablesRoundTrip(t *testing.T) {
 			Tags:                    map[string][]string{"service": {"checkout"}},
 			ECSTags:                 map[string][]string{"ecs": {"tag"}},
 			ContainerInstanceTags:   map[string][]string{"instance": {"tag"}},
+			Envelope:                `{"host":{"name":"ecs-collector"},"info":{"uuid":"ecs-agent-uuid"}}`,
+			TaskHost:                `{"id":99,"name":"ip-10-0-1-7"}`,
 		},
 	})
 	if got := storagetest.Count(t, conn, "ecs_tasks"); got != 1 {
 		t.Fatalf("ecs_tasks: %d rows, want 1", got)
 	}
 	row = storagetest.QueryRow(t, conn, `
-		SELECT aws_account_id, arn, limits['CPU'], isNull(pull_stopped_at), container_instance_tags['instance']
+		SELECT aws_account_id, arn, limits['CPU'], isNull(pull_stopped_at), container_instance_tags['instance'],
+		       JSONExtractString(envelope, 'info', 'uuid'), JSONExtractInt(task_host, 'id')
 		FROM ecs_tasks`)
 	// An int64 account id must stay exact; a float64 anywhere on the path
 	// would round it above 2^53.
@@ -395,5 +413,13 @@ func TestOrchestratorSideTablesRoundTrip(t *testing.T) {
 	}
 	if got, ok := row[4].([]string); !ok || len(got) != 1 {
 		t.Errorf("container_instance_tags = %v", row[4])
+	}
+	// The envelope's own SystemInfo and the task's whole Host: both used to
+	// be decoded and dropped, the task's down to its Name.
+	if row[5].(string) != "ecs-agent-uuid" {
+		t.Errorf("envelope info.uuid = %v", row[5])
+	}
+	if row[6].(int64) != 99 {
+		t.Errorf("task_host.id = %v — a name alone cannot tell two instances apart", row[6])
 	}
 }

@@ -95,6 +95,15 @@ type ECSTaskRow struct {
 	Tags                  map[string][]string
 	ECSTags               map[string][]string
 	ContainerInstanceTags map[string][]string
+
+	// Envelope is the CollectorECSTask itself as JSON, minus the task list.
+	// The envelope carries a Host and an Info of its own — the machine and
+	// the agent that reported the pass — which the columns above do not hold;
+	// TaskHost is the task's own Host message, of which TaskHostName is only
+	// the Name. Both are JSON because their shape is the host inventory's,
+	// not this table's.
+	Envelope string
+	TaskHost string
 }
 
 // AppendTo must match the INSERT column list registered below, argument for
@@ -112,7 +121,8 @@ func (r ECSTaskRow) AppendTo(b driver.Batch) error {
 		orEmpty(r.Limits), orEmpty(r.EphemeralStorageMetrics),
 		r.PullStartedAt, r.PullStoppedAt, r.ExecutionStoppedAt,
 		r.Containers, r.ContainerCount,
-		orEmpty(r.Tags), orEmpty(r.ECSTags), orEmpty(r.ContainerInstanceTags))
+		orEmpty(r.Tags), orEmpty(r.ECSTags), orEmpty(r.ContainerInstanceTags),
+		r.Envelope, r.TaskHost)
 }
 
 func init() {
@@ -128,7 +138,8 @@ func init() {
 			 limits, ephemeral_storage_metrics,
 			 pull_started_at, pull_stopped_at, execution_stopped_at,
 			 containers, container_count,
-			 tags, ecs_tags, container_instance_tags)`,
+			 tags, ecs_tags, container_instance_tags,
+			 envelope, task_host)`,
 		// Same shape of traffic as k8s_resources — whole collection passes in
 		// a burst, then silence — at a fraction of the volume, since a cluster
 		// has far fewer tasks than a Kubernetes cluster has objects. Same
