@@ -74,15 +74,39 @@ func TestApmUnixTimeParsesFractionalSecondsAndKeepsRawOnFailure(t *testing.T) {
 
 // A nil (absent) application or host sub-message must not panic and must
 // come back as zero values, not as an error — many producers omit either.
+// ok must be true here: absent is not the same failure as malformed (see
+// TestApmApplicationAndHostFallBackToRawTextOnWrongShape below).
 func TestApmApplicationAndHostToleratesAbsence(t *testing.T) {
-	svc, ver, env, lang, langVer, tracerVer := apmApplication(nil)
+	svc, ver, env, lang, langVer, tracerVer, ok := apmApplication(nil)
 	if svc != "" || ver != "" || env != "" || lang != "" || langVer != "" || tracerVer != "" {
 		t.Errorf("apmApplication(nil) returned non-empty fields")
 	}
+	if !ok {
+		t.Errorf("apmApplication(nil) ok = false, want true — absent is not malformed")
+	}
 
-	host, os, arch, extra := apmHost(nil)
+	host, os, arch, extra, ok := apmHost(nil)
 	if host != "" || os != "" || arch != "" || extra != nil {
 		t.Errorf("apmHost(nil) returned non-empty fields")
+	}
+	if !ok {
+		t.Errorf("apmHost(nil) ok = false, want true — absent is not malformed")
+	}
+}
+
+// A schema violation (application/host sent as a JSON string, number or
+// array instead of an object — an SDK regression or a future producer this
+// code hasn't seen) must not make the whole block vanish: apmApplication and
+// apmHost report ok=false, and apmBuildRow keeps the literal text in extra
+// under the same key name apmExtraKeys would use for an undeclared field,
+// exactly like every other field in this row that keeps its raw text on a
+// parse failure (tracer_time/event_time/seq_id).
+func TestApmApplicationAndHostFallBackToRawTextOnWrongShape(t *testing.T) {
+	if _, _, _, _, _, _, ok := apmApplication(json.RawMessage(`"not-an-object"`)); ok {
+		t.Errorf("apmApplication(non-object) ok = true, want false")
+	}
+	if _, _, _, extra, ok := apmHost(json.RawMessage(`42`)); ok || extra != nil {
+		t.Errorf("apmHost(non-object) ok/extra = %v/%v, want false/nil", ok, extra)
 	}
 }
 
@@ -96,9 +120,12 @@ func TestApmHostKeepsUndeclaredKeys(t *testing.T) {
 		"kernel_version": "5.15.0", "cpu_cores": 8
 	}`)
 
-	hostname, osName, arch, extra := apmHost(raw)
+	hostname, osName, arch, extra, ok := apmHost(raw)
 	if hostname != "h1" || osName != "linux" || arch != "amd64" {
 		t.Errorf("apmHost known fields: got %q/%q/%q", hostname, osName, arch)
+	}
+	if !ok {
+		t.Errorf("apmHost(valid object) ok = false, want true")
 	}
 	if got := extra["kernel_version"]; got != `"5.15.0"` {
 		t.Errorf("host_extra[kernel_version] = %q, want the raw JSON string", got)
@@ -302,6 +329,85 @@ func TestHandleTelemetryStoresAgentTelemetryEventTime(t *testing.T) {
 	}
 	if r.Hostname != "agent-1" {
 		t.Errorf("hostname: got %q", r.Hostname)
+	}
+}
+
+// Absent columns must store as "", never telString's "-" log sentinel: a
+// query for a column left empty by most producers (origin, runtime_id — see
+// this envelope's own header comment for who sends what) must be able to
+// tell "not sent" apart from a producer that legitimately sent the text "-",
+// and none of these columns are Nullable. This is exactly the shape
+// TestHandleTelemetryStoresAgentTelemetryEventTime already sends (no
+// runtime_id, no application block, no origin).
+func TestHandleTelemetryAbsentFieldsStoreEmptyNotDashSentinel(t *testing.T) {
+	a, node := newTestServer(t)
+
+	body := []byte(`{
+		"api_version": "v2",
+		"request_type": "agent-metrics",
+		"event_time": 1732000000,
+		"host": {"hostname": "agent-1"},
+		"payload": {"message": "ok"}
+	}`)
+
+	e := newTestEngine(t, a, a.routeTelemetry)
+	if w := post(t, e, "/api/v2/apmtelemetry", body); w.Code != http.StatusAccepted {
+		t.Fatalf("POST /api/v2/apmtelemetry: got %d, want 202 (%s)", w.Code, w.Body.String())
+	}
+
+	rows := Rows[storage.APMTelemetryRow](node)
+	if len(rows) != 1 {
+		t.Fatalf("apm_telemetry rows: got %d, want 1", len(rows))
+	}
+	r := rows[0]
+
+	if r.RuntimeID != "" {
+		t.Errorf("runtime_id: got %q, want empty — absent, not a \"-\" sentinel", r.RuntimeID)
+	}
+	if r.Origin != "" {
+		t.Errorf("origin: got %q, want empty — absent, not a \"-\" sentinel", r.Origin)
+	}
+	if r.ServiceName != "" {
+		t.Errorf("service_name: got %q, want empty — application block absent entirely", r.ServiceName)
+	}
+	// host.hostname was sent, but host.os/architecture were not: those two
+	// fields are absent WITHIN a present block, the exact case the reviewed
+	// bug mishandled (present block, missing key inside it).
+	if r.HostOS != "" || r.HostArchitecture != "" {
+		t.Errorf("host_os/host_architecture: got %q/%q, want empty", r.HostOS, r.HostArchitecture)
+	}
+}
+
+// A malformed host block (present but not a JSON object) must not make the
+// whole block disappear without a trace: it lands in extra["host"] as its
+// literal text, the same fallback every other field in this row gets on a
+// parse failure.
+func TestHandleTelemetryMalformedHostFallsBackToExtra(t *testing.T) {
+	a, node := newTestServer(t)
+
+	body := []byte(`{
+		"api_version": "v2",
+		"request_type": "app-started",
+		"runtime_id": "33333333-3333-3333-3333-333333333333",
+		"host": "some-weird-string"
+	}`)
+
+	e := newTestEngine(t, a, a.routeTelemetry)
+	if w := post(t, e, "/api/v2/apmtelemetry", body); w.Code != http.StatusAccepted {
+		t.Fatalf("POST /api/v2/apmtelemetry: got %d, want 202 (%s)", w.Code, w.Body.String())
+	}
+
+	rows := Rows[storage.APMTelemetryRow](node)
+	if len(rows) != 1 {
+		t.Fatalf("apm_telemetry rows: got %d, want 1", len(rows))
+	}
+	r := rows[0]
+
+	if r.Hostname != "" {
+		t.Errorf("hostname: got %q, want empty — the block didn't parse as an object", r.Hostname)
+	}
+	if got := r.Extra["host"]; got != `"some-weird-string"` {
+		t.Errorf(`extra["host"] = %q, want the literal JSON text %q`, got, `"some-weird-string"`)
 	}
 }
 

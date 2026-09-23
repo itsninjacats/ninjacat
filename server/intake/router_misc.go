@@ -126,10 +126,15 @@ func (a *Server) HandleTelemetry(c *gin.Context) {
 		return
 	}
 
-	reqType := telString(env["request_type"])
+	// apmString, not telString: request_type ends up in the stored
+	// request_type column (via apmBuildRow below and child.RequestType in the
+	// batch loop), and telString's "-" sentinel is a log-line convenience
+	// that has no business landing in a ClickHouse row — see apmString's
+	// comment.
+	reqType := apmString(env["request_type"])
 	producer := telProducer(env, reqType)
 	log.Printf("[apmtelemetry] request_type=%s producer=%s api_version=%s %d B",
-		reqType, producer, telString(env["api_version"]), len(body))
+		reqType, producer, apmString(env["api_version"]), len(body))
 
 	// Identity: who is talking. Tracers and the fleet installer identify the
 	// process in the envelope; the trace-agent proxy adds the host in headers.
@@ -175,7 +180,7 @@ func (a *Server) HandleTelemetry(c *gin.Context) {
 			log.Printf("   payload: batch is not an array (%v); kept only on the parent row", err)
 		}
 		for i, entry := range batch {
-			childType := telString(entry["request_type"])
+			childType := apmString(entry["request_type"]) // stored as child.RequestType below
 			child := base
 			child.RequestType = childType
 			child.Producer = telProducer(env, childType)
@@ -248,32 +253,38 @@ func apmRawText(raw json.RawMessage) string {
 }
 
 // apmApplication reads the six fields every producer that sends an
-// application block is documented to include.
-func apmApplication(raw json.RawMessage) (serviceName, serviceVersion, env, languageName, languageVersion, tracerVersion string) {
+// application block is documented to include. ok is false only when raw is
+// present but does not parse as a JSON object (a schema violation no
+// producer is documented to produce) — the caller keeps raw's literal text
+// in that case, the same "never just vanish" rule apmRawText follows for
+// tracer_time/event_time, rather than losing the whole block silently.
+func apmApplication(raw json.RawMessage) (serviceName, serviceVersion, env, languageName, languageVersion, tracerVersion string, ok bool) {
 	if len(raw) == 0 {
-		return
+		return "", "", "", "", "", "", true // absent, not malformed
 	}
 	var app map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &app); err != nil {
-		return
+		return "", "", "", "", "", "", false
 	}
-	return telString(app["service_name"]), telString(app["service_version"]), telString(app["env"]),
-		telString(app["language_name"]), telString(app["language_version"]), telString(app["tracer_version"])
+	return apmString(app["service_name"]), apmString(app["service_version"]), apmString(app["env"]),
+		apmString(app["language_name"]), apmString(app["language_version"]), apmString(app["tracer_version"]), true
 }
 
 // apmHost reads hostname/os/architecture and keeps every other key the host
 // block carried, JSON-text-encoded by name — gohai and the tracer both put
 // more than those three fields there, and the schema does not need to know
-// their names in advance to keep them.
-func apmHost(raw json.RawMessage) (hostname, osName, arch string, extra map[string]string) {
+// their names in advance to keep them. ok mirrors apmApplication's: false
+// only when raw is present but not a JSON object, so the caller can fall
+// back to raw's literal text instead of dropping the block.
+func apmHost(raw json.RawMessage) (hostname, osName, arch string, extra map[string]string, ok bool) {
 	if len(raw) == 0 {
-		return
+		return "", "", "", nil, true // absent, not malformed
 	}
 	var host map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &host); err != nil {
-		return
+		return "", "", "", nil, false
 	}
-	hostname, osName, arch = telString(host["hostname"]), telString(host["os"]), telString(host["architecture"])
+	hostname, osName, arch = apmString(host["hostname"]), apmString(host["os"]), apmString(host["architecture"])
 	for k, v := range host {
 		if k == "hostname" || k == "os" || k == "architecture" {
 			continue
@@ -283,7 +294,7 @@ func apmHost(raw json.RawMessage) (hostname, osName, arch string, extra map[stri
 		}
 		extra[k] = string(v)
 	}
-	return
+	return hostname, osName, arch, extra, true
 }
 
 // apmKnownEnvelopeKeys are the keys apmBuildRow reads by name; anything else
@@ -313,8 +324,21 @@ func apmExtraKeys(env map[string]json.RawMessage) map[string]string {
 // request itself. For request_type message-batch, HandleTelemetry adds one
 // more row per batch entry on top of this one.
 func apmBuildRow(tenant string, receivedAt time.Time, env map[string]json.RawMessage, reqType, producer string, c *gin.Context) storage.APMTelemetryRow {
-	serviceName, serviceVersion, envName, languageName, languageVersion, tracerVersion := apmApplication(env["application"])
-	hostname, hostOS, hostArch, hostExtra := apmHost(env["host"])
+	serviceName, serviceVersion, envName, languageName, languageVersion, tracerVersion, appOK := apmApplication(env["application"])
+	hostname, hostOS, hostArch, hostExtra, hostOK := apmHost(env["host"])
+
+	// application/host are excluded from apmExtraKeys unconditionally (they
+	// are "known" envelope keys), which is only correct when the block above
+	// actually parsed — otherwise the raw text has no column of its own and
+	// must not just disappear. Add it back here, by the same key name
+	// apmExtraKeys would have used, only on the failure path.
+	extra := apmExtraKeys(env)
+	if !appOK {
+		extra = apmAddExtra(extra, "application", apmRawText(env["application"]))
+	}
+	if !hostOK {
+		extra = apmAddExtra(extra, "host", apmRawText(env["host"]))
+	}
 
 	return storage.APMTelemetryRow{
 		TenantID:   tenant,
@@ -322,8 +346,8 @@ func apmBuildRow(tenant string, receivedAt time.Time, env map[string]json.RawMes
 
 		RequestType: reqType,
 		Producer:    producer,
-		APIVersion:  telString(env["api_version"]),
-		RuntimeID:   telString(env["runtime_id"]),
+		APIVersion:  apmString(env["api_version"]),
+		RuntimeID:   apmString(env["runtime_id"]),
 
 		SeqID: apmSeqID(env["seq_id"]),
 
@@ -346,7 +370,7 @@ func apmBuildRow(tenant string, receivedAt time.Time, env map[string]json.RawMes
 
 		Payload: apmRawText(env["payload"]),
 		Debug:   apmRawText(env["debug"]),
-		Origin:  telString(env["origin"]),
+		Origin:  apmString(env["origin"]),
 
 		Via:                   c.GetHeader("Via"),
 		DDAgentHostname:       c.GetHeader("DD-Agent-Hostname"),
@@ -354,8 +378,19 @@ func apmBuildRow(tenant string, receivedAt time.Time, env map[string]json.RawMes
 		DatadogContainerID:    c.GetHeader("Datadog-Container-Id"),
 		XDatadogContainerTags: c.GetHeader("X-Datadog-Container-Tags"),
 
-		Extra: apmExtraKeys(env),
+		Extra: extra,
 	}
+}
+
+// apmAddExtra sets one key on extra, allocating the map on first use — the
+// same lazy-allocation shape apmExtraKeys and apmHost's HostExtra already
+// use, so a request that never needs a fallback never allocates one.
+func apmAddExtra(extra map[string]string, key, val string) map[string]string {
+	if extra == nil {
+		extra = make(map[string]string, 1)
+	}
+	extra[key] = val
+	return extra
 }
 
 // telBatch splits a message-batch payload into its entries, each a raw
@@ -486,6 +521,26 @@ func telString(raw json.RawMessage) string {
 func telRaw(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return "-"
+	}
+	return string(raw)
+}
+
+// apmString is telString's twin for values that end up in a stored column
+// instead of a log line: absent comes back as "", never telRaw's "-"
+// sentinel. That marker was written for display, where a dash is a harmless
+// placeholder; reusing it for a ClickHouse row rewrites "this producer never
+// sent this field" into a fabricated value indistinguishable from a producer
+// that legitimately sent the text "-" — and none of these columns are
+// Nullable, so the two cases could never be told apart again downstream. A
+// present-but-non-string value still comes back as its literal JSON text
+// (matching telString), so nothing is lost either way.
+func apmString(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
 	}
 	return string(raw)
 }

@@ -61,12 +61,27 @@ stay distinguishable from "not a batch entry at all".
 | `debug` | envelope `debug`, raw JSON text (documented on the tracer/installer envelope; not parsed, no fixed type) |
 | `origin` | envelope `origin` — presence (not value) is the fleet-installer signal used by `telProducer`'s fallback |
 | `via`, `dd_agent_hostname`, `dd_agent_env`, `datadog_container_id`, `x_datadog_container_tags` | the trace-agent proxy's own headers (`Via`, `DD-Agent-Hostname`, `DD-Agent-Env`, `Datadog-Container-Id`, `X-Datadog-Container-Tags`) — never in the JSON body |
-| `extra` | every envelope key besides the ones above, JSON-text-encoded by name (`apmExtraKeys`) — an undeclared key from a newer producer stays visible instead of disappearing |
+| `extra` | every envelope key besides the ones above, JSON-text-encoded by name (`apmExtraKeys`) — an undeclared key from a newer producer stays visible instead of disappearing. Also carries `application`/`host` as a fallback (see below) when either block is present but not a JSON object |
 | `batch_index`, `parent_request_type` | see "One request, one or more rows" above |
 
 ### Semantics worth knowing
 
 - No upsert key: `MergeTree`, append-only, one row per request/entry.
+- **Absent is `""`, never a `"-"` display sentinel.** `request_type`,
+  `api_version`, `runtime_id`, `origin` and every `application`/`host`
+  sub-field (`service_name`, `hostname`, …) are read through `apmString`,
+  which is `telString`'s twin for stored columns: `telString`'s `"-"`
+  fallback exists for log-line readability and must never reach a row, since
+  none of these columns is `Nullable` and a fabricated `"-"` would be
+  indistinguishable from a producer that genuinely sent that text. This
+  applies both when the whole `application`/`host` block is absent and when
+  the block is present but one field inside it is missing — the two cases
+  used to be encoded differently before this was fixed.
+- **A malformed `application`/`host` block (present but not a JSON object —
+  a schema violation, e.g. sent as a string) does not silently vanish.** Its
+  literal JSON text lands in `extra["application"]`/`extra["host"]` instead,
+  the same fallback every other field in this row gets on a parse failure
+  (`tracer_time_raw`, `event_time_raw`).
 - No sensitive columns by design — the JSON envelope this table stores does
   not carry credentials, and the proxy headers kept are identity/routing
   headers (agent hostname, container id), not secrets. `raw_payloads` (below)
