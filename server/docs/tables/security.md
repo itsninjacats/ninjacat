@@ -33,6 +33,7 @@ simply left at their zero value:
 | `header_tags` | the "event" part's `ddtags`, through `tagsToMultiMap` |
 | `dns_names` | the "event" part's `dns_names` key, kept as the raw JSON text exactly as received (not decoded further — the shape is undocumented) |
 | `header_extra` | every other key on the "event" part, name → raw JSON text |
+| `header_raw` | the "event" part's raw bytes, **exactly as received, regardless of whether it parsed as a JSON object** — mirrors `dump` below, so a malformed "event" part paired with a good "dump" part still loses nothing |
 | `dump_host`, `dump_service`, `dump_source`, `dump_tags` | `SecDump.Host`/`Service`/`Source`/`Tags` (protobuf, `dumpsv1.SecDump`) |
 | `agent_version` … `cgroup_manager` | `SecDump.Metadata`, flattened field for field |
 | `start_raw`, `end_raw`, `size_raw` | `Metadata.Start`/`End`/`Size` — **raw kernel- or boot-relative counters, not wall-clock timestamps**; `NULL` means `Metadata` itself was absent, a present `0` is a real reading |
@@ -123,6 +124,7 @@ layer, filesystem, etc.). `MergeTree`, partitioned by `toDate(received_at)`,
 | `type`, `id`, `generated_at`, `repo_tags`, `repo_digests`, `in_use`, `generation_duration_ms`, `dd_tags`, `heartbeat`, `hash`, `status`, `kernel_version`, `cpu_architecture` | the matching `SBOMEntity` fields; `generated_at` is `Nullable` (pointer-optional on the wire, never epoch zero when absent) |
 | `error` | the oneof's `Error` arm — set only when generation failed |
 | `bom` | `protojson` of the whole `cyclonedx_v1_4.Bom` (the oneof's `Cyclonedx` arm) — lossless; empty when `error` is set instead |
+| `bom_raw` | backstop, base64 of the raw protobuf bytes: populated only when `protojson.Marshal` on `bom` failed (it requires every string field to be valid UTF-8; `proto.Marshal` does not), so empty on the overwhelming majority of rows |
 | `component_count`, `vulnerability_count` | counts of the rows this entity produced in the two tables below |
 
 **Heartbeat entities are stored as ordinary rows.** `Heartbeat = true` means
@@ -148,15 +150,24 @@ plus:
 - `licenses` — one entry per `LicenseChoice`: the license's `id` if set,
   else its `name`, else the SPDX `expression`.
 - `hashes` — `Map(alg name, value)`, keyed by `HashAlg.String()`.
-- `properties` — `Map(name, value)` from `Component.Properties`.
+- `properties` — `Map(name, Array(value))` from `Component.Properties`, a
+  **multiset**: CycloneDX allows repeated `Property` entries sharing a name
+  (real scanners emit them), so a plain `Map` would silently drop every
+  duplicate but the last — see `docs/decisions/0001-tags-are-a-multiset.md`
+  for the same mistake, once already made and fixed, on Datadog tags.
 - `external_references`, `evidence` — `protojson` **arrays** of the
   corresponding repeated proto fields, kept as JSON text rather than further
   flattened (both are open-ended sub-structures nothing here queries on
-  their own yet).
+  their own yet). An element that fails `protojson` (non-UTF-8 string
+  content) still gets an array entry — `{"raw_protobuf_base64": "..."}` in
+  place of its normal JSON shape — rather than being skipped.
 
 `version` being an **empty string is a valid, meaningful value** per the
 CycloneDX spec ("RECOMMENDED to use an empty string") — never treated as
-absent.
+absent, and stays plain `String`. `purl`, `cpe`, `group`, `publisher`,
+`author` and `description` are all proto3-`optional` on
+`cyclonedx_v1_4.Component`, so they are `Nullable(String)`: `NULL` means the
+field was never set, distinct from a present empty string.
 
 ## sbom_vulnerabilities
 
@@ -166,13 +177,14 @@ VEX-in-BOM shape, findings plus their analysis state. `MergeTree`,
 
 | column(s) | source |
 |---|---|
-| `bom_ref`, `id`, `cwes`, `description`, `detail`, `recommendation` | direct fields |
-| `source_name`, `source_url` | `Vulnerability.Source.Name`/`Url` |
-| `ratings`, `advisories`, `affects` | `protojson` arrays of the corresponding repeated proto fields (`VulnerabilityRating`, `Advisory`, `VulnerabilityAffects` — the last including version ranges, which `affects_refs` below does not) |
+| `bom_ref`, `id`, `cwes` | direct fields |
+| `description`, `detail`, `recommendation` | direct fields, `Nullable(String)` — all three are proto3-`optional` on `cyclonedx_v1_4.Vulnerability`, so `NULL` distinguishes "never set" from a present `""` |
+| `source_name`, `source_url` | `Vulnerability.Source.Name`/`Url`, `Nullable(String)` — those two fields are themselves proto3-`optional` on `Source` |
+| `ratings`, `advisories`, `affects` | `protojson` arrays of the corresponding repeated proto fields (`VulnerabilityRating`, `Advisory`, `VulnerabilityAffects` — the last including version ranges, which `affects_refs` below does not); an element that fails `protojson` falls back to a `{"raw_protobuf_base64": "..."}` entry rather than being dropped, same as `sbom_components` above |
 | `created`, `published`, `updated` | `Nullable` — proto3 `Timestamp` pointers, `NULL` (never epoch zero) when the source did not supply one |
 | `analysis_state`, `analysis_justification`, `analysis_response`, `analysis_detail` | `Vulnerability.Analysis`, when present |
 | `affects_refs` | every affected component's `bom_ref`, pulled out of `affects` for the join `sbom_components` does not otherwise offer |
-| `properties` | `Map(name, value)` from `Vulnerability.Properties` |
+| `properties` | `Map(name, Array(value))` from `Vulnerability.Properties` — a multiset, same reasoning as `sbom_components.properties` above |
 
 ## Sensitive Data Scanner (`sdsresult`)
 
@@ -209,7 +221,11 @@ narrowings are:
   rather than further-flattened columns.** These are open-ended
   CycloneDX sub-structures nothing here queries on their own today;
   `sbom_entities.bom` also holds the entire BOM losslessly, so nothing here
-  is a single point of loss.
+  is a single point of loss. A per-element `protojson.Marshal` failure
+  inside these arrays (non-UTF-8 string content) falls back to a
+  `{"raw_protobuf_base64": "..."}` entry rather than being skipped, and the
+  whole-BOM `protojson.Marshal` in `sbom_entities.bom` has the same
+  fallback via `bom_raw` — see that table's column list above.
 
 `sdsresult` is not a decision to drop anything — there is no Go type to
 decode into yet, hence `raw_payloads` rather than a typed table (see above).

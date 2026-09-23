@@ -2,6 +2,7 @@ package intake
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -113,9 +114,10 @@ func (a *Server) HandleSecDump(c *gin.Context) {
 	// protobuf bytes, kept alongside for lossless storage.
 	// Either header or dump is nil when its part was missing or did not decode.
 	var (
-		header    map[string]json.RawMessage
-		dump      *dumpsv1.SecDump
-		dumpBytes []byte
+		header      map[string]json.RawMessage
+		headerBytes []byte
+		dump        *dumpsv1.SecDump
+		dumpBytes   []byte
 	)
 
 	mr := multipart.NewReader(bytes.NewReader(body), params["boundary"])
@@ -138,6 +140,7 @@ func (a *Server) HandleSecDump(c *gin.Context) {
 		switch part.FormName() {
 		case "event":
 			header = secDecodeDumpHeader(data)
+			headerBytes = data
 		case "dump":
 			dump = secDecodeDump(data)
 			dumpBytes = data
@@ -158,7 +161,7 @@ func (a *Server) HandleSecDump(c *gin.Context) {
 	receivedAt := time.Now().UTC()
 	dumpID := uuid.New()
 
-	row := cwsDumpRow(tenant, receivedAt, dumpID, header, dump, dumpBytes)
+	row := cwsDumpRow(tenant, receivedAt, dumpID, header, headerBytes, dump, dumpBytes)
 	a.store(storage.CWSActivityDumpsWriter, storage.WriteCWSActivityDumps{Dumps: []storage.CWSActivityDumpRow{row}}, 1)
 
 	if dump != nil && len(dump.GetTree()) > 0 {
@@ -216,13 +219,19 @@ var secKnownHeaderKeys = map[string]bool{
 // cwsDumpRow builds the cws_activity_dumps row from whichever of header/dump
 // decoded. Both may be present, either may be nil (never both, callers check
 // that before calling this).
+//
+// headerBytes is the "event" part's raw bytes, kept in HeaderRaw regardless
+// of whether it parsed as a JSON object — mirroring dumpBytes/Dump below, so
+// a malformed "event" part paired with a good "dump" part still loses
+// nothing (see the migration's comment on header_raw).
 func cwsDumpRow(tenant string, receivedAt time.Time, dumpID uuid.UUID,
-	header map[string]json.RawMessage, dump *dumpsv1.SecDump, dumpBytes []byte) storage.CWSActivityDumpRow {
+	header map[string]json.RawMessage, headerBytes []byte, dump *dumpsv1.SecDump, dumpBytes []byte) storage.CWSActivityDumpRow {
 
 	row := storage.CWSActivityDumpRow{
 		TenantID:   tenant,
 		ReceivedAt: receivedAt,
 		DumpID:     dumpID,
+		HeaderRaw:  string(headerBytes),
 		Dump:       string(dumpBytes),
 	}
 
@@ -687,7 +696,18 @@ func sbomRows(tenant string, receivedAt time.Time, payload *sbom.SBOMPayload) (
 			if bomJSON, err := protojson.Marshal(v.Cyclonedx); err == nil {
 				row.Bom = string(bomJSON)
 			} else {
-				log.Printf("[sbom] protojson bom for entity %s: %v", e.GetId(), err)
+				// protojson requires every string field to be valid UTF-8;
+				// proto.Marshal does not, so it survives inputs protojson
+				// rejects (e.g. non-UTF-8 bytes in scanned package metadata).
+				// This is the entity's only backstop once that happens — the
+				// flattened component/vulnerability rows below are built off
+				// the already-decoded Go structs and are unaffected either way.
+				log.Printf("[sbom] protojson bom for entity %s: %v — falling back to raw protobuf bytes", e.GetId(), err)
+				if raw, mErr := proto.Marshal(v.Cyclonedx); mErr == nil {
+					row.BomRaw = base64.StdEncoding.EncodeToString(raw)
+				} else {
+					log.Printf("[sbom] protobuf marshal also failed for entity %s bom: %v", e.GetId(), mErr)
+				}
 			}
 			comps := sbomFlattenComponents(tenant, receivedAt, entityID, v.Cyclonedx.GetComponents(), "", 0)
 			components = append(components, comps...)
@@ -731,7 +751,7 @@ func sbomFlattenComponents(tenant string, receivedAt time.Time, entityID uuid.UU
 			hashes[h.GetAlg().String()] = h.GetValue()
 		}
 
-		properties := sbomPropertiesMap(c.GetProperties())
+		properties := sbomPropertiesMultiMap(c.GetProperties())
 
 		out = append(out, storage.SBOMComponentRow{
 			TenantID:     tenant,
@@ -743,13 +763,16 @@ func sbomFlattenComponents(tenant string, receivedAt time.Time, entityID uuid.UU
 			Type:         c.GetType().String(),
 			Name:         c.GetName(),
 			Version:      c.GetVersion(),
-			Purl:         c.GetPurl(),
-			Cpe:          c.GetCpe(),
-			Group:        c.GetGroup(),
-			Publisher:    c.GetPublisher(),
-			Author:       c.GetAuthor(),
-			Description:  c.GetDescription(),
-			Scope:        c.GetScope().String(),
+			// Purl/Cpe/Group/Publisher/Author/Description are all proto3
+			// optional on the wire — sbomOptString keeps "never set" distinct
+			// from "set to empty string" instead of collapsing both to "".
+			Purl:        sbomOptString(c.Purl),
+			Cpe:         sbomOptString(c.Cpe),
+			Group:       sbomOptString(c.Group),
+			Publisher:   sbomOptString(c.Publisher),
+			Author:      sbomOptString(c.Author),
+			Description: sbomOptString(c.Description),
+			Scope:       c.GetScope().String(),
 
 			Licenses:   licenses,
 			Hashes:     hashes,
@@ -775,23 +798,25 @@ func sbomVulnerabilityRows(tenant string, receivedAt time.Time, entityID uuid.UU
 		}
 
 		row := storage.SBOMVulnerabilityRow{
-			TenantID:       tenant,
-			ReceivedAt:     receivedAt,
-			EntityID:       entityID,
-			BomRef:         v.GetBomRef(),
-			ID:             v.GetId(),
-			Description:    v.GetDescription(),
-			Detail:         v.GetDetail(),
-			Recommendation: v.GetRecommendation(),
+			TenantID:   tenant,
+			ReceivedAt: receivedAt,
+			EntityID:   entityID,
+			BomRef:     v.GetBomRef(),
+			ID:         v.GetId(),
+			// Description/Detail/Recommendation are proto3 optional — see the
+			// same note on sbomFlattenComponents above.
+			Description:    sbomOptString(v.Description),
+			Detail:         sbomOptString(v.Detail),
+			Recommendation: sbomOptString(v.Recommendation),
 			Ratings:        protojsonArray(v.GetRatings()),
 			Cwes:           v.GetCwes(),
 			Advisories:     protojsonArray(v.GetAdvisories()),
-			Properties:     sbomPropertiesMap(v.GetProperties()),
+			Properties:     sbomPropertiesMultiMap(v.GetProperties()),
 			Affects:        protojsonArray(v.GetAffects()),
 		}
 		if s := v.GetSource(); s != nil {
-			row.SourceName = s.GetName()
-			row.SourceURL = s.GetUrl()
+			row.SourceName = sbomOptString(s.Name)
+			row.SourceURL = sbomOptString(s.Url)
 		}
 		if ts := v.GetCreated(); ts != nil {
 			t := ts.AsTime()
@@ -822,13 +847,33 @@ func sbomVulnerabilityRows(tenant string, receivedAt time.Time, entityID uuid.UU
 	return out
 }
 
-func sbomPropertiesMap(props []*cyclonedx_v1_4.Property) map[string]string {
+// sbomOptString copies a CycloneDX proto3-optional string field: nil stays
+// nil ("never set" — the column must read NULL, not ""), a set field —
+// even an explicitly empty one, which the CycloneDX spec allows for e.g.
+// version — copies through. The copy avoids the returned pointer aliasing
+// the proto message's own memory.
+func sbomOptString(v *string) *string {
+	if v == nil {
+		return nil
+	}
+	s := *v
+	return &s
+}
+
+// sbomPropertiesMultiMap turns a CycloneDX Properties list into a multiset,
+// same shape and same reason as tagsToMultiMap: the spec explicitly allows
+// repeated Property entries sharing a name (real scanners emit them, e.g.
+// syft/trivy custom metadata), and a plain map[string]string here silently
+// dropped every duplicate but the last with no column to recover it from —
+// see docs/decisions/0001-tags-are-a-multiset.md for why that class of bug
+// is taken seriously in this repo.
+func sbomPropertiesMultiMap(props []*cyclonedx_v1_4.Property) map[string][]string {
 	if len(props) == 0 {
 		return nil
 	}
-	m := make(map[string]string, len(props))
+	m := make(map[string][]string, len(props))
 	for _, p := range props {
-		m[p.GetName()] = p.GetValue()
+		m[p.GetName()] = append(m[p.GetName()], p.GetValue())
 	}
 	return m
 }
@@ -837,6 +882,11 @@ func sbomPropertiesMap(props []*cyclonedx_v1_4.Property) map[string]string {
 // objects — the lossless-but-untyped shape for the CycloneDX sub-messages
 // (external references, evidence, ratings, advisories, affects) that get a
 // String column instead of their own table.
+//
+// An element that fails protojson (non-UTF-8 string content — see the BOM
+// fallback in sbomRows) is never just skipped: it still gets an array entry,
+// wrapping its raw protobuf bytes instead of its JSON shape, so the array's
+// length always matches the wire's repeated-field count.
 func protojsonArray[T proto.Message](items []T) string {
 	if len(items) == 0 {
 		return ""
@@ -844,11 +894,21 @@ func protojsonArray[T proto.Message](items []T) string {
 	parts := make([]json.RawMessage, 0, len(items))
 	for _, it := range items {
 		b, err := protojson.Marshal(it)
-		if err != nil {
-			log.Printf("[sbom] protojson array element: %v", err)
+		if err == nil {
+			parts = append(parts, b)
 			continue
 		}
-		parts = append(parts, b)
+		log.Printf("[sbom] protojson array element: %v — falling back to raw protobuf bytes", err)
+		raw, mErr := proto.Marshal(it)
+		if mErr != nil {
+			log.Printf("[sbom] protobuf marshal also failed for array element: %v", mErr)
+			continue
+		}
+		wrapped, mErr := json.Marshal(map[string]string{"raw_protobuf_base64": base64.StdEncoding.EncodeToString(raw)})
+		if mErr != nil {
+			continue
+		}
+		parts = append(parts, wrapped)
 	}
 	out, err := json.Marshal(parts)
 	if err != nil {

@@ -96,19 +96,32 @@ func TestSecurityTablesRoundTrip(t *testing.T) {
 		t.Fatalf("sbom_entities: %d rows, want 1", got)
 	}
 
+	author := "Jane Scanner"
 	storagetest.Insert(t, conn, storage.SBOMComponentsWriter, []storage.Row{
 		storage.SBOMComponentRow{
 			TenantID: "default", ReceivedAt: now, EntityID: entityID,
 			BomRef: "pkg:c1", Name: "libfoo", Version: "1.0",
+			Author:   &author,
 			Licenses: []string{"MIT"}, Hashes: map[string]string{"SHA-256": "abcd"},
+			// A duplicate-named property: the multiset column must keep both.
+			Properties: map[string][]string{"scanner:pkgid": {"libfoo@1.0", "libfoo@1.0-alt"}},
 		},
 	})
 	if got := storagetest.Count(t, conn, "sbom_components"); got != 1 {
 		t.Fatalf("sbom_components: %d rows, want 1", got)
 	}
-	row = storagetest.QueryRow(t, conn, "SELECT name, version FROM sbom_components")
+	row = storagetest.QueryRow(t, conn, "SELECT name, version, author, publisher FROM sbom_components")
 	if row[0] != "libfoo" || row[1] != "1.0" {
 		t.Errorf("name/version: got %v/%v", row[0], row[1])
+	}
+	// Nullable columns scan back as a pointer: author was set, publisher
+	// was not — that distinction must survive the round trip.
+	gotAuthor, ok := row[2].(*string)
+	if !ok || gotAuthor == nil || *gotAuthor != author {
+		t.Errorf("author: got %v (%T), want a present *string(%q)", row[2], row[2], author)
+	}
+	if row[3] != (*string)(nil) {
+		t.Errorf("publisher: got %v, want NULL — it was never set", row[3])
 	}
 
 	storagetest.Insert(t, conn, storage.SBOMVulnerabilitiesWriter, []storage.Row{
@@ -121,8 +134,11 @@ func TestSecurityTablesRoundTrip(t *testing.T) {
 	if got := storagetest.Count(t, conn, "sbom_vulnerabilities"); got != 1 {
 		t.Fatalf("sbom_vulnerabilities: %d rows, want 1", got)
 	}
-	row = storagetest.QueryRow(t, conn, "SELECT id, cwes FROM sbom_vulnerabilities")
+	row = storagetest.QueryRow(t, conn, "SELECT id, cwes, description FROM sbom_vulnerabilities")
 	if row[0] != "CVE-2024-1234" {
 		t.Errorf("id: got %v, want CVE-2024-1234", row[0])
+	}
+	if row[2] != (*string)(nil) {
+		t.Errorf("description: got %v, want NULL — it was never set", row[2])
 	}
 }

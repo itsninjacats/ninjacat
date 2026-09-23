@@ -49,6 +49,13 @@ type CWSActivityDumpRow struct {
 	DNSNames      string
 	HeaderExtra   map[string]string
 
+	// HeaderRaw is the "event" part's raw bytes, exactly as received,
+	// regardless of whether it parsed as a JSON object — the same
+	// unconditional-capture treatment Dump below gets for the "dump" part,
+	// so a malformed "event" part never loses its bytes even when the
+	// "dump" part decoded fine and the request otherwise looks fine too.
+	HeaderRaw string
+
 	DumpHost    string
 	DumpService string
 	DumpSource  string
@@ -81,7 +88,7 @@ type CWSActivityDumpRow struct {
 func (r CWSActivityDumpRow) AppendTo(b driver.Batch) error {
 	return b.Append(r.TenantID, r.ReceivedAt, r.DumpID,
 		r.HeaderHost, r.HeaderService, r.HeaderSource, orEmpty(r.HeaderTags),
-		r.DNSNames, orEmpty(r.HeaderExtra),
+		r.DNSNames, orEmpty(r.HeaderExtra), r.HeaderRaw,
 		r.DumpHost, r.DumpService, r.DumpSource, orEmpty(r.DumpTags),
 		r.AgentVersion, r.AgentCommit, r.KernelVersion, r.LinuxDistribution,
 		r.Arch, r.MetadataName, r.ProtobufVersion, r.DifferentiateArgs,
@@ -230,6 +237,12 @@ type SBOMEntityRow struct {
 
 	Error string
 	Bom   string
+	// BomRaw is the raw protobuf bytes of the CycloneDX message, base64,
+	// populated only as a backstop when protojson.Marshal on Bom failed
+	// (protojson requires valid UTF-8 string fields; proto.Marshal does
+	// not) — empty whenever Bom itself is set, to avoid doubling storage
+	// on the overwhelmingly common case where protojson just works.
+	BomRaw string
 
 	ComponentCount     uint32
 	VulnerabilityCount uint32
@@ -241,7 +254,7 @@ func (r SBOMEntityRow) AppendTo(b driver.Batch) error {
 		r.Type, r.ID, r.GeneratedAt, orEmptySlice(r.RepoTags), orEmptySlice(r.RepoDigests),
 		r.InUse, r.GenerationDurationMs, orEmpty(r.DDTags), r.Heartbeat, r.Hash,
 		r.Status, r.KernelVersion, r.CPUArchitecture,
-		r.Error, r.Bom,
+		r.Error, r.Bom, r.BomRaw,
 		r.ComponentCount, r.VulnerabilityCount)
 }
 
@@ -257,20 +270,27 @@ type SBOMComponentRow struct {
 	ParentBomRef string
 	Depth        uint16
 
-	Type        string
-	Name        string
-	Version     string
-	Purl        string
-	Cpe         string
-	Group       string
-	Publisher   string
-	Author      string
-	Description string
+	Type    string
+	Name    string
+	Version string
+	// Purl/Cpe/Group/Publisher/Author/Description are all proto3-optional
+	// on the wire (cyclonedx_v1_4.Component) — nil is "never set", distinct
+	// from a present empty string, which CycloneDX explicitly allows (e.g.
+	// version's own doc comment: "RECOMMENDED to use an empty string").
+	Purl        *string
+	Cpe         *string
+	Group       *string
+	Publisher   *string
+	Author      *string
+	Description *string
 	Scope       string
 
-	Licenses   []string
-	Hashes     map[string]string
-	Properties map[string]string
+	Licenses []string
+	Hashes   map[string]string
+	// Properties is a multiset (see sbomPropertiesMultiMap): CycloneDX
+	// allows repeated same-named Property entries, and real scanners emit
+	// them.
+	Properties map[string][]string
 
 	// ExternalReferences and Evidence are protojson arrays of the
 	// corresponding repeated proto fields — see the migration's comment.
@@ -294,16 +314,22 @@ type SBOMVulnerabilityRow struct {
 	ReceivedAt time.Time
 	EntityID   uuid.UUID
 
-	BomRef     string
-	ID         string
-	SourceName string
-	SourceURL  string
+	BomRef string
+	ID     string
+	// SourceName/SourceURL come from cyclonedx_v1_4.Source's own two
+	// proto3-optional fields (Name/Url) — nil when Source was present but
+	// that particular field was not set, distinct from Source being absent
+	// entirely (both stay nil in that case too, which is the same "we have
+	// nothing" reading either way).
+	SourceName *string
+	SourceURL  *string
 
-	Ratings        string
-	Cwes           []int32
-	Description    string
-	Detail         string
-	Recommendation string
+	Ratings     string
+	Cwes        []int32
+	Description *string
+	Detail      *string
+	// Recommendation is proto3-optional too — see the Description note.
+	Recommendation *string
 	Advisories     string
 
 	Created   *time.Time
@@ -317,7 +343,9 @@ type SBOMVulnerabilityRow struct {
 
 	AffectsRefs []string
 	Affects     string
-	Properties  map[string]string
+	// Properties is a multiset — see SBOMComponentRow's field of the same
+	// name.
+	Properties map[string][]string
 }
 
 func (r SBOMVulnerabilityRow) AppendTo(b driver.Batch) error {
@@ -334,7 +362,7 @@ func init() {
 		Name: "cws_activity_dumps",
 		Insert: `INSERT INTO cws_activity_dumps
 			(tenant_id, received_at, dump_id,
-			 header_host, header_service, header_source, header_tags, dns_names, header_extra,
+			 header_host, header_service, header_source, header_tags, dns_names, header_extra, header_raw,
 			 dump_host, dump_service, dump_source, dump_tags,
 			 agent_version, agent_commit, kernel_version, linux_distribution,
 			 arch, metadata_name, protobuf_version, differentiate_args,
@@ -382,7 +410,7 @@ func init() {
 			(tenant_id, received_at, entity_id, payload_version, host, source, dd_env,
 			 type, id, generated_at, repo_tags, repo_digests, in_use,
 			 generation_duration_ms, dd_tags, heartbeat, hash, status,
-			 kernel_version, cpu_architecture, error, bom,
+			 kernel_version, cpu_architecture, error, bom, bom_raw,
 			 component_count, vulnerability_count)`,
 		// Periodic full inventories, like container_images: every node
 		// re-announces the SBOMs it holds, so arrivals are bursty and

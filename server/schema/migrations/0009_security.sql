@@ -55,6 +55,12 @@ CREATE TABLE IF NOT EXISTS cws_activity_dumps
     -- multiset: these are arbitrary undeclared JSON keys, not "key:value"
     -- tag pairs.
     header_extra        Map(String, String) CODEC(ZSTD(3)),
+    -- The "event" part's raw bytes, exactly as received, regardless of
+    -- whether it parsed as a JSON object above. Mirrors `dump` below: a
+    -- malformed "event" part paired with a decodable "dump" part must not
+    -- silently lose its bytes just because header_host/.../header_extra
+    -- stayed empty.
+    header_raw          String CODEC(ZSTD(3)),
 
     -- "dump" part: dumpsv1.SecDump's own envelope. Can legitimately disagree
     -- with the header's host/service/source — the agent builds the two parts
@@ -291,6 +297,11 @@ CREATE TABLE IF NOT EXISTS sbom_entities
     -- The whole CycloneDX BOM, protojson, lossless. Empty when the oneof was
     -- `error` instead.
     bom                 String CODEC(ZSTD(3)),
+    -- Backstop for the rare case protojson.Marshal on the BOM fails (it
+    -- requires valid UTF-8 in every string field; proto.Marshal does not) —
+    -- raw protobuf bytes, base64. Empty whenever `bom` is set, which is the
+    -- overwhelming majority of rows.
+    bom_raw             String CODEC(ZSTD(3)),
 
     component_count      UInt32 CODEC(T64, ZSTD(1)),
     vulnerability_count  UInt32 CODEC(T64, ZSTD(1)),
@@ -322,19 +333,27 @@ CREATE TABLE IF NOT EXISTS sbom_components
     name                  String,
     -- Empty string is a valid, meaningful value per the CycloneDX spec
     -- ("RECOMMENDED to use an empty string" when a component has none) —
-    -- never treated as absent.
+    -- never treated as absent. That's why version stays plain String while
+    -- purl/cpe/group/publisher/author/description below are Nullable: those
+    -- six are proto3-optional fields on cyclonedx_v1_4.Component, so NULL
+    -- ("never set") must stay distinguishable from a present "".
     version               String,
-    purl                  String,
-    cpe                   String,
-    `group`               String,
-    publisher             String,
-    author                String,
-    description           String CODEC(ZSTD(3)),
+    purl                  Nullable(String),
+    cpe                   Nullable(String),
+    `group`               Nullable(String),
+    publisher             Nullable(String),
+    author                Nullable(String),
+    description           Nullable(String) CODEC(ZSTD(3)),
     scope                 LowCardinality(String),
 
     licenses              Array(String) CODEC(ZSTD(3)),
     hashes                Map(LowCardinality(String), String) CODEC(ZSTD(3)),
-    properties            Map(String, String) CODEC(ZSTD(3)),
+    -- Multiset, not a plain map: CycloneDX explicitly allows repeated
+    -- Property entries sharing a name (real scanners emit them), and a
+    -- last-wins map silently dropped every duplicate but one — see
+    -- docs/decisions/0001-tags-are-a-multiset.md for the same mistake made
+    -- (and fixed) once already, on Datadog tags.
+    properties            Map(String, Array(String)) CODEC(ZSTD(3)),
     -- protojson arrays of the corresponding repeated proto fields — kept as
     -- JSON text rather than further flattened, since neither is queried on
     -- its own today and both are open-ended (ExternalReference/Evidence
@@ -359,14 +378,20 @@ CREATE TABLE IF NOT EXISTS sbom_vulnerabilities
 
     bom_ref                  String,
     id                       String, -- e.g. a CVE id
-    source_name              LowCardinality(String),
-    source_url               String,
+    -- cyclonedx_v1_4.Source.Name/.Url are themselves proto3-optional, so
+    -- source_name/source_url stay Nullable even though the outer Source
+    -- message being absent already reads the same way (both NULL either way).
+    source_name              Nullable(String),
+    source_url               Nullable(String),
 
     ratings                  String CODEC(ZSTD(3)), -- protojson array of VulnerabilityRating
     cwes                     Array(Int32) CODEC(ZSTD(1)),
-    description              String CODEC(ZSTD(3)),
-    detail                   String CODEC(ZSTD(3)),
-    recommendation           String CODEC(ZSTD(3)),
+    -- description/detail/recommendation are proto3-optional on
+    -- cyclonedx_v1_4.Vulnerability — Nullable so "never set" survives
+    -- distinct from a present "".
+    description              Nullable(String) CODEC(ZSTD(3)),
+    detail                   Nullable(String) CODEC(ZSTD(3)),
+    recommendation           Nullable(String) CODEC(ZSTD(3)),
     advisories               String CODEC(ZSTD(3)), -- protojson array of Advisory
 
     -- All three are proto3 Timestamp pointers: NULL, never epoch zero, when
@@ -385,7 +410,8 @@ CREATE TABLE IF NOT EXISTS sbom_vulnerabilities
     -- full VulnerabilityAffects (including version ranges) losslessly.
     affects_refs            Array(String) CODEC(ZSTD(3)),
     affects                 String CODEC(ZSTD(3)), -- protojson array of VulnerabilityAffects
-    properties              Map(String, String) CODEC(ZSTD(3))
+    -- Multiset — see sbom_components.properties' comment above.
+    properties              Map(String, Array(String)) CODEC(ZSTD(3))
 )
 ENGINE = MergeTree
 PARTITION BY toDate(received_at)

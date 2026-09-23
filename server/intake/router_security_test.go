@@ -116,7 +116,7 @@ func TestCWSDumpRowNilMetadata(t *testing.T) {
 	tenant, now, dumpID := "default", time.Now().UTC(), mustUUID(t)
 	dump := &dumpsv1.SecDump{Host: "h1", Tree: threeLevelCWSTree()}
 
-	row := cwsDumpRow(tenant, now, dumpID, nil, dump, []byte{0x08, 0x01})
+	row := cwsDumpRow(tenant, now, dumpID, nil, nil, dump, []byte{0x08, 0x01})
 
 	if row.Start != nil || row.End != nil || row.Size != nil {
 		t.Errorf("Start/End/Size: got %v/%v/%v, want all nil — Metadata was absent", row.Start, row.End, row.Size)
@@ -135,7 +135,7 @@ func TestCWSDumpRowPresentZeroMetadataCounter(t *testing.T) {
 	dump := &dumpsv1.SecDump{
 		Metadata: &dumpsv1.Metadata{AgentVersion: "7.58.2", Start: 0, End: 500},
 	}
-	row := cwsDumpRow("default", time.Now(), mustUUID(t), nil, dump, nil)
+	row := cwsDumpRow("default", time.Now(), mustUUID(t), nil, nil, dump, nil)
 
 	if row.Start == nil || *row.Start != 0 {
 		t.Errorf("Start: got %v, want a present pointer to 0", row.Start)
@@ -160,7 +160,7 @@ func TestCWSDumpRowHeaderTagsAndExtra(t *testing.T) {
 		"dns_names":  json.RawMessage(`["example.com"]`),
 		"unexpected": json.RawMessage(`{"nested":true}`),
 	}
-	row := cwsDumpRow("default", time.Now(), mustUUID(t), header, nil, nil)
+	row := cwsDumpRow("default", time.Now(), mustUUID(t), header, nil, nil, nil)
 
 	if got := row.HeaderTags["kube_service"]; len(got) != 2 || got[0] != "a" || got[1] != "b" {
 		t.Errorf("HeaderTags[kube_service]: got %v, want [a b] — tags are a multiset", got)
@@ -311,6 +311,13 @@ func TestSBOMRowsComponentsAndVulnerability(t *testing.T) {
 	if parent.Hashes["HASH_ALG_SHA_256"] != "abcd" {
 		t.Errorf("parent hashes: got %v", parent.Hashes)
 	}
+	// None of Purl/Cpe/Group/Publisher/Author/Description was set on the
+	// proto literal above — they must read back nil (NULL), never "".
+	if parent.Purl != nil || parent.Cpe != nil || parent.Group != nil ||
+		parent.Publisher != nil || parent.Author != nil || parent.Description != nil {
+		t.Errorf("parent optional strings: got purl=%v cpe=%v group=%v publisher=%v author=%v description=%v, want all nil",
+			parent.Purl, parent.Cpe, parent.Group, parent.Publisher, parent.Author, parent.Description)
+	}
 	if child.BomRef != "pkg:c1-sub" || child.Depth != 1 || child.ParentBomRef != "pkg:c1" {
 		t.Errorf("child: got bom_ref=%q depth=%d parent_bom_ref=%q, want pkg:c1-sub/1/pkg:c1",
 			child.BomRef, child.Depth, child.ParentBomRef)
@@ -325,8 +332,8 @@ func TestSBOMRowsComponentsAndVulnerability(t *testing.T) {
 		t.Fatalf("vulnerabilities: got %d, want 1", len(vulns))
 	}
 	v := vulns[0]
-	if v.ID != "CVE-2024-1234" || v.SourceName != "NVD" {
-		t.Errorf("vuln id/source_name: got %q/%q, want CVE-2024-1234/NVD", v.ID, v.SourceName)
+	if v.ID != "CVE-2024-1234" || v.SourceName == nil || *v.SourceName != "NVD" {
+		t.Errorf("vuln id/source_name: got %q/%v, want CVE-2024-1234/NVD", v.ID, v.SourceName)
 	}
 	if len(v.Cwes) != 1 || v.Cwes[0] != 79 {
 		t.Errorf("vuln cwes: got %v, want [79]", v.Cwes)
@@ -361,6 +368,81 @@ func TestSBOMRowsErrorArm(t *testing.T) {
 	}
 	if len(components) != 0 || len(vulns) != 0 {
 		t.Errorf("components/vulns: got %d/%d, want 0/0", len(components), len(vulns))
+	}
+}
+
+// Real scanners (syft, trivy, grype) emit repeated CycloneDX Properties
+// sharing a name — e.g. multiple "aquasecurity:trivy:*" entries. A
+// last-wins map would silently drop every duplicate but the last; both
+// values here must survive, on both a component and a vulnerability.
+func TestSBOMPropertiesMultiValued(t *testing.T) {
+	dup := func(name string, values ...string) []*cyclonedx_v1_4.Property {
+		props := make([]*cyclonedx_v1_4.Property, len(values))
+		for i, v := range values {
+			props[i] = &cyclonedx_v1_4.Property{Name: name, Value: strp(v)}
+		}
+		return props
+	}
+
+	comp := &cyclonedx_v1_4.Component{
+		BomRef: strp("pkg:c1"), Name: "libfoo",
+		Properties: dup("aquasecurity:trivy:PkgID", "libfoo@1.0", "libfoo@1.0-alt"),
+	}
+	vuln := &cyclonedx_v1_4.Vulnerability{
+		BomRef: strp("pkg:c1"), Id: strp("CVE-2024-1234"),
+		Properties: dup("aquasecurity:trivy:SrcName", "libfoo", "libfoo-src"),
+	}
+	bom := &cyclonedx_v1_4.Bom{
+		SpecVersion:     "1.4",
+		Components:      []*cyclonedx_v1_4.Component{comp},
+		Vulnerabilities: []*cyclonedx_v1_4.Vulnerability{vuln},
+	}
+	payload := &sbom.SBOMPayload{
+		Host: "h1",
+		Entities: []*sbom.SBOMEntity{
+			{Id: "e1", Sbom: &sbom.SBOMEntity_Cyclonedx{Cyclonedx: bom}},
+		},
+	}
+
+	_, components, vulns := sbomRows("default", time.Now(), payload)
+
+	if len(components) != 1 {
+		t.Fatalf("components: got %d, want 1", len(components))
+	}
+	if got := components[0].Properties["aquasecurity:trivy:PkgID"]; len(got) != 2 ||
+		got[0] != "libfoo@1.0" || got[1] != "libfoo@1.0-alt" {
+		t.Errorf("component properties[aquasecurity:trivy:PkgID]: got %v, want both duplicate values kept", got)
+	}
+
+	if len(vulns) != 1 {
+		t.Fatalf("vulnerabilities: got %d, want 1", len(vulns))
+	}
+	if got := vulns[0].Properties["aquasecurity:trivy:SrcName"]; len(got) != 2 ||
+		got[0] != "libfoo" || got[1] != "libfoo-src" {
+		t.Errorf("vulnerability properties[aquasecurity:trivy:SrcName]: got %v, want both duplicate values kept", got)
+	}
+}
+
+// The "event" part's raw bytes must survive even when it fails to parse as
+// a JSON object — the same lossless treatment the "dump" part's bytes
+// already get via dumpBytes/Dump, so a malformed "event" part paired with a
+// good "dump" part loses nothing.
+func TestCWSDumpRowEventPartMalformedJSONKeepsRawBytes(t *testing.T) {
+	badEvent := []byte(`not a json object`)
+	if secDecodeDumpHeader(badEvent) != nil {
+		t.Fatalf("test fixture: badEvent must fail to decode")
+	}
+
+	dump := &dumpsv1.SecDump{Host: "h1", Metadata: &dumpsv1.Metadata{AgentVersion: "7.58.2"}}
+	row := cwsDumpRow("default", time.Now(), mustUUID(t), nil, badEvent, dump, []byte{0x08, 0x01})
+
+	if row.HeaderRaw != string(badEvent) {
+		t.Errorf("HeaderRaw: got %q, want the raw event bytes kept even though they didn't decode", row.HeaderRaw)
+	}
+	// The decode failure must not lose the "dump" part either — this is a
+	// mixed outcome, not a total failure.
+	if row.DumpHost != "h1" || row.AgentVersion != "7.58.2" {
+		t.Errorf("dump part: got host=%q agent_version=%q, want h1/7.58.2 despite the bad event part", row.DumpHost, row.AgentVersion)
 	}
 }
 
@@ -429,6 +511,60 @@ func TestHandleSecDumpStoresRows(t *testing.T) {
 		if n.DumpID != dumps[0].DumpID {
 			t.Errorf("node dump_id: got %v, want %v (must link to the dump row)", n.DumpID, dumps[0].DumpID)
 		}
+	}
+}
+
+// A real request where the "dump" part decodes fine but the "event" part is
+// malformed JSON: the row still gets stored (not routed to raw_payloads,
+// since one part did decode), and the malformed part's bytes must still be
+// reachable through HeaderRaw rather than silently discarded.
+func TestHandleSecDumpMalformedEventPartKeepsRawBytes(t *testing.T) {
+	a, node := newTestServer(t)
+	e := newTestEngine(t, a, a.routeCWS)
+
+	badEvent := []byte(`this is not json`)
+	dumpBytes, err := proto.Marshal(&dumpsv1.SecDump{
+		Host: "h1", Metadata: &dumpsv1.Metadata{AgentVersion: "7.58.2"},
+	})
+	if err != nil {
+		t.Fatalf("marshal test dump: %v", err)
+	}
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	part, _ := mw.CreateFormField("event")
+	part.Write(badEvent)
+	part, _ = mw.CreateFormFile("dump", "dump")
+	part.Write(dumpBytes)
+	mw.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/secdump", &buf)
+	req.Header.Set("Dd-Api-Key", testAPIKey)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	w := httptest.NewRecorder()
+	e.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("POST /api/v2/secdump: got %d, want 202 (%s)", w.Code, w.Body.String())
+	}
+
+	dumps := Rows[storage.CWSActivityDumpRow](node)
+	if len(dumps) != 1 {
+		t.Fatalf("cws_activity_dumps rows: got %d, want 1", len(dumps))
+	}
+	if dumps[0].HeaderRaw != string(badEvent) {
+		t.Errorf("HeaderRaw: got %q, want the malformed event part's raw bytes kept", dumps[0].HeaderRaw)
+	}
+	if dumps[0].HeaderHost != "" {
+		t.Errorf("HeaderHost: got %q, want empty — the event part never decoded", dumps[0].HeaderHost)
+	}
+	if dumps[0].DumpHost != "h1" || dumps[0].AgentVersion != "7.58.2" {
+		t.Errorf("dump part: got host=%q agent_version=%q, want h1/7.58.2 — the good part must not be lost either", dumps[0].DumpHost, dumps[0].AgentVersion)
+	}
+	// Neither storeRaw path fired: this is a mixed-success request, not a
+	// total decode failure, so nothing should have landed in raw_payloads.
+	if got := len(Rows[storage.RawPayloadRow](node)); got != 0 {
+		t.Errorf("raw_payloads rows: got %d, want 0 — one part decoded, so this is not a full decode_error", got)
 	}
 }
 
