@@ -60,6 +60,20 @@ type TimeseriesResponseSeries =
       GroupTags: string list
       QueryIndex: int }
 
+/// NinjaCat's own: the band anomalies() draws around a series, aligned with
+/// `times`. Null where the band is not known (too little history before).
+type NinjacatBounds =
+    { Upper: float option list
+      Lower: float option list }
+
+/// NinjaCat's own: what forecast() predicts past the window. Its own times,
+/// all after `to`, so `times` and `values` keep meaning the window only.
+type NinjacatForecast =
+    { Times: int64 list
+      Values: float list
+      Upper: float list
+      Lower: float list }
+
 type TimeseriesResponseAttributes =
     { Series: TimeseriesResponseSeries list
       /// Bucket starts, unix milliseconds, shared by every series. Only buckets
@@ -67,7 +81,17 @@ type TimeseriesResponseAttributes =
       Times: int64 list
       /// One row per series, one value per time; null where that series has
       /// no data in that bucket.
-      Values: float option list list }
+      Values: float option list list
+      /// Parallel to `series`, present only when a formula asked for it.
+      ///
+      /// Not in Datadog's spec, which has no field for a band or a forecast
+      /// at all — its UI must get them some other way. Fields of our own are
+      /// safe to add: datadog-api-client-go keeps unknown fields in
+      /// AdditionalProperties, and the Python client's models accept them by
+      /// default. The `ninjacat_` prefix keeps them clear of any field
+      /// Datadog may add later.
+      NinjacatBounds: NinjacatBounds option list option
+      NinjacatForecast: NinjacatForecast option list option }
 
 type TimeseriesResponse =
     { /// Not in the spec, but every recorded Datadog response carries "0".

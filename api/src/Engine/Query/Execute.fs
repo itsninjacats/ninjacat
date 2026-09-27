@@ -61,9 +61,59 @@ let run (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<
               ToMs = plan.To.ToUnixTimeMilliseconds() }
 
         let fromMs = plan.From.ToUnixTimeMilliseconds()
+        let toMs = plan.To.ToUnixTimeMilliseconds()
+        let windowMs = toMs - fromMs
+
+        // An output's series, with what its outermost function adds beside
+        // them. The extras read history before the window, so the node is
+        // evaluated from there, and the series trimmed back to the window.
+        let evalOutput (o: Output) : (Series.Series * Series.SeriesExtra) list =
+            let stepMs = fetched.StepMs[Evaluate.fetches o.Node |> List.head |> fst]
+            let visible (s: Series.Series) = { s with Points = s.Points |> Map.filter (fun t _ -> t >= fromMs) }
+
+            let withExtras (historyFrom: int64) (extra: Series.Series -> Series.SeriesExtra) =
+                let full = Evaluate.evalFrom fetched historyFrom o.Node
+                let kept = full |> List.map visible |> Series.limit o.Limit |> List.map _.GroupTags |> set
+                full |> List.filter (fun s -> kept.Contains s.GroupTags) |> List.map (fun s -> visible s, extra s)
+
+            match o.Extra with
+            | NoExtra -> Evaluate.evalFrom fetched fromMs o.Node |> Series.limit o.Limit |> List.map (fun s -> s, Series.noExtra)
+            | Anomalies bounds ->
+                withExtras (fromMs - int64 anomalyWindow * stepMs) (fun s ->
+                    let pts = s.Points |> Map.toArray
+                    let band = Algorithms.basicBand anomalyWindow bounds (Array.map snd pts)
+
+                    { Series.noExtra with
+                        Band =
+                            Array.zip pts band
+                            |> Array.choose (fun ((t, _), b) -> if t >= fromMs then b |> Option.map (fun b -> t, b) else None)
+                            |> Map.ofArray
+                            |> Some })
+            | Forecast(deviations, model, history, horizon) ->
+                let historyMs = history |> Option.map (fun h -> int64 h.TotalMilliseconds) |> Option.defaultValue windowMs
+                let horizonMs = horizon |> Option.map (fun h -> int64 h.TotalMilliseconds) |> Option.defaultValue windowMs
+                let future = Series.grid stepMs toMs (toMs + horizonMs) |> Array.ofSeq
+
+                let modelName =
+                    match model with
+                    | SimpleModel -> "simple"
+                    | ReactiveModel -> "reactive"
+                    | DefaultModel -> "default"
+
+                withExtras (min fromMs (toMs - historyMs)) (fun s ->
+                    let pts = s.Points |> Map.toArray |> Array.filter (fun (t, _) -> t >= toMs - historyMs)
+
+                    if pts.Length < 2 then
+                        Series.noExtra
+                    else
+                        let seconds t = float (t - toMs) / 1000.0
+                        let predicted = Algorithms.linearForecast modelName deviations (pts |> Array.map (fst >> seconds)) (Array.map snd pts) (future |> Array.map seconds)
+
+                        { Series.noExtra with
+                            Forecast = Array.map2 (fun t (v, lo, hi) -> t, v, lo, hi) future predicted |> List.ofArray |> Some })
 
         return
             plan.Outputs
-            |> List.map (fun o -> o.QueryIndex, Evaluate.evalFrom fetched fromMs o.Node |> Series.limit o.Limit)
-            |> Series.response
+            |> List.map (fun o -> o.QueryIndex, evalOutput o)
+            |> Series.responseWith
     }

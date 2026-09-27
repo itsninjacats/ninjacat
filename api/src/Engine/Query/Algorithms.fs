@@ -258,3 +258,52 @@ let madOutliers (scaled: bool) (tolerance: float) (percent: float) (rows: float 
         Array.init n (fun i ->
             let flags = outlying |> Array.choose (fun at -> at[i])
             flags.Length > 0 && 100.0 * float (flags |> Array.filter id |> Array.length) / float flags.Length > percent)
+
+// --- anomalies and forecast --------------------------------------------------------
+
+/// The basic anomaly band: for each point, the range expected from the
+/// `window` points before it (docs: "a simple lagging rolling quantile
+/// computation to determine the range of expected values").
+///
+/// WARNING(undocumented): which quantiles, and what `bounds` multiplies. The
+/// centre is the median of the window, the width `bounds` robust standard
+/// deviations (MAD × 1.4826) either side — the same scale outliers() uses. A
+/// point needs at least 5 points before it for a band.
+let basicBand (window: int) (bounds: float) (values: float[]) : (float * float) option[] =
+    values
+    |> Array.mapi (fun i _ ->
+        let past = values[max 0 (i - window) .. i - 1]
+
+        if past.Length < 5 then
+            None
+        else
+            let centre = median past
+            let spread = madToSigma * mad past
+            Some(centre - bounds * spread, centre + bounds * spread))
+
+/// A linear forecast from (seconds, value) history: the value and band at each
+/// of `future` seconds.
+///
+/// WARNING(undocumented): how the three models differ in practice. We read the
+/// docs' descriptions as: simple fits Huber over the whole history; default
+/// fits Huber over its most recent half ("adjusts to the most recent trend
+/// ... robust to recent noise"); reactive fits least squares over its most
+/// recent fifth ("extrapolates recent behavior ... at the risk of
+/// overfitting"). The band is `deviations` robust standard deviations of the
+/// fit's residuals, the same width at every horizon.
+let linearForecast (model: string) (deviations: float) (xs: float[]) (ys: float[]) (future: float[]) =
+    let n = xs.Length
+
+    let from =
+        match model with
+        | "simple" -> 0
+        | "reactive" -> n - max 2 (n / 5)
+        | _ -> n - max 2 (n / 2)
+        |> max 0
+
+    let fx, fy = xs[from..], ys[from..]
+    let slope, intercept = if model = "reactive" then ols fx fy else huber fx fy
+    let residuals = Array.map2 (fun x y -> y - (intercept + slope * x)) fx fy
+    let width = deviations * madToSigma * mad residuals
+
+    future |> Array.map (fun x -> let v = intercept + slope * x in v, v - width, v + width)

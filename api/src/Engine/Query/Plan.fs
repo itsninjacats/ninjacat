@@ -227,6 +227,27 @@ type Node =
     /// Keep only the series outliers() finds.
     | Outliers of Node * OutlierAlgorithm * tolerance: float
 
+/// forecast()'s `model=` for the linear algorithm (docs: monitors/types/forecasts).
+type LinearModel =
+    /// "Adjusts to the most recent trend and extrapolates data while being
+    /// robust to recent noise."
+    | DefaultModel
+    /// "Does a robust linear regression through the entire history."
+    | SimpleModel
+    /// "Extrapolates recent behavior better at the risk of overfitting to
+    /// noise, spikes, or dips."
+    | ReactiveModel
+
+/// What a formula adds beside its series, outside `values`. Only the
+/// outermost function of a formula can ask for it.
+type Extra =
+    | NoExtra
+    /// anomalies(q, 'basic', bounds): a band of expected values.
+    | Anomalies of bounds: float
+    /// forecast(q, 'linear', deviations): predicted values past the window,
+    /// with a band. History and horizon default to the window's length.
+    | Forecast of deviations: float * model: LinearModel * history: TimeSpan option * horizon: TimeSpan option
+
 type Output =
     {
         /// What the response calls `query_index`: the formula's position, or
@@ -234,7 +255,15 @@ type Output =
         QueryIndex: int
         Node: Node
         Limit: ParsedLimit option
+        Extra: Extra
     }
+
+/// Buckets of history before each point that the basic anomaly band is
+/// computed from.
+///
+/// WARNING(undocumented): Datadog's "lagging rolling quantile" window. It is 60
+/// buckets: at the default steps, from a minute (1 s buckets) to a few hours.
+let anomalyWindow = 60
 
 type Plan =
     { From: DateTimeOffset
@@ -665,6 +694,7 @@ let rec private resolve (from: DateTimeOffset) (label: string) (byName: Map<stri
                     | "exclude_null", [] -> Ok ExcludeNull
                     | "default_zero", [] -> Ok DefaultZero
                     | "outliers", _ -> outlierArgs literals |> Result.map (fun (alg, tol) node -> Outliers(node, alg, tol))
+                    | ("anomalies" | "forecast"), _ -> Error $"{name}() must be the outermost function of a formula"
                     | "default_zero", _ -> Error "default_zero() takes one argument: default_zero(query)"
                     | _, [] when timewiseFunctions.ContainsKey name ->
                         let fn = timewiseFunctions[name]
@@ -688,9 +718,116 @@ let rec private resolve (from: DateTimeOffset) (label: string) (byName: Map<stri
                     @ (match build with Error e -> [ $"{label}: {e}" ] | Ok _ -> [])
                 )
 
+/// `4h`, `30m`, `1w`: a whole number and s, m, h, d or w.
+let private duration (text: string) : TimeSpan option =
+    let m = Text.RegularExpressions.Regex.Match(text, "^(\\d+)(s|m|h|d|w)$")
+
+    if not m.Success then
+        None
+    else
+        let n = float m.Groups[1].Value
+
+        match m.Groups[2].Value with
+        | "s" -> Some(TimeSpan.FromSeconds n)
+        | "m" -> Some(TimeSpan.FromMinutes n)
+        | "h" -> Some(TimeSpan.FromHours n)
+        | "d" -> Some(TimeSpan.FromDays n)
+        | _ -> Some(TimeSpan.FromDays(7.0 * n))
+        |> Option.filter (fun t -> t > TimeSpan.Zero)
+
+let private word =
+    function
+    | Word w
+    | Quoted w -> Some w
+    | Num _ -> None
+
+/// The arguments after the query: positional literals and named ones apart.
+/// In a formula a bare word is a query name — a word again here.
+let private splitArgs (rest: Arg<string> list) =
+    let positional = rest |> List.choose (function Named _ -> None | a -> Some(asLiteral a))
+    let named = rest |> List.choose (function Named(n, v) -> Some(n, v) | _ -> None)
+    positional, named
+
+/// anomalies(q, 'basic', bounds, name=value…)
+///
+/// WARNING(undocumented): what the monitor-oriented named arguments do on a
+/// graph. `direction`, `alert_window`, `interval`, `count_default_zero`,
+/// `seasonality` and `timezone` are accepted, as in Datadog's own queries, and
+/// have no effect here: the band is drawn at the query's step, both sides.
+let private anomaliesArgs (rest: Arg<string> list) : Result<Extra, string> =
+    let known = set [ "direction"; "alert_window"; "interval"; "count_default_zero"; "seasonality"; "timezone" ]
+    let positional, named = splitArgs rest
+
+    match positional, named |> List.tryFind (fun (n, _) -> not (known.Contains n)) with
+    | _, Some(n, _) -> Error $"anomalies() has no argument '{n}'"
+    | [ Some alg; Some(Num bounds) ], _ when bounds > 0.0 ->
+        match word alg with
+        | Some "basic" -> Ok(Anomalies bounds)
+        | Some("agile" | "robust" as a) -> Error $"anomalies() algorithm '{a}' is not supported yet"
+        | _ -> Error "anomalies() algorithm must be 'basic', 'agile' or 'robust'"
+    | _ -> Error "anomalies() takes a query, an algorithm and bounds: anomalies(query, 'basic', 2)"
+
+/// forecast(q, 'linear', deviations, model=, history=, horizon=)
+///
+/// `horizon` is ours. Datadog takes the horizon from where forecast() is
+/// used — a monitor's `next_1w` — and does not document it for graphs.
+let private forecastArgs (rest: Arg<string> list) : Result<Extra, string> =
+    let positional, named = splitArgs rest
+    let ignored = set [ "interval"; "seasonality"; "timezone" ]
+
+    let model =
+        match named |> List.tryFind (fst >> (=) "model") |> Option.map snd |> Option.bind word with
+        | None
+        | Some "default" -> Ok DefaultModel
+        | Some "simple" -> Ok SimpleModel
+        | Some "reactive" -> Ok ReactiveModel
+        | Some m -> Error $"forecast() model must be 'default', 'simple' or 'reactive', got '{m}'"
+
+    let span name =
+        match named |> List.tryFind (fst >> (=) name) |> Option.map snd with
+        | None -> Ok None
+        | Some v ->
+            match word v |> Option.bind duration with
+            | Some d -> Ok(Some d)
+            | None -> Error $"forecast() {name} must be a duration like '4h', '3d' or '1w'"
+
+    let unknown = named |> List.tryFind (fun (n, _) -> not (List.contains n [ "model"; "history"; "horizon" ] || ignored.Contains n))
+
+    match positional, unknown, model, span "history", span "horizon" with
+    | _, Some(n, _), _, _, _ -> Error $"forecast() has no argument '{n}'"
+    | [ Some alg; Some(Num dev) ], None, Ok model, Ok history, Ok horizon when dev >= 0.0 ->
+        match word alg with
+        | Some "linear" -> Ok(Forecast(dev, model, history, horizon))
+        | Some "seasonal" -> Error "forecast() algorithm 'seasonal' is not supported yet"
+        | _ -> Error "forecast() algorithm must be 'linear' or 'seasonal'"
+    | _, _, Error e, _, _
+    | _, _, _, Error e, _
+    | _, _, _, _, Error e -> Error e
+    | _ -> Error "forecast() takes a query, an algorithm and deviations: forecast(query, 'linear', 1)"
+
+/// A formula's outermost function may add an extra; everything below it is a
+/// Node like any other.
+let private resolveOutput (from: DateTimeOffset) (label: string) (byName: Map<string, int>) (expr: Formula) : Result<Node * Extra, string list> =
+    let withExtra (args: Arg<string> list) (read: Arg<string> list -> Result<Extra, string>) =
+        match args with
+        | Value inner :: rest ->
+            match resolve from label byName inner, read rest with
+            | Ok node, Ok extra -> Ok(node, extra)
+            | node, extra ->
+                Error(
+                    (match node with Error es -> es | Ok _ -> [])
+                    @ (match extra with Error e -> [ $"{label}: {e}" ] | Ok _ -> [])
+                )
+        | _ -> Error [ $"{label}: the first argument must be a query" ]
+
+    match expr with
+    | Call("anomalies", args) -> withExtra args anomaliesArgs
+    | Call("forecast", args) -> withExtra args forecastArgs
+    | _ -> resolve from label byName expr |> Result.map (fun node -> node, NoExtra)
+
 let private planOutputs (req: ParsedTimeseriesRequest) : Result<Output list, string list> =
     match req.Formulas with
-    | [] -> Ok(req.Queries |> List.mapi (fun i _ -> { QueryIndex = i; Node = Fetch i; Limit = None }))
+    | [] -> Ok(req.Queries |> List.mapi (fun i _ -> { QueryIndex = i; Node = Fetch i; Limit = None; Extra = NoExtra }))
     | formulas ->
         let byName =
             req.Queries
@@ -701,8 +838,8 @@ let private planOutputs (req: ParsedTimeseriesRequest) : Result<Output list, str
         let results =
             formulas
             |> List.mapi (fun i f ->
-                resolve req.From $"formulas[{i}]" byName f.Formula
-                |> Result.map (fun node -> { QueryIndex = i; Node = node; Limit = f.Limit }))
+                resolveOutput req.From $"formulas[{i}]" byName f.Formula
+                |> Result.map (fun (node, extra) -> { QueryIndex = i; Node = node; Limit = f.Limit; Extra = extra }))
 
         match results |> List.collect (function Error es -> es | Ok _ -> []) with
         | [] -> Ok(results |> List.choose (function Ok o -> Some o | Error _ -> None))
@@ -747,9 +884,30 @@ let plan (req: ParsedTimeseriesRequest) : Result<Plan, string list> =
             | CountNotNull inner
             | ExcludeNull inner -> needs extra inner
 
+        let planned = queries |> List.map (function Ok q -> Some q | Error _ -> None)
+
+        let rec firstSource node =
+            match node with
+            | Fetch i -> i
+            | Pointwise(_, n) | Top(n, _, _, _) | CountNonzero n | CountNotNull n | ExcludeNull n
+            | Timewise(_, n) | Shift(_, n) | DefaultZero n | Outliers(n, _, _) -> firstSource n
+
+        // History an output's extra reads before the window, in buckets of
+        // its query's step: the anomaly window, or forecast history beyond
+        // the window itself.
+        let extraLookback (o: Output) =
+            let step = planned[firstSource o.Node] |> Option.map _.Step |> Option.defaultValue requestStep
+
+            match o.Extra with
+            | NoExtra -> 0
+            | Anomalies _ -> anomalyWindow
+            | Forecast(_, _, history, _) ->
+                let beyond = (defaultArg history window) - window
+                if beyond <= TimeSpan.Zero then 0 else int (Math.Ceiling(beyond / step))
+
         let lookbacks =
             outputs
-            |> List.collect (_.Node >> needs 0)
+            |> List.collect (fun o -> needs (extraLookback o) o.Node)
             |> List.groupBy fst
             |> List.map (fun (i, ns) -> i, ns |> List.map snd |> List.max)
             |> Map.ofList

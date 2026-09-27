@@ -201,8 +201,8 @@ let ``wrong arguments are named`` () =
 
 [<Fact>]
 let ``unknown functions and names inside functions are reported together`` () =
-    let es = errorsOf [ Some "a", "x{*}" ] [ "anomalies(a, 'basic', 2)"; "abs(b)" ]
-    Assert.Contains("formulas[0]: function 'anomalies' is not supported yet", es)
+    let es = errorsOf [ Some "a", "x{*}" ] [ "dt(a)"; "abs(b)" ]
+    Assert.Contains("formulas[0]: function 'dt' is not supported yet", es)
     Assert.Contains("formulas[1]: no query is named 'b'", es)
 
 // --- across series -------------------------------------------------------------------
@@ -362,3 +362,38 @@ let ``outliers arguments are checked`` () =
         "formulas[0]: outliers() takes a query, an algorithm, a tolerance and for MAD a percentage: outliers(query, 'dbscan', 3) or outliers(query, 'mad', 3, 20)",
         err "outliers(a, 'kmeans', 3)"
     )
+
+// --- anomalies and forecast ------------------------------------------------------------------
+
+let private outputOf formula = Assert.Single (planOf [ Some "a", "x{*}" ] [ formula ]).Outputs
+
+[<Fact>]
+let ``anomalies and forecast are extras beside the node`` () =
+    let o = outputOf "anomalies(abs(a), 'basic', 2, direction='above', alert_window='last_15m')"
+    Assert.Equal(Pointwise(Abs, Fetch 0), o.Node)
+    Assert.Equal(Anomalies 2.0, o.Extra)
+    Assert.Equal(Forecast(1.0, DefaultModel, None, None), (outputOf "forecast(a, 'linear', 1)").Extra)
+
+    Assert.Equal(
+        Forecast(2.0, ReactiveModel, Some(TimeSpan.FromDays 7.0), Some(TimeSpan.FromHours 4.0)),
+        (outputOf "forecast(a, 'linear', 2, model='reactive', history='1w', horizon='4h')").Extra
+    )
+
+[<Fact>]
+let ``anomalies and forecast must be outermost`` () =
+    Assert.Contains("formulas[0]: anomalies() must be the outermost function of a formula", errorsOf [ Some "a", "x{*}" ] [ "abs(anomalies(a, 'basic', 2))" ])
+
+[<Fact>]
+let ``unsupported algorithms and bad arguments are named`` () =
+    let err formula = errorsOf [ Some "a", "x{*}" ] [ formula ]
+    Assert.Contains("formulas[0]: anomalies() algorithm 'agile' is not supported yet", err "anomalies(a, 'agile', 2)")
+    Assert.Contains("formulas[0]: forecast() algorithm 'seasonal' is not supported yet", err "forecast(a, 'seasonal', 1)")
+    Assert.Contains("formulas[0]: forecast() horizon must be a duration like '4h', '3d' or '1w'", err "forecast(a, 'linear', 1, horizon='soon')")
+    Assert.Contains("formulas[0]: forecast() has no argument 'colour'", err "forecast(a, 'linear', 1, colour='red')")
+
+[<Fact>]
+let ``history beyond the window becomes lookback`` () =
+    // One hour window at 20 s steps; a day of history is 23 h more: 4140 buckets.
+    let p = planOf [ Some "a", "x{*}" ] [ "forecast(a, 'linear', 1, history='1d')" ]
+    Assert.Equal(4140, (List.exactlyOne p.Queries).Lookback)
+    Assert.Equal(anomalyWindow, (List.exactlyOne (planOf [ Some "a", "x{*}" ] [ "anomalies(a, 'basic', 2)" ]).Queries).Lookback)

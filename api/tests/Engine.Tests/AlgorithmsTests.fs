@@ -78,3 +78,26 @@ let ``piecewise constant is not fooled by a mostly flat integer series`` () =
     // 37 with single blips, like a goroutine count: one segment, not one per blip.
     let ys = [| 37.0; 37.0; 38.0; 37.0; 37.0; 37.0; 39.0; 37.0; 37.0; 37.0; 37.0; 38.0; 37.0; 37.0 |]
     Assert.Equal(1, piecewiseConstant ys |> Array.distinct |> Array.length)
+
+[<Fact>]
+let ``the basic band follows the recent level`` () =
+    // Around 10 (±1) for 20 points: the band for the next is centred near 10.
+    let values = Array.init 21 (fun i -> 10.0 + (if i % 2 = 0 then 1.0 else -1.0))
+    let band = basicBand 60 2.0 values
+    Assert.Equal(None, band[3]) // under 5 points of history
+    let lo, hi = band[20].Value
+    Assert.InRange((lo + hi) / 2.0, 9.0, 11.0)
+    Assert.True(hi - lo > 0.0)
+
+[<Fact>]
+let ``a linear forecast extends an exact line`` () =
+    let xs = Array.init 20 (fun i -> float (i - 20) * 10.0) // the last 200 s
+    let ys = xs |> Array.map (fun x -> 100.0 + 0.5 * x)
+    for model in [ "default"; "simple"; "reactive" ] do
+        let predicted = linearForecast model 1.0 xs ys [| 0.0; 60.0 |]
+        let v0, lo0, hi0 = predicted[0]
+        let v60, _, _ = predicted[1]
+        Assert.Equal(100.0, v0, 6)
+        Assert.Equal(130.0, v60, 6)
+        Assert.Equal(v0, lo0, 6) // no residuals, no band
+        Assert.Equal(v0, hi0, 6)

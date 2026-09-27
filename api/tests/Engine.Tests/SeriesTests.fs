@@ -160,3 +160,42 @@ let ``the window grid and zero alignment`` () =
     Assert.Equal<int64 list>([ 20000L; 40000L ], Series.grid 20000L 1L 60000L |> List.ofSeq)
     let s = Series.zeroFill [ 0L; 20000L ] { GroupTags = []; Points = Map [ 20000L, 5.0 ] }
     Assert.Equal<Map<int64, float>>(Map [ 0L, 0.0; 20000L, 5.0 ], s.Points)
+
+// --- extras in the response ------------------------------------------------------------------
+
+[<Fact>]
+let ``extras appear only when asked, as ninjacat_ fields`` () =
+    let s = { Series.Series.GroupTags = [ "host:a" ]; Series.Series.Points = Map [ 0L, 1.0; 20000L, 2.0 ] }
+    let plain = NinjaCat.Api.Engine.Json.options |> fun o -> System.Text.Json.JsonSerializer.Serialize(Series.response [ 0, [ s ] ], o)
+    Assert.DoesNotContain("ninjacat_", plain)
+
+    let extra =
+        { Series.Band = Some(Map [ 20000L, (1.5, 2.5) ])
+          Series.Forecast = Some [ 40000L, 3.0, 2.0, 4.0 ] }
+
+    let json = System.Text.Json.JsonSerializer.Serialize(Series.responseWith [ 0, [ s, extra ] ], NinjaCat.Api.Engine.Json.options)
+    Assert.Contains("\"times\":[0,20000]", json)
+    Assert.Contains("\"ninjacat_bounds\":[{\"upper\":[null,2.5],\"lower\":[null,1.5]}]", json)
+    Assert.Contains("\"ninjacat_forecast\":[{\"times\":[40000],\"values\":[3],\"upper\":[4],\"lower\":[2]}]", json)
+
+[<Fact>]
+let ``a forecast runs end to end, past the window`` () =
+    let body =
+        """{"data":{"type":"timeseries_request","attributes":{"from":0,"to":100000,"interval":20000,
+            "queries":[{"data_source":"metrics","name":"a","query":"avg:cpu{*}"}],
+            "formulas":[{"formula":"forecast(a, 'linear', 1, horizon='40s')"}]}}}"""
+
+    // A line: value = bucket seconds.
+    let execute (_: Sql) = Task.FromResult [ for t in 0L .. 20000L .. 80000L -> { Groups = []; BucketMs = t; Value = float t / 1000.0; SeriesId = None } ]
+
+    let plan =
+        match read body |> Result.bind Plan.plan with
+        | Ok p -> p
+        | Error es -> failwith (String.Join("\n", es))
+
+    let a = (Execute.run execute (TenantId "default") plan).Result.Data.Attributes
+    Assert.Equal<int64 list>([ 0L; 20000L; 40000L; 60000L; 80000L ], a.Times) // the window only
+    let f = (Option.get a.NinjacatForecast).Head |> Option.get
+    Assert.Equal<int64 list>([ 100000L; 120000L ], f.Times)
+    Assert.Equal(100.0, f.Values[0], 6)
+    Assert.Equal(120.0, f.Values[1], 6)
