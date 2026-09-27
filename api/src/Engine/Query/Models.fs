@@ -14,42 +14,29 @@ open MathNet.Numerics.Optimization
 
 // --- STL ------------------------------------------------------------------------------
 
-/// STL, Cleveland et al. (1990), through stlnet (a port of stl-decomp-4j,
-/// itself a port of the original Fortran).
-type Stl =
-    { Trend: float[]
-      Seasonal: float[]
-      Remainder: float[] }
+/// STL as the robust algorithm uses it (see Stl.fs, a port of statsmodels').
+type Stl = Stl.Decomposition
 
-let private nextOdd (x: float) = let n = int (Math.Ceiling x) in if n % 2 = 0 then n + 1 else n
-
-/// Robust STL with statsmodels' defaults: seasonal smoother 7, trend smoother
-/// the next odd number ≥ 1.5·period / (1 − 1.5/7), low-pass the next odd
-/// number > period, all of degree 1, 2 inner and 15 robustness iterations.
+/// Robust STL with statsmodels' defaults, and R stl()'s jumps: each smoother
+/// evaluated every ⌈width/10⌉ points and interpolated between, as Cleveland
+/// et al. recommend.
+///
+/// The jumps are for speed: evaluating every point, a daily season (1728
+/// points) takes ~270 ms per series; with jumps, a fraction of that, for a
+/// seasonal component differing by under 1e-4 of its amplitude.
 ///
 /// WARNING(undocumented): Datadog's decomposition and its settings. These are
-/// statsmodels' defaults. stlnet agrees with statsmodels to within 0.02 on a
-/// seasonal amplitude of 3 (tests), not exactly: it is a port of a port.
+/// the reference defaults of statsmodels and R.
 let stl (period: int) (values: float[]) : Stl =
-    let trendWidth = nextOdd (1.5 * float period / (1.0 - 1.5 / 7.0))
-    let lowpassWidth = nextOdd (float period + 0.5)
+    let d = Stl.robustDefaults period
+    let jump width = int (Math.Ceiling(float width / 10.0))
 
-    let d =
-        Visus.Stl.SeasonalTrendLoessBuilder()
-            .SetPeriodLength(period)
-            .SetSeasonalWidth(7)
-            .SetTrendWidth(trendWidth)
-            .SetLowpassWidth(lowpassWidth)
-            .SetSeasonalDegree(1)
-            .SetTrendDegree(1)
-            .SetLowpassDegree(1)
-            .SetInnerIterations(2)
-            .SetRobustnessIterations(15)
-            .SetRobust()
-            .Build(values)
-            .Decompose()
-
-    { Trend = d.Trend; Seasonal = d.Seasonal; Remainder = d.Residuals }
+    Stl.decompose
+        { d with
+            SeasonalJump = jump d.Seasonal
+            TrendJump = jump d.Trend
+            LowPassJump = jump d.LowPass }
+        values
 
 // --- the airline SARIMA -----------------------------------------------------------------
 

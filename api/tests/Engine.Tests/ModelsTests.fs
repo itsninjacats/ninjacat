@@ -14,13 +14,20 @@ let private numbers (e: JsonElement) = [| for x in e.EnumerateArray() -> x.GetDo
 let private maxDiff (a: float[]) (b: float[]) = Array.map2 (fun x y -> abs (x - y)) a b |> Array.max
 
 [<Fact>]
-let ``STL agrees with statsmodels`` () =
+let ``the STL port is statsmodels' STL`` () =
+    let r = fixture "stl.json"
+    let d = NinjaCat.Api.Engine.Query.Stl.decompose (NinjaCat.Api.Engine.Query.Stl.robustDefaults 24) (numbers (r.GetProperty "y"))
+    // Measured 1e-13: the same algorithm, step for step.
+    Assert.InRange(maxDiff d.Trend (numbers (r.GetProperty "trend")), 0.0, 1e-9)
+    Assert.InRange(maxDiff d.Seasonal (numbers (r.GetProperty "seasonal")), 0.0, 1e-9)
+    Assert.InRange(maxDiff d.Remainder (numbers (r.GetProperty "resid")), 0.0, 1e-9)
+
+[<Fact>]
+let ``STL with R's jumps stays close to it`` () =
     let r = fixture "stl.json"
     let d = stl 24 (numbers (r.GetProperty "y"))
-    // stlnet is a port of a port: close to statsmodels, not identical.
-    // Measured: trend 0.004, seasonal 0.017, on a seasonal amplitude of 3.
     Assert.InRange(maxDiff d.Trend (numbers (r.GetProperty "trend")), 0.0, 0.01)
-    Assert.InRange(maxDiff d.Seasonal (numbers (r.GetProperty "seasonal")), 0.0, 0.03)
+    Assert.InRange(maxDiff d.Seasonal (numbers (r.GetProperty "seasonal")), 0.0, 0.01)
 
 [<Fact>]
 let ``the airline fit agrees with statsmodels`` () =
