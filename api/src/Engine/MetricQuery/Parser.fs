@@ -1,205 +1,205 @@
-/// Parser for Datadog's metric query language, built with FParsec.
+/// Parser for Datadog's metric query language, written with FParsec.
 ///
-/// Built bottom-up, one piece at a time. So far: the tag filter inside `{...}`.
+/// Three layers, each built on the one before:
+///   1. the tag filter inside `{...}`
+///   2. a metric query: `avg:system.cpu.user{env:prod} by {host}.rollup(sum, 60)`
+///   3. expressions: arithmetic and function calls over metric queries (v1
+///      `query=`) or over query names (v2 formulas)
+///
+/// A note on `attempt`: FParsec does not backtrack by default. Once a parser
+/// has consumed input, the alternatives after it in `<|>` or `choice` are not
+/// tried. `attempt p` makes `p` rewind to where it started when it fails.
+/// Every `attempt` below says why that place needs it.
 module NinjaCat.Api.Engine.MetricQuery.Parser
 
 open System
 open FParsec
 open NinjaCat.Api.Engine.MetricQuery.Ast
 
-// No user state is threaded through the parsers yet.
 type private P<'T> = Parser<'T, unit>
-
-// ---------------------------------------------------------------------------
-// Tag filter: what goes between `{` and `}`.
-//
-// Datadog accepts two surface syntaxes and refuses a mix of them
-// (docs: metrics/advanced-filtering):
-//
-//   symbolic    env:prod,!host:a,region:us-*      `,` = AND, `!` = NOT
-//   functional  env:prod AND NOT (host:a OR host:b) AND zone IN (a, b)
-//
-// Strategy: try the symbolic form first; if it does not reach `}`, rewind and
-// try the functional form. The functional parser treats `,` and `!` as errors
-// with a message that names the mix, so `{a:1, b:2 AND c:3}` fails with an
-// explanation rather than a bare "expected }".
-// ---------------------------------------------------------------------------
-
-/// Characters a tag (key or value) may contain. Unicode letters are allowed
-/// because Datadog lower-cases tags but does not restrict them to ASCII. `*` is
-/// the wildcard, `$` a dashboard template variable (`{$env}`), which Datadog
-/// accepts even in API queries.
-let private isTagChar c =
-    Char.IsLetterOrDigit c
-    || c = '_' || c = '-' || c = ':' || c = '.' || c = '/' || c = '*' || c = '$'
 
 let private ws: P<unit> = spaces
 
-/// The functional keywords. Datadog documents each in upper and lower case
-/// only (`AND`, `and`) — not `And` — and so do we.
-let private keywords = set [ "AND"; "and"; "OR"; "or"; "NOT"; "not"; "IN"; "in" ]
+let private toResult (result: ParserResult<'T, unit>) : Result<'T, string> =
+    match result with
+    | Success(value, _, _) -> Result.Ok value
+    | Failure(message, _, _) -> Result.Error message
 
-/// A keyword, as a whole word: `AND` must not match the start of `ANDROID`.
-let private keyword (kw: string) : P<unit> =
-    attempt ((pstring kw <|> pstring (kw.ToLowerInvariant())) >>. notFollowedBy (satisfy isTagChar))
-    >>. ws
-    <?> kw
+let private andOf (filters: TagFilter list) =
+    match filters with
+    | [ one ] -> one
+    | many -> And many
 
-/// One raw tag word, as typed: `env:prod`, `web-*`, `servicename:`.
+let private orOf (filters: TagFilter list) =
+    match filters with
+    | [ one ] -> one
+    | many -> Or many
+
+// ---------------------------------------------------------------------------------------
+// 1. Tag filter
+//
+// Datadog has two syntaxes for a filter and refuses a mix of them:
+//   symbolic    {env:prod,!host:a}                  `,` is AND, `!` is NOT
+//   functional  {env:prod AND NOT (host:a OR host:b) AND zone IN (x, y)}
+// ---------------------------------------------------------------------------------------
+
+// `*` is the wildcard, `$` a dashboard template variable (`{$env}`).
+let private isTagChar (c: char) = Char.IsLetterOrDigit c || "_-:./*$".Contains c
+
 let private tagWord: P<string> = many1Satisfy isTagChar <?> "tag"
 
-/// A tag word turned into a filter.
-///
-/// Splits at the first `:` — values may contain further colons
-/// (`url:http://x`). A key followed by nothing, `servicename:`, takes the next
-/// word as its value: Datadog accepted `{servicename: ec2}` in the wild.
+/// `env:prod` is a Tag, `canary` a Bare tag. Only the first `:` splits, as
+/// values may hold more (`url:http://x`). A key with nothing after its colon
+/// takes the next word: Datadog accepts `{servicename: ec2}`.
 let private term: P<TagFilter> =
-    tagWord
-    >>= fun word ->
-        match word.IndexOf ':' with
-        | -1 -> preturn (Bare word)
-        | i when i = word.Length - 1 -> ws >>. tagWord |>> fun v -> Tag(word[.. i - 1], v)
-        | i -> preturn (Tag(word[.. i - 1], word[i + 1 ..]))
+    parse {
+        let! word = tagWord
 
-// --- symbolic: env:prod,!host:a ---------------------------------------------
+        match word.IndexOf ':' with
+        | -1 -> return Bare word
+        | colon when colon = word.Length - 1 ->
+            do! ws
+            let! value = tagWord
+            return Tag(word.Substring(0, colon), value)
+        | colon -> return Tag(word.Substring(0, colon), word.Substring(colon + 1))
+    }
+
+// --- symbolic ---------------------------------------------------------------------------
 
 let private symbolicItem: P<TagFilter> =
-    (pchar '!' >>. term |>> Not) <|> term
+    parse {
+        let! negated = opt (pchar '!')
+        let! t = term
+        do! ws
+        return if negated.IsSome then Not t else t
+    }
 
-let private symbolic: P<TagFilter> =
-    sepBy1 (symbolicItem .>> ws) (pchar ',' >>. ws)
-    |>> function
-        | [ single ] -> single
-        | many -> And many
+let private symbolic: P<TagFilter> = sepBy1 symbolicItem (pchar ',' >>. ws) |>> andOf
 
-// --- functional: env:prod AND NOT (host:a OR host:b) ------------------------
+// --- functional -------------------------------------------------------------------------
 
-/// A term in functional syntax: any word except a keyword, which would
-/// otherwise be read as a key-less tag named `AND`.
+// Datadog documents each keyword in upper and lower case only: `AND`, `and`.
+let private keywords = set [ "AND"; "and"; "OR"; "or"; "NOT"; "not"; "IN"; "in" ]
+
+let private keyword (word: string) : P<unit> =
+    // attempt: `AND` must not eat the first letters of a tag like `ANDROID`.
+    attempt ((pstring word <|> pstring (word.ToLowerInvariant())) >>. notFollowedBy (satisfy isTagChar))
+    >>. ws
+    <?> word
+
+// A function rather than a value, because it has to fit where a parser of any
+// result type is expected, and F# allows no generic values.
+let private mixedSyntax () : P<'T> =
+    (pchar ',' <|> pchar '!') >>. fail "symbolic syntax (',' and '!') cannot be mixed with AND/OR/NOT/IN"
+
 let private functionalTerm: P<TagFilter> =
+    // attempt: a keyword where a term was expected is not a tag named `AND`;
+    // rewind, so the caller reads it as the keyword.
     attempt (
-        lookAhead tagWord
-        >>= fun w -> if keywords.Contains w then fail $"unexpected keyword '{w}'" else term
+        parse {
+            let! word = lookAhead tagWord
+
+            if keywords.Contains word then
+                return! fail $"unexpected keyword '{word}'"
+            else
+                return! term
+        }
     )
 
-/// Fails with a named error on `,` or `!`. A function so that it can stand
-/// wherever a parser of any result type is expected.
-let private mixError () : P<'T> =
-    (pchar ',' <|> pchar '!')
-    >>. fail "symbolic syntax (',' and '!') cannot be mixed with AND/OR/NOT/IN"
-
-/// `key IN (a, b)` or `key NOT IN (a, b)`, after the key has been read.
 let private inList: P<string list> =
     between (pchar '(' >>. ws) (pchar ')' >>. ws) (sepBy (tagWord .>> ws) (pchar ',' >>. ws))
 
-let private functional, private functionalRef = createParserForwardedToRef<TagFilter, unit> ()
+/// A term, or `key IN (…)` / `key NOT IN (…)`, where the term is the key.
+let private termOrIn: P<TagFilter> =
+    let isIn = keyword "IN" >>% false
+    // attempt: `NOT` followed by something other than `IN` is not ours.
+    let isNotIn = attempt (keyword "NOT" >>. keyword "IN") >>% true
 
+    parse {
+        let! t = functionalTerm
+        do! ws
+        let! negatedIn = opt (isIn <|> isNotIn)
+
+        match negatedIn, t with
+        | None, _ -> return t
+        | Some negated, Bare key ->
+            let! values = inList
+            return if negated then Not(In(key, values)) else In(key, values)
+        | Some _, _ -> return! fail "IN needs a bare tag key on its left, e.g. 'region IN (a, b)'"
+    }
+
+// NOT binds tighter than AND, and AND tighter than OR. The parsers refer to
+// each other (a parenthesis holds a whole filter again), so they are declared
+// first and defined after.
+let private functional, private functionalRef = createParserForwardedToRef<TagFilter, unit> ()
 let private unary, private unaryRef = createParserForwardedToRef<TagFilter, unit> ()
 
-/// A term, optionally followed by `IN (...)` / `NOT IN (...)`.
-///
-/// `IN` only makes sense after a key-less word — the word *is* the key — so
-/// `env:prod IN (...)` is refused here rather than silently misread.
-let private termOrIn: P<TagFilter> =
-    functionalTerm .>> ws
-    >>= fun t ->
-        let inClause negate =
-            match t with
-            | Bare key -> inList |>> fun vs -> if negate then Not(In(key, vs)) else In(key, vs)
-            | _ -> fail "IN needs a bare tag key on its left, e.g. 'region IN (a, b)'"
-
-        choice [
-            keyword "IN" >>. inClause false
-            attempt (keyword "NOT" >>. keyword "IN") >>. inClause true
-            preturn t
-        ]
-
 unaryRef.Value <-
-    choice [
-        keyword "NOT" >>. unary |>> Not
-        between (pchar '(' >>. ws) (pchar ')' >>. ws) functional
-        mixError ()
-        termOrIn
-    ]
+    choice
+        [ keyword "NOT" >>. unary |>> Not
+          between (pchar '(' >>. ws) (pchar ')' >>. ws) functional
+          mixedSyntax ()
+          termOrIn ]
 
-/// Precedence: NOT binds tightest, then AND, then OR — the usual order, and
-/// the one Datadog's own examples rely on.
-let private chainOf (kw: string) (ctor: TagFilter list -> TagFilter) (next: P<TagFilter>) =
-    sepBy1 next (keyword kw)
-    |>> function
-        | [ single ] -> single
-        | many -> ctor many
+let private conjunction: P<TagFilter> = sepBy1 unary (keyword "AND") |>> andOf
 
-functionalRef.Value <- chainOf "OR" Or (chainOf "AND" And unary)
+functionalRef.Value <- sepBy1 conjunction (keyword "OR") |>> orOf
 
-// --- the braces ---------------------------------------------------------------
+// --- the braces -------------------------------------------------------------------------
 
 /// `{*}`, `{}`, or a filter in either syntax.
 let tagFilter: P<TagFilter> =
     let close = pchar '}'
-    let all = (pchar '*' >>. ws >>. close) <|> close >>% All
-    // `attempt` makes the symbolic branch rewind fully when it does not reach
-    // `}`, so the functional branch starts again from just after `{`.
-    // A `,` after a functional expression means the two syntaxes were mixed
-    // (`{a:1, b:2 AND c:3}`), so it gets the named error, not "expected }".
-    let body =
-        choice [ attempt all; attempt (symbolic .>> close); functional .>> (close <|> mixError ()) ]
-    pchar '{' >>. ws >>. body
+    let everything = ((pchar '*' >>. ws >>. close) <|> close) >>% All
 
-/// Parses a complete `{...}` filter; for tests and for callers that only
-/// have a scope.
+    pchar '{' >>. ws
+    >>. choice
+        [ attempt everything
+          // attempt: when the symbolic syntax does not reach `}` (it met an
+          // AND, say), rewind to just after `{` and try the functional one.
+          attempt (symbolic .>> close)
+          // A `,` left after a functional filter means the syntaxes were mixed.
+          functional .>> (close <|> mixedSyntax ()) ]
+
 let parseTagFilter (input: string) : Result<TagFilter, string> =
-    match run (ws >>. tagFilter .>> ws .>> eof) input with
-    | Success(result, _, _) -> Result.Ok result
-    | Failure(message, _, _) -> Result.Error message
+    run (ws >>. tagFilter .>> ws .>> eof) input |> toResult
 
-// ---------------------------------------------------------------------------
-// Metric query: [agg:]metric{filter} [by {tags}] [.modifier(args)]...
+// ---------------------------------------------------------------------------------------
+// 2. Metric query
 //
 //   avg:system.cpu.user{env:prod} by {host}.rollup(sum, 60)
-//   └┬┘ └──────┬──────┘└───┬────┘ └───┬───┘└───────┬───────┘
-//   agg     metric      filter     group-by     modifiers
-//
-// Only the prefix `agg:` and the braces are fixed; everything else is
-// optional. Wrapping functions (`top(...)`) and arithmetic are the expression
-// layer, not this one.
-// ---------------------------------------------------------------------------
+//   agg metric          filter    group-by  modifiers
+// ---------------------------------------------------------------------------------------
 
-/// `avg`, `sum`, `p95`, `histogram`… Any word: whether it is a real aggregator
-/// for this metric's type is decided after parsing.
 let private identifier: P<string> =
     many1Satisfy2 isLetter (fun c -> isLetter c || isDigit c || c = '_') <?> "identifier"
 
-/// Datadog metric names: must start with a letter, then letters, digits, `_`
-/// and `.`. Segments may start with a digit — `jetty.5xx_responses` was
-/// accepted in the wild.
+// Starts with a letter; later segments may start with a digit (`jetty.5xx_responses`).
 let private metricName: P<string> =
     many1Satisfy2 isLetter (fun c -> isLetter c || isDigit c || c = '_' || c = '.') <?> "metric name"
 
-/// `avg:` — the identifier and its colon, or nothing.
-///
-/// `attempt` because the identifier alone looks exactly like the start of a
-/// metric name: in `system.cpu.user{*}` we read `system`, find `.` instead of
-/// `:`, and must rewind to read it again as the metric.
+// attempt: in `system.cpu.user{*}` the word `system` reads as an identifier too;
+// with no `:` after it, rewind so it is read again as the metric name.
 let private spaceAgg: P<string option> = opt (attempt (identifier .>> pchar ':'))
 
-/// `by {host, env}`. Datadog accepted `{bar:baz}by{host}` with no spaces at
-/// all, so `by` needs no whitespace around it.
+/// `by {host, env}`. Datadog accepts `{bar:baz}by{host}`, with no spaces.
 let private groupBy: P<string list> =
-    let keys = sepBy (tagWord .>> ws) (pchar ',' >>. ws)
-    attempt (ws >>. pstring "by" >>. ws >>. pchar '{') >>. ws >>. keys .>> pchar '}'
+    parse {
+        // attempt: spaces not followed by `by {` belong to whatever comes next.
+        do! attempt (ws >>. skipString "by" >>. ws >>. skipChar '{')
+        do! ws
+        let! keys = sepBy (tagWord .>> ws) (pchar ',' >>. ws)
+        do! skipChar '}'
+        return keys
+    }
 
-// --- literals: what modifiers and named arguments take -------------------------
-
-/// `'mean'` or `"UTC"`. No escapes: nothing in Datadog's documented arguments
-/// needs them.
+// `'mean'` or `"UTC"`. No escapes: no documented argument needs them.
 let private quoted: P<string> =
-    let inQuotes (q: char) = between (pchar q) (pchar q) (manySatisfy ((<>) q))
+    let inQuotes (q: char) = between (pchar q) (pchar q) (manySatisfy (fun c -> c <> q))
     inQuotes '\'' <|> inQuotes '"'
 
-/// `60`, `0.5`, `1e6`. Not `pfloat`: that also reads `NaN` and `Infinity`, so
-/// a metric named `nan.errors` would start as a number. The sign is left to
-/// the expression layer's unary minus.
+// Not pfloat: it also reads `NaN` and `Infinity`, which would make a metric
+// named `nan.errors` start as a number. A minus sign is the expression layer's.
 let private number: P<float> =
     numberLiteral (NumberLiteralOptions.AllowFraction ||| NumberLiteralOptions.AllowExponent) "number"
     |>> fun n -> float n.String
@@ -207,142 +207,149 @@ let private number: P<float> =
 let private literal: P<Literal> =
     choice [ number |>> Num; quoted |>> Quoted; identifier |>> Word ] .>> ws
 
-/// `.rollup(sum, 60)`, `.as_count()`.
+/// `.rollup(sum, 60)`, `.as_count()`
 let private modifier: P<Modifier> =
-    let args = between (pchar '(' >>. ws) (pchar ')') (sepBy literal (pchar ',' >>. ws))
-    // attempt: a `.` not followed by name-and-parenthesis is not ours to eat.
-    attempt (ws >>. pchar '.' >>. identifier .>>. (ws >>. args))
-    |>> fun (name, args) -> { Name = name; Args = args }
-
-// --- the query ------------------------------------------------------------------
-
-/// Modifiers are accepted both before and after `by {...}` and kept in source
-/// order.
-///
-/// WARNING(undocumented): Datadog's own queries put modifiers after `by`;
-/// whether it also accepts them before is unknown. We accept both, because
-/// accepting more than Datadog is the cheaper error.
-let private body: P<TagFilter * string list * Modifier list> =
-    tuple4 tagFilter (many modifier) (opt groupBy) (many modifier)
-    |>> fun (filter, before, groups, after) -> filter, defaultArg groups [], before @ after
+    // attempt: a `.` not followed by a name and `(` is not a modifier.
+    attempt (
+        parse {
+            do! ws
+            do! skipChar '.'
+            let! name = identifier
+            do! ws
+            let! args = between (pchar '(' >>. ws) (pchar ')') (sepBy literal (pchar ',' >>. ws))
+            return { Name = name; Args = args }
+        }
+    )
 
 let private plainQuery: P<MetricQuery> =
-    spaceAgg .>>. metricName .>>. body
-    |>> fun ((agg, metric), (filter, groups, mods)) ->
-        { SpaceAgg = agg; Metric = metric; Filter = filter; GroupBy = groups; Modifiers = mods }
+    parse {
+        let! agg = spaceAgg
+        let! metric = metricName
+        let! filter = tagFilter
+        // WARNING(undocumented): whether Datadog accepts modifiers before `by`.
+        // Its own queries put them after; we accept both.
+        let! before = many modifier
+        let! groups = opt groupBy
+        let! after = many modifier
 
-/// `sum:(gauge{*}).weighted()` — the documented form for `weighted()`: the
-/// aggregator outside the parentheses, the rest of the query inside, and
-/// modifiers after the closing one.
+        return
+            { SpaceAgg = agg
+              Metric = metric
+              Filter = filter
+              GroupBy = defaultArg groups []
+              Modifiers = before @ after }
+    }
+
+/// `sum:(gauge{*}).weighted()`: the form Datadog documents for weighted().
 let private parenthesisedQuery: P<MetricQuery> =
-    attempt (identifier .>> pchar ':' .>> ws .>> pchar '(') .>> ws
-    .>>. plainQuery .>> ws .>> pchar ')' .>>. many modifier
-    |>> fun ((agg, inner), mods) ->
-        { inner with SpaceAgg = Some agg; Modifiers = inner.Modifiers @ mods }
+    parse {
+        // attempt: `avg:` without a `(` after it is the start of a plain query.
+        let! agg = attempt (identifier .>> pchar ':' .>> ws .>> pchar '(')
+        do! ws
+        let! inner = plainQuery
+        do! ws
+        do! skipChar ')'
+        let! more = many modifier
+        return { inner with SpaceAgg = Some agg; Modifiers = inner.Modifiers @ more }
+    }
 
 let metricQuery: P<MetricQuery> = parenthesisedQuery <|> plainQuery
 
 let parseMetricQuery (input: string) : Result<MetricQuery, string> =
-    match run (ws >>. metricQuery .>> ws .>> eof) input with
-    | Success(result, _, _) -> Result.Ok result
-    | Failure(message, _, _) -> Result.Error message
+    run (ws >>. metricQuery .>> ws .>> eof) input |> toResult
 
-// ---------------------------------------------------------------------------
-// Expressions: arithmetic and function calls over a leaf.
+// ---------------------------------------------------------------------------------------
+// 3. Expressions
 //
-//   expr    = term   (('+' | '-') term)*        lowest precedence
-//   term    = unary  (('*' | '/') unary)*
-//   unary   = '-' unary | primary
-//   primary = number | '(' expr ')' | call | leaf
-//   call    = name '(' arg, arg, ... ')'
+//   sum      = product (('+' | '-') product)*
+//   product  = unary   (('*' | '/') unary)*
+//   unary    = '-' unary | primary
+//   primary  = number | '(' sum ')' | name '(' arguments ')' | leaf
 //
-// Written once, as a function of the leaf parser, and used twice: with metric
-// queries as leaves for v1 `query=`, with query names for v2 `formula`.
-// ---------------------------------------------------------------------------
+// Written once over any leaf: metric queries in v1, query names in v2 formulas.
+// ---------------------------------------------------------------------------------------
 
-/// How a bare word inside a call is read — the one place the two languages
-/// differ beyond the leaf.
+/// v1 and v2 differ in one more thing: a bare word inside a call. In v1 a leaf
+/// needs braces, so `mean` in `top(x{*}, 5, mean, desc)` can only be a word.
+/// In v2 it could be a query named `mean`; it is read as a name, and analysis
+/// turns it back into a word where the function expects one.
 type private BareWords =
-    /// v1: a leaf needs braces (`x{*}`), so a word with none, like `mean` in
-    /// `top(x{*}, 5, mean, desc)`, can only be a literal.
-    | AsLiterals
-    /// v2: `query1` is both a leaf and a bare word. It is read as a leaf;
-    /// analysis turns it back into a word where the function wants one.
-    | AsLeaves
+    | WordsAreLiterals
+    | WordsAreLeaves
 
 let private expressionOf (bareWords: BareWords) (leaf: P<'Leaf>) : P<Expr<'Leaf>> =
-    let expr, exprRef = createParserForwardedToRef<Expr<'Leaf>, unit> ()
+    let sum, sumRef = createParserForwardedToRef<Expr<'Leaf>, unit> ()
 
-    /// Tried in this order because the forms overlap:
-    ///   direction='above'   named — looks like a bare word until the `=`
-    ///   'mean', "UTC"       quoted
-    ///   mean                bare word, v1 only — when `,` or `)` follows
-    ///   a{*} / 2, -3600     any expression
-    let arg: P<Arg<'Leaf>> =
-        let named = attempt (identifier .>> ws .>> pchar '=' .>> ws) .>>. literal |>> Named
-        let quotedArg = quoted .>> ws |>> (Quoted >> Lit)
-        let bare = attempt (identifier .>> ws .>> followedBy (pchar ',' <|> pchar ')')) |>> (Word >> Lit)
+    // The forms overlap, so the order matters: `direction='above'` looks like a
+    // bare word until its `=`, and a bare word looks like the start of a leaf.
+    let argument: P<Arg<'Leaf>> =
+        let named =
+            parse {
+                // attempt: a word with no `=` after it is not a named argument.
+                let! name = attempt (identifier .>> ws .>> pchar '=' .>> ws)
+                let! value = literal
+                return Named(name, value)
+            }
+
+        let quotedWord = quoted .>> ws |>> fun s -> Lit(Quoted s)
+        // attempt: a word is bare only when `,` or `)` follows it.
+        let bareWord = attempt (identifier .>> ws .>> followedBy (pchar ',' <|> pchar ')')) |>> fun w -> Lit(Word w)
+        let value = sum |>> Value
 
         match bareWords with
-        | AsLiterals -> choice [ named; quotedArg; bare; expr |>> Value ]
-        | AsLeaves -> choice [ named; quotedArg; expr |>> Value ]
+        | WordsAreLiterals -> choice [ named; quotedWord; bareWord; value ]
+        | WordsAreLeaves -> choice [ named; quotedWord; value ]
 
-    /// `exclude_null(...)`. `attempt` on name-plus-parenthesis: without the
-    /// `(` the name was the start of a leaf, and must be read again as one.
-    let call =
-        attempt (identifier .>> ws .>> pchar '(') .>> ws
-        .>>. sepBy (arg .>> ws) (pchar ',' >>. ws)
-        .>> pchar ')'
-        |>> Call
+    let call: P<Expr<'Leaf>> =
+        parse {
+            // attempt: a name without `(` after it was the start of a leaf.
+            let! name = attempt (identifier .>> ws .>> pchar '(')
+            do! ws
+            let! args = sepBy (argument .>> ws) (pchar ',' >>. ws)
+            do! skipChar ')'
+            return Call(name, args)
+        }
 
-    let primary =
-        choice [
-            number |>> Number
-            between (pchar '(' >>. ws) (pchar ')') expr
-            call
-            leaf |>> Leaf
-        ]
-        .>> ws
+    let primary: P<Expr<'Leaf>> =
+        choice [ number |>> Number; between (pchar '(' >>. ws) (pchar ')') sum; call; leaf |>> Leaf ] .>> ws
 
     let unary, unaryRef = createParserForwardedToRef<Expr<'Leaf>, unit> ()
 
     unaryRef.Value <-
-        (pchar '-' >>. ws >>. unary
-         |>> function
-             // `-3600` is a number, not an operation on one — keeps
-             // `timeshift(q, -3600)` a plain literal for everything downstream.
-             | Number n -> Number -n
-             | e -> Neg e)
-        <|> primary
+        choice
+            [ parse {
+                  do! skipChar '-'
+                  do! ws
 
-    /// Left-associative, so `a - b - c` is `(a - b) - c`, as in arithmetic.
-    let binary (ops: (char * BinaryOp) list) (next: P<Expr<'Leaf>>) =
-        let op = choice [ for c, o in ops -> pchar c >>. ws >>% fun l r -> Binary(o, l, r) ]
-        chainl1 next op
+                  match! unary with
+                  // `-3600` is a number, not a negated one.
+                  | Number n -> return Number -n
+                  | e -> return Neg e
+              }
+              primary ]
 
-    exprRef.Value <- binary [ '+', Add; '-', Sub ] (binary [ '*', Mul; '/', Div ] unary)
-    expr
+    // Left to right, so `a - b - c` is `(a - b) - c`.
+    let leftToRight (operators: (char * BinaryOp) list) (operand: P<Expr<'Leaf>>) : P<Expr<'Leaf>> =
+        let operator = choice [ for c, op in operators -> pchar c >>. ws >>% op ]
 
-let private toResult =
-    function
-    | Success(result, _, _) -> Result.Ok result
-    | Failure(message, _, _) -> Result.Error message
+        parse {
+            let! first = operand
+            let! rest = many (operator .>>. operand)
+            return rest |> List.fold (fun left (op, right) -> Binary(op, left, right)) first
+        }
 
-// --- v2 formula ------------------------------------------------------------------
+    let product = leftToRight [ '*', Mul; '/', Div ] unary
+    sumRef.Value <- leftToRight [ '+', Add; '-', Sub ] product
+    sum
 
-/// A query name in a formula: `a`, `query1`, `my_query_1`. Whether it names a
-/// query in the request is checked later — Datadog itself stores formulas
-/// naming queries that do not exist.
-let private queryName: P<string> = identifier
-
-let formula: P<Formula> = ws >>. expressionOf AsLeaves queryName .>> eof
+/// A v2 formula. Whether its names name queries is checked later: Datadog
+/// itself stores formulas naming queries that do not exist.
+let formula: P<Formula> = ws >>. expressionOf WordsAreLeaves identifier .>> eof
 
 let parseFormula (input: string) : Result<Formula, string> = run formula input |> toResult
 
-// --- v1 query= -------------------------------------------------------------------
-
-/// A whole v1 `query=`: one or more expressions, separated by commas.
+/// A v1 `query=`: one or more expressions, separated by commas.
 let program: P<Program> =
-    ws >>. sepBy1 (expressionOf AsLiterals metricQuery) (pchar ',' >>. ws) .>> eof
+    ws >>. sepBy1 (expressionOf WordsAreLiterals metricQuery) (pchar ',' >>. ws) .>> eof
 
 let parseProgram (input: string) : Result<Program, string> = run program input |> toResult
