@@ -31,6 +31,19 @@ Postgres (users, API keys, later monitors and dashboards) is reached through
 plain Npgsql, no ORM. Its schema belongs to Drizzle in `frontend/`: this
 service never migrates it, and a table it needs is added there first.
 
+## Where Datadog is silent
+
+Datadog documents its query language unevenly. Wherever we had to decide
+behaviour the docs do not pin down, the code says so at that spot:
+
+```bash
+grep -rn "WARNING(undocumented)" src   # a choice we made; check against Datadog when possible
+grep -rn "FIXME(" src                   # a choice we doubt
+```
+
+Each such comment names the question, then the answer we picked. When one is
+checked against a real Datadog account, replace the warning with the source.
+
 ## Commands
 
 ```bash

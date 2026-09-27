@@ -38,10 +38,12 @@ type Aggregation =
 /// Datadog: docs/dashboards/functions/rollup, metrics/custom_metrics/type_modifiers.
 type TimeAggregation =
     /// `.rollup(method)`, or no modifier at all: avg, Datadog's "enforced
-    /// default". Whether Datadog's backend applies `.as_count()` on its own to
-    /// COUNT and RATE metrics is not documented — its UI appends it to the
-    /// query text, so dashboard queries carry it explicitly. We compute what
-    /// the query says.
+    /// default".
+    ///
+    /// WARNING(undocumented): whether Datadog's backend applies `.as_count()`
+    /// on its own to COUNT and RATE metrics with no modifier. Its UI appends
+    /// it to the query text, so dashboard queries carry it explicitly. We
+    /// compute what the query says: avg.
     | Plain of Aggregation
     /// Events per bucket: COUNT sums, RATE sums value × interval, GAUGE is
     /// unaffected (avg).
@@ -110,7 +112,8 @@ type TimewiseFn =
     /// Running sum "over the visible time window" — no lookback, by the docs.
     | Cumsum
     /// Running sum of Δt (seconds) × Δvalue over consecutive points, as the
-    /// docs define it word for word — see Evaluate.fs.
+    /// docs define it word for word.
+    /// FIXME(integral): probably a docs error — see Evaluate.fs.
     | Integral
     /// Value minus the previous point's.
     | Diff
@@ -131,6 +134,9 @@ type TimewiseFn =
     | RollingAvg of span: int
 
 /// Buckets of history a function needs before its first output point.
+///
+/// WARNING(undocumented): how much history Datadog reads for these, and
+/// whether at all. The amounts below are ours.
 ///
 ///   diff-like   1: the point before the first.
 ///   median, rollingavg   span - 1: a full window at the first point.
@@ -191,9 +197,10 @@ type Plan =
 // --- the step --------------------------------------------------------------------
 
 /// Datadog's documented defaults for a line graph, window → bucket
-/// (docs: dashboards/functions/rollup). Rows are "up to this window"; a window
-/// between two rows takes the coarser row's step, which is our guess — Datadog
-/// does not document the in-between.
+/// (docs: dashboards/functions/rollup). Rows are "up to this window".
+///
+/// WARNING(undocumented): the step for a window between two rows (say 2 h).
+/// It takes the coarser row's step.
 let private defaultSteps =
     [ TimeSpan.FromMinutes 1.0, TimeSpan.FromSeconds 1.0
       TimeSpan.FromMinutes 5.0, TimeSpan.FromSeconds 2.0
@@ -209,10 +216,13 @@ let private defaultSteps =
 /// Datadog's cap on points per series for line and bar graphs.
 let maxPoints = 1500
 
-/// A requested width, honoured unless it would exceed maxPoints, and rounded
-/// up to whole seconds — buckets are `toStartOfInterval` in seconds. Datadog
-/// does the same to `interval` ("may override with a larger interval") and to
+/// A requested width, honoured unless it would exceed maxPoints. Datadog
+/// widens both `interval` ("may override with a larger interval") and
 /// `.rollup(_, seconds)` ("up to a limit of 1,500 points").
+///
+/// WARNING(undocumented): by how much Datadog widens. We use the smallest
+/// whole second that fits, and round a sub-second width up — buckets are
+/// `toStartOfInterval` in seconds.
 let private fitted (window: TimeSpan) (requested: TimeSpan) =
     let floor = TimeSpan.FromTicks(window.Ticks / int64 maxPoints)
     TimeSpan.FromSeconds(Math.Ceiling(max (max requested floor).TotalSeconds 1.0))
@@ -323,8 +333,9 @@ let private planQuery (window: TimeSpan) (requestStep: TimeSpan) (label: string)
             { Metric = q.Metric
               Filter = q.Filter
               GroupBy = q.GroupBy
-              // No prefix: avg. Datadog's own default depends on the metric
-              // type; for a gauge, avg is what it would pick.
+              // WARNING(undocumented): the space aggregator for a query with no
+              // prefix. Datadog's default depends on the metric type; we use
+              // avg, what it would pick for a gauge.
               SpaceAgg = q.SpaceAgg |> Option.bind spaceAggregation |> Option.defaultValue Avg
               TimeAgg = timeAgg
               Step = mods.Interval |> Option.map (fitted window) |> Option.defaultValue requestStep
@@ -408,8 +419,10 @@ let private rankBy =
     | "area" -> Some ByArea
     | _ -> None
 
-/// `top(q, 10, 'mean', 'desc')`. All four arguments are required: the docs
-/// give no defaults, and Datadog's editor always writes them out.
+/// `top(q, 10, 'mean', 'desc')`.
+///
+/// WARNING(undocumented): defaults for top()'s arguments. All four are
+/// required; Datadog's editor always writes them out.
 let private topArgs (literals: Literal list) : Result<int * RankBy * SortOrder, string> =
     let word =
         function
@@ -430,6 +443,9 @@ let private topArgs (literals: Literal list) : Result<int * RankBy * SortOrder, 
 
 /// `top5_mean`, `bottom10_min`… — the documented shorthands:
 /// [top, bottom][5, 10, 15, 20]_[mean, min, max, last, area, l2norm].
+///
+/// WARNING(undocumented): whether bare `top10()` exists and what it ranks
+/// by. It is not accepted.
 let private topShorthand (name: string) : (int * RankBy * SortOrder) option =
     let m = Text.RegularExpressions.Regex.Match(name, "^(top|bottom)(5|10|15|20)_(mean|min|max|last|area|l2norm)$")
 

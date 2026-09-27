@@ -55,11 +55,13 @@ let private aggregate =
 ///
 /// One series has one metric type, so `any(metric_type)` over its rows in a
 /// bucket is that type — the formula can follow it without a separate lookup.
-/// UNSPECIFIED and anything unknown are treated as GAUGE.
+/// UNSPECIFIED and anything unknown are treated as GAUGE (silnik-kwerend.md).
 ///
 /// A RATE point is events per second over the metric's `interval`, so its
-/// event count is value × interval. The interval is floored at 1: rows with 0
-/// exist, and would otherwise count as no events at all.
+/// event count is value × interval.
+///
+/// WARNING(undocumented): a RATE row with interval 0. Such rows exist, and
+/// would count as no events at all; the interval is floored at 1 second.
 let private timeAggregateSql (step: string) =
     function
     | Plain Count -> "toFloat64(count())"
@@ -95,8 +97,10 @@ let rec private filterSql (p: Params) (filter: TagFilter) : string =
     | Bare v when isWildcard v -> $"""arrayExists(x -> x LIKE {p.Add("p", String(likePattern v))}, mapKeys(tags))"""
     | Bare v -> $"""mapContains(tags, {p.Add("k", String v)})"""
     // `IN` with a wildcard among its values (`name IN (web-*, db)`) is the OR
-    // of its parts. Datadog's tag rules forbid `*` in a tag value, so a `*`
-    // in a filter can only ever mean a wildcard.
+    // of its parts.
+    //
+    // WARNING(undocumented): wildcards inside IN. Datadog's tag rules forbid
+    // `*` in a tag value, so a `*` in a filter can only ever mean one.
     | In(k, vs) when List.exists isWildcard vs ->
         let exact = vs |> List.filter (isWildcard >> not)
         let parts = [ for v in vs |> List.filter isWildcard -> Tag(k, v) ] @ (if exact.IsEmpty then [] else [ In(k, exact) ])
@@ -117,6 +121,8 @@ let rec private filterSql (p: Params) (filter: TagFilter) : string =
 /// no row at all, so it becomes [NULL] first.
 let private groupSql (p: Params) (key: string) =
     match key with
+    // WARNING(undocumented): a series with an empty host. It joins the N/A
+    // group, as a missing tag does.
     | "host" -> "nullIf(toString(host), '')"
     | k ->
         let k = p.Add("k", String k)

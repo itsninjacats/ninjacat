@@ -13,11 +13,12 @@ open NinjaCat.Api.Engine.Query.Series
 
 /// One value through one function; None where there is no value to show.
 ///
-/// Our choices where Datadog's docs are silent:
-///   - log of zero or a negative number is a gap: JSON cannot carry -Infinity
-///     or NaN, and neither is a value to draw.
-///   - round() rounds halves away from zero (2.5 → 3, -2.5 → -3), as people
-///     expect, not to even as .NET does by default.
+/// WARNING(undocumented): log of zero or a negative number. It is a gap:
+/// JSON cannot carry -Infinity or NaN, and neither is a value to draw.
+///
+/// WARNING(undocumented): how round() treats halves. It rounds them away
+/// from zero (2.5 → 3, -2.5 → -3), as people expect, not to even as .NET
+/// does by default.
 let private apply (fn: PointwiseFn) (v: float) : float option =
     let finite x = if Double.IsFinite x then Some x else None
 
@@ -46,10 +47,14 @@ let private mapValues (fn: PointwiseFn) (s: Series) =
 // --- across series -------------------------------------------------------------
 
 /// The number a series is ranked by. None for a series with no points: it has
-/// nothing to rank by, and goes last whichever the direction.
+/// nothing to rank by.
 ///
-/// `area` is the sum of value × bucket width, in seconds. Buckets are equal
-/// within one query, so it orders series the way the true area would.
+/// WARNING(undocumented): where top() puts a series with no points. It goes
+/// last, whichever the direction.
+///
+/// WARNING(undocumented): how `area` is integrated. It is the sum of
+/// value × bucket width, in seconds. Buckets are equal within one query, so
+/// it orders series the way the true area would.
 let private rank (by: RankBy) (s: Series) : float option =
     if s.Points.IsEmpty then
         None
@@ -70,6 +75,8 @@ let private rank (by: RankBy) (s: Series) : float option =
                 let width = float (keys[1] - keys[0]) / 1000.0
                 Some(List.sum values * width)
 
+/// WARNING(undocumented): how top() breaks ties. The sort is stable over the
+/// series' group order, which is alphabetical (the SQL orders by group).
 let private top (count: int) (by: RankBy) (order: SortOrder) (series: Series list) =
     let ranked, empty = series |> List.partition (fun s -> (rank by s).IsSome)
 
@@ -106,20 +113,28 @@ let private hasNotApplicable (s: Series) =
 
 /// One function over one series' points, in time order.
 ///
-/// Our choices where Datadog's docs are silent, or odd:
-///   - Diff-like functions work on consecutive points, so a gap is bridged:
-///     the diff after a gap is against the last point before it.
-///   - monotonic_diff keeps zero (a counter that did not move), and a
-///     negative delta — a counter reset — becomes a gap.
-///   - median_N and rollingavg_N are trailing windows: each point looks at
-///     itself and the N-1 before it, as a live graph must.
-///   - integral follows the docs literally: "the cumulative sum of
-///     [time delta] x [value delta] over all consecutive pairs of points".
-///     That makes the integral of a constant zero, which suggests the docs
-///     mean something else; kept literal until checked against Datadog.
-///   - ewma starts at the first point's value, then
-///     s = alpha·v + (1 - alpha)·s, alpha = 2 / (span + 1): "twice the
-///     weighted average age", the usual span definition.
+/// WARNING(undocumented): how diff-like functions handle a gap. They work
+/// on consecutive points, so the diff after a gap is against the last point
+/// before it.
+///
+/// WARNING(undocumented): monotonic_diff at zero and below. It keeps zero
+/// (a counter that did not move); a negative delta — a counter reset — is a
+/// gap.
+///
+/// WARNING(undocumented): whether median_N and rollingavg_N windows are
+/// trailing or centred. They are trailing: each point looks at itself and the
+/// N-1 before it, as a live graph must.
+///
+/// WARNING(undocumented): how ewma starts. At the first point's value, then
+/// s = alpha·v + (1 - alpha)·s, alpha = 2 / (span + 1): "twice the weighted
+/// average age", the usual span definition.
+///
+/// FIXME(integral): the docs define integral as "the cumulative sum of
+/// [time delta] x [value delta] over all consecutive pairs of points", and
+/// that is what this does. It makes the integral of a constant zero, so the
+/// docs likely mean [time delta] x [value] — the area under the curve.
+/// Unverified: nobody here has a Datadog account to compare against. The fix
+/// is the `Integral` case below: `dt * dv` → `dt * v1`.
 let private alongTime (fn: TimewiseFn) (stepMs: int64) (s: Series) : Series =
     let pts = s.Points |> Map.toArray
     let seconds (dtMs: int64) = float dtMs / 1000.0

@@ -217,8 +217,11 @@ let private modifier: P<Modifier> =
 // --- the query ------------------------------------------------------------------
 
 /// Modifiers are accepted both before and after `by {...}` and kept in source
-/// order. Datadog's own queries put them after; whether it also accepts them
-/// before is unverified, and accepting more than Datadog is the cheaper error.
+/// order.
+///
+/// WARNING(undocumented): Datadog's own queries put modifiers after `by`;
+/// whether it also accepts them before is unknown. We accept both, because
+/// accepting more than Datadog is the cheaper error.
 let private body: P<TagFilter * string list * Modifier list> =
     tuple4 tagFilter (many modifier) (opt groupBy) (many modifier)
     |>> fun (filter, before, groups, after) -> filter, defaultArg groups [], before @ after

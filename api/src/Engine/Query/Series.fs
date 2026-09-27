@@ -18,14 +18,20 @@ type Series =
 
 /// The value shown for a series that has no value for a `by` key. Datadog
 /// lower-cases tag values on intake, so no real value can be "N/A".
+///
+/// WARNING(undocumented): the exact group_tags string of an N/A group. The
+/// docs name the group "N/A"; `key:N/A` is our spelling.
 let notApplicable = "N/A"
 
 /// Groups rows by their group values; each group is one series.
 ///
 /// A bucket that starts before `from` is dropped: it holds only the part of
 /// its interval inside the window, so its value covers less time than every
-/// other point. Datadog's recorded v1 response likewise starts at the first
-/// bucket after `from`.
+/// other point.
+///
+/// WARNING(undocumented): what Datadog does with a partial first bucket.
+/// Its one recorded v1 response starts at the first bucket after `from`, and
+/// we do the same.
 let fromRows (groupBy: string list) (fromMs: int64) (rows: Row list) : Series list =
     rows
     |> List.filter (fun r -> r.BucketMs >= fromMs)
@@ -34,10 +40,11 @@ let fromRows (groupBy: string list) (fromMs: int64) (rows: Row list) : Series li
         { GroupTags = List.map2 (fun k v -> $"""{k}:{defaultArg v notApplicable}""") groupBy groups
           Points = rs |> List.map (fun r -> r.BucketMs, r.Value) |> Map.ofList })
 
-/// A formula's `limit`: rank the series by their mean, keep `count`.
+/// A formula's `limit`: rank the series by their mean, keep `count`. Without
+/// a count only the order applies.
 ///
-/// Mean is our choice for ranking — the spec does not say what Datadog ranks
-/// formula limits by. Without a count only the order applies.
+/// WARNING(undocumented): what Datadog ranks a formula's `limit` by. We
+/// use the mean.
 let limit (l: ParsedLimit option) (series: Series list) : Series list =
     match l with
     | None -> series
