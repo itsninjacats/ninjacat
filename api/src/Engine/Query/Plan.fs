@@ -10,8 +10,9 @@
 ///   avg|sum|min|max:metric{any tag filter} [by {keys}]
 ///     [.rollup(avg|sum|min|max|count[, seconds])] [.as_count() | .as_rate()]
 ///   formulas: query names, wrapped in functions that act on each value
-///   (abs, log2, log10, ceil, floor, round, clamp_*, cutoff_*), with an
-///   optional limit
+///   (abs, log2, log10, ceil, floor, round, clamp_*, cutoff_*) or across
+///   series (top, top10_mean-style shorthands, count_nonzero, count_not_null,
+///   exclude_null), with an optional limit
 ///
 /// Everything else (functions, arithmetic, other modifiers, calendar rollups,
 /// percentiles) gets a "not supported yet" naming the construct.
@@ -83,6 +84,20 @@ type PointwiseFn =
     /// Values above the threshold are removed; equal ones stay.
     | CutoffMax of float
 
+/// What `top` ranks series by (docs: dashboards/functions/rank).
+type RankBy =
+    | ByMax
+    | ByMean
+    | ByMin
+    | BySum
+    /// The series' latest value.
+    | ByLast
+    /// sqrt of the sum of squares: "the norm of the timeseries, which is
+    /// always positive".
+    | ByL2norm
+    /// "Signed area under the curve, which can be negative".
+    | ByArea
+
 /// What a formula computes: its names resolved to queries, every function
 /// checked against what it takes. A function that exists here has arguments
 /// of the right number and type — the evaluator never has to check.
@@ -90,6 +105,14 @@ type Node =
     /// The series one query returned; the index is into Plan.Queries.
     | Fetch of source: int
     | Pointwise of PointwiseFn * Node
+    /// Keep `count` series, ranked by `by`, in `order` (desc = the largest).
+    | Top of Node * count: int * by: RankBy * order: SortOrder
+    /// One series: at each time, how many series have a non-zero value.
+    | CountNonzero of Node
+    /// One series: at each time, how many series have a value at all.
+    | CountNotNull of Node
+    /// Drop the series whose group has an N/A tag value.
+    | ExcludeNull of Node
 
 type Output =
     {
@@ -284,6 +307,59 @@ let private pointwiseFunctions: Map<string, Literal list -> Result<PointwiseFn, 
           threshold CutoffMin "cutoff_min"
           threshold CutoffMax "cutoff_max" ]
 
+/// A plain argument after the series one, as the analysis sees it. In a
+/// formula a bare word (`mean`) parses as a query name — the parser cannot
+/// know better — so here, where the function says a word is wanted, a name
+/// becomes a word again.
+let private asLiteral (arg: Arg<string>) : Literal option =
+    match arg with
+    | Value(Number n) -> Some(Num n)
+    | Value(Leaf w) -> Some(Word w)
+    | Lit l -> Some l
+    | _ -> None
+
+let private rankBy =
+    function
+    | "max" -> Some ByMax
+    | "mean" -> Some ByMean
+    | "min" -> Some ByMin
+    | "sum" -> Some BySum
+    | "last" -> Some ByLast
+    | "l2norm" -> Some ByL2norm
+    | "area" -> Some ByArea
+    | _ -> None
+
+/// `top(q, 10, 'mean', 'desc')`. All four arguments are required: the docs
+/// give no defaults, and Datadog's editor always writes them out.
+let private topArgs (literals: Literal list) : Result<int * RankBy * SortOrder, string> =
+    let word =
+        function
+        | Word w
+        | Quoted w -> Some w
+        | Num _ -> None
+
+    match literals with
+    | [ Num n; by; dir ] ->
+        match int n, word by |> Option.bind rankBy, word dir with
+        | limit, _, _ when float limit <> n || not (List.contains limit [ 5; 10; 25; 50; 100 ]) ->
+            Error "top() limit must be one of 5, 10, 25, 50, 100"
+        | _, None, _ -> Error "top() ranks by one of 'max', 'mean', 'min', 'sum', 'last', 'l2norm', 'area'"
+        | limit, Some by, Some "desc" -> Ok(limit, by, Desc)
+        | limit, Some by, Some "asc" -> Ok(limit, by, Asc)
+        | _ -> Error "top() direction must be 'asc' or 'desc'"
+    | _ -> Error "top() takes a query, a limit, a ranking and a direction: top(query, 10, 'mean', 'desc')"
+
+/// `top5_mean`, `bottom10_min`… — the documented shorthands:
+/// [top, bottom][5, 10, 15, 20]_[mean, min, max, last, area, l2norm].
+let private topShorthand (name: string) : (int * RankBy * SortOrder) option =
+    let m = Text.RegularExpressions.Regex.Match(name, "^(top|bottom)(5|10|15|20)_(mean|min|max|last|area|l2norm)$")
+
+    if m.Success then
+        rankBy m.Groups[3].Value
+        |> Option.map (fun by -> int m.Groups[2].Value, by, (if m.Groups[1].Value = "top" then Desc else Asc))
+    else
+        None
+
 /// A formula's expression tree → Node, with every problem in it named.
 let rec private resolve (label: string) (byName: Map<string, int>) (expr: Formula) : Result<Node, string list> =
     match expr with
@@ -295,34 +371,51 @@ let rec private resolve (label: string) (byName: Map<string, int>) (expr: Formul
     | Neg _
     | Binary _ -> Error [ $"{label}: arithmetic in formulas is not supported yet" ]
     | Call(name, args) ->
-        match pointwiseFunctions.TryFind name, args with
-        | None, _ -> Error [ $"{label}: function '{name}' is not supported yet" ]
-        | Some _, [] -> Error [ $"{label}: {name}() needs a query to act on" ]
-        | Some shape, Value inner :: rest ->
-            // The rest must be plain numbers. In a formula they arrive as
-            // expressions (`-5` is Number -5.0); anything else is refused.
-            let literals =
-                rest
-                |> List.map (function
-                    | Value(Number n) -> Some(Num n)
-                    | _ -> None)
+        let inner, rest =
+            match args with
+            | Value inner :: rest -> Some inner, rest
+            | _ -> None, []
 
-            let inner = resolve label byName inner
+        match inner with
+        | None when args.IsEmpty -> Error [ $"{label}: {name}() needs a query to act on" ]
+        | None -> Error [ $"{label}: the first argument of {name}() must be a query" ]
+        | Some inner ->
+            let literals = rest |> List.map asLiteral
 
-            let fn =
-                if List.forall Option.isSome literals then
-                    shape (List.choose id literals) |> Result.mapError (fun e -> [ $"{label}: {e}" ])
+            // The function itself, from its name and plain arguments, before
+            // the inner expression is resolved.
+            let build: Result<Node -> Node, string> =
+                if not (List.forall Option.isSome literals) then
+                    Error $"{name}() takes only numbers and words after the query"
                 else
-                    Error [ $"{label}: {name}() takes only numbers after the query" ]
+                    let literals = List.choose id literals
 
-            match inner, fn with
-            | Ok inner, Ok fn -> Ok(Pointwise(fn, inner))
-            | inner, fn ->
+                    match name, literals with
+                    | _ when pointwiseFunctions.ContainsKey name ->
+                        // Pointwise thresholds are numbers, never words.
+                        if literals |> List.exists (function Num _ -> false | _ -> true) then
+                            Error $"{name}() takes only numbers after the query"
+                        else
+                            pointwiseFunctions[name] literals |> Result.map (fun fn node -> Pointwise(fn, node))
+                    | "top", _ -> topArgs literals |> Result.map (fun (n, by, dir) node -> Top(node, n, by, dir))
+                    | ("count_nonzero" | "count_nonzero_finite"), [] -> Ok CountNonzero
+                    | "count_not_null", [] -> Ok CountNotNull
+                    | "exclude_null", [] -> Ok ExcludeNull
+                    | ("count_nonzero" | "count_nonzero_finite" | "count_not_null" | "exclude_null"), _ ->
+                        Error $"{name}() takes one argument: {name}(query)"
+                    | _ ->
+                        match topShorthand name, literals with
+                        | Some(n, by, dir), [] -> Ok(fun node -> Top(node, n, by, dir))
+                        | Some _, _ -> Error $"{name}() takes one argument: {name}(query)"
+                        | None, _ -> Error $"function '{name}' is not supported yet"
+
+            match resolve label byName inner, build with
+            | Ok inner, Ok build -> Ok(build inner)
+            | inner, build ->
                 Error(
                     (match inner with Error es -> es | Ok _ -> [])
-                    @ (match fn with Error es -> es | Ok _ -> [])
+                    @ (match build with Error e -> [ $"{label}: {e}" ] | Ok _ -> [])
                 )
-        | Some _, _ -> Error [ $"{label}: the first argument of {name}() must be a query" ]
 
 let private planOutputs (req: ParsedTimeseriesRequest) : Result<Output list, string list> =
     match req.Formulas with

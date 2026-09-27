@@ -76,9 +76,11 @@ let ``boolean structure is kept`` () =
     Assert.Contains(") OR (hasAny(tags[{k", sql.Text)
 
 [<Fact>]
-let ``group by: host as a column, tags through arrayJoin`` () =
+let ``group by: host as a column, tags through arrayJoin, missing as NULL`` () =
     let sql = compiled All [ "host"; "role" ]
-    Assert.Contains("host AS g0, arrayJoin(tags[{k", sql.Text)
+    Assert.Contains("nullIf(toString(host), '') AS g0", sql.Text)
+    Assert.Contains("arrayJoin(if(empty(tags[{k", sql.Text)
+    Assert.Contains("[NULL], CAST(tags[{k", sql.Text)
     Assert.Contains("GROUP BY g0, g1, bucket", sql.Text)
     Assert.Contains("GROUP BY series_id, g0, g1, bucket", sql.Text)
 

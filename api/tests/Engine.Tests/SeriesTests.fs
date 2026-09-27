@@ -8,7 +8,7 @@ open NinjaCat.Api.Engine.Api.V2.Timeseries
 open NinjaCat.Api.Engine.Query
 open NinjaCat.Api.Engine.Query.Compile
 
-let private row groups bucket value = { Groups = groups; BucketMs = bucket; Value = value }
+let private row groups bucket value = { Groups = List.map Some groups; BucketMs = bucket; Value = value }
 
 // --- series from rows ---------------------------------------------------------
 
@@ -19,6 +19,12 @@ let ``rows group into one series per group`` () =
 
     Assert.Equal<string list list>([ [ "host:web-1" ]; [ "host:web-2" ] ], series |> List.map _.GroupTags)
     Assert.Equal<Map<int64, float>>(Map [ 0L, 1.0; 20L, 3.0 ], series[0].Points)
+
+[<Fact>]
+let ``a series without the tag is the N/A group`` () =
+    let rows = [ { Groups = [ Some "web-1"; None ]; BucketMs = 0L; Value = 1.0 } ]
+    let s = Assert.Single(Series.fromRows [ "host"; "role" ] 0L rows)
+    Assert.Equal<string list>([ "host:web-1"; "role:N/A" ], s.GroupTags)
 
 [<Fact>]
 let ``no group by is one series without tags`` () =

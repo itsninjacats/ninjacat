@@ -22,11 +22,13 @@ open NinjaCat.Api.Engine.Query.Plan
 
 /// The columns a compiled query returns, in this order:
 ///
-///   g0 … gN-1   String   one per `by` key, in the order of GroupBy
+///   g0 … gN-1   Nullable(String)   one per `by` key, in the order of GroupBy;
+///                                  NULL where the series has no such tag
 ///   bucket_ms   Int64    bucket start, unix milliseconds
 ///   value       Float64
 type Row =
-    { Groups: string list
+    { /// None: the series has no value for that `by` key — Datadog's N/A group.
+      Groups: string option list
       BucketMs: int64
       Value: float }
 
@@ -107,12 +109,18 @@ let rec private filterSql (p: Params) (filter: TagFilter) : string =
 
 /// One expression per `by` key. A tag holds a list of values, and a series
 /// with `role:api` and `role:web` belongs to both groups — arrayJoin gives it a
-/// row in each, as the Go query worker already does. A series without the tag
-/// at all yields no row for that key, so it drops out of a grouped query.
+/// row in each, as the Go query worker already does.
+///
+/// A series without the tag is not dropped: Datadog shows it in an N/A group
+/// (that is what exclude_null() exists to remove — docs:
+/// dashboards/functions/exclusion). An empty list would make arrayJoin yield
+/// no row at all, so it becomes [NULL] first.
 let private groupSql (p: Params) (key: string) =
     match key with
-    | "host" -> "host"
-    | k -> $"""arrayJoin(tags[{p.Add("k", String k)}])"""
+    | "host" -> "nullIf(toString(host), '')"
+    | k ->
+        let k = p.Add("k", String k)
+        $"arrayJoin(if(empty(tags[{k}]), [NULL], CAST(tags[{k}], 'Array(Nullable(String))')))"
 
 let compile (tenant: TenantId) (plan: Plan) (query: QueryPlan) : Sql =
     let p = Params()

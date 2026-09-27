@@ -16,6 +16,10 @@ type Series =
       /// Bucket start (unix ms) → value.
       Points: Map<int64, float> }
 
+/// The value shown for a series that has no value for a `by` key. Datadog
+/// lower-cases tag values on intake, so no real value can be "N/A".
+let notApplicable = "N/A"
+
 /// Groups rows by their group values; each group is one series.
 ///
 /// A bucket that starts before `from` is dropped: it holds only the part of
@@ -27,7 +31,7 @@ let fromRows (groupBy: string list) (fromMs: int64) (rows: Row list) : Series li
     |> List.filter (fun r -> r.BucketMs >= fromMs)
     |> List.groupBy _.Groups
     |> List.map (fun (groups, rs) ->
-        { GroupTags = List.map2 (fun k v -> $"{k}:{v}") groupBy groups
+        { GroupTags = List.map2 (fun k v -> $"""{k}:{defaultArg v notApplicable}""") groupBy groups
           Points = rs |> List.map (fun r -> r.BucketMs, r.Value) |> Map.ofList })
 
 /// A formula's `limit`: rank the series by their mean, keep `count`.

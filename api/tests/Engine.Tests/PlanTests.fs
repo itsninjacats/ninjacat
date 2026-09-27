@@ -204,3 +204,39 @@ let ``unknown functions and names inside functions are reported together`` () =
     let es = errorsOf [ Some "a", "x{*}" ] [ "ewma_3(a)"; "abs(b)" ]
     Assert.Contains("formulas[0]: function 'ewma_3' is not supported yet", es)
     Assert.Contains("formulas[1]: no query is named 'b'", es)
+
+// --- across series -------------------------------------------------------------------
+
+[<Fact>]
+let ``top with quoted or bare words`` () =
+    Assert.Equal(Top(Fetch 0, 10, ByMean, Desc), nodeOf "top(a, 10, 'mean', 'desc')")
+    // Bare words arrive as query names; top wants words there, so they are.
+    Assert.Equal(Top(Fetch 0, 5, ByL2norm, Asc), nodeOf "top(a, 5, l2norm, asc)")
+
+[<Fact>]
+let ``top shorthands`` () =
+    Assert.Equal(Top(Fetch 0, 10, ByMean, Desc), nodeOf "top10_mean(a)")
+    Assert.Equal(Top(Fetch 0, 10, ByMin, Asc), nodeOf "bottom10_min(a)")
+    Assert.Equal(Top(Fetch 0, 20, ByArea, Desc), nodeOf "top20_area(a)")
+
+[<Fact>]
+let ``count and exclude functions`` () =
+    Assert.Equal(CountNonzero(Fetch 0), nodeOf "count_nonzero(a)")
+    Assert.Equal(CountNonzero(Fetch 0), nodeOf "count_nonzero_finite(a)")
+    Assert.Equal(CountNotNull(Fetch 0), nodeOf "count_not_null(a)")
+    Assert.Equal(ExcludeNull(Fetch 0), nodeOf "exclude_null(a)")
+
+[<Fact>]
+let ``across-series functions combine with pointwise ones`` () =
+    Assert.Equal(Top(Pointwise(Abs, Fetch 0), 5, ByMax, Desc), nodeOf "top(abs(a), 5, 'max', 'desc')")
+
+[<Fact>]
+let ``top arguments are checked`` () =
+    let err formula = errorsOf [ Some "a", "x{*}" ] [ formula ]
+    Assert.Contains("formulas[0]: top() limit must be one of 5, 10, 25, 50, 100", err "top(a, 7, 'mean', 'desc')")
+    Assert.Contains("formulas[0]: top() ranks by one of 'max', 'mean', 'min', 'sum', 'last', 'l2norm', 'area'", err "top(a, 10, 'median', 'desc')")
+    Assert.Contains("formulas[0]: top() direction must be 'asc' or 'desc'", err "top(a, 10, 'mean', 'up')")
+    Assert.Contains("formulas[0]: top() takes a query, a limit, a ranking and a direction: top(query, 10, 'mean', 'desc')", err "top(a)")
+    Assert.Contains("formulas[0]: top10_mean() takes one argument: top10_mean(query)", err "top10_mean(a, 3)")
+    // Not in the documented pattern: 25 is a top() limit, not a shorthand size.
+    Assert.Contains("formulas[0]: function 'top25_mean' is not supported yet", err "top25_mean(a)")

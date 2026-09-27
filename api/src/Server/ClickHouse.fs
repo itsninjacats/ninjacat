@@ -78,7 +78,7 @@ let metricRows (client: ClickHouseClient) (ct: CancellationToken) (sql: Sql) : T
     |> query client ct (fun r ->
         let groups = r.FieldCount - 2
 
-        { Groups = [ for i in 0 .. groups - 1 -> r.GetString i ]
+        { Groups = [ for i in 0 .. groups - 1 -> if r.IsDBNull i then None else Some(r.GetString i) ]
           BucketMs = r.GetInt64 groups
           Value = r.GetDouble(groups + 1) }
         : NinjaCat.Api.Engine.Query.Compile.Row)
