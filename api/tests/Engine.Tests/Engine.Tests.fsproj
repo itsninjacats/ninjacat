@@ -15,6 +15,10 @@
     <Compile Include="SeriesTests.fs" />
     <Compile Include="EvaluateTests.fs" />
     <Compile Include="AlgorithmsTests.fs" />
+    <Compile Include="ModelsTests.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Fixtures/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="xunit.v3" />

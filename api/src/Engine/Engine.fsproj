@@ -21,11 +21,14 @@
     <Compile Include="Query/Compile.fs" />
     <Compile Include="Query/Series.fs" />
     <Compile Include="Query/Algorithms.fs" />
+    <Compile Include="Query/Models.fs" />
     <Compile Include="Query/Evaluate.fs" />
     <Compile Include="Query/Execute.fs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FParsec" />
     <PackageReference Include="FSharp.SystemTextJson" />
+    <PackageReference Include="MathNet.Numerics" />
+    <PackageReference Include="stlnet" />
   </ItemGroup>
 </Project>

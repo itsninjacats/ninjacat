@@ -388,7 +388,7 @@ let ``unsupported algorithms and bad arguments are named`` () =
     let err formula = errorsOf [ Some "a", "x{*}" ] [ formula ]
     Assert.Contains("formulas[0]: anomalies() algorithm must be 'basic', 'agile' or 'robust'", err "anomalies(a, 'magic', 2)")
     Assert.Contains("formulas[0]: seasonality must be 'hourly', 'daily' or 'weekly', got 'yearly'", err "anomalies(a, 'robust', 2, seasonality='yearly')")
-    Assert.Contains("formulas[0]: forecast() 'seasonal' horizon cannot be longer than the query window", err "forecast(a, 'seasonal', 1, horizon='2h')")
+
     Assert.Contains("formulas[0]: forecast() horizon must be a duration like '4h', '3d' or '1w'", err "forecast(a, 'linear', 1, horizon='soon')")
     Assert.Contains("formulas[0]: forecast() has no argument 'colour'", err "forecast(a, 'linear', 1, colour='red')")
 
@@ -400,20 +400,18 @@ let ``history beyond the window becomes lookback`` () =
     Assert.Equal(anomalyWindow, (List.exactlyOne (planOf [ Some "a", "x{*}" ] [ "anomalies(a, 'basic', 2)" ]).Queries).Lookback)
 
 [<Fact>]
-let ``seasonal anomalies read six past seasons, weekly by default`` () =
-    let week = 604800000L
-    Assert.Equal(Anomalies(Robust [ for k in 1L .. 6L -> -k * week ], 3.0), (outputOf "anomalies(a, 'robust', 3)").Extra)
-    Assert.Equal(Anomalies(Agile [ for k in 1L .. 6L -> -k * 3600000L ], 2.0), (outputOf "anomalies(a, 'agile', 2, seasonality='hourly')").Extra)
+let ``seasonal algorithms take their seasonality, weekly by default`` () =
+    Assert.Equal(Anomalies(Robust Weekly, 3.0), (outputOf "anomalies(a, 'robust', 3)").Extra)
+    Assert.Equal(Anomalies(Agile Hourly, 2.0), (outputOf "anomalies(a, 'agile', 2, seasonality='hourly', timezone='Europe/Paris')").Extra)
+    Assert.Equal(Forecast(1.0, SeasonalForecast Daily, None, None), (outputOf "forecast(a, 'seasonal', 1, seasonality='daily')").Extra)
 
 [<Fact>]
-let ``a seasonal forecast reads seasons lying wholly in the past`` () =
-    // Window 1 h, horizon 1 h, hourly: season 1 is t − 1 h, which for the end
-    // of the horizon is `to` itself — still past. Offsets are −kS + horizon.
-    let h = 3600000L
-    Assert.Equal(
-        Forecast(1.0, SeasonalForecast [ for k in 1L .. 6L -> -k * h + h ], None, None),
-        (outputOf "forecast(a, 'seasonal', 1, seasonality='hourly')").Extra
-    )
+let ``seasonal history is six seasons, within raw retention`` () =
+    Assert.Equal(TimeSpan.FromHours 6.0, seasonalHistory Hourly)
+    Assert.Equal(TimeSpan.FromDays 6.0, seasonalHistory Daily)
+    // Six weeks would be 42 days; 30 days of raw points hold four whole weeks.
+    Assert.Equal(TimeSpan.FromDays 28.0, seasonalHistory Weekly)
+    Assert.Equal<int list>([ 60; 288; 168 ], [ Hourly.Period; Daily.Period; Weekly.Period ])
 
 // --- arithmetic ----------------------------------------------------------------------------
 

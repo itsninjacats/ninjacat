@@ -201,18 +201,21 @@ let ``a forecast runs end to end, past the window`` () =
     Assert.Equal(120.0, f.Values[1], 6)
 
 [<Fact>]
-let ``a seasonal forecast reads past seasons and predicts past the window`` () =
-    // Hourly seasonality over a 1 h window at 20 min steps; every past hour
-    // looked the same: 10, 20, 30 at minutes 0, 20, 40.
+let ``a seasonal forecast fits the history and continues the season`` () =
+    // Hourly seasonality: every hour the same shape, minute by minute. The
+    // airline model on a perfectly periodic history predicts the shape again.
     let body =
-        """{"data":{"type":"timeseries_request","attributes":{"from":36000000,"to":39600000,"interval":1200000,
-            "queries":[{"data_source":"metrics","name":"a","query":"avg:cpu{*}"}],
-            "formulas":[{"formula":"forecast(a, 'seasonal', 0, seasonality='hourly')"}]}}}"""
+        """{"data":{"type":"timeseries_request","attributes":{"from":36000000,"to":39600000,"interval":60000,
+            "queries":[{"data_source":"metrics","name":"a","query":"avg:cpu{*}.fill(null)"}],
+            "formulas":[{"formula":"forecast(a, 'seasonal', 1, seasonality='hourly', horizon='10m')"}]}}}"""
+
+    let shape (t: int64) = 50.0 + 10.0 * sin (2.0 * Math.PI * float ((t / 60000L) % 60L) / 60.0)
 
     let execute (sql: Sql) =
-        let from = sql.Parameters |> List.pick (fun (n, v) -> match v with Int64 f when n.StartsWith "from" -> Some f | _ -> None)
-        let minute t = (t / 60000L) % 60L
-        Task.FromResult [ for t in from .. 1200000L .. from + 2400000L -> { Groups = []; BucketMs = t; Value = float (10L + minute t / 2L); SeriesId = None } ]
+        let int64Param (prefix: string) = sql.Parameters |> List.pick (fun (n, v) -> match v with Int64 f when n.StartsWith prefix -> Some f | _ -> None)
+        let from, until, step = int64Param "from", int64Param "to", int64Param "step" * 1000L
+        let first = (from + step - 1L) / step * step
+        Task.FromResult [ for t in first .. step .. until - 1L -> { Groups = []; BucketMs = t; Value = shape t; SeriesId = None } ]
 
     let plan =
         match read body |> Result.bind Plan.plan with
@@ -221,5 +224,51 @@ let ``a seasonal forecast reads past seasons and predicts past the window`` () =
 
     let a = (Execute.run execute (TenantId "default") plan).Result.Data.Attributes
     let f = (Option.get a.NinjacatForecast).Head |> Option.get
-    Assert.Equal<int64 list>([ 39600000L; 40800000L; 42000000L ], f.Times)
-    Assert.Equal<float list>([ 10.0; 20.0; 30.0 ], f.Values)
+    Assert.Equal(10, f.Times.Length)
+    for t, v in List.zip f.Times f.Values do
+        Assert.Equal(shape t, v, 6)
+
+/// Hourly-seasonal data at 1-minute buckets, with a lasting +20 shift from
+/// `shiftAt` on; the engine asks for whatever window and step it needs.
+let private seasonalWithShift (shiftAt: int64) (sql: Sql) =
+    let int64Param (prefix: string) = sql.Parameters |> List.pick (fun (n, v) -> match v with Int64 f when n.StartsWith prefix -> Some f | _ -> None)
+    let from, until, step = int64Param "from", int64Param "to", int64Param "step" * 1000L
+    let first = (from + step - 1L) / step * step
+    let value (t: int64) =
+        50.0 + 10.0 * sin (2.0 * Math.PI * float ((t / 60000L) % 60L) / 60.0)
+        + 0.3 * sin (float t / 7e4) // a little texture, so residuals are not zero
+        + (if t >= shiftAt then 20.0 else 0.0)
+    Task.FromResult [ for t in first .. step .. until - 1L -> { Groups = []; BucketMs = t; Value = value t; SeriesId = None } ]
+
+let private bandAfterShift algorithm =
+    // Window: hour 10 to hour 11; the shift lands at 10:20.
+    let body =
+        $"""{{"data":{{"type":"timeseries_request","attributes":{{"from":36000000,"to":39600000,"interval":60000,
+            "queries":[{{"data_source":"metrics","name":"a","query":"avg:cpu{{*}}.fill(null)"}}],
+            "formulas":[{{"formula":"anomalies(a, '{algorithm}', 3, seasonality='hourly')"}}]}}}}}}"""
+
+    let plan =
+        match read body |> Result.bind Plan.plan with
+        | Ok p -> p
+        | Error es -> failwith (String.Join("\n", es))
+
+    let a = (Execute.run (seasonalWithShift 37200000L) (TenantId "default") plan).Result.Data.Attributes
+    let b = (Option.get a.NinjacatBounds).Head |> Option.get
+    // Points 30–60 minutes into the window: well after the shift.
+    [ for i in 0 .. a.Times.Length - 1 do
+          if a.Times[i] >= 37800000L then
+              match a.Values[0][i], b.Lower[i], b.Upper[i] with
+              | Some v, Some lo, Some hi -> yield v < lo || v > hi
+              | _ -> () ]
+
+[<Fact>]
+let ``robust keeps expecting the season through a lasting shift`` () =
+    let outside = bandAfterShift "robust"
+    Assert.NotEmpty outside
+    Assert.True(List.forall id outside, "every shifted point should lie outside robust's band")
+
+[<Fact>]
+let ``agile follows a lasting shift`` () =
+    let outside = bandAfterShift "agile"
+    Assert.NotEmpty outside
+    Assert.True(outside |> List.filter id |> List.length < outside.Length / 4, "agile should have caught up with the shift")

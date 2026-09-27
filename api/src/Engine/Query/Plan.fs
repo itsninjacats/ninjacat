@@ -257,24 +257,66 @@ type LinearModel =
     | ReactiveModel
 
 /// How an anomaly band finds its expected value (docs: monitors/types/anomaly).
+/// A seasonal model's period, and the step it is fitted at.
+///
+/// WARNING(undocumented): the resolution Datadog fits seasonal models at. We
+/// use its own default line-graph steps for the matching windows — an hour at
+/// 1 min, a day at 5 min, a week at 1 h — so a season is 60, 288 or 168
+/// points: enough to shape the season, few enough to fit fast.
+type Seasonality =
+    | Hourly
+    | Daily
+    | Weekly
+
+    member s.Step =
+        match s with
+        | Hourly -> TimeSpan.FromMinutes 1.0
+        | Daily -> TimeSpan.FromMinutes 5.0
+        | Weekly -> TimeSpan.FromHours 1.0
+
+    member s.Length =
+        match s with
+        | Hourly -> TimeSpan.FromHours 1.0
+        | Daily -> TimeSpan.FromDays 1.0
+        | Weekly -> TimeSpan.FromDays 7.0
+
+    /// Points per season at the model's step.
+    member s.Period = int (s.Length / s.Step)
+
+/// How long raw points are kept: the `metrics` table's TTL.
+///
+/// Seasonal history cannot reach further back than this. It mirrors the TTL in
+/// server/schema/migrations/0001_initial.sql; when retention becomes
+/// configurable, this is the one place to read it from.
+let rawRetention = TimeSpan.FromDays 30.0
+
+/// History a seasonal model reads, back from `to`: "up to six weeks" (six
+/// seasons), as much of it as raw retention holds.
+///
+/// WARNING(undocumented): Datadog reads six weeks; raw retention caps us at
+/// 30 days, so weekly seasonality gets four weeks at most. Longer history
+/// needs metrics_1m, which has no tags yet.
+let seasonalHistory (s: Seasonality) =
+    let wanted = s.Length * 6.0
+    let available = TimeSpan.FromTicks((rawRetention.Ticks / s.Length.Ticks) * s.Length.Ticks)
+    if wanted < available then wanted else available
+
 type AnomalyAlgorithm =
     /// "A simple lagging rolling quantile computation."
     | Basic
     /// "A seasonal-trend decomposition algorithm, it is stable and
     /// predictions remain constant even through long-lasting anomalies."
-    | Robust of lags: int64 list
+    | Robust of Seasonality
     /// "A robust version of the SARIMA algorithm, it incorporates the
     /// immediate past into its predictions" and "quickly adjusts to metric
     /// level shifts."
-    | Agile of lags: int64 list
+    | Agile of Seasonality
 
 /// How forecast() predicts.
 type ForecastMethod =
     | LinearForecast of LinearModel
-    /// The same moments in past seasons. `lags` are read offsets arranged so
-    /// that a future time t reads its k-th past season at t − horizon; see
-    /// seasonalLags.
-    | SeasonalForecast of lags: int64 list
+    /// The airline SARIMA on the seasonal history.
+    | SeasonalForecast of Seasonality
 
 /// What a formula adds beside its series, outside `values`. Only the
 /// outermost function of a formula can ask for it.
@@ -809,20 +851,6 @@ let private splitArgs (rest: Arg<string> list) =
     let named = rest |> List.choose (function Named(n, v) -> Some(n, v) | _ -> None)
     positional, named
 
-/// The offsets of the k-th past season, k = 1…count, as negative
-/// milliseconds from `from`. Daily and weekly are calendar days and weeks in
-/// `timezone`, so a season across a DST change keeps its wall-clock time.
-let private seasonOffsets (from: DateTimeOffset) (seasonality: string) (timezone: string) (count: int) : Result<int64 list, string> =
-    let lag k =
-        match seasonality with
-        | "hourly" -> Ok(int64 k * -3600000L)
-        | "daily" -> calendarShift $"-{k}d" timezone from
-        | _ -> calendarShift $"-{k}w" timezone from
-
-    [ 1..count ]
-    |> List.map lag
-    |> List.fold (fun acc r -> match acc, r with Ok xs, Ok x -> Ok(xs @ [ x ]) | Error e, _ | _, Error e -> Error e) (Ok [])
-
 /// The named arguments shared by the seasonal algorithms.
 ///
 /// "By default, the robust and agile algorithms use weekly seasonality"
@@ -830,12 +858,16 @@ let private seasonOffsets (from: DateTimeOffset) (seasonality: string) (timezone
 ///
 /// WARNING(undocumented): forecast()'s default seasonality. Weekly, as for
 /// anomalies().
-let private seasonality (named: (string * Literal) list) : Result<string * string, string> =
-    let find n = named |> List.tryFind (fst >> (=) n) |> Option.map snd |> Option.bind word
-
-    match find "seasonality" |> Option.defaultValue "weekly", find "timezone" |> Option.defaultValue "UTC" with
-    | ("hourly" | "daily" | "weekly") as s, tz -> Ok(s, tz)
-    | s, _ -> Error $"seasonality must be 'hourly', 'daily' or 'weekly', got '{s}'"
+///
+/// WARNING(undocumented): `timezone`. It is accepted and has no effect: the
+/// models run at a fixed period, so across a DST change a daily or weekly
+/// season is off by the hour Datadog would shift it by.
+let private seasonality (named: (string * Literal) list) : Result<Seasonality, string> =
+    match named |> List.tryFind (fst >> (=) "seasonality") |> Option.map snd |> Option.bind word |> Option.defaultValue "weekly" with
+    | "hourly" -> Ok Hourly
+    | "daily" -> Ok Daily
+    | "weekly" -> Ok Weekly
+    | s -> Error $"seasonality must be 'hourly', 'daily' or 'weekly', got '{s}'"
 
 /// anomalies(q, 'basic' | 'agile' | 'robust', bounds, name=value…)
 ///
@@ -847,17 +879,13 @@ let private anomaliesArgs (from: DateTimeOffset) (rest: Arg<string> list) : Resu
     let known = set [ "direction"; "alert_window"; "interval"; "count_default_zero"; "seasonality"; "timezone" ]
     let positional, named = splitArgs rest
 
-    // "All seasonal algorithms may use up to six weeks of historical data":
-    // up to six past seasons are read; three must have data for a band.
-    let lags () = seasonality named |> Result.bind (fun (s, tz) -> seasonOffsets from s tz 6)
-
     match positional, named |> List.tryFind (fun (n, _) -> not (known.Contains n)) with
     | _, Some(n, _) -> Error $"anomalies() has no argument '{n}'"
     | [ Some alg; Some(Num bounds) ], _ when bounds > 0.0 ->
         match word alg with
         | Some "basic" -> Ok(Anomalies(Basic, bounds))
-        | Some "robust" -> lags () |> Result.map (fun l -> Anomalies(Robust l, bounds))
-        | Some "agile" -> lags () |> Result.map (fun l -> Anomalies(Agile l, bounds))
+        | Some "robust" -> seasonality named |> Result.map (fun s -> Anomalies(Robust s, bounds))
+        | Some "agile" -> seasonality named |> Result.map (fun s -> Anomalies(Agile s, bounds))
         | _ -> Error "anomalies() algorithm must be 'basic', 'agile' or 'robust'"
     | _ -> Error "anomalies() takes a query, an algorithm and bounds: anomalies(query, 'basic', 2)"
 
@@ -889,32 +917,12 @@ let private forecastArgs (from: DateTimeOffset) (window: TimeSpan) (rest: Arg<st
     let allowed = [ "model"; "history"; "horizon"; "seasonality"; "timezone" ]
     let unknown = named |> List.tryFind (fun (n, _) -> not (List.contains n allowed || ignored.Contains n))
 
-    /// A future time t reads its k-th past season at t − kS. Reads are
-    /// windows shifted by an offset and drawn back onto the present window,
-    /// so the read for season k is shifted by −kS + h: its window then holds
-    /// [to − kS, to − kS + h), drawn at [to − h, to). k starts at the first
-    /// season that lies wholly in the past for the whole horizon.
-    let seasonalLags (horizon: TimeSpan) =
-        if horizon > window then
-            Error "forecast() 'seasonal' horizon cannot be longer than the query window"
-        else
-            seasonality named
-            |> Result.bind (fun (s, tz) ->
-                let seasonMs = match s with "hourly" -> 3600000L | "daily" -> 86400000L | _ -> 604800000L
-                let h = int64 horizon.TotalMilliseconds
-                let first = int ((h + seasonMs - 1L) / seasonMs)
-                // "uses up to six seasons for forecasting"
-                seasonOffsets from s tz (first + 5)
-                |> Result.map (List.skip (first - 1) >> List.map (fun o -> o + h)))
-
     match positional, unknown, model, span "history", span "horizon" with
     | _, Some(n, _), _, _, _ -> Error $"forecast() has no argument '{n}'"
     | [ Some alg; Some(Num dev) ], None, Ok model, Ok history, Ok horizon when dev >= 0.0 ->
         match word alg with
         | Some "linear" -> Ok(Forecast(dev, LinearForecast model, history, horizon))
-        | Some "seasonal" ->
-            seasonalLags (defaultArg horizon window)
-            |> Result.map (fun lags -> Forecast(dev, SeasonalForecast lags, history, horizon))
+        | Some "seasonal" -> seasonality named |> Result.map (fun s -> Forecast(dev, SeasonalForecast s, history, horizon))
         | _ -> Error "forecast() algorithm must be 'linear' or 'seasonal'"
     | _, _, Error e, _, _
     | _, _, _, Error e, _
@@ -1067,6 +1075,8 @@ let plan (req: ParsedTimeseriesRequest) : Result<Plan, string list> =
 
             match o.Extra with
             | NoExtra -> 0
+            // Seasonal models read their history separately, at their own step;
+            // the window itself still needs the lagging residuals before it.
             | Anomalies _ -> anomalyWindow
             | Forecast(_, SeasonalForecast _, _, _) -> 0
             | Forecast(_, _, history, _) ->
