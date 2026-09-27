@@ -31,6 +31,30 @@ Postgres (users, API keys, later monitors and dashboards) is reached through
 plain Npgsql, no ORM. Its schema belongs to Drizzle in `frontend/`: this
 service never migrates it, and a table it needs is added there first.
 
+## Calling the engine from F#
+
+Monitors and other in-process code use `Query.Engine`, not HTTP: the same
+query and formula strings go in, plain records come out.
+
+```fsharp
+let! result =
+    Engine.timeseries execute tenant
+        { From = now.AddHours -1.0; To = now; Interval = None
+          Queries = [ { Name = "cpu"; Query = "avg:system.cpu.user{env:prod} by {host}" } ]
+          Formulas = [ "anomalies(cpu, 'agile', 2)" ] }
+// Ok [ { Formula = "anomalies(cpu, 'agile', 2)"
+//        Series = [ { Tags = [ { Key = "host"; Value = Some "web-1" } ]
+//                     Points = [ { Time = …; Value = 41.2; Expected = Some { Lower = 35.0; Upper = 47.1 } }; … ]
+//                     Forecast = [] }; … ] } ]
+// or Error [ "queries[0] (cpu): …" ] — every problem, named
+
+let! values = Engine.scalar execute tenant { …; Queries = [ { …; Aggregator = ScalarAvg } ] }
+// Ok [ { Formula = "cpu"; Values = [ { Tags = [ … ]; Value = 41.7 }; … ] } ]
+```
+
+`execute` is how the engine reaches ClickHouse — `Server/ClickHouse.fs`
+`metricRows` in the service, a list in tests.
+
 ## Where Datadog is silent
 
 Datadog documents its query language unevenly. Wherever we had to decide

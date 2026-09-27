@@ -26,6 +26,7 @@
     <Compile Include="Query/Models.fs" />
     <Compile Include="Query/Evaluate.fs" />
     <Compile Include="Query/Execute.fs" />
+    <Compile Include="Query/Engine.fs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FParsec" />

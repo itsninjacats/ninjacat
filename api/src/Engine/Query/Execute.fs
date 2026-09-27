@@ -104,7 +104,9 @@ let private modelInput (s: Seasonality) (seasons: int) (fromMs: int64) (toMs: in
                     | None, None -> 0.0)
             |> Some
 
-let run (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<Api.V2.Wire.TimeseriesFormulaQueryResponse> =
+/// Runs a timeseries plan: for each output, in plan order, its query_index
+/// and its series with their extras.
+let evaluate (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<(int * (Series.Series * Series.SeriesExtra) list) list> =
     task {
         let! fetched = fetchAll execute tenant plan (plan.Outputs |> List.map _.Node)
 
@@ -309,7 +311,14 @@ let run (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<
             }
 
         let! outputs = plan.Outputs |> List.map (fun o -> task { let! r = evalOutput o in return o.QueryIndex, r }) |> Task.WhenAll
-        return outputs |> List.ofArray |> Series.responseWith
+        return List.ofArray outputs
+    }
+
+/// Runs a timeseries plan into Datadog's response shape.
+let run (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<Api.V2.Wire.TimeseriesFormulaQueryResponse> =
+    task {
+        let! outputs = evaluate execute tenant plan
+        return Series.responseWith outputs
     }
 
 // --- scalar ---------------------------------------------------------------------------
@@ -346,12 +355,14 @@ let private reduce (agg: ScalarAggregator) (stepMs: int64) (points: (int64 * flo
 /// WARNING(undocumented): what a sum or area of a gauge adds up. The window's
 /// buckets as the timeseries endpoint would draw them — the same points a
 /// graph of the query shows.
-let runScalar
+/// Runs a scalar plan: for each output, in plan order, its series, each with
+/// one point — the reduced value — at the window's start.
+let evaluateScalar
     (execute: Sql -> Task<Row list>)
     (tenant: TenantId)
     (plan: Plan)
-    (request: ParsedScalarRequest)
-    : Task<Result<ScalarFormulaQueryResponse, string list>> =
+    (aggregators: ScalarAggregator list)
+    : Task<Result<Series.Series list list, string list>> =
     task {
         match plan.Outputs |> List.filter (fun o -> o.Extra <> NoExtra) with
         | _ :: _ -> return Error [ "anomalies() and forecast() are not available in scalar queries" ]
@@ -359,7 +370,7 @@ let runScalar
             let! fetched = fetchAll execute tenant plan (plan.Outputs |> List.map _.Node)
             let fromMs = plan.From.ToUnixTimeMilliseconds()
             let toMs = plan.To.ToUnixTimeMilliseconds()
-            let aggregators = Array.ofList request.Aggregators
+            let aggregators = Array.ofList aggregators
 
             let reduced =
                 { fetched with
@@ -381,6 +392,23 @@ let runScalar
             let outputs =
                 plan.Outputs
                 |> List.map (fun o -> Evaluate.evalFrom reduced fromMs o.Node |> Series.limit o.Limit)
+
+            return Ok outputs
+    }
+
+/// Runs a scalar plan into Datadog's response shape: group columns, then one
+/// number column per formula.
+let runScalar
+    (execute: Sql -> Task<Row list>)
+    (tenant: TenantId)
+    (plan: Plan)
+    (request: ParsedScalarRequest)
+    : Task<Result<ScalarFormulaQueryResponse, string list>> =
+    task {
+        match! evaluateScalar execute tenant plan request.Aggregators with
+        | Error es -> return Error es
+        | Ok outputs ->
+            let fromMs = plan.From.ToUnixTimeMilliseconds()
 
             // Rows: every group any column has, in the order they first appear
             // — the first formula's, limit and all, then any others'.

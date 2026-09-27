@@ -14,6 +14,7 @@
     <Compile Include="CompileTests.fs" />
     <Compile Include="SeriesTests.fs" />
     <Compile Include="ScalarTests.fs" />
+    <Compile Include="EngineTests.fs" />
     <Compile Include="EvaluateTests.fs" />
     <Compile Include="AlgorithmsTests.fs" />
     <Compile Include="ModelsTests.fs" />
