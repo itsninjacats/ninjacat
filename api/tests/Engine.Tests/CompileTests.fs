@@ -15,7 +15,12 @@ let private plan =
       Outputs = [] }
 
 let private query filter groupBy =
-    { Metric = "system.cpu.user"; Filter = filter; GroupBy = groupBy; SpaceAgg = Sum; TimeAgg = Avg }
+    { Metric = "system.cpu.user"
+      Filter = filter
+      GroupBy = groupBy
+      SpaceAgg = Sum
+      TimeAgg = Plain Avg
+      Step = TimeSpan.FromSeconds 20.0 }
 
 let private compiled filter groupBy = compile (TenantId "acme") plan (query filter groupBy)
 
@@ -76,3 +81,31 @@ let ``group by: host as a column, tags through arrayJoin`` () =
     Assert.Contains("host AS g0, arrayJoin(tags[{k", sql.Text)
     Assert.Contains("GROUP BY g0, g1, bucket", sql.Text)
     Assert.Contains("GROUP BY series_id, g0, g1, bucket", sql.Text)
+
+// --- time aggregation ------------------------------------------------------------
+
+let private withTime agg (step: float) =
+    compile (TenantId "acme") plan { query All [] with TimeAgg = agg; Step = TimeSpan.FromSeconds step }
+
+[<Fact>]
+let ``the query's own step is bound`` () =
+    Assert.Equal(Int64 60L, boundAfter "toIntervalSecond(" (withTime (Plain Sum) 60.0))
+
+[<Fact>]
+let ``rollup methods`` () =
+    Assert.Contains("sum(value) AS v", (withTime (Plain Sum) 20.0).Text)
+    Assert.Contains("toFloat64(count()) AS v", (withTime (Plain Count) 20.0).Text)
+
+[<Fact>]
+let ``as_count follows the metric type`` () =
+    let sql = (withTime AsCount 20.0).Text
+    Assert.Contains("any(metric_type) = 'RATE', sum(value * greatest(interval, 1))", sql)
+    Assert.Contains("any(metric_type) = 'COUNT', sum(value)", sql)
+    Assert.Contains(", avg(value)) AS v", sql) // GAUGE: unaffected
+
+[<Fact>]
+let ``as_rate divides by the bucket, floored to a rate's interval`` () =
+    let sql = withTime AsRate 20.0
+    Assert.Contains("/ greatest({step", sql.Text)
+    Assert.Contains("}, max(interval))", sql.Text)
+    Assert.Contains("any(metric_type) = 'COUNT', sum(value) / {step", sql.Text)

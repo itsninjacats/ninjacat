@@ -80,9 +80,9 @@ let ``aggregator, filter and group by are carried over`` () =
 
 [<Fact>]
 let ``what is not supported yet is named`` () =
-    let es = errorsOf [ Some "a", "p95:x{*}.rollup(sum, 60)" ] []
+    let es = errorsOf [ Some "a", "p95:x{*}.fill(zero)" ] []
     Assert.Contains("queries[0] (a): aggregator 'p95:' is not supported yet", es)
-    Assert.Contains("queries[0] (a): .rollup() is not supported yet", es)
+    Assert.Contains("queries[0] (a): .fill() is not supported yet", es)
 
 [<Fact>]
 let ``unsubstituted template variables are refused`` () =
@@ -116,3 +116,56 @@ let ``arithmetic in formulas is not supported yet`` () =
 [<Fact>]
 let ``duplicate query names are refused`` () =
     Assert.Contains("query name 'a' is used more than once", errorsOf [ Some "a", "x{*}"; Some "a", "y{*}" ] [])
+
+// --- rollup and type modifiers -------------------------------------------------------
+
+let private onlyQuery q = Assert.Single (planOf [ None, q ] []).Queries
+
+[<Fact>]
+let ``no modifier: avg over the request's step`` () =
+    let q = onlyQuery "sum:requests{*}"
+    Assert.Equal(Plain Avg, q.TimeAgg)
+    Assert.Equal(TimeSpan.FromSeconds 20.0, q.Step) // one hour → 20 s
+
+[<Fact>]
+let ``rollup with a method keeps the step`` () =
+    let q = onlyQuery "x{*}.rollup(max)"
+    Assert.Equal(Plain Max, q.TimeAgg)
+    Assert.Equal(TimeSpan.FromSeconds 20.0, q.Step)
+
+[<Fact>]
+let ``rollup with an interval sets this query's step`` () =
+    let q = onlyQuery "x{*}.rollup(sum, 60)"
+    Assert.Equal(Plain Sum, q.TimeAgg)
+    Assert.Equal(TimeSpan.FromSeconds 60.0, q.Step)
+
+[<Fact>]
+let ``rollup count is a method`` () = Assert.Equal(Plain Count, (onlyQuery "x{*}.rollup(count, 60)").TimeAgg)
+
+[<Fact>]
+let ``a rollup interval over 1500 points is widened`` () =
+    // One hour at 1 s is 3600 points; 3600 / 1500 = 2.4 → 3 s.
+    Assert.Equal(TimeSpan.FromSeconds 3.0, (onlyQuery "x{*}.rollup(avg, 1)").Step)
+
+[<Fact>]
+let ``as_count and as_rate`` () =
+    Assert.Equal(AsCount, (onlyQuery "sum:x{*}.as_count()").TimeAgg)
+    Assert.Equal(AsRate, (onlyQuery "sum:x{*}.as_rate()").TimeAgg)
+
+[<Fact>]
+let ``as_count with a sum rollup, in either order`` () =
+    // Datadog docs: sum:requests.count{*}.as_count().rollup(sum, …)
+    let q = onlyQuery "sum:requests{*}.as_count().rollup(sum, 120)"
+    Assert.Equal(AsCount, q.TimeAgg)
+    Assert.Equal(TimeSpan.FromSeconds 120.0, q.Step)
+    Assert.Equal(AsCount, (onlyQuery "sum:requests{*}.rollup(sum, 120).as_count()").TimeAgg)
+
+[<Fact>]
+let ``contradictions and unsupported forms are named`` () =
+    Assert.Contains("queries[0]: .as_count() with .rollup(max) is not supported yet", errorsOf [ None, "x{*}.as_count().rollup(max)" ] [])
+    Assert.Contains("queries[0]: .as_rate() cannot follow .as_count()", errorsOf [ None, "x{*}.as_count().as_rate()" ] [])
+    Assert.Contains("queries[0]: .rollup() method must be one of avg, sum, min, max, count", errorsOf [ None, "x{*}.rollup(median)" ] [])
+    Assert.Contains(
+        "queries[0]: calendar .rollup() (daily, weekly, monthly, alignment, timezone) is not supported yet",
+        errorsOf [ None, "x{*}.rollup(sum, monthly)" ] []
+    )

@@ -47,6 +47,29 @@ let private aggregate =
     | Sum -> "sum"
     | Min -> "min"
     | Max -> "max"
+    | Count -> "count"
+
+/// The inner, per-series aggregate. `step` is the bucket width placeholder.
+///
+/// One series has one metric type, so `any(metric_type)` over its rows in a
+/// bucket is that type — the formula can follow it without a separate lookup.
+/// UNSPECIFIED and anything unknown are treated as GAUGE.
+///
+/// A RATE point is events per second over the metric's `interval`, so its
+/// event count is value × interval. The interval is floored at 1: rows with 0
+/// exist, and would otherwise count as no events at all.
+let private timeAggregateSql (step: string) =
+    function
+    | Plain Count -> "toFloat64(count())"
+    | Plain agg -> $"{aggregate agg}(value)"
+    | AsCount ->
+        "multiIf(any(metric_type) = 'RATE', sum(value * greatest(interval, 1)), "
+        + "any(metric_type) = 'COUNT', sum(value), avg(value))"
+    | AsRate ->
+        // For RATE, the bucket is floored to the metric's interval: a 5 s
+        // bucket over a metric sent every 10 s would otherwise double it.
+        $"multiIf(any(metric_type) = 'RATE', sum(value * greatest(interval, 1)) / greatest({step}, max(interval)), "
+        + $"any(metric_type) = 'COUNT', sum(value) / {step}, avg(value))"
 
 /// Datadog's `*` wildcard as a LIKE pattern. `_` and `%` are LIKE's own
 /// wildcards and common in tag values (`kube_namespace`), so they are escaped.
@@ -97,13 +120,13 @@ let compile (tenant: TenantId) (plan: Plan) (query: QueryPlan) : Sql =
     let metricP = p.Add("metric", String query.Metric)
     let fromP = p.Add("from", Int64(plan.From.ToUnixTimeMilliseconds()))
     let toP = p.Add("to", Int64(plan.To.ToUnixTimeMilliseconds()))
-    let stepP = p.Add("step", Int64(int64 plan.Step.TotalSeconds))
+    let stepP = p.Add("step", Int64(int64 query.Step.TotalSeconds))
     let filter = filterSql p query.Filter
 
     let text =
         $"""SELECT {groupList}toInt64(toUnixTimestamp(bucket)) * 1000 AS bucket_ms, {aggregate query.SpaceAgg}(v) AS value
 FROM (
-    SELECT series_id, {groupSelect}toStartOfInterval(timestamp, toIntervalSecond({stepP})) AS bucket, {aggregate query.TimeAgg}(value) AS v
+    SELECT series_id, {groupSelect}toStartOfInterval(timestamp, toIntervalSecond({stepP})) AS bucket, {timeAggregateSql stepP query.TimeAgg} AS v
     FROM metrics
     WHERE tenant_id = {tenantP}
       AND metric = {metricP}
