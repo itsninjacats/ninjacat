@@ -102,6 +102,70 @@ let private countAcross (counts: float -> bool) (series: Series list) : Series l
 let private hasNotApplicable (s: Series) =
     s.GroupTags |> List.exists (fun t -> t.EndsWith($":{notApplicable}"))
 
+// --- along time ------------------------------------------------------------------
+
+/// One function over one series' points, in time order.
+///
+/// Our choices where Datadog's docs are silent, or odd:
+///   - Diff-like functions work on consecutive points, so a gap is bridged:
+///     the diff after a gap is against the last point before it.
+///   - monotonic_diff keeps zero (a counter that did not move), and a
+///     negative delta — a counter reset — becomes a gap.
+///   - median_N and rollingavg_N are trailing windows: each point looks at
+///     itself and the N-1 before it, as a live graph must.
+///   - integral follows the docs literally: "the cumulative sum of
+///     [time delta] x [value delta] over all consecutive pairs of points".
+///     That makes the integral of a constant zero, which suggests the docs
+///     mean something else; kept literal until checked against Datadog.
+///   - ewma starts at the first point's value, then
+///     s = alpha·v + (1 - alpha)·s, alpha = 2 / (span + 1): "twice the
+///     weighted average age", the usual span definition.
+let private alongTime (fn: TimewiseFn) (stepMs: int64) (s: Series) : Series =
+    let pts = s.Points |> Map.toArray
+    let seconds (dtMs: int64) = float dtMs / 1000.0
+
+    let deltas (f: float -> float -> float option) =
+        pts |> Array.pairwise |> Array.choose (fun ((t0, v0), (t1, v1)) -> f (seconds (t1 - t0)) (v1 - v0) |> Option.map (fun r -> t1, r))
+
+    let window n (f: float[] -> float) =
+        pts |> Array.mapi (fun i (t, _) -> t, pts[max 0 (i - n + 1) .. i] |> Array.map snd |> f)
+
+    let median (xs: float[]) =
+        let sorted = Array.sort xs
+        let m = sorted.Length / 2
+        if sorted.Length % 2 = 1 then sorted[m] else (sorted[m - 1] + sorted[m]) / 2.0
+
+    let out =
+        match fn with
+        | Cumsum -> pts |> Array.scan (fun (_, acc) (t, v) -> t, acc + v) (0L, 0.0) |> Array.tail
+        | Integral ->
+            match pts with
+            | [||] -> [||]
+            | _ ->
+                let first = fst pts[0], 0.0
+                let steps = deltas (fun dt dv -> Some(dt * dv))
+                Array.append [| first |] (steps |> Array.scan (fun (_, acc) (t, x) -> t, acc + x) first |> Array.tail)
+        | Diff -> deltas (fun _ dv -> Some dv)
+        | MonotonicDiff -> deltas (fun _ dv -> if dv >= 0.0 then Some dv else None)
+        | Derivative
+        | PerSecond -> deltas (fun dt dv -> Some(dv / dt))
+        | PerMinute -> deltas (fun dt dv -> Some(dv / dt * 60.0))
+        | PerHour -> deltas (fun dt dv -> Some(dv / dt * 3600.0))
+        | Throughput -> pts |> Array.map (fun (t, v) -> t, v / seconds stepMs)
+        | Ewma span ->
+            let alpha = 2.0 / (float span + 1.0)
+
+            match pts with
+            | [||] -> [||]
+            | _ -> pts |> Array.tail |> Array.scan (fun (_, e) (t, v) -> t, alpha * v + (1.0 - alpha) * e) pts[0]
+        | Median n -> window n median
+        | RollingAvg n -> window n Array.average
+
+    { s with Points = Map.ofArray out }
+
+let private trim (fromMs: int64) (series: Series list) =
+    series |> List.map (fun s -> { s with Points = s.Points |> Map.filter (fun t _ -> t >= fromMs) })
+
 // --- the tree ---------------------------------------------------------------------
 
 /// The queries a node reads, so only those go to ClickHouse.
@@ -112,15 +176,39 @@ let rec sources (node: Node) : int list =
     | Top(inner, _, _, _)
     | CountNonzero inner
     | CountNotNull inner
-    | ExcludeNull inner -> sources inner
+    | ExcludeNull inner
+    | Timewise(_, inner) -> sources inner
 
-let rec eval (fetched: Map<int, Series list>) (node: Node) : Series list =
+/// What evaluation reads: each query's series, and each query's bucket width.
+type Fetched =
+    { Series: Map<int, Series list>
+      StepMs: Map<int, int64> }
+
+/// Evaluates `node`, keeping points from `fromMs` on.
+///
+/// A time-wise function asks its input for earlier points — its lookback —
+/// and trims its own output back to `fromMs`, so nothing above it sees the
+/// history: `top` ranks, and the response shows, the visible window only.
+let rec evalFrom (fetched: Fetched) (fromMs: int64) (node: Node) : Series list =
     match node with
-    | Fetch i -> fetched[i]
-    | Pointwise(fn, inner) -> eval fetched inner |> List.map (mapValues fn)
-    | Top(inner, count, by, order) -> eval fetched inner |> top count by order
+    | Fetch i -> fetched.Series[i] |> trim fromMs
+    | Pointwise(fn, inner) -> evalFrom fetched fromMs inner |> List.map (mapValues fn)
+    | Top(inner, count, by, order) -> evalFrom fetched fromMs inner |> top count by order
     // Every value that reaches here is finite (see `apply`), so "not null"
     // and "non-zero finite" need no further check.
-    | CountNonzero inner -> eval fetched inner |> countAcross (fun v -> v <> 0.0)
-    | CountNotNull inner -> eval fetched inner |> countAcross (fun _ -> true)
-    | ExcludeNull inner -> eval fetched inner |> List.filter (hasNotApplicable >> not)
+    | CountNonzero inner -> evalFrom fetched fromMs inner |> countAcross (fun v -> v <> 0.0)
+    | CountNotNull inner -> evalFrom fetched fromMs inner |> countAcross (fun _ -> true)
+    | ExcludeNull inner -> evalFrom fetched fromMs inner |> List.filter (hasNotApplicable >> not)
+    | Timewise(fn, inner) ->
+        // One source below: arithmetic, the only way to join two, is not in yet.
+        let stepMs = fetched.StepMs[List.head (sources inner)]
+        // Saturating: `fromMs` may already be the lowest there is.
+        let back = int64 (lookback fn) * stepMs
+        let innerFrom = if fromMs < Int64.MinValue + back then Int64.MinValue else fromMs - back
+
+        evalFrom fetched innerFrom inner |> List.map (alongTime fn stepMs) |> trim fromMs
+
+/// Evaluates with every point the queries returned; for tests of single
+/// functions, where there is no window to trim to.
+let eval (series: Map<int, Series list>) (node: Node) : Series list =
+    evalFrom { Series = series; StepMs = series |> Map.map (fun _ _ -> 20000L) } Int64.MinValue node

@@ -12,7 +12,9 @@
 ///   formulas: query names, wrapped in functions that act on each value
 ///   (abs, log2, log10, ceil, floor, round, clamp_*, cutoff_*) or across
 ///   series (top, top10_mean-style shorthands, count_nonzero, count_not_null,
-///   exclude_null), with an optional limit
+///   exclude_null) or along time (cumsum, integral, diff, monotonic_diff,
+///   derivative, per_second/minute/hour, throughput, ewma_*, median_*,
+///   rollingavg_*), with an optional limit
 ///
 /// Everything else (functions, arithmetic, other modifiers, calendar rollups,
 /// percentiles) gets a "not supported yet" naming the construct.
@@ -60,7 +62,10 @@ type QueryPlan =
       TimeAgg: TimeAggregation
       /// The bucket width for this query: `.rollup(_, seconds)`, or the
       /// request's step.
-      Step: TimeSpan }
+      Step: TimeSpan
+      /// Buckets to fetch before `from`, for functions that look back — a
+      /// diff at the first visible point needs the point before it.
+      Lookback: int }
 
 /// One series group in the response: a formula, or a query shown as is when
 /// the request had no formulas.
@@ -98,6 +103,56 @@ type RankBy =
     /// "Signed area under the curve, which can be negative".
     | ByArea
 
+/// A function along one series' time axis: each output point depends on
+/// earlier points of the same series (docs: dashboards/functions/rate,
+/// arithmetic, smoothing, beta).
+type TimewiseFn =
+    /// Running sum "over the visible time window" — no lookback, by the docs.
+    | Cumsum
+    /// Running sum of Δt (seconds) × Δvalue over consecutive points, as the
+    /// docs define it word for word — see Evaluate.fs.
+    | Integral
+    /// Value minus the previous point's.
+    | Diff
+    /// Diff, only where it is not negative.
+    | MonotonicDiff
+    /// Diff divided by Δt in seconds.
+    | Derivative
+    | PerSecond
+    | PerMinute
+    | PerHour
+    /// Each value divided by the bucket width in seconds.
+    | Throughput
+    /// Exponentially weighted moving average, alpha = 2 / (span + 1).
+    | Ewma of span: int
+    /// Median of the last `span` points.
+    | Median of span: int
+    /// Mean of the last `span` points.
+    | RollingAvg of span: int
+
+/// Buckets of history a function needs before its first output point.
+///
+///   diff-like   1: the point before the first.
+///   median, rollingavg   span - 1: a full window at the first point.
+///   ewma   2 × span: by then the weight left on the start is
+///          (1 - 2/(span+1))^(2·span) ≈ e^-4, under 2 %.
+///   cumsum, integral, throughput   0: the docs make cumsum and integral
+///          start at the visible window; throughput is per point.
+let lookback =
+    function
+    | Cumsum
+    | Integral
+    | Throughput -> 0
+    | Diff
+    | MonotonicDiff
+    | Derivative
+    | PerSecond
+    | PerMinute
+    | PerHour -> 1
+    | Median n
+    | RollingAvg n -> n - 1
+    | Ewma n -> 2 * n
+
 /// What a formula computes: its names resolved to queries, every function
 /// checked against what it takes. A function that exists here has arguments
 /// of the right number and type — the evaluator never has to check.
@@ -113,6 +168,7 @@ type Node =
     | CountNotNull of Node
     /// Drop the series whose group has an N/A tag value.
     | ExcludeNull of Node
+    | Timewise of TimewiseFn * Node
 
 type Output =
     {
@@ -271,7 +327,8 @@ let private planQuery (window: TimeSpan) (requestStep: TimeSpan) (label: string)
               // type; for a gauge, avg is what it would pick.
               SpaceAgg = q.SpaceAgg |> Option.bind spaceAggregation |> Option.defaultValue Avg
               TimeAgg = timeAgg
-              Step = mods.Interval |> Option.map (fitted window) |> Option.defaultValue requestStep }
+              Step = mods.Interval |> Option.map (fitted window) |> Option.defaultValue requestStep
+              Lookback = 0 }
     | _ -> Error errors
 
 // --- formulas --------------------------------------------------------------------
@@ -306,6 +363,28 @@ let private pointwiseFunctions: Map<string, Literal list -> Result<PointwiseFn, 
           threshold ClampMax "clamp_max"
           threshold CutoffMin "cutoff_min"
           threshold CutoffMax "cutoff_max" ]
+
+/// Time-wise functions by name. The numbered forms are exactly the ones
+/// documented; `ewma()` is ewma_20 and `median()` is median_3, as the docs say.
+let private timewiseFunctions: Map<string, TimewiseFn> =
+    Map
+        [ "cumsum", Cumsum
+          "integral", Integral
+          "diff", Diff
+          "monotonic_diff", MonotonicDiff
+          "derivative", Derivative
+          "per_second", PerSecond
+          "per_minute", PerMinute
+          "per_hour", PerHour
+          "throughput", Throughput
+          for n in [ 1; 3; 5; 7; 10; 20 ] do
+              $"ewma_{n}", Ewma n
+          "ewma", Ewma 20
+          for n in [ 3; 5; 7; 9 ] do
+              $"median_{n}", Median n
+          "median", Median 3
+          for n in [ 5; 13; 21; 29 ] do
+              $"rollingavg_{n}", RollingAvg n ]
 
 /// A plain argument after the series one, as the analysis sees it. In a
 /// formula a bare word (`mean`) parses as a query name — the parser cannot
@@ -401,6 +480,10 @@ let rec private resolve (label: string) (byName: Map<string, int>) (expr: Formul
                     | ("count_nonzero" | "count_nonzero_finite"), [] -> Ok CountNonzero
                     | "count_not_null", [] -> Ok CountNotNull
                     | "exclude_null", [] -> Ok ExcludeNull
+                    | _, [] when timewiseFunctions.ContainsKey name ->
+                        let fn = timewiseFunctions[name]
+                        Ok(fun node -> Timewise(fn, node))
+                    | _, _ when timewiseFunctions.ContainsKey name -> Error $"{name}() takes one argument: {name}(query)"
                     | ("count_nonzero" | "count_nonzero_finite" | "count_not_null" | "exclude_null"), _ ->
                         Error $"{name}() takes one argument: {name}(query)"
                     | _ ->
@@ -462,10 +545,31 @@ let plan (req: ParsedTimeseriesRequest) : Result<Plan, string list> =
 
     match duplicates @ queryErrors @ outputErrors, outputs with
     | [], Ok outputs ->
+        // The deepest history any output asks of each query.
+        let rec needs (extra: int) (node: Node) : (int * int) list =
+            match node with
+            | Fetch i -> [ i, extra ]
+            | Timewise(fn, inner) -> needs (extra + lookback fn) inner
+            | Pointwise(_, inner)
+            | Top(inner, _, _, _)
+            | CountNonzero inner
+            | CountNotNull inner
+            | ExcludeNull inner -> needs extra inner
+
+        let lookbacks =
+            outputs
+            |> List.collect (_.Node >> needs 0)
+            |> List.groupBy fst
+            |> List.map (fun (i, ns) -> i, ns |> List.map snd |> List.max)
+            |> Map.ofList
+
         Ok
             { From = req.From
               To = req.To
               Step = requestStep
-              Queries = queries |> List.choose (function Ok q -> Some q | Error _ -> None)
+              Queries =
+                queries
+                |> List.choose (function Ok q -> Some q | Error _ -> None)
+                |> List.mapi (fun i q -> { q with Lookback = defaultArg (lookbacks.TryFind i) 0 })
               Outputs = outputs }
     | errors, _ -> Error errors

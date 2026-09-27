@@ -122,6 +122,15 @@ let private groupSql (p: Params) (key: string) =
         let k = p.Add("k", String k)
         $"arrayJoin(if(empty(tags[{k}]), [NULL], CAST(tags[{k}], 'Array(Nullable(String))')))"
 
+/// How far before `from` a query reads, in milliseconds.
+let earliestOffsetMs (query: QueryPlan) =
+    if query.Lookback = 0 then 0L
+    else int64 (query.Lookback + 1) * int64 query.Step.TotalMilliseconds
+
+/// The first bucket a query's series keep: `from`, less its lookback.
+let keepFromMs (plan: Plan) (query: QueryPlan) =
+    plan.From.ToUnixTimeMilliseconds() - int64 query.Lookback * int64 query.Step.TotalMilliseconds
+
 let compile (tenant: TenantId) (plan: Plan) (query: QueryPlan) : Sql =
     let p = Params()
     let (TenantId t) = tenant
@@ -133,7 +142,10 @@ let compile (tenant: TenantId) (plan: Plan) (query: QueryPlan) : Sql =
 
     let tenantP = p.Add("tenant", String t)
     let metricP = p.Add("metric", String query.Metric)
-    let fromP = p.Add("from", Int64(plan.From.ToUnixTimeMilliseconds()))
+    // With lookback, one bucket more than asked: the bucket holding `from`
+    // minus the lookback may start before it, and would be partial.
+    let fromMs = plan.From.ToUnixTimeMilliseconds() - earliestOffsetMs query
+    let fromP = p.Add("from", Int64 fromMs)
     let toP = p.Add("to", Int64(plan.To.ToUnixTimeMilliseconds()))
     let stepP = p.Add("step", Int64(int64 query.Step.TotalSeconds))
     let filter = filterSql p query.Filter

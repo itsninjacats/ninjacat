@@ -22,14 +22,18 @@ let run (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<
                 task {
                     let query = plan.Queries[i]
                     let! rows = execute (compile tenant plan query)
-                    return i, Series.fromRows query.GroupBy (plan.From.ToUnixTimeMilliseconds()) rows
+                    return i, Series.fromRows query.GroupBy (keepFromMs plan query) rows
                 })
             |> Task.WhenAll
 
-        let bySource = Map.ofArray fetched
+        let fetched: Evaluate.Fetched =
+            { Series = Map.ofArray fetched
+              StepMs = sources |> List.map (fun i -> i, int64 plan.Queries[i].Step.TotalMilliseconds) |> Map.ofList }
+
+        let fromMs = plan.From.ToUnixTimeMilliseconds()
 
         return
             plan.Outputs
-            |> List.map (fun o -> o.QueryIndex, Evaluate.eval bySource o.Node |> Series.limit o.Limit)
+            |> List.map (fun o -> o.QueryIndex, Evaluate.evalFrom fetched fromMs o.Node |> Series.limit o.Limit)
             |> Series.response
     }

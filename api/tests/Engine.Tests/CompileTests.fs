@@ -20,7 +20,8 @@ let private query filter groupBy =
       GroupBy = groupBy
       SpaceAgg = Sum
       TimeAgg = Plain Avg
-      Step = TimeSpan.FromSeconds 20.0 }
+      Step = TimeSpan.FromSeconds 20.0
+      Lookback = 0 }
 
 let private compiled filter groupBy = compile (TenantId "acme") plan (query filter groupBy)
 
@@ -124,3 +125,10 @@ let ``wildcards inside IN are patterns, the rest stay exact`` () =
 let ``host IN with a wildcard`` () =
     let sql = compiled (Not(In("host", [ "web-*" ]))) []
     Assert.Contains("NOT ((host LIKE {p", sql.Text)
+
+[<Fact>]
+let ``lookback reads earlier, one bucket more`` () =
+    let sql = compile (TenantId "acme") plan { query All [] with Lookback = 3 }
+    // from − (3 + 1) × 20 s
+    Assert.Equal(Int64(1711977600000L - 80000L), boundAfter "fromUnixTimestamp64Milli(" sql)
+    Assert.Equal(1711977600000L - 60000L, keepFromMs plan { query All [] with Lookback = 3 })

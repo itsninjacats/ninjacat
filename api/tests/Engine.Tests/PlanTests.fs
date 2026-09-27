@@ -201,8 +201,8 @@ let ``wrong arguments are named`` () =
 
 [<Fact>]
 let ``unknown functions and names inside functions are reported together`` () =
-    let es = errorsOf [ Some "a", "x{*}" ] [ "ewma_3(a)"; "abs(b)" ]
-    Assert.Contains("formulas[0]: function 'ewma_3' is not supported yet", es)
+    let es = errorsOf [ Some "a", "x{*}" ] [ "autosmooth(a)"; "abs(b)" ]
+    Assert.Contains("formulas[0]: function 'autosmooth' is not supported yet", es)
     Assert.Contains("formulas[1]: no query is named 'b'", es)
 
 // --- across series -------------------------------------------------------------------
@@ -240,3 +240,24 @@ let ``top arguments are checked`` () =
     Assert.Contains("formulas[0]: top10_mean() takes one argument: top10_mean(query)", err "top10_mean(a, 3)")
     // Not in the documented pattern: 25 is a top() limit, not a shorthand size.
     Assert.Contains("formulas[0]: function 'top25_mean' is not supported yet", err "top25_mean(a)")
+
+// --- along time ------------------------------------------------------------------------
+
+[<Fact>]
+let ``time-wise functions resolve, with the documented aliases`` () =
+    Assert.Equal(Timewise(Cumsum, Fetch 0), nodeOf "cumsum(a)")
+    Assert.Equal(Timewise(PerMinute, Fetch 0), nodeOf "per_minute(a)")
+    Assert.Equal(Timewise(Ewma 7, Fetch 0), nodeOf "ewma_7(a)")
+    Assert.Equal(Timewise(Ewma 20, Fetch 0), nodeOf "ewma(a)")
+    Assert.Equal(Timewise(Median 3, Fetch 0), nodeOf "median(a)")
+    Assert.Equal(Timewise(RollingAvg 13, Fetch 0), nodeOf "rollingavg_13(a)")
+
+[<Fact>]
+let ``undocumented spans are not guessed`` () =
+    Assert.Contains("formulas[0]: function 'ewma_4' is not supported yet", errorsOf [ Some "a", "x{*}" ] [ "ewma_4(a)" ])
+
+[<Fact>]
+let ``lookback is the deepest a query is read`` () =
+    let p = planOf [ Some "a", "x{*}"; Some "b", "y{*}" ] [ "diff(ewma_5(a))"; "median_7(a)"; "cumsum(b)" ]
+    // a: diff 1 + ewma 2×5 = 11, more than median_7's 6. b: cumsum needs none.
+    Assert.Equal<int list>([ 11; 0 ], p.Queries |> List.map _.Lookback)
