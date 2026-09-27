@@ -89,6 +89,10 @@ seasonal). Anomaly bands and forecasts travel as `ninjacat_bounds` and
 Every behaviour Datadog does not document is marked in the code
 (`grep -rn "WARNING(undocumented)" api/src`); `integral` is a FIXME.
 
+By decision, `trace.*` metric names are not served from APM stats: APM
+stays in `apm_stats`, to be queried through the v2 APM data sources (see
+api/README.md, "Known deviations from Datadog").
+
 Not yet: `dt()`, `.weighted()`, percentiles (`p95:`, from `sketches`),
 calendar rollups, `/api/v2/query/scalar`, v1 `/api/v1/query`, the
 `metrics_1m` table for windows past raw retention, and the metric catalog.

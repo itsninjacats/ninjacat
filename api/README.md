@@ -55,6 +55,20 @@ let! values = Engine.scalar execute tenant { …; Queries = [ { …; Aggregator 
 `execute` is how the engine reaches ClickHouse — `Server/ClickHouse.fs`
 `metricRows` in the service, a list in tests.
 
+## Known deviations from Datadog
+
+Decisions, not gaps: places where NinjaCat behaves differently on purpose.
+
+- **`trace.*` metrics are not metrics here.** Datadog turns the agent's APM
+  stats into ordinary metrics (`sum:trace.http.request.hits{service:web}`),
+  queryable like any other. NinjaCat keeps APM stats in their own table
+  (`apm_stats`) and does not merge them into the metrics path: a metric query
+  for `trace.*` finds nothing. APM is to be queried through its own data
+  sources (`apm_metrics`, `apm_resource_stats`, `apm_dependency_stats`, as
+  Datadog's v2 query API defines them), not built yet. Decided 2026-09-27.
+- **RUM likewise** stays in its own tables (`rum_events`, `rum_views`, …),
+  queried as events, not as metrics.
+
 ## Where Datadog is silent
 
 Datadog documents its query language unevenly. Wherever we had to decide
