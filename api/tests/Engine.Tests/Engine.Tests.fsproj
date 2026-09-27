@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="MetricsTests.fs" />
+    <Compile Include="TagFilterTests.fs" />
+    <Compile Include="MetricQueryTests.fs" />
+    <Compile Include="ExpressionTests.fs" />
+    <Compile Include="FormulaTests.fs" />
+    <Compile Include="TimeseriesTests.fs" />
+    <Compile Include="PlanTests.fs" />
+    <Compile Include="CompileTests.fs" />
+    <Compile Include="SeriesTests.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Engine/Engine.fsproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,15 @@
+<Project>
+  <!-- Central package management: every version is pinned here, once. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="FParsec" Version="1.1.1" />
+    <PackageVersion Include="FSharp.SystemTextJson" Version="1.4.36" />
+    <PackageVersion Include="FSharp.Core" Version="10.1.401" />
+    <PackageVersion Include="Oxpecker" Version="2.1.1" />
+    <PackageVersion Include="ClickHouse.Driver" Version="1.4.0" />
+    <PackageVersion Include="Npgsql.DependencyInjection" Version="10.0.3" />
+    <PackageVersion Include="xunit.v3" Version="4.0.1" />
+  </ItemGroup>
+</Project>

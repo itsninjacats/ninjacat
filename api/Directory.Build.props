@@ -1,0 +1,21 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- FS3370: the ^ operator for index-from-end; noise, not a defect. -->
+    <NoWarn>$(NoWarn);FS3370</NoWarn>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <!-- The compose dev container sets this so its bin/obj live in a volume
+         outside the bind mount; mounting volumes over bin/ and obj/ instead
+         would leave root-owned directories in the host's source tree. -->
+    <ArtifactsPath Condition="'$(NINJACAT_ARTIFACTS_PATH)' != ''">$(NINJACAT_ARTIFACTS_PATH)</ArtifactsPath>
+    <!-- Under central package management the SDK's implicit FSharp.Core
+         reference ends up unresolved in some projects; pin it once instead. -->
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+  </ItemGroup>
+</Project>

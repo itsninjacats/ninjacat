@@ -116,6 +116,37 @@ services:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
 
+  # The read side, in F#. `dotnet watch` rebuilds on save. It reads
+  # ClickHouse over HTTP (:8123), not the native port the Go server uses.
+  api:
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    container_name: ninjacat-api
+    restart: unless-stopped
+    working_dir: /app
+    command: ["dotnet", "watch", "--project", "src/Server", "run", "--non-interactive"]
+    ports:
+      - "8082:8082"   # F# API — internal
+    environment:
+      NINJACAT_API_URL: http://0.0.0.0:8082
+      CLICKHOUSE_HTTP_ADDR: clickhouse:8123
+      CLICKHOUSE_DB: ninjacat
+      CLICKHOUSE_USER: ninjacat
+      CLICKHOUSE_PASSWORD: ninjacat
+      DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
+      NINJACAT_ARTIFACTS_PATH: /artifacts
+      # Polling, because inotify events do not cross the bind mount everywhere.
+      DOTNET_USE_POLLING_FILE_WATCHER: "true"
+    volumes:
+      - ./api:/app
+      # Build output lives here, not in the bind mount (see NINJACAT_ARTIFACTS_PATH),
+      # so host and container builds never collide.
+      - api-artifacts:/artifacts
+      - nuget-cache:/root/.nuget/packages
+    depends_on:
+      clickhouse: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+
   frontend:
     build:
       context: ./frontend
@@ -148,3 +179,5 @@ volumes:
   go-build-cache:
   frontend-node-modules:
   frontend-svelte-kit:
+  api-artifacts:
+  nuget-cache:

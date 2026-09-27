@@ -57,10 +57,15 @@ Together with the engine behind it, it is also the hardest part of this plan.
   dependency on the web framework, so it can be tested without a server and
   the framework can be swapped cheaply.
 
-**Open: the web framework — Falco or Oxpecker.** Both are thin functional
-layers over ASP.NET Core endpoint routing with similar performance, and both
-depend on a single maintainer. For an internal JSON API the choice matters
-little as long as the rule above holds.
+**Decided: Oxpecker.** Both it and Falco are thin functional layers over
+ASP.NET Core endpoint routing with similar performance, and both depend on a
+single maintainer; Oxpecker had the stable net10 release while Falco 6 was
+still in beta. For an internal JSON API the choice matters little as long as
+the rule above holds.
+
+**Started 2026-09-27** in `api/`: Engine / Server / tests split, ClickHouse
+over HTTP via ClickHouse.Driver with `readonly=2`, `/health`, and the first
+Datadog endpoint, `GET /api/v1/metrics`.
 
 **Open, recommended yes: speak Datadog's public query API.**
 `/api/v2/query/timeseries`, `/api/v2/logs/events/search`,

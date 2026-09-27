@@ -1,0 +1,78 @@
+module NinjaCat.Api.Engine.Tests.CompileTests
+
+open System
+open Xunit
+open NinjaCat.Api.Engine
+open NinjaCat.Api.Engine.MetricQuery.Ast
+open NinjaCat.Api.Engine.Query.Plan
+open NinjaCat.Api.Engine.Query.Compile
+
+let private plan =
+    { From = DateTimeOffset.FromUnixTimeMilliseconds 1711977600000L
+      To = DateTimeOffset.FromUnixTimeMilliseconds 1711981200000L
+      Step = TimeSpan.FromSeconds 20.0
+      Queries = []
+      Outputs = [] }
+
+let private query filter groupBy =
+    { Metric = "system.cpu.user"; Filter = filter; GroupBy = groupBy; SpaceAgg = Sum; TimeAgg = Avg }
+
+let private compiled filter groupBy = compile (TenantId "acme") plan (query filter groupBy)
+
+/// The value bound to the placeholder that follows `before` in the SQL text.
+let private boundAfter (before: string) (sql: Sql) =
+    let i = sql.Text.IndexOf before
+    Assert.True(i >= 0, $"'{before}' not in:\n{sql.Text}")
+    let start = i + before.Length + 1
+    let name = sql.Text.Substring(start, sql.Text.IndexOf(':', start) - start)
+    sql.Parameters |> List.find (fst >> (=) name) |> snd
+
+[<Fact>]
+let ``time first, then space`` () =
+    let sql = compiled All []
+    // Inner query: per series, the time aggregator; outer: across series, the space one.
+    Assert.Contains("SELECT series_id, toStartOfInterval(timestamp, toIntervalSecond({step", sql.Text)
+    Assert.Contains("avg(value) AS v", sql.Text)
+    Assert.Contains("sum(v) AS value", sql.Text)
+    Assert.Contains("GROUP BY series_id, bucket", sql.Text)
+
+[<Fact>]
+let ``request values are bound, never inlined`` () =
+    let sql = compiled (Tag("env", "prod'; DROP TABLE metrics; --")) []
+    Assert.DoesNotContain("DROP", sql.Text)
+    Assert.DoesNotContain("acme", sql.Text)
+    Assert.DoesNotContain("system.cpu.user", sql.Text)
+    Assert.Equal(String "acme", boundAfter "tenant_id = " sql)
+    Assert.Equal(String "system.cpu.user", boundAfter "metric = " sql)
+    Assert.Equal(Int64 1711977600000L, boundAfter "fromUnixTimestamp64Milli(" sql)
+    Assert.Equal(Int64 20L, boundAfter "toIntervalSecond(" sql)
+
+[<Fact>]
+let ``host is a column, other tags are in the map`` () =
+    Assert.Contains("host = {p", (compiled (Tag("host", "web-1")) []).Text)
+    let env = compiled (Tag("env", "prod")) []
+    Assert.Contains("has(tags[{k", env.Text)
+    Assert.Equal(String "env", boundAfter "has(tags[" env)
+
+[<Fact>]
+let ``wildcards become LIKE, with LIKE's own wildcards escaped`` () =
+    let sql = compiled (Tag("kube_namespace", "prod_*")) []
+    Assert.Contains("arrayExists(x -> x LIKE {p", sql.Text)
+    Assert.Equal(String "prod\\_%", boundAfter "x LIKE " sql)
+
+[<Fact>]
+let ``a key-less tag asks for the key`` () =
+    Assert.Contains("mapContains(tags, {k", (compiled (Bare "canary") []).Text)
+
+[<Fact>]
+let ``boolean structure is kept`` () =
+    let sql = compiled (And [ Tag("env", "prod"); Not(Or [ Tag("host", "a"); In("zone", [ "x"; "y" ]) ]) ]) []
+    Assert.Contains(") AND (NOT ((host = {p", sql.Text)
+    Assert.Contains(") OR (hasAny(tags[{k", sql.Text)
+
+[<Fact>]
+let ``group by: host as a column, tags through arrayJoin`` () =
+    let sql = compiled All [ "host"; "role" ]
+    Assert.Contains("host AS g0, arrayJoin(tags[{k", sql.Text)
+    Assert.Contains("GROUP BY g0, g1, bucket", sql.Text)
+    Assert.Contains("GROUP BY series_id, g0, g1, bucket", sql.Text)

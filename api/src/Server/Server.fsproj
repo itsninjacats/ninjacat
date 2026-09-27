@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <AssemblyName>ninjacat-api</AssemblyName>
+    <RootNamespace>NinjaCat.Api.Server</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Config.fs" />
+    <Compile Include="ClickHouse.fs" />
+    <Compile Include="Postgres.fs" />
+    <Compile Include="Handlers.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Oxpecker" />
+    <PackageReference Include="ClickHouse.Driver" />
+    <PackageReference Include="Npgsql.DependencyInjection" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Engine/Engine.fsproj" />
+  </ItemGroup>
+</Project>
