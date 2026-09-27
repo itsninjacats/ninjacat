@@ -64,8 +64,9 @@ let ``nested functions apply inside out`` () =
     Assert.Equal(2.0, out.Points[0L], 12)
 
 [<Fact>]
-let ``sources lists the queries a node reads`` () =
-    Assert.Equal<int list>([ 3 ], sources (Pointwise(Abs, Pointwise(Floor, Fetch 3))))
+let ``fetches lists the queries a node reads, with their offsets`` () =
+    Assert.Equal<(int * int64) list>([ 3, 0L ], fetches (Pointwise(Abs, Pointwise(Floor, Fetch 3))))
+    Assert.Equal<(int * int64) list>([ 3, -90000000L ], fetches (Shift(-3600000L, Pointwise(Abs, Shift(-86400000L, Fetch 3)))))
 
 // --- across series -------------------------------------------------------------------
 
@@ -193,7 +194,7 @@ let ``a gap is bridged by diff`` () =
 
 let private withHistory =
     // Buckets from −40 s; the visible window starts at 0.
-    { Fetched.Series = Map [ 0, [ s "a" [ -40000L, 1.0; -20000L, 2.0; 0L, 10.0; 20000L, 12.0 ] ] ]
+    { Fetched.Series = Map [ (0, 0L), [ s "a" [ -40000L, 1.0; -20000L, 2.0; 0L, 10.0; 20000L, 12.0 ] ] ]
       Fetched.StepMs = Map [ 0, 20000L ] }
 
 [<Fact>]
@@ -210,3 +211,14 @@ let ``cumsum starts at the visible window`` () =
 let ``nested: cumsum of diff reads one bucket back, sums from the window`` () =
     let out = evalFrom withHistory 0L (Timewise(Cumsum, Timewise(Diff, Fetch 0))) |> List.exactlyOne
     Assert.Equal<Map<int64, float>>(Map [ 0L, 8.0; 20000L, 10.0 ], out.Points)
+
+// --- shifts ----------------------------------------------------------------------------
+
+[<Fact>]
+let ``a shift reads the shifted fetch`` () =
+    let fetched =
+        { Fetched.Series = Map [ (0, 0L), [ s "now" [ 0L, 1.0 ] ]; (0, -3600000L), [ s "hour ago" [ 0L, 7.0 ] ] ]
+          Fetched.StepMs = Map [ 0, 20000L ] }
+
+    Assert.Equal<string list>([ "now" ], evalFrom fetched 0L (Fetch 0) |> names)
+    Assert.Equal<string list>([ "hour ago" ], evalFrom fetched 0L (Shift(-3600000L, Abs |> fun _ -> Fetch 0)) |> names)

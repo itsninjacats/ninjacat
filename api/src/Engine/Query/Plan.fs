@@ -14,7 +14,8 @@
 ///   series (top, top10_mean-style shorthands, count_nonzero, count_not_null,
 ///   exclude_null) or along time (cumsum, integral, diff, monotonic_diff,
 ///   derivative, per_second/minute/hour, throughput, ewma_*, median_*,
-///   rollingavg_*), with an optional limit
+///   rollingavg_*), shifted in time (timeshift, hour/day/week/month_before,
+///   calendar_shift), with an optional limit
 ///
 /// Everything else (functions, arithmetic, other modifiers, calendar rollups,
 /// percentiles) gets a "not supported yet" naming the construct.
@@ -175,6 +176,9 @@ type Node =
     /// Drop the series whose group has an N/A tag value.
     | ExcludeNull of Node
     | Timewise of TimewiseFn * Node
+    /// The inner node over data from `offsetMs` away (negative: the past),
+    /// drawn at the present window's times. Shifts nest by adding up.
+    | Shift of offsetMs: int64 * Node
 
 type Output =
     {
@@ -456,7 +460,58 @@ let private topShorthand (name: string) : (int * RankBy * SortOrder) option =
         None
 
 /// A formula's expression tree → Node, with every problem in it named.
-let rec private resolve (label: string) (byName: Map<string, int>) (expr: Formula) : Result<Node, string list> =
+/// `calendar_shift`'s "-1d", "-2w", "-1mo": a negative whole number and a unit.
+let private calendarShift (spec: string) (timezone: string) (from: DateTimeOffset) : Result<int64, string> =
+    let m = Text.RegularExpressions.Regex.Match(spec, "^-(\\d+)(d|w|mo)$")
+
+    let zone =
+        try
+            Ok(TimeZoneInfo.FindSystemTimeZoneById timezone)
+        with _ ->
+            Error $"calendar_shift() timezone '{timezone}' is not a known IANA zone"
+
+    match m.Success, zone with
+    | false, _ -> Error $"calendar_shift() shift must look like \"-1d\", \"-2w\" or \"-1mo\", got \"{spec}\""
+    | _, Error e -> Error e
+    | true, Ok zone ->
+        let n = int m.Groups[1].Value
+        let local = TimeZoneInfo.ConvertTime(from, zone)
+
+        let shifted =
+            match m.Groups[2].Value with
+            | "d" -> local.DateTime.AddDays(float -n)
+            | "w" -> local.DateTime.AddDays(float (-7 * n))
+            | _ -> local.DateTime.AddMonths(-n)
+
+        // The same wall-clock time, n units back, in that zone — so "-1d"
+        // across a DST change is 23 or 25 hours, as a calendar day is.
+        let back = DateTimeOffset(shifted, zone.GetUtcOffset shifted)
+        Ok(back.ToUnixTimeMilliseconds() - from.ToUnixTimeMilliseconds())
+
+/// The shift functions, as a fixed offset from the request's `from`.
+///
+/// WARNING(undocumented): how a calendar shift maps points inside the
+/// window. The offset is computed once, at `from`, and applied to every point:
+/// over a window spanning a month end or a DST change, points drift from their
+/// exact calendar counterparts by the difference.
+let private shiftOffset (from: DateTimeOffset) (name: string) (literals: Literal list) : Result<int64, string> option =
+    let fixedShift seconds = Some(Ok(int64 seconds * 1000L))
+
+    match name, literals with
+    | "timeshift", [ Num seconds ] when seconds <> 0.0 && seconds = Math.Floor seconds -> Some(Ok(int64 seconds * 1000L))
+    | "timeshift", _ -> Some(Error "timeshift() takes a query and a whole, non-zero number of seconds: timeshift(query, -3600)")
+    | "hour_before", [] -> fixedShift -3600
+    | "day_before", [] -> fixedShift -86400
+    | "week_before", [] -> fixedShift -604800
+    // Deprecated by Datadog in favour of calendar_shift "-1mo".
+    | "month_before", [] -> Some(calendarShift "-1mo" "UTC" from)
+    | ("hour_before" | "day_before" | "week_before" | "month_before"), _ -> Some(Error $"{name}() takes one argument: {name}(query)")
+    | "calendar_shift", [ (Quoted spec | Word spec) ] -> Some(calendarShift spec "UTC" from)
+    | "calendar_shift", [ (Quoted spec | Word spec); (Quoted zone | Word zone) ] -> Some(calendarShift spec zone from)
+    | "calendar_shift", _ -> Some(Error "calendar_shift() takes a query, a shift and optionally a timezone: calendar_shift(query, \"-1w\", \"Europe/Paris\")")
+    | _ -> None
+
+let rec private resolve (from: DateTimeOffset) (label: string) (byName: Map<string, int>) (expr: Formula) : Result<Node, string list> =
     match expr with
     | Leaf name ->
         match byName.TryFind name with
@@ -500,6 +555,8 @@ let rec private resolve (label: string) (byName: Map<string, int>) (expr: Formul
                         let fn = timewiseFunctions[name]
                         Ok(fun node -> Timewise(fn, node))
                     | _, _ when timewiseFunctions.ContainsKey name -> Error $"{name}() takes one argument: {name}(query)"
+                    | _ when (shiftOffset from name literals).IsSome ->
+                        (shiftOffset from name literals).Value |> Result.map (fun offset node -> Shift(offset, node))
                     | ("count_nonzero" | "count_nonzero_finite" | "count_not_null" | "exclude_null"), _ ->
                         Error $"{name}() takes one argument: {name}(query)"
                     | _ ->
@@ -508,7 +565,7 @@ let rec private resolve (label: string) (byName: Map<string, int>) (expr: Formul
                         | Some _, _ -> Error $"{name}() takes one argument: {name}(query)"
                         | None, _ -> Error $"function '{name}' is not supported yet"
 
-            match resolve label byName inner, build with
+            match resolve from label byName inner, build with
             | Ok inner, Ok build -> Ok(build inner)
             | inner, build ->
                 Error(
@@ -529,7 +586,7 @@ let private planOutputs (req: ParsedTimeseriesRequest) : Result<Output list, str
         let results =
             formulas
             |> List.mapi (fun i f ->
-                resolve $"formulas[{i}]" byName f.Formula
+                resolve req.From $"formulas[{i}]" byName f.Formula
                 |> Result.map (fun node -> { QueryIndex = i; Node = node; Limit = f.Limit }))
 
         match results |> List.collect (function Error es -> es | Ok _ -> []) with
@@ -566,6 +623,7 @@ let plan (req: ParsedTimeseriesRequest) : Result<Plan, string list> =
             match node with
             | Fetch i -> [ i, extra ]
             | Timewise(fn, inner) -> needs (extra + lookback fn) inner
+            | Shift(_, inner) -> needs extra inner
             | Pointwise(_, inner)
             | Top(inner, _, _, _)
             | CountNonzero inner

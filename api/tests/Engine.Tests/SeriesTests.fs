@@ -87,3 +87,31 @@ let ``a request runs end to end`` () =
     Assert.Equal<string list>([ "host:web-1" ], (Assert.Single r.Series).GroupTags)
     Assert.Equal<int64 list>([ 0L; 20000L ], r.Times)
     Assert.Equal<float option list list>([ [ Some 41.0; Some 40.5 ] ], r.Values)
+
+[<Fact>]
+let ``a shifted read queries the past and draws it now`` () =
+    let body =
+        """{"data":{"type":"timeseries_request","attributes":{"from":86400000,"to":90000000,
+            "queries":[{"data_source":"metrics","name":"a","query":"avg:cpu{*}"}],
+            "formulas":[{"formula":"a"},{"formula":"day_before(a)"}]}}}"""
+
+    let asked = System.Collections.Concurrent.ConcurrentBag<int64>()
+
+    let execute (sql: Sql) =
+        let from = sql.Parameters |> List.pick (fun (n, v) -> match v with Int64 f when n.StartsWith "from" -> Some f | _ -> None)
+        asked.Add from
+        // Whatever window was asked, one point at its start, valued by window.
+        Task.FromResult [ { Groups = []; BucketMs = from; Value = (if from = 0L then 1.0 else 2.0) } ]
+
+    let plan =
+        match read body |> Result.bind Plan.plan with
+        | Ok p -> p
+        | Error es -> failwith (String.Join("\n", es))
+
+    let r = (Execute.run execute (TenantId "default") plan).Result.Data.Attributes
+
+    // Two reads: the window itself, and the same window a day earlier.
+    Assert.Equal<int64 list>([ 0L; 86400000L ], asked |> Seq.sort |> List.ofSeq)
+    // Both drawn at the present window's start.
+    Assert.Equal<int64 list>([ 86400000L ], r.Times)
+    Assert.Equal<float option list list>([ [ Some 2.0 ]; [ Some 1.0 ] ], r.Values)

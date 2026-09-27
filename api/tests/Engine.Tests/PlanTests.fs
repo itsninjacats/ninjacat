@@ -261,3 +261,56 @@ let ``lookback is the deepest a query is read`` () =
     let p = planOf [ Some "a", "x{*}"; Some "b", "y{*}" ] [ "diff(ewma_5(a))"; "median_7(a)"; "cumsum(b)" ]
     // a: diff 1 + ewma 2×5 = 11, more than median_7's 6. b: cumsum needs none.
     Assert.Equal<int list>([ 11; 0 ], p.Queries |> List.map _.Lookback)
+
+// --- shifts ------------------------------------------------------------------------------
+
+[<Fact>]
+let ``fixed shifts`` () =
+    Assert.Equal(Shift(-3600000L, Fetch 0), nodeOf "timeshift(a, -3600)")
+    Assert.Equal(Shift(-3600000L, Fetch 0), nodeOf "hour_before(a)")
+    Assert.Equal(Shift(-86400000L, Fetch 0), nodeOf "day_before(a)")
+    Assert.Equal(Shift(-604800000L, Fetch 0), nodeOf "week_before(a)")
+
+/// Plans one formula with a window starting at `from`.
+let private shiftAt (from: string) formula =
+    let fromMs = DateTimeOffset.Parse(from).ToUnixTimeMilliseconds()
+    let body =
+        $"""{{"data":{{"type":"timeseries_request","attributes":{{"from":{fromMs},"to":{fromMs + 3600000L},"queries":[{{"data_source":"metrics","name":"a","query":"x{{*}}"}}],"formulas":[{{"formula":"{formula}"}}]}}}}}}"""
+
+    match read body |> Result.bind plan with
+    | Ok p ->
+        match (List.exactlyOne p.Outputs).Node with
+        | Shift(offset, Fetch 0) -> offset
+        | other -> failwith $"unexpected {other}"
+    | Error es -> failwith (String.Join("\n", es))
+
+[<Fact>]
+let ``calendar_shift by weeks and days`` () =
+    Assert.Equal(-2L * 604800000L, shiftAt "2026-03-10T12:00:00Z" "calendar_shift(a, \\\"-2w\\\")")
+    Assert.Equal(-86400000L, shiftAt "2026-03-10T12:00:00Z" "calendar_shift(a, \\\"-1d\\\", \\\"UTC\\\")")
+
+[<Fact>]
+let ``calendar_shift keeps wall-clock time across DST`` () =
+    // Europe/Warsaw moved to summer time at 02:00 on 2026-03-29. Noon that day
+    // (10:00 UTC) minus one calendar day is noon on the 28th, still winter
+    // time (11:00 UTC): 23 hours earlier, not 24.
+    Assert.Equal(-23L * 3600000L, shiftAt "2026-03-29T10:00:00Z" "calendar_shift(a, \\\"-1d\\\", \\\"Europe/Warsaw\\\")")
+
+[<Fact>]
+let ``a month back is a calendar month`` () =
+    // 31 March → 28 February (2026 is not a leap year): 31 days back.
+    Assert.Equal(-31L * 86400000L, shiftAt "2026-03-31T12:00:00Z" "month_before(a)")
+    Assert.Equal(-31L * 86400000L, shiftAt "2026-03-31T12:00:00Z" "calendar_shift(a, \\\"-1mo\\\")")
+
+[<Fact>]
+let ``shift arguments are checked`` () =
+    let err formula = errorsOf [ Some "a", "x{*}" ] [ formula ]
+    Assert.Contains("formulas[0]: timeshift() takes a query and a whole, non-zero number of seconds: timeshift(query, -3600)", err "timeshift(a)")
+    Assert.Contains("formulas[0]: day_before() takes one argument: day_before(query)", err "day_before(a, 2)")
+    Assert.Contains("formulas[0]: calendar_shift() shift must look like \"-1d\", \"-2w\" or \"-1mo\", got \"1d\"", err "calendar_shift(a, '1d')")
+    Assert.Contains("formulas[0]: calendar_shift() timezone 'Mars/Olympus' is not a known IANA zone", err "calendar_shift(a, '-1d', 'Mars/Olympus')")
+
+[<Fact>]
+let ``a shift keeps the lookback of what it wraps`` () =
+    let p = planOf [ Some "a", "x{*}" ] [ "week_before(diff(a))" ]
+    Assert.Equal(1, (List.exactlyOne p.Queries).Lookback)

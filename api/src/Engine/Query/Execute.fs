@@ -14,17 +14,27 @@ let run (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<
     task {
         // Only the queries some output uses; one named but never shown is not
         // worth a trip to ClickHouse. Each runs once, however many outputs use it.
-        let sources = plan.Outputs |> List.collect (_.Node >> Evaluate.sources) |> List.distinct
+        let fetches = plan.Outputs |> List.collect (_.Node >> Evaluate.fetches) |> List.distinct
 
         let! fetched =
-            sources
-            |> List.map (fun i ->
+            fetches
+            |> List.map (fun (i, offset) ->
                 task {
+                    // A shifted read is the same query over a shifted window;
+                    // its times are moved back onto the present one.
                     let query = plan.Queries[i]
-                    let! rows = execute (compile tenant plan query)
-                    return i, Series.fromRows query.GroupBy (keepFromMs plan query) rows
+                    let window = { plan with From = plan.From.AddMilliseconds(float offset); To = plan.To.AddMilliseconds(float offset) }
+                    let! rows = execute (compile tenant window query)
+
+                    let series =
+                        Series.fromRows query.GroupBy (keepFromMs window query) rows
+                        |> List.map (fun s -> { s with Points = s.Points |> Seq.map (fun p -> p.Key - offset, p.Value) |> Map.ofSeq })
+
+                    return (i, offset), series
                 })
             |> Task.WhenAll
+
+        let sources = fetches |> List.map fst |> List.distinct
 
         let fetched: Evaluate.Fetched =
             { Series = Map.ofArray fetched

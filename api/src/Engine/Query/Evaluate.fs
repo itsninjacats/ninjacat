@@ -183,47 +183,67 @@ let private trim (fromMs: int64) (series: Series list) =
 
 // --- the tree ---------------------------------------------------------------------
 
-/// The queries a node reads, so only those go to ClickHouse.
-let rec sources (node: Node) : int list =
-    match node with
-    | Fetch i -> [ i ]
-    | Pointwise(_, inner)
-    | Top(inner, _, _, _)
-    | CountNonzero inner
-    | CountNotNull inner
-    | ExcludeNull inner
-    | Timewise(_, inner) -> sources inner
+/// What a node reads: which query, and shifted by how much. The same query
+/// may be read at several offsets (`a` and `week_before(a)` side by side);
+/// each is one trip to ClickHouse.
+let rec fetches (node: Node) : (int * int64) list =
+    let rec go (shift: int64) node =
+        match node with
+        | Fetch i -> [ i, shift ]
+        | Shift(offset, inner) -> go (shift + offset) inner
+        | Pointwise(_, inner)
+        | Top(inner, _, _, _)
+        | CountNonzero inner
+        | CountNotNull inner
+        | ExcludeNull inner
+        | Timewise(_, inner) -> go shift inner
 
-/// What evaluation reads: each query's series, and each query's bucket width.
+    go 0L node
+
+/// What evaluation reads.
 type Fetched =
-    { Series: Map<int, Series list>
-      StepMs: Map<int, int64> }
+    {
+        /// Each (query, offset)'s series, with times already moved to the
+        /// present window.
+        Series: Map<int * int64, Series list>
+        /// Each query's bucket width.
+        StepMs: Map<int, int64>
+    }
 
 /// Evaluates `node`, keeping points from `fromMs` on.
 ///
 /// A time-wise function asks its input for earlier points — its lookback —
 /// and trims its own output back to `fromMs`, so nothing above it sees the
 /// history: `top` ranks, and the response shows, the visible window only.
-let rec evalFrom (fetched: Fetched) (fromMs: int64) (node: Node) : Series list =
+let rec private evalShifted (fetched: Fetched) (shift: int64) (fromMs: int64) (node: Node) : Series list =
+    let evalFrom = evalShifted fetched shift
+
     match node with
-    | Fetch i -> fetched.Series[i] |> trim fromMs
-    | Pointwise(fn, inner) -> evalFrom fetched fromMs inner |> List.map (mapValues fn)
-    | Top(inner, count, by, order) -> evalFrom fetched fromMs inner |> top count by order
+    | Fetch i -> fetched.Series[(i, shift)] |> trim fromMs
+    | Shift(offset, inner) -> evalShifted fetched (shift + offset) fromMs inner
+    | Pointwise(fn, inner) -> evalFrom fromMs inner |> List.map (mapValues fn)
+    | Top(inner, count, by, order) -> evalFrom fromMs inner |> top count by order
     // Every value that reaches here is finite (see `apply`), so "not null"
     // and "non-zero finite" need no further check.
-    | CountNonzero inner -> evalFrom fetched fromMs inner |> countAcross (fun v -> v <> 0.0)
-    | CountNotNull inner -> evalFrom fetched fromMs inner |> countAcross (fun _ -> true)
-    | ExcludeNull inner -> evalFrom fetched fromMs inner |> List.filter (hasNotApplicable >> not)
+    | CountNonzero inner -> evalFrom fromMs inner |> countAcross (fun v -> v <> 0.0)
+    | CountNotNull inner -> evalFrom fromMs inner |> countAcross (fun _ -> true)
+    | ExcludeNull inner -> evalFrom fromMs inner |> List.filter (hasNotApplicable >> not)
     | Timewise(fn, inner) ->
         // One source below: arithmetic, the only way to join two, is not in yet.
-        let stepMs = fetched.StepMs[List.head (sources inner)]
+        let stepMs = fetched.StepMs[fetches inner |> List.head |> fst]
         // Saturating: `fromMs` may already be the lowest there is.
         let back = int64 (lookback fn) * stepMs
         let innerFrom = if fromMs < Int64.MinValue + back then Int64.MinValue else fromMs - back
 
-        evalFrom fetched innerFrom inner |> List.map (alongTime fn stepMs) |> trim fromMs
+        evalFrom innerFrom inner |> List.map (alongTime fn stepMs) |> trim fromMs
+
+let evalFrom (fetched: Fetched) (fromMs: int64) (node: Node) : Series list = evalShifted fetched 0L fromMs node
 
 /// Evaluates with every point the queries returned; for tests of single
 /// functions, where there is no window to trim to.
 let eval (series: Map<int, Series list>) (node: Node) : Series list =
-    evalFrom { Series = series; StepMs = series |> Map.map (fun _ _ -> 20000L) } Int64.MinValue node
+    evalFrom
+        { Series = series |> Map.toSeq |> Seq.map (fun (i, s) -> (i, 0L), s) |> Map.ofSeq
+          StepMs = series |> Map.map (fun _ _ -> 20000L) }
+        Int64.MinValue
+        node
