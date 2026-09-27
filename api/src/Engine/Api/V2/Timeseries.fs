@@ -56,7 +56,9 @@ let private locations =
       nameof QueryFormula, "data.attributes.formulas[]"
       nameof FormulaLimit, "data.attributes.formulas[].limit" ]
 
-let private describe (message: string) =
+/// Turns a deserializer's message into one about the request body, given where
+/// each Wire record sits in it. Shared with the scalar request.
+let describeWith (locations: (string * string) list) (message: string) =
     let locate (typeName: string) =
         locations |> List.tryFind (fst >> (=) typeName) |> Option.map snd
 
@@ -112,7 +114,7 @@ let decode (json: string) : Result<TimeseriesFormulaRequestAttributes, string li
             | [] -> Error [ "API input validation failed: Invalid type. Expected \"timeseries_request\"." ]
             | errors -> Error errors
     with :? JsonException as e ->
-        Error [ $"invalid request body: {describe e.Message}" ]
+        Error [ $"invalid request body: {describeWith locations e.Message}" ]
 
 // --- parse: Wire → ParsedTimeseriesRequest --------------------------------------------------
 

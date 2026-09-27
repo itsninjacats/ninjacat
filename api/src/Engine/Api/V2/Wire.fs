@@ -102,3 +102,65 @@ type TimeseriesResponse =
 
 /// The response body of `POST /api/v2/query/timeseries`.
 type TimeseriesFormulaQueryResponse = { Data: TimeseriesResponse }
+
+// --- scalar: the request -----------------------------------------------------------
+
+/// One element of a scalar request's `queries[]` (spec: the metrics variant of
+/// ScalarQuery). `aggregator` is required: how the query's window becomes one
+/// value — `MetricsAggregator`: avg, min, max, sum, last, percentile, mean,
+/// l2norm or area.
+type MetricsScalarQuery =
+    { DataSource: string
+      Name: string option
+      Query: string
+      Aggregator: string }
+
+type ScalarFormulaRequestAttributes =
+    { From: int64 option
+      To: int64 option
+      Queries: MetricsScalarQuery list
+      Formulas: QueryFormula list option }
+
+type ScalarFormulaRequest =
+    { /// `ScalarFormulaRequestType`: always "scalar_request".
+      Type: string
+      Attributes: ScalarFormulaRequestAttributes }
+
+/// The request body of `POST /api/v2/query/scalar`.
+type ScalarFormulaQueryRequest = { Data: ScalarFormulaRequest }
+
+// --- scalar: the response ----------------------------------------------------------
+
+/// A column of group tags: `name` is the tag key, and `values` holds, per row,
+/// that tag's values (an array, as a tag can hold several).
+type GroupScalarColumn =
+    { Name: string
+      /// Always "group".
+      Type: string
+      Values: string list list }
+
+/// `ScalarMeta`. `unit` is left out for now, as on timeseries series.
+type ScalarMeta = { Unit: string option }
+
+/// A column of numbers: one formula's value per row.
+type DataScalarColumn =
+    { Name: string
+      /// Always "number".
+      Type: string
+      /// Null where a row's group has no value for this formula.
+      Values: float option list
+      Meta: ScalarMeta }
+
+type ScalarFormulaResponseAtrributes =
+    { /// `ScalarColumn`, a oneOf: GroupScalarColumn or DataScalarColumn,
+      /// serialized by their own shapes.
+      Columns: obj list }
+
+type ScalarResponse =
+    { /// Always "scalar_response".
+      Type: string
+      /// The spec's own spelling of the schema name is kept above.
+      Attributes: ScalarFormulaResponseAtrributes }
+
+/// The response body of `POST /api/v2/query/scalar`.
+type ScalarFormulaQueryResponse = { Data: ScalarResponse }

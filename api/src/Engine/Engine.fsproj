@@ -17,6 +17,7 @@
     <Compile Include="MetricQuery/Parser.fs" />
     <Compile Include="Api/V2/Wire.fs" />
     <Compile Include="Api/V2/Timeseries.fs" />
+    <Compile Include="Api/V2/Scalar.fs" />
     <Compile Include="Query/Plan.fs" />
     <Compile Include="Query/Compile.fs" />
     <Compile Include="Query/Series.fs" />

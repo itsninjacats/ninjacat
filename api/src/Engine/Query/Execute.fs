@@ -311,3 +311,131 @@ let run (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<
         let! outputs = plan.Outputs |> List.map (fun o -> task { let! r = evalOutput o in return o.QueryIndex, r }) |> Task.WhenAll
         return outputs |> List.ofArray |> Series.responseWith
     }
+
+// --- scalar ---------------------------------------------------------------------------
+
+open NinjaCat.Api.Engine.Api.V2.Scalar
+open NinjaCat.Api.Engine.Api.V2.Wire
+
+/// One series' points in the window as one value.
+let private reduce (agg: ScalarAggregator) (stepMs: int64) (points: (int64 * float)[]) : float option =
+    if points.Length = 0 then
+        None
+    else
+        let values = Array.map snd points
+
+        match agg with
+        | ScalarAvg -> Array.average values
+        | ScalarMin -> Array.min values
+        | ScalarMax -> Array.max values
+        | ScalarSum -> Array.sum values
+        | ScalarLast -> points |> Array.maxBy fst |> snd
+        | ScalarL2norm -> values |> Array.sumBy (fun v -> v * v) |> sqrt
+        | ScalarArea -> Array.sum values * float stepMs / 1000.0
+        |> Some
+
+/// Runs a scalar request: each query's window reduced to one value by its
+/// aggregator, then the formulas over those values.
+///
+/// The aggregator belongs to the query, not the formula (spec:
+/// MetricsScalarQuery.aggregator), so reduction comes first: `a / b` with avg
+/// is avg(a) / avg(b). A reduced series is a series with one point, which is
+/// all the evaluator needs — every function and all arithmetic work on it
+/// unchanged; time-wise ones have one point to work with.
+///
+/// WARNING(undocumented): what a sum or area of a gauge adds up. The window's
+/// buckets as the timeseries endpoint would draw them — the same points a
+/// graph of the query shows.
+let runScalar
+    (execute: Sql -> Task<Row list>)
+    (tenant: TenantId)
+    (plan: Plan)
+    (request: ParsedScalarRequest)
+    : Task<Result<ScalarFormulaQueryResponse, string list>> =
+    task {
+        match plan.Outputs |> List.filter (fun o -> o.Extra <> NoExtra) with
+        | _ :: _ -> return Error [ "anomalies() and forecast() are not available in scalar queries" ]
+        | [] ->
+            let! fetched = fetchAll execute tenant plan (plan.Outputs |> List.map _.Node)
+            let fromMs = plan.From.ToUnixTimeMilliseconds()
+            let toMs = plan.To.ToUnixTimeMilliseconds()
+            let aggregators = Array.ofList request.Aggregators
+
+            let reduced =
+                { fetched with
+                    Series =
+                        fetched.Series
+                        |> Map.map (fun (i, _) series ->
+                            let stepMs = fetched.StepMs[i]
+
+                            series
+                            |> List.map (fun s ->
+                                let window = s.Points |> Map.toArray |> Array.filter (fun (t, _) -> t >= fromMs && t < toMs)
+
+                                { s with
+                                    Points =
+                                        match reduce aggregators[i] stepMs window with
+                                        | Some v -> Map [ fromMs, v ]
+                                        | None -> Map.empty })) }
+
+            let outputs =
+                plan.Outputs
+                |> List.map (fun o -> Evaluate.evalFrom reduced fromMs o.Node |> Series.limit o.Limit)
+
+            // Rows: every group any column has, in the order they first appear
+            // — the first formula's, limit and all, then any others'.
+            //
+            // WARNING(undocumented): a limit on one formula of several. The
+            // rows are the groups every limited formula kept: a top 5 with a
+            // second, unlimited column is still five rows, not five plus the
+            // rest with a null first column.
+            let limited =
+                List.zip plan.Outputs outputs
+                |> List.filter (fun (o, _) -> o.Limit.IsSome)
+                |> List.map (fun (_, series) -> series |> List.map (_.GroupTags >> set) |> Set.ofList)
+
+            let rows =
+                outputs
+                |> List.concat
+                |> List.map _.GroupTags
+                |> List.distinctBy set
+                |> List.filter (fun tags -> limited |> List.forall (fun kept -> kept.Contains(set tags)))
+
+            let split (tag: string) =
+                match tag.IndexOf ':' with
+                | -1 -> tag, tag
+                | i -> tag[.. i - 1], tag[i + 1 ..]
+
+            let keys =
+                match rows |> List.tryFind (List.isEmpty >> not) with
+                | Some tags -> tags |> List.map (split >> fst)
+                | None -> []
+
+            let groupColumns =
+                keys
+                |> List.map (fun key ->
+                    box
+                        { GroupScalarColumn.Name = key
+                          Type = "group"
+                          Values =
+                            rows
+                            |> List.map (fun tags ->
+                                tags |> List.map split |> List.filter (fst >> (=) key) |> List.map snd) })
+
+            let dataColumns =
+                List.zip request.ColumnNames outputs
+                |> List.map (fun (name, series) ->
+                    let byGroup = series |> List.map (fun s -> set s.GroupTags, s) |> Map.ofList
+
+                    box
+                        { DataScalarColumn.Name = name
+                          Type = "number"
+                          Values = rows |> List.map (fun tags -> byGroup.TryFind(set tags) |> Option.bind (fun s -> s.Points.TryFind fromMs))
+                          Meta = { Unit = None } })
+
+            return
+                Ok
+                    { Data =
+                        { Type = "scalar_response"
+                          Attributes = { Columns = groupColumns @ dataColumns } } }
+    }

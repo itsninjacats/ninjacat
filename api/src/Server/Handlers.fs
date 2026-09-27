@@ -82,7 +82,34 @@ let queryTimeseries: EndpointHandler =
                     return! errors StatusCodes.Status500InternalServerError [ $"query failed: {e.Message}" ] ctx
         }
 
+/// `POST /api/v2/query/scalar`: one value per group and formula, for query
+/// value, top list and table widgets.
+let queryScalar: EndpointHandler =
+    fun ctx ->
+        task {
+            use reader = new IO.StreamReader(ctx.Request.Body)
+            let! body = reader.ReadToEndAsync(ctx.RequestAborted)
+
+            let planned =
+                NinjaCat.Api.Engine.Api.V2.Scalar.read body
+                |> Result.bind (fun r -> NinjaCat.Api.Engine.Query.Plan.plan r.Request |> Result.map (fun p -> p, r))
+
+            match planned with
+            | Error msgs -> return! errors StatusCodes.Status400BadRequest msgs ctx
+            | Ok(plan, request) ->
+                let execute = ClickHouse.metricRows (ctx.GetService<ClickHouseClient>()) ctx.RequestAborted
+
+                try
+                    match! NinjaCat.Api.Engine.Query.Execute.runScalar execute defaultTenant plan request with
+                    | Ok response -> return! ctx.WriteJson response
+                    | Error msgs -> return! errors StatusCodes.Status400BadRequest msgs ctx
+                with e ->
+                    let log = ctx.GetService<ILoggerFactory>().CreateLogger "NinjaCat.Api.QueryScalar"
+                    log.LogError(e, "scalar query failed")
+                    return! errors StatusCodes.Status500InternalServerError [ $"query failed: {e.Message}" ] ctx
+        }
+
 let endpoints =
     [ GET [ route "/ping" ping; route "/health" health ]
       subRoute "/api/v1" [ GET [ route "/metrics" activeMetrics ] ]
-      subRoute "/api/v2" [ POST [ route "/query/timeseries" queryTimeseries ] ] ]
+      subRoute "/api/v2" [ POST [ route "/query/timeseries" queryTimeseries; route "/query/scalar" queryScalar ] ] ]
