@@ -13,6 +13,7 @@
     <Compile Include="PlanTests.fs" />
     <Compile Include="CompileTests.fs" />
     <Compile Include="SeriesTests.fs" />
+    <Compile Include="EvaluateTests.fs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="xunit.v3" />

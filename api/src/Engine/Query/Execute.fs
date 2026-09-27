@@ -14,7 +14,7 @@ let run (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<
     task {
         // Only the queries some output uses; one named but never shown is not
         // worth a trip to ClickHouse. Each runs once, however many outputs use it.
-        let sources = plan.Outputs |> List.map _.Source |> List.distinct
+        let sources = plan.Outputs |> List.collect (_.Node >> Evaluate.sources) |> List.distinct
 
         let! fetched =
             sources
@@ -30,6 +30,6 @@ let run (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<
 
         return
             plan.Outputs
-            |> List.map (fun o -> o.QueryIndex, Series.limit o.Limit bySource[o.Source])
+            |> List.map (fun o -> o.QueryIndex, Evaluate.eval bySource o.Node |> Series.limit o.Limit)
             |> Series.response
     }

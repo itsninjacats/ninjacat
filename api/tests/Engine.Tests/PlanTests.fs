@@ -95,14 +95,14 @@ let ``unsubstituted template variables are refused`` () =
 let ``no formulas: every query is an output`` () =
     let p = planOf [ Some "a", "x{*}"; Some "b", "y{*}" ] []
     Assert.Equal<int list>([ 0; 1 ], p.Outputs |> List.map _.QueryIndex)
-    Assert.Equal<int list>([ 0; 1 ], p.Outputs |> List.map _.Source)
+    Assert.Equal<Node list>([ Fetch 0; Fetch 1 ], p.Outputs |> List.map _.Node)
 
 [<Fact>]
 let ``formulas name their query and set query_index`` () =
     let p = planOf [ Some "a", "x{*}"; Some "b", "y{*}" ] [ "b" ]
     let o = Assert.Single p.Outputs
     Assert.Equal(0, o.QueryIndex)
-    Assert.Equal(1, o.Source)
+    Assert.Equal(Fetch 1, o.Node)
 
 [<Fact>]
 let ``a formula naming nothing is refused`` () =
@@ -111,7 +111,7 @@ let ``a formula naming nothing is refused`` () =
 [<Fact>]
 let ``arithmetic in formulas is not supported yet`` () =
     let es = errorsOf [ Some "a", "x{*}"; Some "b", "y{*}" ] [ "a / b" ]
-    Assert.Contains("formulas[0]: only a single query name is supported yet, e.g. \"query1\"", es)
+    Assert.Contains("formulas[0]: arithmetic in formulas is not supported yet", es)
 
 [<Fact>]
 let ``duplicate query names are refused`` () =
@@ -169,3 +169,38 @@ let ``contradictions and unsupported forms are named`` () =
         "queries[0]: calendar .rollup() (daily, weekly, monthly, alignment, timezone) is not supported yet",
         errorsOf [ None, "x{*}.rollup(sum, monthly)" ] []
     )
+
+// --- functions in formulas ------------------------------------------------------------
+
+let private nodeOf formula = (Assert.Single (planOf [ Some "a", "x{*}" ] [ formula ]).Outputs).Node
+
+[<Fact>]
+let ``pointwise functions resolve to typed nodes`` () =
+    Assert.Equal(Pointwise(Abs, Fetch 0), nodeOf "abs(a)")
+    Assert.Equal(Pointwise(ClampMin 100.0, Fetch 0), nodeOf "clamp_min(a, 100)")
+    Assert.Equal(Pointwise(CutoffMax -5.0, Fetch 0), nodeOf "cutoff_max(a, -5)")
+    Assert.Equal(Pointwise(Round 0, Fetch 0), nodeOf "round(a)")
+    Assert.Equal(Pointwise(Round 2, Fetch 0), nodeOf "round(a, 2)")
+
+[<Fact>]
+let ``functions nest`` () =
+    Assert.Equal(Pointwise(Abs, Pointwise(Log10, Fetch 0)), nodeOf "abs(log10(a))")
+
+[<Fact>]
+let ``wrong arguments are named`` () =
+    let err formula = errorsOf [ Some "a", "x{*}" ] [ formula ]
+    Assert.Contains("formulas[0]: abs() takes one argument: abs(query)", err "abs(a, 2)")
+    Assert.Contains("formulas[0]: clamp_min() takes a query and a number: clamp_min(query, 100)", err "clamp_min(a)")
+    Assert.Contains("formulas[0]: clamp_min() takes only numbers after the query", err "clamp_min(a, 'x')")
+    Assert.Contains("formulas[0]: the first argument of abs() must be a query", err "abs('a')")
+    Assert.Contains("formulas[0]: abs() needs a query to act on", err "abs()")
+    Assert.Contains(
+        "formulas[0]: round() takes a query and optionally a whole number of decimals from 0 to 15: round(query, 2)",
+        err "round(a, 1.5)"
+    )
+
+[<Fact>]
+let ``unknown functions and names inside functions are reported together`` () =
+    let es = errorsOf [ Some "a", "x{*}" ] [ "ewma_3(a)"; "abs(b)" ]
+    Assert.Contains("formulas[0]: function 'ewma_3' is not supported yet", es)
+    Assert.Contains("formulas[1]: no query is named 'b'", es)

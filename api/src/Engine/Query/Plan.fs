@@ -9,7 +9,9 @@
 ///
 ///   avg|sum|min|max:metric{any tag filter} [by {keys}]
 ///     [.rollup(avg|sum|min|max|count[, seconds])] [.as_count() | .as_rate()]
-///   formulas that are a single query name, with an optional limit
+///   formulas: query names, wrapped in functions that act on each value
+///   (abs, log2, log10, ceil, floor, round, clamp_*, cutoff_*), with an
+///   optional limit
 ///
 /// Everything else (functions, arithmetic, other modifiers, calendar rollups,
 /// percentiles) gets a "not supported yet" naming the construct.
@@ -61,13 +63,40 @@ type QueryPlan =
 
 /// One series group in the response: a formula, or a query shown as is when
 /// the request had no formulas.
+/// A function that maps each value on its own, independent of its
+/// neighbours and of other series (docs: dashboards/functions/arithmetic,
+/// exclusion).
+type PointwiseFn =
+    | Abs
+    | Log2
+    | Log10
+    | Ceil
+    | Floor
+    /// `round(q)` or `round(q, decimals)`.
+    | Round of decimals: int
+    /// Values below the threshold are raised to it.
+    | ClampMin of float
+    /// Values above the threshold are lowered to it.
+    | ClampMax of float
+    /// Values below the threshold are removed; equal ones stay.
+    | CutoffMin of float
+    /// Values above the threshold are removed; equal ones stay.
+    | CutoffMax of float
+
+/// What a formula computes: its names resolved to queries, every function
+/// checked against what it takes. A function that exists here has arguments
+/// of the right number and type — the evaluator never has to check.
+type Node =
+    /// The series one query returned; the index is into Plan.Queries.
+    | Fetch of source: int
+    | Pointwise of PointwiseFn * Node
+
 type Output =
     {
         /// What the response calls `query_index`: the formula's position, or
         /// the query's when there are no formulas.
         QueryIndex: int
-        /// Index into Plan.Queries.
-        Source: int
+        Node: Node
         Limit: ParsedLimit option
     }
 
@@ -224,9 +253,80 @@ let private planQuery (window: TimeSpan) (requestStep: TimeSpan) (label: string)
 
 // --- formulas --------------------------------------------------------------------
 
+/// The functions that take one series argument and act on each value, by the
+/// shape of their other arguments.
+let private pointwiseFunctions: Map<string, Literal list -> Result<PointwiseFn, string>> =
+    let none fn name =
+        name,
+        function
+        | [] -> Ok fn
+        | _ -> Error $"{name}() takes one argument: {name}(query)"
+
+    let threshold ctor name =
+        name,
+        function
+        | [ Num t ] -> Ok(ctor t)
+        | _ -> Error $"{name}() takes a query and a number: {name}(query, 100)"
+
+    Map
+        [ none Abs "abs"
+          none Log2 "log2"
+          none Log10 "log10"
+          none Ceil "ceil"
+          none Floor "floor"
+          "round",
+          (function
+          | [] -> Ok(Round 0)
+          | [ Num d ] when d >= 0.0 && d <= 15.0 && d = Math.Floor d -> Ok(Round(int d))
+          | _ -> Error "round() takes a query and optionally a whole number of decimals from 0 to 15: round(query, 2)")
+          threshold ClampMin "clamp_min"
+          threshold ClampMax "clamp_max"
+          threshold CutoffMin "cutoff_min"
+          threshold CutoffMax "cutoff_max" ]
+
+/// A formula's expression tree → Node, with every problem in it named.
+let rec private resolve (label: string) (byName: Map<string, int>) (expr: Formula) : Result<Node, string list> =
+    match expr with
+    | Leaf name ->
+        match byName.TryFind name with
+        | Some i -> Ok(Fetch i)
+        | None -> Error [ $"{label}: no query is named '{name}'" ]
+    | Number _
+    | Neg _
+    | Binary _ -> Error [ $"{label}: arithmetic in formulas is not supported yet" ]
+    | Call(name, args) ->
+        match pointwiseFunctions.TryFind name, args with
+        | None, _ -> Error [ $"{label}: function '{name}' is not supported yet" ]
+        | Some _, [] -> Error [ $"{label}: {name}() needs a query to act on" ]
+        | Some shape, Value inner :: rest ->
+            // The rest must be plain numbers. In a formula they arrive as
+            // expressions (`-5` is Number -5.0); anything else is refused.
+            let literals =
+                rest
+                |> List.map (function
+                    | Value(Number n) -> Some(Num n)
+                    | _ -> None)
+
+            let inner = resolve label byName inner
+
+            let fn =
+                if List.forall Option.isSome literals then
+                    shape (List.choose id literals) |> Result.mapError (fun e -> [ $"{label}: {e}" ])
+                else
+                    Error [ $"{label}: {name}() takes only numbers after the query" ]
+
+            match inner, fn with
+            | Ok inner, Ok fn -> Ok(Pointwise(fn, inner))
+            | inner, fn ->
+                Error(
+                    (match inner with Error es -> es | Ok _ -> [])
+                    @ (match fn with Error es -> es | Ok _ -> [])
+                )
+        | Some _, _ -> Error [ $"{label}: the first argument of {name}() must be a query" ]
+
 let private planOutputs (req: ParsedTimeseriesRequest) : Result<Output list, string list> =
     match req.Formulas with
-    | [] -> Ok(req.Queries |> List.mapi (fun i _ -> { QueryIndex = i; Source = i; Limit = None }))
+    | [] -> Ok(req.Queries |> List.mapi (fun i _ -> { QueryIndex = i; Node = Fetch i; Limit = None }))
     | formulas ->
         let byName =
             req.Queries
@@ -237,14 +337,10 @@ let private planOutputs (req: ParsedTimeseriesRequest) : Result<Output list, str
         let results =
             formulas
             |> List.mapi (fun i f ->
-                match f.Formula with
-                | Leaf name ->
-                    match byName.TryFind name with
-                    | Some source -> Ok { QueryIndex = i; Source = source; Limit = f.Limit }
-                    | None -> Error $"formulas[{i}]: no query is named '{name}'"
-                | _ -> Error $"formulas[{i}]: only a single query name is supported yet, e.g. \"query1\"")
+                resolve $"formulas[{i}]" byName f.Formula
+                |> Result.map (fun node -> { QueryIndex = i; Node = node; Limit = f.Limit }))
 
-        match results |> List.choose (function Error e -> Some e | Ok _ -> None) with
+        match results |> List.collect (function Error es -> es | Ok _ -> []) with
         | [] -> Ok(results |> List.choose (function Ok o -> Some o | Error _ -> None))
         | errors -> Error errors
 
