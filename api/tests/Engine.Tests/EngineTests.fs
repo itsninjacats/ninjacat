@@ -82,3 +82,46 @@ let ``a scalar is one value per group`` () =
     | Ok [ cpu ] ->
         Assert.Equal<(string option * float) list>([ Some "a", 30.0; Some "b", 3.0 ], cpu.Values |> List.map (fun v -> v.Tags.Head.Value, v.Value))
     | Ok other -> Assert.Fail $"one result expected, got {other}"
+
+// --- one expression, queries inline ----------------------------------------------------
+
+open NinjaCat.Api.Engine.MetricQuery
+open NinjaCat.Api.Engine.MetricQuery.Ast
+
+let private splitOf text =
+    match Parser.parseProgram text with
+    | Ok [ e ] -> split e
+    | other -> failwith $"{other}"
+
+[<Fact>]
+let ``split names each query and keeps the formula`` () =
+    let queries, formula = splitOf "anomalies(avg:cpu{*} by {host}, 'basic', 3)"
+    Assert.Equal<string list>([ "q1" ], queries |> List.map (_.Name >> Option.get))
+    Assert.Equal("cpu", queries.Head.Query.Metric)
+    Assert.Equal(Call("anomalies", [ Value(Leaf "q1"); Lit(Quoted "basic"); Value(Number 3.0) ]), formula)
+
+[<Fact>]
+let ``the same query twice is one query`` () =
+    let queries, formula = splitOf "(sum:hits{*} - sum:errors{*}) / sum:hits{*}"
+    Assert.Equal<string list>([ "hits"; "errors" ], queries |> List.map _.Query.Metric)
+    Assert.Equal(Binary(Div, Binary(Sub, Leaf "q1", Leaf "q2"), Leaf "q1"), formula)
+
+[<Fact>]
+let ``an expression runs like a formula`` () =
+    let result = (expression execute (TenantId "t") t0 (t0.AddSeconds 60.0) "avg:cpu{*} by {host}.fill(null) * 2").Result
+
+    match result with
+    | Ok [ r ] ->
+        Assert.Equal("avg:cpu{*} by {host}.fill(null) * 2", r.Formula)
+        Assert.Equal<float list>([ 20.0; 40.0; 60.0 ], r.Series.Head.Points |> List.map _.Value)
+    | other -> Assert.Fail $"{other}"
+
+[<Fact>]
+let ``expression problems are named`` () =
+    match (expression execute (TenantId "t") t0 (t0.AddSeconds 60.0) "avg:cpu{*}, avg:mem{*}").Result with
+    | Error [ e ] -> Assert.Equal("expected one expression, got 2 separated by commas", e)
+    | other -> Assert.Fail $"{other}"
+
+    match (expression execute (TenantId "t") t0 (t0.AddSeconds 60.0) "ewma_4(avg:cpu{*})").Result with
+    | Error es -> Assert.Contains("formulas[0]: function 'ewma_4' is not supported yet", es)
+    | other -> Assert.Fail $"{other}"

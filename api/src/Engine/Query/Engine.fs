@@ -22,6 +22,8 @@ open System.Threading.Tasks
 open NinjaCat.Api.Engine
 open NinjaCat.Api.Engine.Api.V2
 open NinjaCat.Api.Engine.Api.V2.Scalar
+open NinjaCat.Api.Engine.MetricQuery
+open NinjaCat.Api.Engine.MetricQuery.Ast
 
 // --- what goes in ---------------------------------------------------------------------
 
@@ -106,6 +108,47 @@ let private time (ms: int64) = DateTimeOffset.FromUnixTimeMilliseconds ms
 let private labels (queries: string list) (formulas: string list) =
     if formulas.IsEmpty then queries else formulas
 
+/// The engine's own results, as records.
+let private results (names: string list) (outputs: (int * (Series.Series * Series.SeriesExtra) list) list) : FormulaResult list =
+    [ for (index, series) in outputs ->
+          { Formula = names[index]
+            Series =
+              [ for (s, extra) in series ->
+                    { Tags = tags s.GroupTags
+                      Points =
+                        [ for p in s.Points ->
+                              { Time = time p.Key
+                                Value = p.Value
+                                Expected =
+                                  extra.Band
+                                  |> Option.bind (Map.tryFind p.Key)
+                                  |> Option.map (fun (lo, hi) -> { Lower = lo; Upper = hi }) } ]
+                      Forecast =
+                        [ for (t, v, lo, hi) in defaultArg extra.Forecast [] ->
+                              { Time = time t
+                                Value = v
+                                Band = { Lower = lo; Upper = hi } } ] } ] } ]
+
+/// The primitive under the others: an already parsed request — trees, not
+/// strings. For code that parses once and runs many times, as a monitor
+/// evaluating the same query every minute does.
+///
+/// `labels` names the results, one per formula (or per query when there are
+/// no formulas).
+let parsed
+    (execute: Sql -> Task<Compile.Row list>)
+    (tenant: TenantId)
+    (labels: string list)
+    (request: Timeseries.ParsedTimeseriesRequest)
+    : Task<Result<FormulaResult list, string list>> =
+    task {
+        match Plan.plan request with
+        | Error problems -> return Error problems
+        | Ok plan ->
+            let! outputs = Execute.evaluate execute tenant plan
+            return Ok(results labels outputs)
+    }
+
 /// Timeseries: every formula's series over the window.
 ///
 /// Problems with the request — a query that does not parse, a function given
@@ -127,33 +170,71 @@ let timeseries
                 | [] -> None
                 | fs -> Some(fs |> List.map (fun f -> { Formula = f; Limit = None })) }
 
-        match Timeseries.parse wire |> Result.bind Plan.plan with
+        match Timeseries.parse wire with
         | Error problems -> return Error problems
-        | Ok plan ->
-            let! outputs = Execute.evaluate execute tenant plan
-            let names = labels (request.Queries |> List.map _.Name) request.Formulas
-
-            return
-                Ok
-                    [ for (index, series) in outputs ->
-                          { Formula = names[index]
-                            Series =
-                              [ for (s, extra) in series ->
-                                    { Tags = tags s.GroupTags
-                                      Points =
-                                        [ for p in s.Points ->
-                                              { Time = time p.Key
-                                                Value = p.Value
-                                                Expected =
-                                                  extra.Band
-                                                  |> Option.bind (Map.tryFind p.Key)
-                                                  |> Option.map (fun (lo, hi) -> { Lower = lo; Upper = hi }) } ]
-                                      Forecast =
-                                        [ for (t, v, lo, hi) in defaultArg extra.Forecast [] ->
-                                              { Time = time t
-                                                Value = v
-                                                Band = { Lower = lo; Upper = hi } } ] } ] } ]
+        | Ok request' -> return! parsed execute tenant (labels (request.Queries |> List.map _.Name) request.Formulas) request'
     }
+
+/// Splits an expression with queries inline into named queries and the
+/// formula over their names: each metric query becomes q1, q2, …, the same
+/// query twice being one.
+let split (expr: Expr<MetricQuery>) : Timeseries.ParsedQuery list * Formula =
+    let queries = ResizeArray<MetricQuery>()
+
+    let name (q: MetricQuery) =
+        match queries |> Seq.tryFindIndex ((=) q) with
+        | Some i -> $"q{i + 1}"
+        | None ->
+            queries.Add q
+            $"q{queries.Count}"
+
+    let rec formula (e: Expr<MetricQuery>) : Formula =
+        match e with
+        | Leaf q -> Leaf(name q)
+        | Number n -> Number n
+        | Neg inner -> Neg(formula inner)
+        | Binary(op, l, r) -> Binary(op, formula l, formula r)
+        | Call(fn, args) ->
+            Call(
+                fn,
+                args
+                |> List.map (function
+                    | Value v -> Value(formula v)
+                    | Lit l -> Lit l
+                    | Named(n, v) -> Named(n, v))
+            )
+
+    let f = formula expr
+    let named = queries |> Seq.mapi (fun i q -> ({ Name = Some $"q{i + 1}"; Query = q }: Timeseries.ParsedQuery)) |> List.ofSeq
+    named, f
+
+/// One expression with its queries inline, the way Datadog's v1 API and its
+/// monitors write them:
+///
+///   anomalies(avg:system.cpu.user{*} by {host}, 'basic', 3)
+///   sum:requests.errors{*}.as_count() / sum:requests.hits{*}.as_count() * 100
+///
+/// `split` turns it into named queries and a formula; from there it is the
+/// same engine as `timeseries`.
+let expression
+    (execute: Sql -> Task<Compile.Row list>)
+    (tenant: TenantId)
+    (from: DateTimeOffset)
+    (until: DateTimeOffset)
+    (text: string)
+    : Task<Result<FormulaResult list, string list>> =
+    match Parser.parseProgram text with
+    | Error e -> Task.FromResult(Error [ e ])
+    | Ok [ expr ] ->
+        let queries, formula = split expr
+
+        parsed execute tenant [ text ]
+            { From = from
+              To = until
+              Interval = None
+              Queries = queries
+              Formulas = [ { Formula = formula; Limit = None } ] }
+    | Ok many -> Task.FromResult(Error [ $"expected one expression, got {many.Length} separated by commas" ])
 
 /// Scalar: every formula's one value per group, over the window.
 let scalar
