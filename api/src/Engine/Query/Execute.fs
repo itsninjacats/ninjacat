@@ -26,8 +26,27 @@ let run (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<
                     let window = { plan with From = plan.From.AddMilliseconds(float offset); To = plan.To.AddMilliseconds(float offset) }
                     let! rows = execute (compile tenant window query)
 
+                    let keepFrom = keepFromMs window query
+
+                    let combined =
+                        match query.Fill with
+                        | NoFill -> Series.fromRows query.GroupBy keepFrom rows
+                        | _ -> Series.combine query.GroupBy query.SpaceAgg query.Fill keepFrom rows
+
+                    // "COUNT or RATE metrics queried as as_count() or
+                    // as_rate() ... are always aligned as 0" (docs:
+                    // dashboards/functions/interpolation): an empty bucket
+                    // there is zero events, not unknown.
+                    let aligned =
+                        match query.TimeAgg with
+                        | AsCount
+                        | AsRate ->
+                            let times = Series.grid (int64 query.Step.TotalMilliseconds) keepFrom (window.To.ToUnixTimeMilliseconds())
+                            combined |> List.map (Series.zeroFill times)
+                        | Plain _ -> combined
+
                     let series =
-                        Series.fromRows query.GroupBy (keepFromMs window query) rows
+                        aligned
                         |> List.map (fun s -> { s with Points = s.Points |> Seq.map (fun p -> p.Key - offset, p.Value) |> Map.ofSeq })
 
                     return (i, offset), series
@@ -38,7 +57,8 @@ let run (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<
 
         let fetched: Evaluate.Fetched =
             { Series = Map.ofArray fetched
-              StepMs = sources |> List.map (fun i -> i, int64 plan.Queries[i].Step.TotalMilliseconds) |> Map.ofList }
+              StepMs = sources |> List.map (fun i -> i, int64 plan.Queries[i].Step.TotalMilliseconds) |> Map.ofList
+              ToMs = plan.To.ToUnixTimeMilliseconds() }
 
         let fromMs = plan.From.ToUnixTimeMilliseconds()
 

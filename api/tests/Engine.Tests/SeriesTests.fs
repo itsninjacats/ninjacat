@@ -8,7 +8,7 @@ open NinjaCat.Api.Engine.Api.V2.Timeseries
 open NinjaCat.Api.Engine.Query
 open NinjaCat.Api.Engine.Query.Compile
 
-let private row groups bucket value = { Groups = List.map Some groups; BucketMs = bucket; Value = value }
+let private row groups bucket value = { Groups = List.map Some groups; BucketMs = bucket; Value = value; SeriesId = None }
 
 // --- series from rows ---------------------------------------------------------
 
@@ -22,7 +22,7 @@ let ``rows group into one series per group`` () =
 
 [<Fact>]
 let ``a series without the tag is the N/A group`` () =
-    let rows = [ { Groups = [ Some "web-1"; None ]; BucketMs = 0L; Value = 1.0 } ]
+    let rows = [ { Groups = [ Some "web-1"; None ]; BucketMs = 0L; Value = 1.0; SeriesId = None } ]
     let s = Assert.Single(Series.fromRows [ "host"; "role" ] 0L rows)
     Assert.Equal<string list>([ "host:web-1"; "role:N/A" ], s.GroupTags)
 
@@ -101,7 +101,7 @@ let ``a shifted read queries the past and draws it now`` () =
         let from = sql.Parameters |> List.pick (fun (n, v) -> match v with Int64 f when n.StartsWith "from" -> Some f | _ -> None)
         asked.Add from
         // Whatever window was asked, one point at its start, valued by window.
-        Task.FromResult [ { Groups = []; BucketMs = from; Value = (if from = 0L then 1.0 else 2.0) } ]
+        Task.FromResult [ { Groups = []; BucketMs = from; Value = (if from = 0L then 1.0 else 2.0); SeriesId = None } ]
 
     let plan =
         match read body |> Result.bind Plan.plan with
@@ -115,3 +115,48 @@ let ``a shifted read queries the past and draws it now`` () =
     // Both drawn at the present window's start.
     Assert.Equal<int64 list>([ 86400000L ], r.Times)
     Assert.Equal<float option list list>([ [ Some 2.0 ]; [ Some 1.0 ] ], r.Values)
+
+// --- filling and combining ---------------------------------------------------------------
+
+let private seriesRow id bucket value = { Groups = [ Some "prod" ]; BucketMs = bucket; Value = value; SeriesId = Some id }
+
+/// Two hosts in one group, every 20 s. Host 1 misses the bucket at 40 s.
+///   host 1:  10   20   --   40
+///   host 2:   1    2    3    4
+let private twoHosts =
+    [ seriesRow 1UL 0L 10.0; seriesRow 1UL 20000L 20.0; seriesRow 1UL 60000L 40.0
+      seriesRow 2UL 0L 1.0; seriesRow 2UL 20000L 2.0; seriesRow 2UL 40000L 3.0; seriesRow 2UL 60000L 4.0 ]
+
+let private summed fill rows =
+    Series.combine [ "env" ] Plan.Sum fill 0L rows |> List.exactlyOne |> _.Points |> Map.toList
+
+[<Fact>]
+let ``without a fill the sum dips where a host missed a bucket`` () =
+    Assert.Equal<(int64 * float) list>([ 0L, 11.0; 20000L, 22.0; 40000L, 3.0; 60000L, 44.0 ], summed Plan.NoFill twoHosts)
+
+[<Fact>]
+let ``linear fill aligns the host first`` () =
+    // Host 1 at 40 s: halfway between 20 and 40 → 30; sum 30 + 3.
+    Assert.Equal<(int64 * float) list>([ 0L, 11.0; 20000L, 22.0; 40000L, 33.0; 60000L, 44.0 ], summed (Plan.FillWithin(Plan.Linear, 300)) twoHosts)
+
+[<Fact>]
+let ``last and zero fills`` () =
+    Assert.Equal<(int64 * float) list>([ 0L, 11.0; 20000L, 22.0; 40000L, 23.0; 60000L, 44.0 ], summed (Plan.FillWithin(Plan.Last, 300)) twoHosts)
+    Assert.Equal<(int64 * float) list>([ 0L, 11.0; 20000L, 22.0; 40000L, 3.0; 60000L, 44.0 ], summed (Plan.FillWithin(Plan.Zero, 300)) twoHosts)
+
+[<Fact>]
+let ``a gap longer than the limit stays a gap`` () =
+    // 20 s after host 1's last point, with a 10 s limit: not filled.
+    Assert.Equal<(int64 * float) list>([ 0L, 11.0; 20000L, 22.0; 40000L, 3.0; 60000L, 44.0 ], summed (Plan.FillWithin(Plan.Linear, 10)) twoHosts)
+
+[<Fact>]
+let ``a series alone in its group is not filled`` () =
+    // Nothing to align with: interpolation is for combining series.
+    let alone = [ seriesRow 1UL 0L 10.0; seriesRow 1UL 40000L 30.0 ]
+    Assert.Equal<(int64 * float) list>([ 0L, 10.0; 40000L, 30.0 ], summed (Plan.FillWithin(Plan.Linear, 300)) alone)
+
+[<Fact>]
+let ``the window grid and zero alignment`` () =
+    Assert.Equal<int64 list>([ 20000L; 40000L ], Series.grid 20000L 1L 60000L |> List.ofSeq)
+    let s = Series.zeroFill [ 0L; 20000L ] { GroupTags = []; Points = Map [ 20000L, 5.0 ] }
+    Assert.Equal<Map<int64, float>>(Map [ 0L, 0.0; 20000L, 5.0 ], s.Points)

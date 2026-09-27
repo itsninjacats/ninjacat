@@ -9,6 +9,7 @@
 ///
 ///   avg|sum|min|max:metric{any tag filter} [by {keys}]
 ///     [.rollup(avg|sum|min|max|count[, seconds])] [.as_count() | .as_rate()]
+///     [.fill(null|zero|last|linear[, seconds])]
 ///   formulas: query names, wrapped in functions that act on each value
 ///   (abs, log2, log10, ceil, floor, round, clamp_*, cutoff_*) or across
 ///   series (top, top10_mean-style shorthands, count_nonzero, count_not_null,
@@ -53,6 +54,21 @@ type TimeAggregation =
     /// by the width floored to the metric's own interval, as Datadog does.
     | AsRate
 
+/// How gaps in one series are filled before series are combined
+/// (docs: metrics/guide/interpolation-the-fill-modifier-explained).
+type FillMethod =
+    /// "linear interpolation up to X seconds after real samples"
+    | Linear
+    /// "Replicates the last sample value up to X secs"
+    | Last
+    /// "Inserts 0 where the interpolation is needed up to X secs"
+    | Zero
+
+type Fill =
+    /// `.fill(null)`, and the default under `.as_count()` / `.as_rate()`.
+    | NoFill
+    | FillWithin of FillMethod * limitSeconds: int
+
 type QueryPlan =
     { Metric: string
       Filter: TagFilter
@@ -68,7 +84,10 @@ type QueryPlan =
       Step: TimeSpan
       /// Buckets to fetch before `from`, for functions that look back — a
       /// diff at the first visible point needs the point before it.
-      Lookback: int }
+      Lookback: int
+      /// Interpolation before space aggregation. Anything but NoFill makes
+      /// ClickHouse return series one by one, and F# combine them.
+      Fill: Fill }
 
 /// One series group in the response: a formula, or a query shown as is when
 /// the request had no formulas.
@@ -179,6 +198,8 @@ type Node =
     /// The inner node over data from `offsetMs` away (negative: the past),
     /// drawn at the present window's times. Shifts nest by adding up.
     | Shift of offsetMs: int64 * Node
+    /// Every bucket of the window that a series has no value in becomes 0.
+    | DefaultZero of Node
 
 type Output =
     {
@@ -261,7 +282,8 @@ let private rollupMethod =
 type private Modifiers =
     { Method: Aggregation option
       Interval: TimeSpan option
-      Mode: string option }
+      Mode: string option
+      Fill: Fill option }
 
 let private readModifiers (label: string) (mods: Modifier list) : Modifiers * string list =
     let apply (acc: Modifiers, errors: string list) (m: Modifier) =
@@ -290,9 +312,30 @@ let private readModifiers (label: string) (mods: Modifier list) : Modifiers * st
             | Some other when other <> mode -> fail $".{mode}() cannot follow .{other}()"
             | _ -> { acc with Mode = Some mode }, errors
         | ("as_count" | "as_rate") as mode, _ -> fail $".{mode}() takes no arguments"
+        | "fill", method :: rest ->
+            let methodName =
+                match method with
+                | Word w
+                | Quoted w -> Some w
+                | Num _ -> None
+
+            let limit =
+                match rest with
+                | [] -> Ok 300
+                | [ Num s ] when s >= 1.0 && s = Math.Floor s -> Ok(int s)
+                | _ -> Error ".fill() limit must be a whole number of seconds, e.g. .fill(linear, 300)"
+
+            match methodName, limit with
+            | Some "null", _ -> { acc with Fill = Some NoFill }, errors
+            | Some m, Ok limit when List.contains m [ "linear"; "last"; "zero" ] ->
+                let method = match m with "linear" -> Linear | "last" -> Last | _ -> Zero
+                { acc with Fill = Some(FillWithin(method, limit)) }, errors
+            | Some _, Error e -> fail e
+            | _ -> fail ".fill() method must be one of null, zero, last, linear"
+        | "fill", [] -> fail ".fill() needs a method, e.g. .fill(zero) or .fill(linear, 300)"
         | name, _ -> fail $".{name}() is not supported yet"
 
-    mods |> List.fold apply ({ Method = None; Interval = None; Mode = None }, [])
+    mods |> List.fold apply ({ Method = None; Interval = None; Mode = None; Fill = None }, [])
 
 let private timeAggregation (label: string) (m: Modifiers) : Result<TimeAggregation, string> =
     match m.Mode, m.Method with
@@ -343,7 +386,20 @@ let private planQuery (window: TimeSpan) (requestStep: TimeSpan) (label: string)
               SpaceAgg = q.SpaceAgg |> Option.bind spaceAggregation |> Option.defaultValue Avg
               TimeAgg = timeAgg
               Step = mods.Interval |> Option.map (fitted window) |> Option.defaultValue requestStep
-              Lookback = 0 }
+              Lookback = 0
+              // "The default interpolation for all metric types is linear
+              // and performed up to five minutes after real samples";
+              // as_count() and as_rate() disable it.
+              //
+              // WARNING(undocumented): the docs say as_count/as_rate disable
+              // interpolation "except for Gauge types". The type is known
+              // only per series, in the data, so under those modifiers no
+              // series is interpolated, gauges included.
+              Fill =
+                match mods.Fill, timeAgg with
+                | Some fill, _ -> fill
+                | None, (AsCount | AsRate) -> NoFill
+                | None, Plain _ -> FillWithin(Linear, 300) }
     | _ -> Error errors
 
 // --- formulas --------------------------------------------------------------------
@@ -551,6 +607,8 @@ let rec private resolve (from: DateTimeOffset) (label: string) (byName: Map<stri
                     | ("count_nonzero" | "count_nonzero_finite"), [] -> Ok CountNonzero
                     | "count_not_null", [] -> Ok CountNotNull
                     | "exclude_null", [] -> Ok ExcludeNull
+                    | "default_zero", [] -> Ok DefaultZero
+                    | "default_zero", _ -> Error "default_zero() takes one argument: default_zero(query)"
                     | _, [] when timewiseFunctions.ContainsKey name ->
                         let fn = timewiseFunctions[name]
                         Ok(fun node -> Timewise(fn, node))
@@ -623,7 +681,8 @@ let plan (req: ParsedTimeseriesRequest) : Result<Plan, string list> =
             match node with
             | Fetch i -> [ i, extra ]
             | Timewise(fn, inner) -> needs (extra + lookback fn) inner
-            | Shift(_, inner) -> needs extra inner
+            | Shift(_, inner)
+            | DefaultZero inner -> needs extra inner
             | Pointwise(_, inner)
             | Top(inner, _, _, _)
             | CountNonzero inner

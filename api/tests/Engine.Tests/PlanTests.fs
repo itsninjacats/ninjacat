@@ -80,9 +80,9 @@ let ``aggregator, filter and group by are carried over`` () =
 
 [<Fact>]
 let ``what is not supported yet is named`` () =
-    let es = errorsOf [ Some "a", "p95:x{*}.fill(zero)" ] []
+    let es = errorsOf [ Some "a", "p95:x{*}.weighted()" ] []
     Assert.Contains("queries[0] (a): aggregator 'p95:' is not supported yet", es)
-    Assert.Contains("queries[0] (a): .fill() is not supported yet", es)
+    Assert.Contains("queries[0] (a): .weighted() is not supported yet", es)
 
 [<Fact>]
 let ``unsubstituted template variables are refused`` () =
@@ -314,3 +314,26 @@ let ``shift arguments are checked`` () =
 let ``a shift keeps the lookback of what it wraps`` () =
     let p = planOf [ Some "a", "x{*}" ] [ "week_before(diff(a))" ]
     Assert.Equal(1, (List.exactlyOne p.Queries).Lookback)
+
+// --- fill ----------------------------------------------------------------------------------
+
+[<Fact>]
+let ``interpolation is on by default, off under as_count and as_rate`` () =
+    Assert.Equal(FillWithin(Linear, 300), (onlyQuery "avg:x{*}").Fill)
+    Assert.Equal(NoFill, (onlyQuery "sum:x{*}.as_count()").Fill)
+    Assert.Equal(NoFill, (onlyQuery "sum:x{*}.as_rate()").Fill)
+
+[<Fact>]
+let ``the fill modifier`` () =
+    Assert.Equal(NoFill, (onlyQuery "avg:x{*}.fill(null)").Fill)
+    Assert.Equal(FillWithin(Zero, 300), (onlyQuery "avg:x{*}.fill(zero)").Fill)
+    Assert.Equal(FillWithin(Last, 120), (onlyQuery "avg:x{*}.fill(last, 120)").Fill)
+    Assert.Equal(FillWithin(Linear, 60), (onlyQuery "sum:x{*}.as_count().fill(linear, 60)").Fill)
+
+[<Fact>]
+let ``fill arguments are checked`` () =
+    Assert.Contains("queries[0]: .fill() method must be one of null, zero, last, linear", errorsOf [ None, "x{*}.fill(mean)" ] [])
+    Assert.Contains("queries[0]: .fill() limit must be a whole number of seconds, e.g. .fill(linear, 300)", errorsOf [ None, "x{*}.fill(zero, 1.5)" ] [])
+
+[<Fact>]
+let ``default_zero resolves`` () = Assert.Equal(DefaultZero(Fetch 0), nodeOf "default_zero(a)")

@@ -76,9 +76,11 @@ let ping (client: ClickHouseClient) (ct: CancellationToken) = client.PingAsync(n
 let metricRows (client: ClickHouseClient) (ct: CancellationToken) (sql: Sql) : Task<NinjaCat.Api.Engine.Query.Compile.Row list> =
     sql
     |> query client ct (fun r ->
-        let groups = r.FieldCount - 2
+        let perSeries = r.GetName(r.FieldCount - 1) = "series_id"
+        let groups = r.FieldCount - (if perSeries then 3 else 2)
 
         { Groups = [ for i in 0 .. groups - 1 -> if r.IsDBNull i then None else Some(r.GetString i) ]
+          SeriesId = if perSeries then Some(Convert.ToUInt64(r.GetValue(r.FieldCount - 1))) else None
           BucketMs = r.GetInt64 groups
           Value = r.GetDouble(groups + 1) }
         : NinjaCat.Api.Engine.Query.Compile.Row)

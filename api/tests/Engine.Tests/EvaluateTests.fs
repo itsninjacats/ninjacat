@@ -1,5 +1,6 @@
 module NinjaCat.Api.Engine.Tests.EvaluateTests
 
+open System
 open Xunit
 open NinjaCat.Api.Engine.Api.V2.Timeseries
 open NinjaCat.Api.Engine.Query.Plan
@@ -195,7 +196,8 @@ let ``a gap is bridged by diff`` () =
 let private withHistory =
     // Buckets from −40 s; the visible window starts at 0.
     { Fetched.Series = Map [ (0, 0L), [ s "a" [ -40000L, 1.0; -20000L, 2.0; 0L, 10.0; 20000L, 12.0 ] ] ]
-      Fetched.StepMs = Map [ 0, 20000L ] }
+      Fetched.StepMs = Map [ 0, 20000L ]
+      Fetched.ToMs = Int64.MaxValue }
 
 [<Fact>]
 let ``the first visible diff uses the point before the window`` () =
@@ -218,7 +220,24 @@ let ``nested: cumsum of diff reads one bucket back, sums from the window`` () =
 let ``a shift reads the shifted fetch`` () =
     let fetched =
         { Fetched.Series = Map [ (0, 0L), [ s "now" [ 0L, 1.0 ] ]; (0, -3600000L), [ s "hour ago" [ 0L, 7.0 ] ] ]
-          Fetched.StepMs = Map [ 0, 20000L ] }
+          Fetched.StepMs = Map [ 0, 20000L ]
+          Fetched.ToMs = Int64.MaxValue }
 
     Assert.Equal<string list>([ "now" ], evalFrom fetched 0L (Fetch 0) |> names)
     Assert.Equal<string list>([ "hour ago" ], evalFrom fetched 0L (Shift(-3600000L, Abs |> fun _ -> Fetch 0)) |> names)
+
+// --- default_zero ------------------------------------------------------------------------
+
+let private window60 series =
+    { Fetched.Series = Map [ (0, 0L), series ]; Fetched.StepMs = Map [ 0, 20000L ]; Fetched.ToMs = 60000L }
+
+[<Fact>]
+let ``default_zero fills every bucket of the window`` () =
+    let out = evalFrom (window60 [ s "a" [ 20000L, 5.0 ] ]) 0L (DefaultZero(Fetch 0)) |> List.exactlyOne
+    Assert.Equal<Map<int64, float>>(Map [ 0L, 0.0; 20000L, 5.0; 40000L, 0.0 ], out.Points)
+
+[<Fact>]
+let ``default_zero with nothing at all is one zero series`` () =
+    let out = evalFrom (window60 []) 0L (DefaultZero(Fetch 0)) |> List.exactlyOne
+    Assert.Empty out.GroupTags
+    Assert.Equal<Map<int64, float>>(Map [ 0L, 0.0; 20000L, 0.0; 40000L, 0.0 ], out.Points)

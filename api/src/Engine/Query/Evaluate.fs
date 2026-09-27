@@ -196,7 +196,8 @@ let rec fetches (node: Node) : (int * int64) list =
         | CountNonzero inner
         | CountNotNull inner
         | ExcludeNull inner
-        | Timewise(_, inner) -> go shift inner
+        | Timewise(_, inner)
+        | DefaultZero inner -> go shift inner
 
     go 0L node
 
@@ -208,6 +209,8 @@ type Fetched =
         Series: Map<int * int64, Series list>
         /// Each query's bucket width.
         StepMs: Map<int, int64>
+        /// The window's end, for functions that fill it to the end.
+        ToMs: int64
     }
 
 /// Evaluates `node`, keeping points from `fromMs` on.
@@ -221,6 +224,24 @@ let rec private evalShifted (fetched: Fetched) (shift: int64) (fromMs: int64) (n
     match node with
     | Fetch i -> fetched.Series[(i, shift)] |> trim fromMs
     | Shift(offset, inner) -> evalShifted fetched (shift + offset) fromMs inner
+    // "Fills empty time intervals using the value 0" — every bucket of the
+    // window, after time and space aggregation (docs: dashboards/functions/
+    // interpolation).
+    //
+    // WARNING(undocumented): default_zero over a query with no series in the
+    // window. It gives one series without tags, all zeros, so a sparse metric
+    // reads as 0 rather than as nothing.
+    //
+    // WARNING(undocumented): the docs say default_zero fills "with
+    // interpolation" where interpolation is enabled. Interpolation has already
+    // run before space aggregation here; default_zero fills what is left with 0.
+    | DefaultZero inner ->
+        let stepMs = fetched.StepMs[fetches inner |> List.head |> fst]
+        let times = grid stepMs fromMs fetched.ToMs |> Array.ofSeq
+
+        match evalFrom fromMs inner with
+        | [] -> [ zeroFill times { GroupTags = []; Points = Map.empty } ]
+        | series -> series |> List.map (zeroFill times)
     | Pointwise(fn, inner) -> evalFrom fromMs inner |> List.map (mapValues fn)
     | Top(inner, count, by, order) -> evalFrom fromMs inner |> top count by order
     // Every value that reaches here is finite (see `apply`), so "not null"
@@ -244,6 +265,7 @@ let evalFrom (fetched: Fetched) (fromMs: int64) (node: Node) : Series list = eva
 let eval (series: Map<int, Series list>) (node: Node) : Series list =
     evalFrom
         { Series = series |> Map.toSeq |> Seq.map (fun (i, s) -> (i, 0L), s) |> Map.ofSeq
-          StepMs = series |> Map.map (fun _ _ -> 20000L) }
+          StepMs = series |> Map.map (fun _ _ -> 20000L)
+          ToMs = Int64.MaxValue }
         Int64.MinValue
         node

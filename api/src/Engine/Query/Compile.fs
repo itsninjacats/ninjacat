@@ -24,11 +24,18 @@ open NinjaCat.Api.Engine.Query.Plan
 ///
 ///   g0 … gN-1   Nullable(String)   one per `by` key, in the order of GroupBy;
 ///                                  NULL where the series has no such tag
+///   bucket_ms   Int64              bucket start, unix milliseconds
+///   value       Float64
+///   series_id   UInt64             only when the plan fills gaps: then each
+///                                  row is one series' bucket, uncombined
 ///   bucket_ms   Int64    bucket start, unix milliseconds
 ///   value       Float64
 type Row =
     { /// None: the series has no value for that `by` key — Datadog's N/A group.
       Groups: string option list
+      /// Set when the query returns series one by one (see `compile`), for F#
+      /// to fill and combine them; None when ClickHouse already combined them.
+      SeriesId: uint64 option
       BucketMs: int64
       Value: float }
 
@@ -156,7 +163,25 @@ let compile (tenant: TenantId) (plan: Plan) (query: QueryPlan) : Sql =
     let stepP = p.Add("step", Int64(int64 query.Step.TotalSeconds))
     let filter = filterSql p query.Filter
 
+    let perSeries = query.Fill <> NoFill
+
+    // Filling happens per series, before series are combined — so with a fill
+    // ClickHouse stops at the inner query, and Series.combine does the rest.
     let text =
+        if perSeries then
+            $"""SELECT {groupList}toInt64(toUnixTimestamp(bucket)) * 1000 AS bucket_ms, v AS value, series_id
+FROM (
+    SELECT series_id, {groupSelect}toStartOfInterval(timestamp, toIntervalSecond({stepP})) AS bucket, {timeAggregateSql stepP query.TimeAgg} AS v
+    FROM metrics
+    WHERE tenant_id = {tenantP}
+      AND metric = {metricP}
+      AND timestamp >= fromUnixTimestamp64Milli({fromP})
+      AND timestamp < fromUnixTimestamp64Milli({toP})
+      AND ({filter})
+    GROUP BY series_id, {groupList}bucket
+)
+ORDER BY {groupList}series_id, bucket"""
+        else
         $"""SELECT {groupList}toInt64(toUnixTimestamp(bucket)) * 1000 AS bucket_ms, {aggregate query.SpaceAgg}(v) AS value
 FROM (
     SELECT series_id, {groupSelect}toStartOfInterval(timestamp, toIntervalSecond({stepP})) AS bucket, {timeAggregateSql stepP query.TimeAgg} AS v

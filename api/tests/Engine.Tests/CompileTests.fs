@@ -21,7 +21,8 @@ let private query filter groupBy =
       SpaceAgg = Sum
       TimeAgg = Plain Avg
       Step = TimeSpan.FromSeconds 20.0
-      Lookback = 0 }
+      Lookback = 0
+      Fill = NoFill }
 
 let private compiled filter groupBy = compile (TenantId "acme") plan (query filter groupBy)
 
@@ -132,3 +133,10 @@ let ``lookback reads earlier, one bucket more`` () =
     // from − (3 + 1) × 20 s
     Assert.Equal(Int64(1711977600000L - 80000L), boundAfter "fromUnixTimestamp64Milli(" sql)
     Assert.Equal(1711977600000L - 60000L, keepFromMs plan { query All [] with Lookback = 3 })
+
+[<Fact>]
+let ``with a fill, series come back one by one`` () =
+    let sql = compile (TenantId "acme") plan { query All [ "host" ] with Fill = FillWithin(Linear, 300) }
+    Assert.Contains("v AS value, series_id", sql.Text)
+    Assert.Contains("ORDER BY g0, series_id, bucket", sql.Text)
+    Assert.DoesNotContain("sum(v)", sql.Text)
