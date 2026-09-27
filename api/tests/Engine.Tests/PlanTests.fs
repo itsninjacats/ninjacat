@@ -109,9 +109,9 @@ let ``a formula naming nothing is refused`` () =
     Assert.Contains("formulas[0]: no query is named 'c'", errorsOf [ Some "a", "x{*}" ] [ "c" ])
 
 [<Fact>]
-let ``arithmetic in formulas is not supported yet`` () =
-    let es = errorsOf [ Some "a", "x{*}"; Some "b", "y{*}" ] [ "a / b" ]
-    Assert.Contains("formulas[0]: arithmetic in formulas is not supported yet", es)
+let ``arithmetic between named queries`` () =
+    let p = planOf [ Some "a", "x{*}"; Some "b", "y{*}" ] [ "a / b" ]
+    Assert.Equal(Arith(Divide, Fetch 0, Fetch 1), (Assert.Single p.Outputs).Node)
 
 [<Fact>]
 let ``duplicate query names are refused`` () =
@@ -414,3 +414,46 @@ let ``a seasonal forecast reads seasons lying wholly in the past`` () =
         Forecast(1.0, SeasonalForecast [ for k in 1L .. 6L -> -k * h + h ], None, None),
         (outputOf "forecast(a, 'seasonal', 1, seasonality='hourly')").Extra
     )
+
+// --- arithmetic ----------------------------------------------------------------------------
+
+let private nodeOf2 (queries: (string option * string) list) formula = (Assert.Single (planOf queries [ formula ]).Outputs).Node
+let private ab = [ Some "a", "x{*} by {host}"; Some "b", "y{*} by {host}" ]
+
+[<Fact>]
+let ``operators, precedence, numbers and minus`` () =
+    // (query1 - query2) / query1 * 100, from the corpus plus a constant.
+    Assert.Equal(
+        Arith(Times, Arith(Divide, Arith(Minus, Fetch 0, Fetch 1), Fetch 0), Constant 100.0),
+        nodeOf2 ab "(a - b) / a * 100"
+    )
+
+    Assert.Equal(Arith(Times, Constant -1.0, Fetch 0), nodeOf2 ab "-a")
+
+[<Fact>]
+let ``minimum, maximum, pow and time`` () =
+    Assert.Equal(Arith(Minimum, Fetch 0, Fetch 1), nodeOf2 ab "minimum(a, b)")
+    Assert.Equal(Arith(Power, Fetch 0, Constant 2.0), nodeOf2 ab "pow(a, 2)")
+    // Datadog docs: time() - max:backup.last_completed_timestamp{*}
+    Assert.Equal(Arith(Minus, TimeOfPoint, Fetch 0), nodeOf2 [ Some "a", "max:backup.last_completed_timestamp{*}" ] "time() - a")
+
+[<Fact>]
+let ``functions over arithmetic and arithmetic over functions`` () =
+    Assert.Equal(Pointwise(Abs, Arith(Minus, Fetch 0, Fetch 1)), nodeOf2 ab "abs(a - b)")
+    Assert.Equal(Arith(Divide, Timewise(Cumsum, Fetch 0), Constant 60.0), nodeOf2 ab "cumsum(a) / 60")
+
+[<Fact>]
+let ``both sides must group alike, or one not at all`` () =
+    let err queries formula = errorsOf queries [ formula ]
+    Assert.Contains(
+        "formulas[0]: arithmetic needs both sides grouped by the same tags, got 'host' and 'env'",
+        err [ Some "a", "x{*} by {host}"; Some "b", "y{*} by {env}" ] "a / b"
+    )
+    // Ungrouped, or grouped the same in another order: fine.
+    nodeOf2 [ Some "a", "x{*} by {host}"; Some "b", "y{*}" ] "a / b" |> ignore
+    nodeOf2 [ Some "a", "x{*} by {host,env}"; Some "b", "y{*} by {env,host}" ] "a / b" |> ignore
+
+[<Fact>]
+let ``a formula needs a query`` () =
+    Assert.Contains("formulas[0]: a formula needs at least one query, not only numbers", errorsOf [ Some "a", "x{*}" ] [ "2 * 3" ])
+    Assert.Contains("formulas[0]: a function needs a query inside it, not only numbers", errorsOf [ Some "a", "x{*}" ] [ "a + abs(5)" ])

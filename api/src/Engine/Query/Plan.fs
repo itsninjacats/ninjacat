@@ -16,7 +16,8 @@
 ///   exclude_null) or along time (cumsum, integral, diff, monotonic_diff,
 ///   derivative, per_second/minute/hour, throughput, ewma_*, median_*,
 ///   rollingavg_*, autosmooth, trend_line, robust_trend, piecewise_constant),
-///   picked out by outliers(dbscan|scaledbscan|mad|scaledmad), shifted in time (timeshift, hour/day/week/month_before,
+///   picked out by outliers(dbscan|scaledbscan|mad|scaledmad), combined by
+///   + - * /, minimum, maximum, pow, time() and numbers, shifted in time (timeshift, hour/day/week/month_before,
 ///   calendar_shift), with an optional limit
 ///
 /// Everything else (functions, arithmetic, other modifiers, calendar rollups,
@@ -111,6 +112,17 @@ type PointwiseFn =
     | CutoffMin of float
     /// Values above the threshold are removed; equal ones stay.
     | CutoffMax of float
+
+/// What arithmetic combines two operands with (docs: dashboards/querying):
+/// "+, -, /, *, minimum() and maximum()", and pow() (docs: arithmetic).
+type ArithOp =
+    | Plus
+    | Minus
+    | Times
+    | Divide
+    | Minimum
+    | Maximum
+    | Power
 
 /// What `top` ranks series by (docs: dashboards/functions/rank).
 type RankBy =
@@ -226,6 +238,12 @@ type Node =
     | DefaultZero of Node
     /// Keep only the series outliers() finds.
     | Outliers of Node * OutlierAlgorithm * tolerance: float
+    /// A number in a formula: `* 100`.
+    | Constant of float
+    /// `time()`: each point's own time, in seconds.
+    | TimeOfPoint
+    /// Two operands combined point by point, their series matched by group.
+    | Arith of ArithOp * Node * Node
 
 /// forecast()'s `model=` for the linear algorithm (docs: monitors/types/forecasts).
 type LinearModel =
@@ -621,6 +639,12 @@ let private topShorthand (name: string) : (int * RankBy * SortOrder) option =
     else
         None
 
+/// Joins two resolved operands, collecting both sides' errors.
+let private combine2 (label: string) (op: ArithOp) (l: Result<Node, string list>) (r: Result<Node, string list>) =
+    match l, r with
+    | Ok l, Ok r -> Ok(Arith(op, l, r))
+    | l, r -> Error((match l with Error es -> es | Ok _ -> []) @ (match r with Error es -> es | Ok _ -> []))
+
 /// A formula's expression tree → Node, with every problem in it named.
 /// `calendar_shift`'s "-1d", "-2w", "-1mo": a negative whole number and a unit.
 let private calendarShift (spec: string) (timezone: string) (from: DateTimeOffset) : Result<int64, string> =
@@ -679,9 +703,25 @@ let rec private resolve (from: DateTimeOffset) (label: string) (byName: Map<stri
         match byName.TryFind name with
         | Some i -> Ok(Fetch i)
         | None -> Error [ $"{label}: no query is named '{name}'" ]
-    | Number _
-    | Neg _
-    | Binary _ -> Error [ $"{label}: arithmetic in formulas is not supported yet" ]
+    | Number n -> Ok(Constant n)
+    | Neg inner -> resolve from label byName inner |> Result.map (fun n -> Arith(Times, Constant -1.0, n))
+    | Binary(op, l, r) ->
+        let op =
+            match op with
+            | Add -> Plus
+            | Sub -> Minus
+            | Mul -> Times
+            | Div -> Divide
+
+        combine2 label op (resolve from label byName l) (resolve from label byName r)
+    | Call(("minimum" | "maximum" | "pow") as name, args) ->
+        match args with
+        | [ Value l; Value r ] ->
+            let op = match name with "minimum" -> Minimum | "maximum" -> Maximum | _ -> Power
+            combine2 label op (resolve from label byName l) (resolve from label byName r)
+        | _ -> Error [ $"{label}: {name}() takes two operands: {name}(a, b)" ]
+    | Call("time", []) -> Ok TimeOfPoint
+    | Call("time", _) -> Error [ $"{label}: time() takes no arguments" ]
     | Call(name, args) ->
         let inner, rest =
             match args with
@@ -901,6 +941,47 @@ let private resolveOutput (from: DateTimeOffset) (window: TimeSpan) (label: stri
     | Call("forecast", args) -> withExtra args (forecastArgs from window)
     | _ -> resolve from label byName expr |> Result.map (fun node -> node, NoExtra)
 
+/// The `by` keys a node's series carry: Some keys for series (empty for one
+/// ungrouped series), None for a number or time(), which have no series.
+///
+/// Checks what arithmetic may combine: "all queries must be grouped by the
+/// same" tags (docs: dashboards/querying). One side ungrouped — a single
+/// series, or a number — applies to every series of the other.
+let rec private groupKeys (req: ParsedTimeseriesRequest) (node: Node) : Result<Set<string> option, string> =
+    let keysOf = groupKeys req
+
+    /// A function over series needs series under it, not only numbers.
+    let series (name: string) inner =
+        keysOf inner
+        |> Result.bind (function
+            | None -> Error $"{name} needs a query inside it, not only numbers"
+            | keys -> Ok keys)
+
+    match node with
+    | Fetch i -> Ok(Some(set req.Queries[i].Query.GroupBy))
+    | Constant _
+    | TimeOfPoint -> Ok None
+    | CountNonzero inner
+    | CountNotNull inner -> series "count_nonzero()/count_not_null()" inner |> Result.map (fun _ -> Some Set.empty)
+    | Pointwise(_, inner)
+    | Top(inner, _, _, _)
+    | ExcludeNull inner
+    | Timewise(_, inner)
+    | Shift(_, inner)
+    | DefaultZero inner
+    | Outliers(inner, _, _) -> series "a function" inner
+    | Arith(_, l, r) ->
+        match keysOf l, keysOf r with
+        | Error e, _
+        | _, Error e -> Error e
+        | Ok None, Ok k
+        | Ok k, Ok None -> Ok k
+        | Ok(Some a), Ok(Some b) when a.IsEmpty -> Ok(Some b)
+        | Ok(Some a), Ok(Some b) when b.IsEmpty || a = b -> Ok(Some a)
+        | Ok(Some a), Ok(Some b) ->
+            let show (k: Set<string>) = k |> Seq.map (sprintf "'%s'") |> String.concat ", "
+            Error $"arithmetic needs both sides grouped by the same tags, got {show a} and {show b}"
+
 let private planOutputs (req: ParsedTimeseriesRequest) : Result<Output list, string list> =
     match req.Formulas with
     | [] -> Ok(req.Queries |> List.mapi (fun i _ -> { QueryIndex = i; Node = Fetch i; Limit = None; Extra = NoExtra }))
@@ -915,7 +996,11 @@ let private planOutputs (req: ParsedTimeseriesRequest) : Result<Output list, str
             formulas
             |> List.mapi (fun i f ->
                 resolveOutput req.From (req.To - req.From) $"formulas[{i}]" byName f.Formula
-                |> Result.map (fun (node, extra) -> { QueryIndex = i; Node = node; Limit = f.Limit; Extra = extra }))
+                |> Result.bind (fun (node, extra) ->
+                    match groupKeys req node with
+                    | Error e -> Error [ $"formulas[{i}]: {e}" ]
+                    | Ok None -> Error [ $"formulas[{i}]: a formula needs at least one query, not only numbers" ]
+                    | Ok(Some _) -> Ok { QueryIndex = i; Node = node; Limit = f.Limit; Extra = extra }))
 
         match results |> List.collect (function Error es -> es | Ok _ -> []) with
         | [] -> Ok(results |> List.choose (function Ok o -> Some o | Error _ -> None))
@@ -959,20 +1044,26 @@ let plan (req: ParsedTimeseriesRequest) : Result<Plan, string list> =
             | CountNonzero inner
             | CountNotNull inner
             | ExcludeNull inner -> needs extra inner
+            | Arith(_, l, r) -> needs extra l @ needs extra r
+            | Constant _
+            | TimeOfPoint -> []
 
         let planned = queries |> List.map (function Ok q -> Some q | Error _ -> None)
 
         let rec firstSource node =
             match node with
-            | Fetch i -> i
+            | Fetch i -> Some i
             | Pointwise(_, n) | Top(n, _, _, _) | CountNonzero n | CountNotNull n | ExcludeNull n
             | Timewise(_, n) | Shift(_, n) | DefaultZero n | Outliers(n, _, _) -> firstSource n
+            | Arith(_, l, r) -> firstSource l |> Option.orElse (firstSource r)
+            | Constant _
+            | TimeOfPoint -> None
 
         // History an output's extra reads before the window, in buckets of
         // its query's step: the anomaly window, or forecast history beyond
         // the window itself.
         let extraLookback (o: Output) =
-            let step = planned[firstSource o.Node] |> Option.map _.Step |> Option.defaultValue requestStep
+            let step = firstSource o.Node |> Option.bind (fun i -> planned[i]) |> Option.map _.Step |> Option.defaultValue requestStep
 
             match o.Extra with
             | NoExtra -> 0

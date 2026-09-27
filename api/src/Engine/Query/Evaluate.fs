@@ -211,8 +211,84 @@ let rec fetches (node: Node) : (int * int64) list =
         | Timewise(_, inner)
         | DefaultZero inner
         | Outliers(inner, _, _) -> go shift inner
+        | Arith(_, l, r) -> go shift l @ go shift r
+        | Constant _
+        | TimeOfPoint -> []
 
     go 0L node
+
+// --- arithmetic ---------------------------------------------------------------------
+
+/// One operation on two values; None where it has no finite answer.
+///
+/// WARNING(undocumented): division by zero. It is a gap, not ±Infinity, which
+/// JSON cannot carry and a graph cannot draw.
+let private arith (op: ArithOp) (a: float) (b: float) : float option =
+    let r =
+        match op with
+        | Plus -> a + b
+        | Minus -> a - b
+        | Times -> a * b
+        | Divide -> if b = 0.0 then nan else a / b
+        | Minimum -> min a b
+        | Maximum -> max a b
+        | Power -> Math.Pow(a, b)
+
+    if Double.IsFinite r then Some r else None
+
+/// An operand of arithmetic: series, or a value per time with no series of
+/// its own — a number, time(), or arithmetic on those.
+type private Operand =
+    | Many of Series list
+    | Scalar of (int64 -> float)
+
+/// Point by point where both have a value — a gap on either side is a gap in
+/// the result.
+///
+/// WARNING(undocumented): operands at different steps (one query with
+/// `.rollup(sum, 60)`, the other at the request's 20 s). Their times rarely
+/// meet, and most points become gaps; Datadog does not say how it aligns them.
+let private zipSeries (op: ArithOp) (a: Series) (b: Series) tags =
+    { GroupTags = tags
+      Points =
+        a.Points
+        |> Seq.choose (fun p ->
+            b.Points.TryFind p.Key |> Option.bind (fun bv -> arith op p.Value bv) |> Option.map (fun r -> p.Key, r))
+        |> Map.ofSeq }
+
+let private withScalar (f: float -> float -> float option) (s: Series) =
+    { s with Points = s.Points |> Seq.choose (fun p -> f (float p.Key) p.Value |> Option.map (fun r -> p.Key, r)) |> Map.ofSeq }
+
+/// Two operands combined, series matched by group:
+///   - a number or time() applies to every series;
+///   - one ungrouped series (a query with no `by`) applies to every series of
+///     the other side;
+///   - otherwise series pair up by their group tags, as a set, so `by {a, b}`
+///     meets `by {b, a}`.
+///
+/// WARNING(undocumented): a group on one side only. It is dropped — there is
+/// nothing to combine it with.
+let private combineOperands (op: ArithOp) (left: Operand) (right: Operand) : Operand =
+    let ungrouped =
+        function
+        | [ s ] when List.isEmpty s.GroupTags -> Some s
+        | _ -> None
+
+    match left, right with
+    | Scalar f, Scalar g -> Scalar(fun t -> match arith op (f t) (g t) with Some r -> r | None -> nan)
+    | Scalar f, Many b -> Many(b |> List.map (withScalar (fun t v -> arith op (f (int64 t)) v)))
+    | Many a, Scalar g -> Many(a |> List.map (withScalar (fun t v -> arith op v (g (int64 t)))))
+    | Many a, Many b ->
+        match ungrouped a, ungrouped b with
+        | Some sa, _ -> Many(b |> List.map (fun sb -> zipSeries op sa sb sb.GroupTags))
+        | _, Some sb -> Many(a |> List.map (fun sa -> zipSeries op sa sb sa.GroupTags))
+        | None, None ->
+            let byGroup = b |> List.map (fun s -> set s.GroupTags, s) |> Map.ofList
+
+            Many(
+                a
+                |> List.choose (fun sa -> byGroup.TryFind(set sa.GroupTags) |> Option.map (fun sb -> zipSeries op sa sb sa.GroupTags))
+            )
 
 /// What evaluation reads.
 type Fetched =
@@ -267,6 +343,21 @@ let rec private evalShifted (fetched: Fetched) (shift: int64) (fromMs: int64) (n
                 rows |> Array.map (Array.mapi (fun t v -> defaultArg v medians[t])) |> Algorithms.dbscanOutliers scaled tolerance
 
         Array.zip series flags |> Array.filter snd |> Array.map fst |> List.ofArray
+    | Arith _
+    | Constant _
+    | TimeOfPoint ->
+        let rec operand node =
+            match node with
+            | Constant c -> Scalar(fun _ -> c)
+            // Times are milliseconds; time() is seconds.
+            | TimeOfPoint -> Scalar(fun t -> float t / 1000.0)
+            | Arith(op, l, r) -> combineOperands op (operand l) (operand r)
+            | other -> Many(evalFrom fromMs other)
+
+        match operand node with
+        | Many series -> series
+        // The plan refuses a formula made only of numbers.
+        | Scalar _ -> []
     | DefaultZero inner ->
         let stepMs = fetched.StepMs[fetches inner |> List.head |> fst]
         let times = grid stepMs fromMs fetched.ToMs |> Array.ofSeq

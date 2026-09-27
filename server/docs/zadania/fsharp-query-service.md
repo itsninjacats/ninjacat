@@ -74,6 +74,25 @@ own. Then the panel, `datadog-api-client`, Terraform and Grafana's Datadog
 plugin work against us unchanged. The Go intake forwards those paths to F#
 instead of answering 404 (see [brakujace-endpointy-api.md](brakujace-endpointy-api.md)).
 
+### Status, 2026-09-27
+
+`POST /api/v2/query/timeseries` runs metric queries end to end in `api/`:
+the query language (filters in both syntaxes, wildcards, `by`, rollups,
+`as_count`/`as_rate`, `fill`), formulas with arithmetic between queries,
+and Datadog's function families — pointwise, rank, count/exclusion,
+rate/smoothing/cumulative with lookback, timeshift/calendar_shift,
+interpolation and default_zero, regression, autosmooth, outliers,
+anomalies (basic, agile, robust, with seasonality) and forecast (linear,
+seasonal). Anomaly bands and forecasts travel as `ninjacat_bounds` and
+`ninjacat_forecast` beside the values.
+
+Every behaviour Datadog does not document is marked in the code
+(`grep -rn "WARNING(undocumented)" api/src`); `integral` is a FIXME.
+
+Not yet: `dt()`, `.weighted()`, percentiles (`p95:`, from `sketches`),
+calendar rollups, `/api/v2/query/scalar`, v1 `/api/v1/query`, the
+`metrics_1m` table for windows past raw retention, and the metric catalog.
+
 ### 1. Metric explorer
 
 - Metric catalog: name, type, unit, last seen. Probably a ClickHouse

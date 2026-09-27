@@ -252,3 +252,57 @@ let ``autosmooth uses one window for every series`` () =
     let spread (s: Series) = s.Points.Values |> Seq.skip 20 |> fun v -> Seq.max v - Seq.min v
     Assert.Equal(spread out[0], spread out[1], 9)
     Assert.True(spread out[0] < 2.0)
+
+// --- arithmetic ----------------------------------------------------------------------------
+
+let private two (a: Series list) (b: Series list) node =
+    evalFrom
+        { Fetched.Series = Map [ (0, 0L), a; (1, 0L), b ]
+          Fetched.StepMs = Map [ 0, 20000L; 1, 20000L ]
+          Fetched.ToMs = Int64.MaxValue }
+        Int64.MinValue
+        node
+
+let private host name (points: (int64 * float) list) = { GroupTags = [ $"host:{name}" ]; Points = Map.ofList points }
+
+[<Fact>]
+let ``series pair up by group`` () =
+    let a = [ host "x" [ 0L, 10.0 ]; host "y" [ 0L, 20.0 ]; host "only-a" [ 0L, 1.0 ] ]
+    let b = [ host "y" [ 0L, 4.0 ]; host "x" [ 0L, 5.0 ] ]
+    let out = two a b (Arith(Divide, Fetch 0, Fetch 1))
+    Assert.Equal<(string list * float) list>([ [ "host:x" ], 2.0; [ "host:y" ], 5.0 ], out |> List.map (fun s -> s.GroupTags, s.Points[0L]))
+
+[<Fact>]
+let ``an ungrouped side applies to every series`` () =
+    let a = [ host "x" [ 0L, 10.0 ]; host "y" [ 0L, 20.0 ] ]
+    let total = [ { GroupTags = []; Points = Map [ 0L, 40.0 ] } ]
+    let out = two a total (Arith(Divide, Fetch 0, Fetch 1))
+    Assert.Equal<float list>([ 0.25; 0.5 ], out |> List.map (fun s -> s.Points[0L]))
+
+[<Fact>]
+let ``numbers and time apply to every point`` () =
+    let a = [ host "x" [ 0L, 0.25; 60000L, 0.5 ] ]
+    Assert.Equal<float list>([ 25.0; 50.0 ], two a [] (Arith(Times, Fetch 0, Constant 100.0)) |> List.head |> _.Points.Values |> List.ofSeq)
+    // time() is seconds: at 60 000 ms, time() − value = 60 − 0.5.
+    Assert.Equal(59.5, (two a [] (Arith(Minus, TimeOfPoint, Fetch 0)) |> List.head).Points[60000L])
+
+[<Fact>]
+let ``a gap on either side, or a zero divisor, is a gap`` () =
+    let a = [ host "x" [ 0L, 1.0; 20000L, 2.0; 40000L, 3.0 ] ]
+    let b = [ host "x" [ 0L, 1.0; 40000L, 0.0 ] ]
+    let out = two a b (Arith(Divide, Fetch 0, Fetch 1)) |> List.head
+    Assert.Equal<Map<int64, float>>(Map [ 0L, 1.0 ], out.Points)
+
+[<Fact>]
+let ``minimum, maximum and pow`` () =
+    let a = [ host "x" [ 0L, 3.0 ] ]
+    let b = [ host "x" [ 0L, 2.0 ] ]
+    Assert.Equal(2.0, (two a b (Arith(Minimum, Fetch 0, Fetch 1)) |> List.head).Points[0L])
+    Assert.Equal(3.0, (two a b (Arith(Maximum, Fetch 0, Fetch 1)) |> List.head).Points[0L])
+    Assert.Equal(9.0, (two a b (Arith(Power, Fetch 0, Fetch 1)) |> List.head).Points[0L])
+
+[<Fact>]
+let ``a function over arithmetic`` () =
+    let a = [ host "x" [ 0L, 1.0 ] ]
+    let b = [ host "x" [ 0L, 4.0 ] ]
+    Assert.Equal(3.0, (two a b (Pointwise(Abs, Arith(Minus, Fetch 0, Fetch 1))) |> List.head).Points[0L])
