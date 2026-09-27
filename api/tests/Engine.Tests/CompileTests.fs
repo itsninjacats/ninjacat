@@ -109,3 +109,16 @@ let ``as_rate divides by the bucket, floored to a rate's interval`` () =
     Assert.Contains("/ greatest({step", sql.Text)
     Assert.Contains("}, max(interval))", sql.Text)
     Assert.Contains("any(metric_type) = 'COUNT', sum(value) / {step", sql.Text)
+
+[<Fact>]
+let ``wildcards inside IN are patterns, the rest stay exact`` () =
+    let sql = compiled (In("container_name", [ "ninjacat*"; "postgres" ])) []
+    Assert.Contains("arrayExists(x -> x LIKE {p", sql.Text)
+    Assert.Contains(") OR (hasAny(tags[{k", sql.Text)
+    Assert.Equal(String "ninjacat%", boundAfter "x LIKE " sql)
+    Assert.Equal(StringArray [ "postgres" ], boundAfter "], " sql)
+
+[<Fact>]
+let ``host IN with a wildcard`` () =
+    let sql = compiled (Not(In("host", [ "web-*" ]))) []
+    Assert.Contains("NOT ((host LIKE {p", sql.Text)

@@ -92,6 +92,13 @@ let rec private filterSql (p: Params) (filter: TagFilter) : string =
     // splitTag), so `{prod}` asks whether the key exists.
     | Bare v when isWildcard v -> $"""arrayExists(x -> x LIKE {p.Add("p", String(likePattern v))}, mapKeys(tags))"""
     | Bare v -> $"""mapContains(tags, {p.Add("k", String v)})"""
+    // `IN` with a wildcard among its values (`name IN (web-*, db)`) is the OR
+    // of its parts. Datadog's tag rules forbid `*` in a tag value, so a `*`
+    // in a filter can only ever mean a wildcard.
+    | In(k, vs) when List.exists isWildcard vs ->
+        let exact = vs |> List.filter (isWildcard >> not)
+        let parts = [ for v in vs |> List.filter isWildcard -> Tag(k, v) ] @ (if exact.IsEmpty then [] else [ In(k, exact) ])
+        filterSql p (Or parts)
     | In("host", vs) -> $"""has({p.Add("p", StringArray vs)}, host)"""
     | In(k, vs) -> $"""hasAny(tags[{p.Add("k", String k)}], {p.Add("p", StringArray vs)})"""
     | Not f -> $"NOT ({filterSql p f})"
