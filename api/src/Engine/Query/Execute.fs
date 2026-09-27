@@ -14,7 +14,17 @@ let run (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<
     task {
         // Only the queries some output uses; one named but never shown is not
         // worth a trip to ClickHouse. Each runs once, however many outputs use it.
-        let fetches = plan.Outputs |> List.collect (_.Node >> Evaluate.fetches) |> List.distinct
+        // Seasonal extras read their node again, once per past season.
+        let seasonalLags (o: Output) =
+            match o.Extra with
+            | Anomalies((Robust lags | Agile lags), _) -> lags
+            | Forecast(_, SeasonalForecast lags, _, _) -> lags
+            | _ -> []
+
+        let fetches =
+            plan.Outputs
+            |> List.collect (fun o -> Evaluate.fetches o.Node @ (seasonalLags o |> List.collect (fun lag -> Evaluate.fetches (Shift(lag, o.Node)))))
+            |> List.distinct
 
         let! fetched =
             fetches
@@ -78,10 +88,27 @@ let run (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<
 
             match o.Extra with
             | NoExtra -> Evaluate.evalFrom fetched fromMs o.Node |> Series.limit o.Limit |> List.map (fun s -> s, Series.noExtra)
-            | Anomalies bounds ->
-                withExtras (fromMs - int64 anomalyWindow * stepMs) (fun s ->
+            | Anomalies(algorithm, bounds) ->
+                let historyFrom = fromMs - int64 anomalyWindow * stepMs
+
+                // Each past season's series, by group, on the present times.
+                let seasons =
+                    seasonalLags o
+                    |> List.map (fun lag -> Evaluate.evalFrom fetched historyFrom (Shift(lag, o.Node)) |> List.map (fun s -> s.GroupTags, s.Points) |> Map.ofList)
+
+                withExtras historyFrom (fun s ->
                     let pts = s.Points |> Map.toArray
-                    let band = Algorithms.basicBand anomalyWindow bounds (Array.map snd pts)
+                    let values = Array.map snd pts
+
+                    let band =
+                        match algorithm with
+                        | Basic -> Algorithms.basicBand anomalyWindow bounds values
+                        | Robust _
+                        | Agile _ ->
+                            let past =
+                                pts |> Array.map (fun (t, _) -> seasons |> List.map (fun m -> m.TryFind s.GroupTags |> Option.bind (Map.tryFind t)) |> Array.ofList)
+
+                            Algorithms.seasonalBand (algorithm.IsAgile) anomalyWindow bounds values past
 
                     { Series.noExtra with
                         Band =
@@ -89,7 +116,23 @@ let run (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<
                             |> Array.choose (fun ((t, _), b) -> if t >= fromMs then b |> Option.map (fun b -> t, b) else None)
                             |> Map.ofArray
                             |> Some })
-            | Forecast(deviations, model, history, horizon) ->
+            | Forecast(deviations, SeasonalForecast lags, _, horizon) ->
+                let horizonMs = horizon |> Option.map (fun h -> int64 h.TotalMilliseconds) |> Option.defaultValue windowMs
+                let future = Series.grid stepMs toMs (toMs + horizonMs) |> Array.ofSeq
+
+                // Season k's read is drawn so that a future time t finds its
+                // past value at t − horizon (see Plan.forecastArgs).
+                let seasons =
+                    lags |> List.map (fun lag -> Evaluate.evalFrom fetched fromMs (Shift(lag, o.Node)) |> List.map (fun s -> s.GroupTags, s.Points) |> Map.ofList)
+
+                withExtras fromMs (fun s ->
+                    let past =
+                        future |> Array.map (fun t -> seasons |> List.map (fun m -> m.TryFind s.GroupTags |> Option.bind (Map.tryFind (t - horizonMs))) |> Array.ofList)
+
+                    match Array.zip future (Algorithms.seasonalForecast deviations past) |> Array.choose (fun (t, p) -> p |> Option.map (fun (v, lo, hi) -> t, v, lo, hi)) with
+                    | [||] -> Series.noExtra
+                    | points -> { Series.noExtra with Forecast = Some(List.ofArray points) })
+            | Forecast(deviations, LinearForecast model, history, horizon) ->
                 let historyMs = history |> Option.map (fun h -> int64 h.TotalMilliseconds) |> Option.defaultValue windowMs
                 let horizonMs = horizon |> Option.map (fun h -> int64 h.TotalMilliseconds) |> Option.defaultValue windowMs
                 let future = Series.grid stepMs toMs (toMs + horizonMs) |> Array.ofSeq

@@ -118,3 +118,33 @@ let ``bounds are standard deviations`` () =
     let lo, hi = band[10].Value
     Assert.Equal(4.0, lo, 9)
     Assert.Equal(16.0, hi, 9)
+
+// --- seasonal ------------------------------------------------------------------------------
+
+/// Past seasons that all said 10 at every point.
+let private pastTens n = Array.init n (fun _ -> Array.init 6 (fun _ -> Some 10.0))
+
+[<Fact>]
+let ``robust holds its expectation through a long anomaly, agile follows it`` () =
+    // 10 ± 1 for 30 points, then a lasting shift to 20 ± 1.
+    let values = Array.init 60 (fun i -> (if i < 30 then 10.0 else 20.0) + (if i % 2 = 0 then 1.0 else -1.0))
+    let centre (band: (float * float) option[]) i = band[i] |> Option.map (fun (lo, hi) -> (lo + hi) / 2.0)
+    let robust = seasonalBand false 20 2.0 values (pastTens 60)
+    let agile = seasonalBand true 20 2.0 values (pastTens 60)
+    // Twenty points into the shift:
+    Assert.Equal(Some 10.0, centre robust 55) // still expects the seasonal 10
+    Assert.InRange((centre agile 55).Value, 19.0, 21.0) // has moved to the new level
+
+[<Fact>]
+let ``no band without three seasons of history`` () =
+    let seasons = Array.init 10 (fun _ -> [| Some 10.0; Some 10.0; None; None; None; None |])
+    Assert.True(seasonalBand false 20 2.0 (Array.create 10 10.0) seasons |> Array.forall Option.isNone)
+
+[<Fact>]
+let ``a seasonal forecast is the median of past seasons, spread as band`` () =
+    let forecast = seasonalForecast 1.0 [| [| Some 8.0; Some 10.0; Some 12.0; None; None; None |]; [| Some 5.0; None; None; None; None; None |] |]
+    let v, lo, hi = forecast[0].Value
+    Assert.Equal(10.0, v)
+    Assert.Equal(10.0 - sqrt (8.0 / 3.0), lo, 9)
+    Assert.Equal(10.0 + sqrt (8.0 / 3.0), hi, 9)
+    Assert.Equal(None, forecast[1]) // one season is not enough

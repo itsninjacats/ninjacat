@@ -315,3 +315,74 @@ let linearForecast (model: string) (deviations: float) (xs: float[]) (ys: float[
     let width = deviations * madToSigma * mad residuals
 
     future |> Array.map (fun x -> let v = intercept + slope * x in v, v - width, v + width)
+
+let private sd (xs: float[]) =
+    let m = Array.average xs
+    sqrt (xs |> Array.averageBy (fun x -> (x - m) * (x - m)))
+
+/// The seasonal anomaly band. `seasons[i]` holds point i's values at the same
+/// moment in up to six past seasons.
+///
+/// robust: the expected value is the median of the past seasons — three at
+/// least, as the docs require three seasons of history. Past seasons do not
+/// see today, so a long anomaly never becomes the expectation ("predictions
+/// remain constant even through long-lasting anomalies").
+///
+/// agile: the same, shifted by the median departure from it over the `window`
+/// points before — "incorporates the immediate past" and "quickly adjusts to
+/// level shifts".
+///
+/// Both: `bounds` standard deviations of the residuals (value − expected) over
+/// the `window` points before, at least 5 of them.
+///
+/// WARNING(undocumented): Datadog's models are a seasonal-trend decomposition
+/// (robust) and a robust SARIMA (agile). These are simpler estimators with the
+/// behaviour the docs describe, not those models: expect different numbers.
+let seasonalBand (agile: bool) (window: int) (bounds: float) (values: float[]) (seasons: float option[][]) : (float * float) option[] =
+    let n = values.Length
+
+    let seasonal =
+        seasons |> Array.map (fun vs -> match Array.choose id vs with xs when xs.Length >= 3 -> Some(median xs) | _ -> None)
+
+    let expected =
+        Array.init n (fun i ->
+            match seasonal[i] with
+            | Some s when agile ->
+                let departures =
+                    [| for j in max 0 (i - window) .. i - 1 do
+                           match seasonal[j] with
+                           | Some sj -> values[j] - sj
+                           | None -> () |]
+
+                Some(s + (if departures.Length >= 5 then median departures else 0.0))
+            | other -> other)
+
+    Array.init n (fun i ->
+        match expected[i] with
+        | None -> None
+        | Some e ->
+            let residuals =
+                [| for j in max 0 (i - window) .. i - 1 do
+                       match expected[j] with
+                       | Some ej -> values[j] - ej
+                       | None -> () |]
+
+            if residuals.Length < 5 then None
+            else let width = bounds * sd residuals in Some(e - width, e + width))
+
+/// A seasonal forecast at each future time from its values in past seasons:
+/// their median, at least 2 of them ("requires at least two seasons of
+/// history and uses up to six"), with `deviations` standard deviations of
+/// those same values either side.
+///
+/// WARNING(undocumented): Datadog's seasonal model. This is a seasonal naive
+/// median, with the spread across seasons as its band.
+let seasonalForecast (deviations: float) (seasons: float option[][]) : (float * float * float) option[] =
+    seasons
+    |> Array.map (fun vs ->
+        match Array.choose id vs with
+        | xs when xs.Length >= 2 ->
+            let v = median xs
+            let width = deviations * sd xs
+            Some(v, v - width, v + width)
+        | _ -> None)

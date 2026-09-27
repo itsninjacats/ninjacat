@@ -199,3 +199,27 @@ let ``a forecast runs end to end, past the window`` () =
     Assert.Equal<int64 list>([ 100000L; 120000L ], f.Times)
     Assert.Equal(100.0, f.Values[0], 6)
     Assert.Equal(120.0, f.Values[1], 6)
+
+[<Fact>]
+let ``a seasonal forecast reads past seasons and predicts past the window`` () =
+    // Hourly seasonality over a 1 h window at 20 min steps; every past hour
+    // looked the same: 10, 20, 30 at minutes 0, 20, 40.
+    let body =
+        """{"data":{"type":"timeseries_request","attributes":{"from":36000000,"to":39600000,"interval":1200000,
+            "queries":[{"data_source":"metrics","name":"a","query":"avg:cpu{*}"}],
+            "formulas":[{"formula":"forecast(a, 'seasonal', 0, seasonality='hourly')"}]}}}"""
+
+    let execute (sql: Sql) =
+        let from = sql.Parameters |> List.pick (fun (n, v) -> match v with Int64 f when n.StartsWith "from" -> Some f | _ -> None)
+        let minute t = (t / 60000L) % 60L
+        Task.FromResult [ for t in from .. 1200000L .. from + 2400000L -> { Groups = []; BucketMs = t; Value = float (10L + minute t / 2L); SeriesId = None } ]
+
+    let plan =
+        match read body |> Result.bind Plan.plan with
+        | Ok p -> p
+        | Error es -> failwith (String.Join("\n", es))
+
+    let a = (Execute.run execute (TenantId "default") plan).Result.Data.Attributes
+    let f = (Option.get a.NinjacatForecast).Head |> Option.get
+    Assert.Equal<int64 list>([ 39600000L; 40800000L; 42000000L ], f.Times)
+    Assert.Equal<float list>([ 10.0; 20.0; 30.0 ], f.Values)
