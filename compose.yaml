@@ -159,6 +159,8 @@ services:
       DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
       # The panel talks to :8081, never to the agent intake on :8080.
       NINJACAT_INTERNAL_URL: http://server:8081
+      # The query API (F#): Datadog's query language, for the metrics explorer.
+      NINJACAT_QUERY_URL: http://api:8082
       ORIGIN: http://localhost:5173
       BETTER_AUTH_SECRET: dev-only-secret-change-me-in-production-32ch
     volumes:

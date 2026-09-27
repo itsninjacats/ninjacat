@@ -249,6 +249,10 @@ Two data sources, and the split matters:
 - **The Go panel API via `src/lib/server/ninjacat.ts`** — all telemetry. Server-side only, so
   the browser never learns :8081 exists. Timeouts here are shorter than the Go side's, so a
   slow query surfaces as our error rather than a hang.
+- **The F# query API (`api/`, :8082) via the same file** — Datadog's query language for the
+  metrics explorer (`/app/metrics`, proxied by `app/metrics/query/+server.ts`). Address in
+  `NINJACAT_QUERY_URL`. The explorer's view lives in the URL (`?view=<json>`, see
+  `src/lib/metrics/query.ts`).
 
 Auth is Better Auth, wired in `src/hooks.server.ts` (after the Paraglide handle) which
 populates `locals.user`/`locals.session`. `/app/**` is guarded once in
