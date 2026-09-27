@@ -262,12 +262,19 @@ let madOutliers (scaled: bool) (tolerance: float) (percent: float) (rows: float 
 // --- anomalies and forecast --------------------------------------------------------
 
 /// The basic anomaly band: for each point, the range expected from the
-/// `window` points before it (docs: "a simple lagging rolling quantile
-/// computation to determine the range of expected values").
+/// `window` points before it.
 ///
-/// WARNING(undocumented): which quantiles, and what `bounds` multiplies. The
-/// centre is the median of the window, the width `bounds` robust standard
-/// deviations (MAD × 1.4826) either side — the same scale outliers() uses. A
+/// Sources: "Basic uses a simple lagging rolling quantile computation to
+/// determine the range of expected values" (docs: monitors/types/anomaly), and
+/// "bounds can be interpreted as the standard deviations for your algorithm"
+/// (docs: dashboards/functions/algorithms). So: centred on a quantile of the
+/// window before the point, `bounds` standard deviations either side.
+///
+/// Standard deviation, not a robust stand-in for it: the MAD collapses to 0
+/// when most of a window is one value, as a goroutine count usually is, and
+/// the band with it — every 38 among 37s became an anomaly.
+///
+/// WARNING(undocumented): which quantile centres the band. The median. A
 /// point needs at least 5 points before it for a band.
 let basicBand (window: int) (bounds: float) (values: float[]) : (float * float) option[] =
     values
@@ -278,8 +285,9 @@ let basicBand (window: int) (bounds: float) (values: float[]) : (float * float) 
             None
         else
             let centre = median past
-            let spread = madToSigma * mad past
-            Some(centre - bounds * spread, centre + bounds * spread))
+            let mean = Array.average past
+            let sd = sqrt (past |> Array.averageBy (fun x -> (x - mean) * (x - mean)))
+            Some(centre - bounds * sd, centre + bounds * sd))
 
 /// A linear forecast from (seconds, value) history: the value and band at each
 /// of `future` seconds.

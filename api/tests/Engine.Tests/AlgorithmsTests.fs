@@ -101,3 +101,20 @@ let ``a linear forecast extends an exact line`` () =
         Assert.Equal(130.0, v60, 6)
         Assert.Equal(v0, lo0, 6) // no residuals, no band
         Assert.Equal(v0, hi0, 6)
+
+[<Fact>]
+let ``the basic band does not collapse on a mostly constant integer series`` () =
+    // Mostly 37, now and then 38–40, like a goroutine count. A 38 is normal.
+    let history = [| 37.0; 37.0; 38.0; 37.0; 39.0; 37.0; 37.0; 38.0; 37.0; 40.0; 37.0; 37.0 |]
+    let band = basicBand 60 2.0 (Array.append history [| 38.0 |])
+    let lo, hi = band[history.Length].Value
+    Assert.True(lo < 37.0 && hi > 38.0, $"band [{lo}, {hi}]")
+
+[<Fact>]
+let ``bounds are standard deviations`` () =
+    // Past values 8 and 12 alternating: median 10, standard deviation 2.
+    let past = Array.init 10 (fun i -> if i % 2 = 0 then 8.0 else 12.0)
+    let band = basicBand 60 3.0 (Array.append past [| 10.0 |])
+    let lo, hi = band[10].Value
+    Assert.Equal(4.0, lo, 9)
+    Assert.Equal(16.0, hi, 9)
