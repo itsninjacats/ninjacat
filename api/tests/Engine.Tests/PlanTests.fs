@@ -201,8 +201,8 @@ let ``wrong arguments are named`` () =
 
 [<Fact>]
 let ``unknown functions and names inside functions are reported together`` () =
-    let es = errorsOf [ Some "a", "x{*}" ] [ "autosmooth(a)"; "abs(b)" ]
-    Assert.Contains("formulas[0]: function 'autosmooth' is not supported yet", es)
+    let es = errorsOf [ Some "a", "x{*}" ] [ "anomalies(a, 'basic', 2)"; "abs(b)" ]
+    Assert.Contains("formulas[0]: function 'anomalies' is not supported yet", es)
     Assert.Contains("formulas[1]: no query is named 'b'", es)
 
 // --- across series -------------------------------------------------------------------
@@ -337,3 +337,28 @@ let ``fill arguments are checked`` () =
 
 [<Fact>]
 let ``default_zero resolves`` () = Assert.Equal(DefaultZero(Fetch 0), nodeOf "default_zero(a)")
+
+// --- algorithms --------------------------------------------------------------------------
+
+[<Fact>]
+let ``regressions and autosmooth resolve`` () =
+    Assert.Equal(Timewise(TrendLine, Fetch 0), nodeOf "trend_line(a)")
+    Assert.Equal(Timewise(RobustTrend, Fetch 0), nodeOf "robust_trend(a)")
+    Assert.Equal(Timewise(PiecewiseConstant, Fetch 0), nodeOf "piecewise_constant(a)")
+    Assert.Equal(Timewise(Autosmooth, Fetch 0), nodeOf "autosmooth(a)")
+
+[<Fact>]
+let ``outliers resolve, any case`` () =
+    Assert.Equal(Outliers(Fetch 0, Dbscan false, 3.0), nodeOf "outliers(a, 'DBSCAN', 3)")
+    Assert.Equal(Outliers(Fetch 0, Dbscan true, 2.5), nodeOf "outliers(a, 'scaledbscan', 2.5)")
+    Assert.Equal(Outliers(Fetch 0, Mad(false, 20.0), 3.0), nodeOf "outliers(a, 'mad', 3, 20)")
+    Assert.Equal(Outliers(Fetch 0, Mad(true, 10.0), 2.0), nodeOf "outliers(a, 'scaledMAD', 2, 10)")
+
+[<Fact>]
+let ``outliers arguments are checked`` () =
+    let err formula = errorsOf [ Some "a", "x{*}" ] [ formula ]
+    Assert.Contains("formulas[0]: outliers() with MAD needs a percentage: outliers(query, 'mad', 3, 20)", err "outliers(a, 'mad', 3)")
+    Assert.Contains(
+        "formulas[0]: outliers() takes a query, an algorithm, a tolerance and for MAD a percentage: outliers(query, 'dbscan', 3) or outliers(query, 'mad', 3, 20)",
+        err "outliers(a, 'kmeans', 3)"
+    )

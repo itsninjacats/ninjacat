@@ -15,7 +15,8 @@
 ///   series (top, top10_mean-style shorthands, count_nonzero, count_not_null,
 ///   exclude_null) or along time (cumsum, integral, diff, monotonic_diff,
 ///   derivative, per_second/minute/hour, throughput, ewma_*, median_*,
-///   rollingavg_*), shifted in time (timeshift, hour/day/week/month_before,
+///   rollingavg_*, autosmooth, trend_line, robust_trend, piecewise_constant),
+///   picked out by outliers(dbscan|scaledbscan|mad|scaledmad), shifted in time (timeshift, hour/day/week/month_before,
 ///   calendar_shift), with an optional limit
 ///
 /// Everything else (functions, arithmetic, other modifiers, calendar rollups,
@@ -152,6 +153,16 @@ type TimewiseFn =
     | Median of span: int
     /// Mean of the last `span` points.
     | RollingAvg of span: int
+    /// EWMA with a span picked per series (see Evaluate.fs).
+    | Autosmooth
+    /// "Fit an ordinary least squares regression line through the metric
+    /// values" — over the visible window.
+    | TrendLine
+    /// "Fit a robust regression trend line using Huber loss."
+    | RobustTrend
+    /// "Approximate the metric with a piecewise function composed of
+    /// constant-valued segments."
+    | PiecewiseConstant
 
 /// Buckets of history a function needs before its first output point.
 ///
@@ -168,7 +179,11 @@ let lookback =
     function
     | Cumsum
     | Integral
-    | Throughput -> 0
+    | Throughput
+    | TrendLine
+    | RobustTrend
+    | PiecewiseConstant -> 0
+    | Autosmooth -> 2 * 20
     | Diff
     | MonotonicDiff
     | Derivative
@@ -178,6 +193,15 @@ let lookback =
     | Median n
     | RollingAvg n -> n - 1
     | Ewma n -> 2 * n
+
+/// How outliers() compares series (docs: monitors/types/outlier).
+type OutlierAlgorithm =
+    /// Clusters series around the median series; outside the largest
+    /// cluster is an outlier.
+    | Dbscan of scaled: bool
+    /// Per time, distance from the median in MADs; a series with more than
+    /// `percent` of its points that far is an outlier.
+    | Mad of scaled: bool * percent: float
 
 /// What a formula computes: its names resolved to queries, every function
 /// checked against what it takes. A function that exists here has arguments
@@ -200,6 +224,8 @@ type Node =
     | Shift of offsetMs: int64 * Node
     /// Every bucket of the window that a series has no value in becomes 0.
     | DefaultZero of Node
+    /// Keep only the series outliers() finds.
+    | Outliers of Node * OutlierAlgorithm * tolerance: float
 
 type Output =
     {
@@ -455,7 +481,37 @@ let private timewiseFunctions: Map<string, TimewiseFn> =
               $"median_{n}", Median n
           "median", Median 3
           for n in [ 5; 13; 21; 29 ] do
-              $"rollingavg_{n}", RollingAvg n ]
+              $"rollingavg_{n}", RollingAvg n
+          "autosmooth", Autosmooth
+          "trend_line", TrendLine
+          "robust_trend", RobustTrend
+          "piecewise_constant", PiecewiseConstant ]
+
+/// `outliers(q, 'dbscan', 3)` or `outliers(q, 'mad', 3, 20)`. Algorithm names
+/// are matched case-insensitively: Datadog's own examples write both 'DBSCAN'
+/// and 'dbscan'.
+let private outlierArgs (literals: Literal list) : Result<OutlierAlgorithm * float, string> =
+    let usage = "outliers() takes a query, an algorithm, a tolerance and for MAD a percentage: outliers(query, 'dbscan', 3) or outliers(query, 'mad', 3, 20)"
+
+    let name =
+        function
+        | Word w
+        | Quoted w -> Some(w.ToLowerInvariant())
+        | Num _ -> None
+
+    match literals with
+    | [ alg; Num tol ] when tol > 0.0 ->
+        match name alg with
+        | Some "dbscan" -> Ok(Dbscan false, tol)
+        | Some "scaledbscan" -> Ok(Dbscan true, tol)
+        | Some("mad" | "scaledmad") -> Error "outliers() with MAD needs a percentage: outliers(query, 'mad', 3, 20)"
+        | _ -> Error usage
+    | [ alg; Num tol; Num pct ] when tol > 0.0 && pct >= 0.0 && pct <= 100.0 ->
+        match name alg with
+        | Some "mad" -> Ok(Mad(false, pct), tol)
+        | Some "scaledmad" -> Ok(Mad(true, pct), tol)
+        | _ -> Error usage
+    | _ -> Error usage
 
 /// A plain argument after the series one, as the analysis sees it. In a
 /// formula a bare word (`mean`) parses as a query name — the parser cannot
@@ -608,6 +664,7 @@ let rec private resolve (from: DateTimeOffset) (label: string) (byName: Map<stri
                     | "count_not_null", [] -> Ok CountNotNull
                     | "exclude_null", [] -> Ok ExcludeNull
                     | "default_zero", [] -> Ok DefaultZero
+                    | "outliers", _ -> outlierArgs literals |> Result.map (fun (alg, tol) node -> Outliers(node, alg, tol))
                     | "default_zero", _ -> Error "default_zero() takes one argument: default_zero(query)"
                     | _, [] when timewiseFunctions.ContainsKey name ->
                         let fn = timewiseFunctions[name]
@@ -682,7 +739,8 @@ let plan (req: ParsedTimeseriesRequest) : Result<Plan, string list> =
             | Fetch i -> [ i, extra ]
             | Timewise(fn, inner) -> needs (extra + lookback fn) inner
             | Shift(_, inner)
-            | DefaultZero inner -> needs extra inner
+            | DefaultZero inner
+            | Outliers(inner, _, _) -> needs extra inner
             | Pointwise(_, inner)
             | Top(inner, _, _, _)
             | CountNonzero inner

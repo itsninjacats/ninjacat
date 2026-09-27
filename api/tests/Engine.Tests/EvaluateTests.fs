@@ -241,3 +241,14 @@ let ``default_zero with nothing at all is one zero series`` () =
     let out = evalFrom (window60 []) 0L (DefaultZero(Fetch 0)) |> List.exactlyOne
     Assert.Empty out.GroupTags
     Assert.Equal<Map<int64, float>>(Map [ 0L, 0.0; 20000L, 0.0; 40000L, 0.0 ], out.Points)
+
+// --- autosmooth across series ------------------------------------------------------------
+
+[<Fact>]
+let ``autosmooth uses one window for every series`` () =
+    // Same noise, different levels: one window, so both smooth alike.
+    let noisy level = s (string level) [ for i in 0L .. 59L -> i * 20000L, level + (if i % 2L = 0L then 1.0 else -1.0) ]
+    let out = eval (Map [ 0, [ noisy 10.0; noisy 50.0 ] ]) (Timewise(Autosmooth, Fetch 0))
+    let spread (s: Series) = s.Points.Values |> Seq.skip 20 |> fun v -> Seq.max v - Seq.min v
+    Assert.Equal(spread out[0], spread out[1], 9)
+    Assert.True(spread out[0] < 2.0)

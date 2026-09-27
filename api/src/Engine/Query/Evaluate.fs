@@ -175,6 +175,18 @@ let private alongTime (fn: TimewiseFn) (stepMs: int64) (s: Series) : Series =
             | _ -> pts |> Array.tail |> Array.scan (fun (_, e) (t, v) -> t, alpha * v + (1.0 - alpha) * e) pts[0]
         | Median n -> window n median
         | RollingAvg n -> window n Array.average
+        | TrendLine
+        | RobustTrend when pts.Length > 0 ->
+            let t0 = fst pts[0]
+            let xs = pts |> Array.map (fun (t, _) -> seconds (t - t0))
+            let ys = pts |> Array.map snd
+            let slope, intercept = (if fn = TrendLine then Algorithms.ols else Algorithms.huber) xs ys
+            Array.map2 (fun (t, _) x -> t, intercept + slope * x) pts xs
+        | PiecewiseConstant -> Array.map2 (fun (t, _) v -> t, v) pts (Algorithms.piecewiseConstant (Array.map snd pts))
+        // Autosmooth picks one window across all series; see evalShifted.
+        | Autosmooth -> pts
+        | TrendLine
+        | RobustTrend -> [||]
 
     { s with Points = Map.ofArray out }
 
@@ -197,7 +209,8 @@ let rec fetches (node: Node) : (int * int64) list =
         | CountNotNull inner
         | ExcludeNull inner
         | Timewise(_, inner)
-        | DefaultZero inner -> go shift inner
+        | DefaultZero inner
+        | Outliers(inner, _, _) -> go shift inner
 
     go 0L node
 
@@ -235,6 +248,25 @@ let rec private evalShifted (fetched: Fetched) (shift: int64) (fromMs: int64) (n
     // WARNING(undocumented): the docs say default_zero fills "with
     // interpolation" where interpolation is enabled. Interpolation has already
     // run before space aggregation here; default_zero fills what is left with 0.
+    // WARNING(undocumented): what outliers() returns. On a Datadog graph it
+    // colours the outlying series and greys the rest; the v2 response has
+    // nowhere to carry that mark. It returns the outlying series only — what a
+    // monitor alerts on.
+    | Outliers(inner, algorithm, tolerance) ->
+        let series = evalFrom fromMs inner |> Array.ofList
+        let times = series |> Seq.collect _.Points.Keys |> Seq.distinct |> Seq.sort |> Array.ofSeq
+        let rows = series |> Array.map (fun s -> times |> Array.map s.Points.TryFind)
+
+        let flags =
+            match algorithm with
+            | Mad(scaled, percent) -> Algorithms.madOutliers scaled tolerance percent rows
+            | Dbscan scaled ->
+                // A series missing a time is placed at that time's median, so
+                // a gap is neither near nor far from the others.
+                let medians = Array.init times.Length (fun t -> rows |> Array.choose (fun r -> r[t]) |> Algorithms.median)
+                rows |> Array.map (Array.mapi (fun t v -> defaultArg v medians[t])) |> Algorithms.dbscanOutliers scaled tolerance
+
+        Array.zip series flags |> Array.filter snd |> Array.map fst |> List.ofArray
     | DefaultZero inner ->
         let stepMs = fetched.StepMs[fetches inner |> List.head |> fst]
         let times = grid stepMs fromMs fetched.ToMs |> Array.ofSeq
@@ -256,7 +288,37 @@ let rec private evalShifted (fetched: Fetched) (shift: int64) (fromMs: int64) (n
         let back = int64 (lookback fn) * stepMs
         let innerFrom = if fromMs < Int64.MinValue + back then Int64.MinValue else fromMs - back
 
-        evalFrom innerFrom inner |> List.map (alongTime fn stepMs) |> trim fromMs
+        let series = evalFrom innerFrom inner
+
+        match fn with
+        // "When you apply Auto Smoother to several timeseries using a group
+        // by query, the same window size is applied on all the timeseries"
+        // (https://www.datadoghq.com/blog/auto-smoother-asap/).
+        //
+        // WARNING(undocumented): how that one window is chosen. Each series
+        // gets its own ASAP window, and all use the median of them. The
+        // window is capped at the lookback autosmooth reads, so the first
+        // visible point always has a full window behind it.
+        | Autosmooth ->
+            let values = series |> List.map (fun s -> s.Points.Values |> Array.ofSeq) |> List.filter (fun v -> v.Length > 0)
+
+            match values with
+            | [] -> series |> trim fromMs
+            | _ ->
+                let w =
+                    values
+                    |> List.map (Algorithms.autosmoothWindow (lookback Autosmooth) >> float)
+                    |> Array.ofList
+                    |> Algorithms.median
+                    |> int
+
+                series
+                |> List.map (fun s ->
+                    let pts = s.Points |> Map.toArray
+                    let smoothed = Algorithms.movingAverage w (Array.map snd pts)
+                    { s with Points = Array.map2 (fun (t, _) v -> t, v) pts smoothed |> Map.ofArray })
+                |> trim fromMs
+        | _ -> series |> List.map (alongTime fn stepMs) |> trim fromMs
 
 let evalFrom (fetched: Fetched) (fromMs: int64) (node: Node) : Series list = evalShifted fetched 0L fromMs node
 
