@@ -43,19 +43,19 @@ git clone <this repo> && cd ninjacat
 docker compose up
 ```
 
-That brings up ClickHouse, Postgres, the server and the panel, applies both schemas,
-and watches both source trees: saving an F# file rebuilds and restarts the server
-(via `dotnet watch`), saving a Svelte file hot-reloads the browser.
+That brings up ClickHouse, Postgres, the server's two processes and the panel, applies
+both schemas, and watches both source trees: saving an F# file rebuilds and restarts the
+server (via `dotnet watch`), saving a Svelte file hot-reloads the browser.
 
 | | |
 |---|---|
 | Panel | http://localhost:5173 |
 | Agent intake | http://localhost:8080 |
-| Panel and query API (internal) | http://localhost:8081 |
+| Panel and query API (internal, loopback only) | http://localhost:8081 |
 
 To work on the host instead, run just the databases with
-`docker compose up -d postgres clickhouse`, then `dotnet run --project src/Server` in
-`api/` and `bun run dev` in `frontend/`. Development needs the .NET 10 SDK and
+`docker compose up -d postgres clickhouse`, then `dotnet run --project src/Server -- intake`
+and `dotnet run --project src/Server -- query` in `api/`, and `bun run dev` in `frontend/`. Development needs the .NET 10 SDK and
 [Bun](https://bun.sh).
 
 Create an API key in the panel under Settings, then send an agent at it. The intake
@@ -80,18 +80,32 @@ configured. That is the recommended way to try this the first time:
 DD_API_KEY=<key> docker compose -f compose.yaml -f compose.lab.yaml up
 ```
 
+### NinjaCat watching itself
+
+`compose.self.yaml` makes the installation its own first customer. The panel reports
+through Datadog's browser SDKs (RUM, browser logs), the server's two processes through
+Datadog's .NET tracer (traces, runtime metrics, profiles, logs), and an agent reports the
+host — all of it to this installation's own intake, none of it to Datadog. It is off
+unless the file is named:
+
+```bash
+NINJACAT_SELF_KEY=<key> docker compose -f compose.yaml -f compose.self.yaml up
+```
+
+Use a key made for this alone: the panel hands it to every browser that opens it.
+
 ## Architecture
 
 ```
 Datadog Agent ──:8080──▶ intake ──▶ one writer per table ──▶ ClickHouse
                                                                  ▲
-SvelteKit panel ──:8081──▶ panel and query API ─────────────────┘
+SvelteKit panel ──:8081──▶ query (panel and query API) ─────────┘
        │
        └──▶ Postgres (users, sessions, API keys)
 ```
 
-The server is one F# process (`api/`) with two ports: agents reach the intake and only
-the intake; the panel's API and Datadog's query API stay on the internal one. The agent
+The server is one F# program (`api/`) run as two processes: agents reach `intake` and only
+`intake`; the panel's API and Datadog's query API are served by `query`, on a port of its own. The agent
 gets its answer before anything is written — rows are buffered per table and inserted in
 batches, so a burst of logs cannot delay metrics.
 

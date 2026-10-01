@@ -1,0 +1,136 @@
+# NinjaCat — self-observability: this installation watching itself.
+#
+#   NINJACAT_SELF_KEY=<key> docker compose -f compose.yaml -f compose.self.yaml up
+#
+# (or -f compose.prod.yaml; the service names are the same.) Off unless this
+# file is named: without it no SDK is loaded anywhere.
+#
+# The key is one created in the panel (Settings → API keys). Make one for this
+# purpose alone: the panel hands it to every browser that opens it.
+#
+# What reports, and how:
+#   panel    Datadog's browser SDKs (RUM, logs)          → the intake, directly
+#   intake,  Datadog's .NET tracer: traces, runtime
+#   query    metrics, profiles, its own telemetry        → the agent → the intake
+#            their log lines                             → the intake, directly
+#   agent    its own host and container metrics          → the intake
+#
+# Nothing goes to Datadog. The agent sits on a network with no route out; the
+# tracer inside the two server processes does have one, so DD_SITE below names
+# a site that only resolves on that network — a URL the tracer builds on its
+# own leads nowhere.
+#
+# The intake watching itself feeds itself: a batch of its spans arrives as a
+# request, which is a span in the next batch. That is a trickle (one request
+# per flush), not a loop that grows, but an idle installation is never silent.
+
+x-tracer-environment: &tracer-environment
+  # Attaches the tracer to the runtime — of the server alone, not of the
+  # `dotnet` build tools the development containers also run.
+  CORECLR_ENABLE_PROFILING: "1"
+  CORECLR_PROFILER: "{846F5F1C-F9AE-4B07-969E-05C26BC060D8}"
+  CORECLR_PROFILER_PATH: /opt/datadog/Datadog.Trace.ClrProfiler.Native.so
+  DD_DOTNET_TRACER_HOME: /opt/datadog
+  DD_PROFILER_PROCESSES: ninjacat-api
+  # The continuous profiler needs its wrapper loaded before libc.
+  LD_PRELOAD: /opt/datadog/continuousprofiler/Datadog.Linux.ApiWrapper.x64.so
+
+  DD_ENV: ${NINJACAT_SELF_ENV:-dev}
+  DD_AGENT_HOST: agent
+  DD_SITE: ninjacat.self
+  DD_API_KEY: ${NINJACAT_SELF_KEY:?create a key in the panel and pass it as NINJACAT_SELF_KEY}
+  DD_RUNTIME_METRICS_ENABLED: "true"
+  DD_PROFILING_ENABLED: "true"
+
+  # Log lines carry the trace they were written in, and go straight to the
+  # intake: the agent here has no access to container logs.
+  DD_LOGS_INJECTION: "true"
+  DD_LOGS_DIRECT_SUBMISSION_INTEGRATIONS: ILogger
+  DD_LOGS_DIRECT_SUBMISSION_URL: http://http-intake.logs.ninjacat.self:8080
+  DD_LOGS_DIRECT_SUBMISSION_HOST: ${NINJACAT_SELF_HOSTNAME:-ninjacat}
+
+  # The tracer's telemetry goes through the agent or not at all.
+  DD_INSTRUMENTATION_TELEMETRY_AGENTLESS_ENABLED: "false"
+
+services:
+  # One-shot: copies the tracer out of Datadog's image into a volume the
+  # server's two processes mount. Neither NinjaCat image carries the tracer.
+  tracer:
+    image: datadog/dd-lib-dotnet-init:v3.54.0
+    user: "0:0"
+    network_mode: none
+    entrypoint: ["cp", "-r", "/datadog-init/package/.", "/opt/datadog"]
+    volumes:
+      - dd-tracer:/opt/datadog
+    restart: "no"
+
+  intake:
+    depends_on:
+      tracer: { condition: service_completed_successfully }
+    volumes:
+      - dd-tracer:/opt/datadog:ro
+    networks:
+      default: {}
+      # The intake routes on the Host header: one alias per product that is
+      # pointed at it below.
+      self:
+        aliases:
+          - app.ninjacat.self
+          - trace.agent.ninjacat.self
+          - process.ninjacat.self
+          - intake.profile.ninjacat.self
+          - instrumentation-telemetry-intake.ninjacat.self
+          - http-intake.logs.ninjacat.self
+    environment:
+      <<: *tracer-environment
+      DD_SERVICE: ninjacat-intake
+
+  query:
+    depends_on:
+      tracer: { condition: service_completed_successfully }
+    volumes:
+      - dd-tracer:/opt/datadog:ro
+    networks: [default, self]
+    environment:
+      <<: *tracer-environment
+      DD_SERVICE: ninjacat-query
+
+  frontend:
+    environment:
+      PUBLIC_NINJACAT_RUM_CLIENT_TOKEN: ${NINJACAT_SELF_KEY:?create a key in the panel and pass it as NINJACAT_SELF_KEY}
+      # The address BROWSERS reach the intake at. *.localhost resolves to the
+      # loopback in every current browser; a deployment names its public host.
+      PUBLIC_NINJACAT_RUM_INTAKE: ${NINJACAT_SELF_BROWSER_INTAKE:-http://browser-intake.localhost:8080}
+      PUBLIC_NINJACAT_ENV: ${NINJACAT_SELF_ENV:-dev}
+
+  agent:
+    image: datadog/agent:7
+    restart: unless-stopped
+    depends_on: [intake]
+    networks: [self]
+    environment:
+      DD_API_KEY: ${NINJACAT_SELF_KEY:?create a key in the panel and pass it as NINJACAT_SELF_KEY}
+      DD_HOSTNAME: ${NINJACAT_SELF_HOSTNAME:-ninjacat}
+      DD_ENV: ${NINJACAT_SELF_ENV:-dev}
+      DD_LOG_LEVEL: warn
+
+      DD_DD_URL: http://app.ninjacat.self:8080
+      DD_APM_DD_URL: http://trace.agent.ninjacat.self:8080
+      DD_APM_PROFILING_DD_URL: http://intake.profile.ninjacat.self:8080/api/v2/profile
+      DD_APM_TELEMETRY_DD_URL: http://instrumentation-telemetry-intake.ninjacat.self:8080
+      DD_PROCESS_CONFIG_PROCESS_DD_URL: http://process.ninjacat.self:8080
+
+      DD_APM_ENABLED: "true"
+      DD_APM_NON_LOCAL_TRAFFIC: "true"
+      DD_DOGSTATSD_NON_LOCAL_TRAFFIC: "true"
+
+      # What cannot be redirected. This only keeps the agent's log quiet —
+      # the network lets nothing through either way.
+      DD_REMOTE_CONFIGURATION_ENABLED: "false"
+
+networks:
+  self:
+    internal: true
+
+volumes:
+  dd-tracer:
