@@ -2,5 +2,9 @@
   "TestHandleLogsKeepsAnUndecodableBodyRaw/001": {
     "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
     "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestHandleAppV3KeepsUndecodableBodies__not_protobuf_at_all/001": {
+    "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
+    "why": "The note quotes the protobuf parser's error, and Google.Protobuf words it differently from Go's proto package."
   }
 }
