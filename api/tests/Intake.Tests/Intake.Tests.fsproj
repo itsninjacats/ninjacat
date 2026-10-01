@@ -23,6 +23,7 @@
     <Compile Include="InstallTests.fs" />
     <Compile Include="ContainersTests.fs" />
     <Compile Include="KubeopsTests.fs" />
+    <Compile Include="GoCompatTests.fs" />
     <Compile Include="DbmTests.fs" />
     <Compile Include="NdmTests.fs" />
     <Compile Include="MiscTests.fs" />
