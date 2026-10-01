@@ -111,7 +111,8 @@ let main args =
 
         // Two surfaces, split by port: agents reach the intake, and only the
         // intake; the panel and the query API stay on the internal port.
-        let intake = Routes.create (app.Services.GetRequiredService<Deps>())
+        let deps = app.Services.GetRequiredService<Deps>()
+        let intake = Routes.create deps
         let intakePort = cfg.IntakePort
 
         app.MapWhen(
@@ -119,8 +120,17 @@ let main args =
             fun branch ->
                 branch.Run(fun http ->
                     task {
+                        let started = DateTime.UtcNow
                         let! body = Engine.readBody http
-                        do! Engine.write http (intake http body)
+                        let response = intake http body
+                        do! Engine.write http response
+
+                        if cfg.Debug then
+                            try
+                                let decoded = Body.decompress deps.Log (http.Request.Headers.ContentEncoding.ToString()) body
+                                Capture.write cfg.CaptureDir http body decoded response.Status started |> ignore
+                            with e ->
+                                deps.Log.LogWarning("capture not written: {Error}", e.Message)
                     })
         )
         |> ignore

@@ -15,6 +15,7 @@
     <Compile Include="TcpLogsTests.fs" />
     <Compile Include="IntakeCoreTests.fs" />
     <Compile Include="MigrationsTests.fs" />
+    <Compile Include="CaptureTests.fs" />
     <Compile Include="ClickHouseRoundTripTests.fs" />
     <Compile Include="ApiTests.fs" />
     <Compile Include="AppTests.fs" />

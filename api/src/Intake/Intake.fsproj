@@ -33,6 +33,7 @@
     <Compile Include="Routers/Process.fs" />
     <Compile Include="Routers/Rum.fs" />
     <Compile Include="TcpLogs.fs" />
+    <Compile Include="Capture.fs" />
     <Compile Include="Routes.fs" />
   </ItemGroup>
 

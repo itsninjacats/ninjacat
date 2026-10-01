@@ -48,6 +48,9 @@ type Config =
       AutoMigrate: bool
       /// Answer 202 on unknown intake paths (NINJACAT_ACK_UNKNOWN).
       AckUnknown: bool
+      /// DEBUG=true: every intake request is also dumped to CaptureDir.
+      Debug: bool
+      CaptureDir: string
       SelfMonitorInterval: TimeSpan
       SelfMonitorTenant: string
       SelfMonitorHost: string }
@@ -77,6 +80,8 @@ let load () =
         | url -> url
       AutoMigrate = envOr "NINJACAT_AUTO_MIGRATE" "true" <> "false"
       AckUnknown = envOr "NINJACAT_ACK_UNKNOWN" "" = "true"
+      Debug = envOr "DEBUG" "" = "true"
+      CaptureDir = envOr "NINJACAT_CAPTURE_DIR" "captures"
       SelfMonitorInterval = duration "NINJACAT_SELFMON_INTERVAL" (TimeSpan.FromSeconds 15.0)
       SelfMonitorTenant = envOr "NINJACAT_SELFMON_TENANT" "default"
       SelfMonitorHost = envOr "NINJACAT_SELFMON_HOST" "" }
