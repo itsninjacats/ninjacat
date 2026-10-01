@@ -2,5 +2,17 @@
   "TestHandleLogsKeepsAnUndecodableBodyRaw/001": {
     "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
     "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestHandleContainerPayloadsStoreRawWhenUndecodable__image_garbage/001": {
+    "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
+    "why": "The note quotes the protobuf parser's error, and Google.Protobuf words it differently from Go's protobuf library."
+  },
+  "TestHandleContainerPayloadsStoreRawWhenUndecodable__lifecycle_garbage/001": {
+    "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
+    "why": "The note quotes the protobuf parser's error, and Google.Protobuf words it differently from Go's protobuf library."
+  },
+  "TestHandleKubeActionsStoresRowsAndRaw/002": {
+    "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
+    "why": "The note quotes encoding/json's type error, which names a Go type ([]jsontext.Value); the F# note says the same thing in its own words."
   }
 }
