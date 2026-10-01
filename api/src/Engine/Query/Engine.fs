@@ -164,7 +164,11 @@ let timeseries
             { From = Some(request.From.ToUnixTimeMilliseconds())
               To = Some(request.To.ToUnixTimeMilliseconds())
               Interval = request.Interval |> Option.map (fun i -> int64 i.TotalMilliseconds)
-              Queries = request.Queries |> List.map (fun q -> { DataSource = "metrics"; Name = Some q.Name; Query = q.Query })
+              Queries =
+                Some(
+                    request.Queries
+                    |> List.map (fun q -> ({ DataSource = "metrics"; Name = Some q.Name; Query = q.Query }: Wire.MetricsTimeseriesQuery))
+                )
               Formulas =
                 match request.Formulas with
                 | [] -> None
@@ -247,7 +251,11 @@ let scalar
             { From = Some(request.From.ToUnixTimeMilliseconds())
               To = Some(request.To.ToUnixTimeMilliseconds())
               Interval = None
-              Queries = request.Queries |> List.map (fun q -> { DataSource = "metrics"; Name = Some q.Name; Query = q.Query })
+              Queries =
+                Some(
+                    request.Queries
+                    |> List.map (fun q -> ({ DataSource = "metrics"; Name = Some q.Name; Query = q.Query }: Wire.MetricsTimeseriesQuery))
+                )
               Formulas =
                 match request.Formulas with
                 | [] -> None

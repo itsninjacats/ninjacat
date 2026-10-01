@@ -2,7 +2,7 @@
 ///
 /// Two steps, kept apart so each has one kind of error:
 ///
-///   decode   JSON → Wire types                FSharp.SystemTextJson; "missing field 'from'"
+///   decode   JSON → Wire types                the deserializer; "missing field 'from'"
 ///   parse    Wire → ParsedTimeseriesRequest   "queries[0]: expecting '}' at column 23"
 ///
 /// Errors inside query and formula strings are all reported, not just the
@@ -46,39 +46,6 @@ type ParsedTimeseriesRequest =
 
 // --- decode: JSON → Wire -----------------------------------------------
 
-/// Where each Wire record sits in the body, so an error names a JSON location
-/// instead of a .NET type the client has never heard of.
-let private locations =
-    [ nameof TimeseriesFormulaQueryRequest, "the body"
-      nameof TimeseriesFormulaRequest, "data"
-      nameof TimeseriesFormulaRequestAttributes, "data.attributes"
-      nameof MetricsTimeseriesQuery, "data.attributes.queries[]"
-      nameof QueryFormula, "data.attributes.formulas[]"
-      nameof FormulaLimit, "data.attributes.formulas[].limit" ]
-
-/// Turns a deserializer's message into one about the request body, given where
-/// each Wire record sits in it. Shared with the scalar request.
-let describeWith (locations: (string * string) list) (message: string) =
-    let locate (typeName: string) =
-        locations |> List.tryFind (fst >> (=) typeName) |> Option.map snd
-
-    let missing = Text.RegularExpressions.Regex.Match(message, @"^Missing field for record type [\w.+]*\+(\w+): (\w+)")
-    let notList = Text.RegularExpressions.Regex.Match(message, @"^Failed to parse type .*FSharpList.*?\+(\w+),.*expected JSON array")
-
-    // "... could not be converted to System.Int64. Path: $ | LineNumber: 0 | ..."
-    // — the path is always `$` here, which only misleads; the position does not.
-    let converted = Text.RegularExpressions.Regex.Match(message, @"could not be converted to System\.(\w+)\..*(LineNumber: \d+ \| BytePositionInLine: \d+)")
-
-    match () with
-    | _ when missing.Success && (locate missing.Groups[1].Value).IsSome ->
-        $"missing field '{missing.Groups[2].Value}' in {(locate missing.Groups[1].Value).Value}"
-    | _ when notList.Success && (locate notList.Groups[1].Value).IsSome ->
-        $"{(locate notList.Groups[1].Value).Value.TrimEnd('[', ']')} must be a JSON array"
-    | _ when converted.Success ->
-        let expected = if converted.Groups[1].Value.StartsWith "Int" then "an integer" else converted.Groups[1].Value
-        $"expected {expected} at {converted.Groups[2].Value}"
-    | _ -> message.Replace("Path: $ | ", "")
-
 /// What the deserializer lets through but the spec requires.
 let private required (body: TimeseriesFormulaQueryRequest) : string list =
     let missing where name (value: obj) =
@@ -89,7 +56,8 @@ let private required (body: TimeseriesFormulaQueryRequest) : string list =
     [ yield! missing "data" "type" body.Data.Type
       if a.From.IsNone then "missing field 'from' in data.attributes"
       if a.To.IsNone then "missing field 'to' in data.attributes"
-      for q in a.Queries do
+      if a.Queries.IsNone then "missing field 'queries' in data.attributes"
+      for q in defaultArg a.Queries [] do
           yield! missing "data.attributes.queries[]" "data_source" q.DataSource
           // Only a metrics query has `query`; the others (logs: `search`, …)
           // are refused by data_source in parse, with a better message.
@@ -99,9 +67,9 @@ let private required (body: TimeseriesFormulaQueryRequest) : string list =
           yield! missing "data.attributes.formulas[]" "formula" f.Formula ]
     |> List.distinct
 
-/// Structural errors mostly stop at the first one — that is what the
-/// deserializer gives. Errors inside query and formula strings are all
-/// collected (parse).
+/// A body that is not JSON, or holds a value of the wrong type, is reported
+/// in the deserializer's own words, and it stops at the first. Errors inside
+/// query and formula strings are all collected (parse).
 let decode (json: string) : Result<TimeseriesFormulaRequestAttributes, string list> =
     try
         match JsonSerializer.Deserialize<TimeseriesFormulaQueryRequest>(json, NinjaCat.Api.Engine.Json.options) with
@@ -114,7 +82,7 @@ let decode (json: string) : Result<TimeseriesFormulaRequestAttributes, string li
             | [] -> Error [ "API input validation failed: Invalid type. Expected \"timeseries_request\"." ]
             | errors -> Error errors
     with :? JsonException as e ->
-        Error [ $"invalid request body: {describeWith locations e.Message}" ]
+        Error [ $"invalid request body: {e.Message}" ]
 
 // --- parse: Wire → ParsedTimeseriesRequest --------------------------------------------------
 
@@ -132,11 +100,12 @@ let parse (raw: TimeseriesFormulaRequestAttributes) : Result<ParsedTimeseriesReq
     let errors = ResizeArray<string>()
 
     let from, to' = raw.From.Value, raw.To.Value
+    let sentQueries = defaultArg raw.Queries []
 
     if from >= to' then
         errors.Add "data.attributes.from must be earlier than data.attributes.to"
 
-    if raw.Queries.IsEmpty then
+    if sentQueries.IsEmpty then
         errors.Add "data.attributes.queries must not be empty"
 
     match raw.Interval with
@@ -144,7 +113,7 @@ let parse (raw: TimeseriesFormulaRequestAttributes) : Result<ParsedTimeseriesReq
     | _ -> ()
 
     let queries =
-        raw.Queries
+        sentQueries
         |> List.mapi (fun i (q: MetricsTimeseriesQuery) ->
             let label = $"""queries[{i}]{q.Name |> Option.map (sprintf " (%s)") |> Option.defaultValue ""}"""
 

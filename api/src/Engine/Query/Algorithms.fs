@@ -7,14 +7,10 @@
 module NinjaCat.Api.Engine.Query.Algorithms
 
 open System
+open MathNet.Numerics
+open MathNet.Numerics.Statistics
 
-let median (xs: float[]) =
-    if xs.Length = 0 then
-        nan
-    else
-        let s = Array.sort xs
-        let m = s.Length / 2
-        if s.Length % 2 = 1 then s[m] else (s[m - 1] + s[m]) / 2.0
+let median (xs: float[]) : float = Statistics.Median xs
 
 /// Median absolute deviation from the median.
 let mad (xs: float[]) =
@@ -148,8 +144,8 @@ let private roughness (xs: float[]) =
         sqrt (d |> Array.averageBy (fun x -> (x - m) ** 2.0))
 
 /// Trailing moving average over `w` points.
-let movingAverage (w: int) (ys: float[]) =
-    ys |> Array.mapi (fun i _ -> ys[max 0 (i - w + 1) .. i] |> Array.average)
+let movingAverage (w: int) (ys: float[]) : float[] =
+    Statistics.MovingAverage(ys, w) |> Array.ofSeq
 
 /// The window autosmooth picks for these values.
 ///
@@ -202,7 +198,7 @@ let dbscanOutliers (scaled: bool) (tolerance: float) (rows: float[][]) : bool[] 
     else
         let times = rows[0].Length
         let med = Array.init times (fun t -> rows |> Array.map (fun r -> r[t]) |> median)
-        let dist (a: float[]) (b: float[]) = Array.map2 (fun x y -> (x - y) * (x - y)) a b |> Array.sum |> sqrt
+        let dist (a: float[]) (b: float[]) = Distance.Euclidean(a, b)
         let threshold = rows |> Array.map (dist med) |> median
 
         let threshold =

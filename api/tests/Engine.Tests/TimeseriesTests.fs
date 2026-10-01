@@ -114,14 +114,18 @@ let ``from must be before to`` () =
     Assert.Contains("data.attributes.from must be earlier than data.attributes.to", es)
 
 [<Fact>]
-let ``wrong JSON types are named`` () =
-    Assert.Equal<string list>(
-        [ "invalid request body: data.attributes.queries must be a JSON array" ],
-        errorsOf (body """ "from":1,"to":2,"queries":{} """)
-    )
+let ``wrong JSON types are reported in the deserializer's own words`` () =
+    let notAList = Assert.Single(errorsOf (body """ "from":1,"to":2,"queries":{} """))
+    Assert.StartsWith("invalid request body: ", notAList)
+    Assert.Contains("expected JSON array", notAList)
 
-    let e = Assert.Single(errorsOf (body """ "from":"yesterday","to":1000,"queries":[] """))
-    Assert.StartsWith("invalid request body: expected an integer", e)
+    let notANumber = Assert.Single(errorsOf (body """ "from":"yesterday","to":1000,"queries":[] """))
+    Assert.StartsWith("invalid request body: ", notANumber)
+    Assert.Contains("could not be converted to System.Int64", notANumber)
+
+[<Fact>]
+let ``queries is required`` () =
+    Assert.Equal<string list>([ "missing field 'queries' in data.attributes" ], errorsOf (body """ "from":1,"to":2 """))
 
 [<Fact>]
 let ``not JSON at all`` () =

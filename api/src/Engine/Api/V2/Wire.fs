@@ -37,7 +37,8 @@ type TimeseriesFormulaRequestAttributes =
       To: int64 option
       /// A hint: Datadog may widen it, and picks one itself when absent.
       Interval: int64 option
-      Queries: MetricsTimeseriesQuery list
+      /// Required; an option so that its absence is ours to report.
+      Queries: MetricsTimeseriesQuery list option
       Formulas: QueryFormula list option }
 
 type TimeseriesFormulaRequest =
@@ -118,7 +119,7 @@ type MetricsScalarQuery =
 type ScalarFormulaRequestAttributes =
     { From: int64 option
       To: int64 option
-      Queries: MetricsScalarQuery list
+      Queries: MetricsScalarQuery list option
       Formulas: QueryFormula list option }
 
 type ScalarFormulaRequest =

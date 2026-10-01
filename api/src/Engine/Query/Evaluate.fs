@@ -145,11 +145,6 @@ let private alongTime (fn: TimewiseFn) (stepMs: int64) (s: Series) : Series =
     let window n (f: float[] -> float) =
         pts |> Array.mapi (fun i (t, _) -> t, pts[max 0 (i - n + 1) .. i] |> Array.map snd |> f)
 
-    let median (xs: float[]) =
-        let sorted = Array.sort xs
-        let m = sorted.Length / 2
-        if sorted.Length % 2 = 1 then sorted[m] else (sorted[m - 1] + sorted[m]) / 2.0
-
     let out =
         match fn with
         | Cumsum -> pts |> Array.scan (fun (_, acc) (t, v) -> t, acc + v) (0L, 0.0) |> Array.tail
@@ -173,7 +168,7 @@ let private alongTime (fn: TimewiseFn) (stepMs: int64) (s: Series) : Series =
             match pts with
             | [||] -> [||]
             | _ -> pts |> Array.tail |> Array.scan (fun (_, e) (t, v) -> t, alpha * v + (1.0 - alpha) * e) pts[0]
-        | Median n -> window n median
+        | Median n -> window n Algorithms.median
         | RollingAvg n -> window n Array.average
         | TrendLine
         | RobustTrend when pts.Length > 0 ->

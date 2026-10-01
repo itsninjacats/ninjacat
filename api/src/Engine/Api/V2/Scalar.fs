@@ -35,14 +35,6 @@ type ParsedScalarRequest =
       /// formula text for every formula.
       ColumnNames: string list }
 
-let private locations =
-    [ nameof ScalarFormulaQueryRequest, "the body"
-      nameof ScalarFormulaRequest, "data"
-      nameof ScalarFormulaRequestAttributes, "data.attributes"
-      nameof MetricsScalarQuery, "data.attributes.queries[]"
-      nameof QueryFormula, "data.attributes.formulas[]"
-      nameof FormulaLimit, "data.attributes.formulas[].limit" ]
-
 /// "mean" is listed beside "avg" in the spec's enum, and means the same.
 ///
 /// WARNING(undocumented): "percentile". It applies to distribution metrics
@@ -72,7 +64,8 @@ let decode (json: string) : Result<ScalarFormulaRequestAttributes, string list> 
                 [ if isNull body.Data.Type then "missing field 'type' in data"
                   if a.From.IsNone then "missing field 'from' in data.attributes"
                   if a.To.IsNone then "missing field 'to' in data.attributes"
-                  for q in a.Queries do
+                  if a.Queries.IsNone then "missing field 'queries' in data.attributes"
+                  for q in defaultArg a.Queries [] do
                       if isNull q.DataSource then "missing field 'data_source' in data.attributes.queries[]"
                       if q.DataSource = "metrics" && isNull q.Query then "missing field 'query' in data.attributes.queries[]"
                       if q.DataSource = "metrics" && isNull q.Aggregator then "missing field 'aggregator' in data.attributes.queries[]" ]
@@ -83,19 +76,21 @@ let decode (json: string) : Result<ScalarFormulaRequestAttributes, string list> 
             | [] -> Error [ "API input validation failed: Invalid type. Expected \"scalar_request\"." ]
             | errors -> Error errors
     with :? JsonException as e ->
-        Error [ $"invalid request body: {describeWith locations e.Message}" ]
+        Error [ $"invalid request body: {e.Message}" ]
 
 let parse (raw: ScalarFormulaRequestAttributes) : Result<ParsedScalarRequest, string list> =
     // The same attributes a timeseries request has, without an interval: the
     // step falls back to Datadog's table for the window.
+    let queries = defaultArg raw.Queries []
+
     let asTimeseries: TimeseriesFormulaRequestAttributes =
         { From = raw.From
           To = raw.To
           Interval = None
-          Queries = raw.Queries |> List.map (fun q -> { DataSource = q.DataSource; Name = q.Name; Query = q.Query })
+          Queries = Some(queries |> List.map (fun q -> { DataSource = q.DataSource; Name = q.Name; Query = q.Query }))
           Formulas = raw.Formulas }
 
-    let aggregators = raw.Queries |> List.mapi (fun i q -> if q.DataSource = "metrics" then aggregator i q.Aggregator else Ok ScalarAvg)
+    let aggregators = queries |> List.mapi (fun i q -> if q.DataSource = "metrics" then aggregator i q.Aggregator else Ok ScalarAvg)
     let aggErrors = aggregators |> List.choose (function Error e -> Some e | Ok _ -> None)
 
     match Timeseries.parse asTimeseries, aggErrors with
@@ -103,7 +98,7 @@ let parse (raw: ScalarFormulaRequestAttributes) : Result<ParsedScalarRequest, st
         let names =
             match raw.Formulas with
             | Some fs when not fs.IsEmpty -> fs |> List.map _.Formula
-            | _ -> raw.Queries |> List.mapi (fun i q -> defaultArg q.Name $"query{i + 1}")
+            | _ -> queries |> List.mapi (fun i q -> defaultArg q.Name $"query{i + 1}")
 
         Ok
             { Request = request
