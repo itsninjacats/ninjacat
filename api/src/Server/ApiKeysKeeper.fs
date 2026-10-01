@@ -12,13 +12,17 @@ open NinjaCat.Api.Intake
 /// start-up, then every 30 seconds, and at once when the panel says a key
 /// was added or removed.
 ///
+/// The panel says so through Postgres (NOTIFY on `channel`), the one thing
+/// both already share: the intake needs no port for the panel to call.
+///
 /// Postgres holds only the SHA-256 of each key, which is what the intake
 /// looks up by.
 type ApiKeysKeeper(db: NpgsqlDataSource, store: ApiKeys.Store, log: ILogger<ApiKeysKeeper>) =
     inherit BackgroundService()
 
+    /// The same name is in the panel (frontend/src/lib/server/api-keys.ts).
+    let channel = "ninjacat_api_keys"
     let refreshInterval = TimeSpan.FromSeconds 30.0
-    let wake = new SemaphoreSlim(0, 1)
 
     let fetch (ct: CancellationToken) : Task =
         task {
@@ -43,13 +47,18 @@ type ApiKeysKeeper(db: NpgsqlDataSource, store: ApiKeys.Store, log: ILogger<ApiK
             store.Publish keys
         }
 
-    /// Reads the keys again now, without waiting for the next round.
-    member _.RequestRefresh() : unit =
-        try
-            wake.Release() |> ignore
-        with :? SemaphoreFullException ->
-            // A refresh is already pending; one is enough.
-            ()
+    /// Re-reads the keys at every notification and every interval, until
+    /// the connection breaks. LISTEN belongs to a session, so it holds one.
+    let listenAndRefresh (ct: CancellationToken) : Task =
+        task {
+            use! listener = db.OpenConnectionAsync ct
+            use listen = new NpgsqlCommand($"LISTEN {channel}", listener)
+            let! _ = listen.ExecuteNonQueryAsync ct
+
+            while not ct.IsCancellationRequested do
+                let! _ = listener.WaitAsync(refreshInterval, ct)
+                do! fetch ct
+        }
 
     /// Reads the keys once, now. Called before the intake accepts anything:
     /// with no keys every agent would be answered 403, which tells it to stop.
@@ -61,10 +70,16 @@ type ApiKeysKeeper(db: NpgsqlDataSource, store: ApiKeys.Store, log: ILogger<ApiK
         task {
             while not ct.IsCancellationRequested do
                 try
-                    let! _ = wake.WaitAsync(refreshInterval, ct)
-                    do! fetch ct
+                    do! listenAndRefresh ct
                 with
                 | :? OperationCanceledException -> ()
-                // The old keys stay in force; the next round tries again.
-                | e -> log.LogWarning("keeper: refresh failed: {Error}", e.Message)
+                | e ->
+                    // The old keys stay in force. A Postgres that is down is
+                    // asked again after the interval, not in a tight loop.
+                    log.LogWarning("keeper: refresh failed: {Error}", e.Message)
+
+                    try
+                        do! Task.Delay(refreshInterval, ct)
+                    with :? OperationCanceledException ->
+                        ()
         }

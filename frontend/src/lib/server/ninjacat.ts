@@ -8,9 +8,6 @@ import { env } from '$env/dynamic/private';
 // address exists.
 const BASE = env.NINJACAT_INTERNAL_URL || 'http://localhost:8081';
 
-// Control calls are best-effort and must never hold up a page.
-const CONTROL_TIMEOUT_MS = 2000;
-
 // Queries hit ClickHouse, so they get more room. Still shorter than the
 // server's own budget, so a slow query surfaces as our timeout rather than
 // hanging a request handler.
@@ -358,31 +355,4 @@ export async function fetchLogFacets(from: string, to?: string): Promise<LogFace
 		hosts: body.hosts ?? [],
 		statuses: body.statuses ?? []
 	};
-}
-
-/**
- * Asks the server to re-read the API keys from the database now.
- *
- * Called after a key is added or removed so the change takes effect
- * immediately instead of waiting for the periodic refresh.
- *
- * NEVER throws: a server that is down must not break an operation that
- * already succeeded in Postgres — the keeper will pick the key up within 30
- * seconds anyway. It reports whether it worked instead.
- */
-export async function refreshApiKeys(): Promise<{ ok: boolean; reason?: string }> {
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), CONTROL_TIMEOUT_MS);
-	try {
-		const res = await fetch(`${BASE}/internal/apikeys/refresh`, {
-			method: 'POST',
-			signal: controller.signal
-		});
-		if (!res.ok) return { ok: false, reason: `server responded ${res.status}` };
-		return { ok: true };
-	} catch (e) {
-		return { ok: false, reason: e instanceof Error ? e.message : 'unknown error' };
-	} finally {
-		clearTimeout(timer);
-	}
 }

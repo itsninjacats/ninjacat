@@ -2,8 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import { desc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { apiKey } from '$lib/server/db/schema';
-import { nowyKlucz, skrotKlucza, prefiks } from '$lib/server/api-keys';
-import { refreshApiKeys } from '$lib/server/ninjacat';
+import { nowyKlucz, skrotKlucza, prefiks, refreshApiKeys } from '$lib/server/api-keys';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {

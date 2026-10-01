@@ -13,7 +13,7 @@ Two kinds:
 
 ```sh
 docker compose up -d postgres clickhouse migrate   # the dev stack's databases
-lab/server.sh up                                   # builds api/, starts it, mints a temporary key
+lab/server.sh up                                   # builds api/, starts its intake, mints a temporary key
 …runs…
 lab/server.sh down                                 # removes all of it
 ```

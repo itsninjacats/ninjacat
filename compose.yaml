@@ -1,17 +1,29 @@
 # NinjaCat — development stack.
 #
-#   docker compose up            everything, with hot reload on both sides
+#   docker compose up            everything, with hot reload
 #   docker compose up -d postgres clickhouse   just the databases, if you run the apps on the host
 #
-# Both application services rebuild themselves on save: the server through
-# `dotnet watch`, the panel through Vite's dev server. Source is bind-mounted,
+# The application services rebuild themselves on save: the server's two
+# processes through `dotnet watch`, the panel through Vite's dev server. Source is bind-mounted,
 # so an edit on the host is an edit in the container.
 #
-# Databases publish on 127.0.0.1 only. They have passwords, but exposing a
-# development database on 0.0.0.0 is a separate decision — drop the prefix if
-# you mean to make it.
+# Databases and the query process publish on 127.0.0.1 only. The databases
+# have passwords, the query process asks for nothing at all; exposing either
+# on 0.0.0.0 is a separate decision — drop the prefix if you mean to make it.
 
 name: ninjacat
+
+x-server-environment: &server-environment
+  DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
+  CLICKHOUSE_HTTP_ADDR: clickhouse:8123
+  CLICKHOUSE_DB: ninjacat
+  CLICKHOUSE_USER: ninjacat
+  CLICKHOUSE_PASSWORD: ninjacat
+  NINJACAT_ARTIFACTS_PATH: /artifacts
+  # Polling, because inotify events do not cross the bind mount everywhere.
+  DOTNET_USE_POLLING_FILE_WATCHER: "true"
+  # The .NET SDK reports its own usage to Microsoft unless told not to.
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
 
 services:
   clickhouse:
@@ -81,37 +93,55 @@ services:
       postgres: { condition: service_healthy }
     restart: "no"
 
-  # The server: agent intake, panel API and query API in one process.
-  # `dotnet watch` rebuilds on save. It reaches ClickHouse over HTTP (:8123).
-  api:
+  # The server is one program run as two processes, so that what agents can
+  # reach and what the panel reads from share neither a port nor a container.
+  # Both rebuild on save through `dotnet watch`, each into its own volume:
+  # two builds of the same tree must not write the same files.
+
+  # What agents send to. It owns every write to ClickHouse and its schema.
+  intake:
     image: mcr.microsoft.com/dotnet/sdk:10.0
-    container_name: ninjacat-api
+    container_name: ninjacat-intake
     restart: unless-stopped
     working_dir: /app
-    command: ["dotnet", "watch", "--project", "src/Server", "run", "--non-interactive"]
+    command: ["dotnet", "watch", "--project", "src/Server", "run", "--non-interactive", "--", "intake"]
     ports:
-      - "8080:8080"     # agent intake — reachable from agent machines
-      - "8081:8081"     # panel and query API — internal
+      - "8080:8080"     # reachable from agent machines
       - "10516:10516"   # logs over TCP, for agents with force_use_tcp
     environment:
-      DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
-      CLICKHOUSE_HTTP_ADDR: clickhouse:8123
-      CLICKHOUSE_DB: ninjacat
-      CLICKHOUSE_USER: ninjacat
-      CLICKHOUSE_PASSWORD: ninjacat
+      <<: *server-environment
       NINJACAT_ADDR: ":8080"
-      NINJACAT_INTERNAL_ADDR: ":8081"
       NINJACAT_CAPTURE_DIR: /data/captures
       DEBUG: "true"
-      NINJACAT_ARTIFACTS_PATH: /artifacts
-      # Polling, because inotify events do not cross the bind mount everywhere.
-      DOTNET_USE_POLLING_FILE_WATCHER: "true"
     volumes:
       - ./api:/app
       - ./api/captures:/data/captures
       # Build output lives here, not in the bind mount (see NINJACAT_ARTIFACTS_PATH),
       # so host and container builds never collide.
-      - api-artifacts:/artifacts
+      - intake-artifacts:/artifacts
+      - nuget-cache:/root/.nuget/packages
+    depends_on:
+      clickhouse: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+
+  # What the panel reads from: the panel's and the query API. It only reads.
+  # Nothing on its port asks for a key, so it is published on the loopback
+  # alone; the panel's container reaches it over the compose network.
+  query:
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    container_name: ninjacat-query
+    restart: unless-stopped
+    working_dir: /app
+    command: ["dotnet", "watch", "--project", "src/Server", "run", "--non-interactive", "--", "query"]
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      <<: *server-environment
+      NINJACAT_INTERNAL_ADDR: ":8081"
+    volumes:
+      - ./api:/app
+      - query-artifacts:/artifacts
       - nuget-cache:/root/.nuget/packages
     depends_on:
       clickhouse: { condition: service_healthy }
@@ -128,8 +158,8 @@ services:
       - "5173:5173"
     environment:
       DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
-      # The panel talks to :8081, never to the agent intake on :8080.
-      NINJACAT_INTERNAL_URL: http://api:8081
+      # The panel talks to the query process, never to the agent intake.
+      NINJACAT_INTERNAL_URL: http://query:8081
       ORIGIN: http://localhost:5173
       BETTER_AUTH_SECRET: dev-only-secret-change-me-in-production-32ch
     volumes:
@@ -148,5 +178,6 @@ volumes:
   pgdata:
   frontend-node-modules:
   frontend-svelte-kit:
-  api-artifacts:
+  intake-artifacts:
+  query-artifacts:
   nuget-cache:

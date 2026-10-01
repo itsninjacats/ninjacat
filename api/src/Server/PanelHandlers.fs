@@ -224,25 +224,11 @@ let logFacets: EndpointHandler =
                 | _, _, Error e -> return! fail 400 e ctx
         }
 
-/// The panel calls this after adding or removing a key, so the change takes
-/// effect now rather than at the keeper's next round.
-let refreshKeys: EndpointHandler =
-    fun ctx ->
-        ctx.GetService<ApiKeysKeeper>().RequestRefresh()
-        (setStatusCode 202 >=> json {| status = "refresh requested" |}) ctx
-
-let keyStatus: EndpointHandler =
-    fun ctx ->
-        let snapshot = ctx.GetService<ApiKeys.Store>().Current
-        ctx.WriteJson {| keys = snapshot.ByHash.Count; refreshed = snapshot.UpdatedAt |}
-
 let endpoints =
     [ subRoute
           "/internal"
-          [ POST [ route "/apikeys/refresh" refreshKeys ]
-            GET
-                [ route "/apikeys/status" keyStatus
-                  route "/metrics/names" metricNames
+          [ GET
+                [ route "/metrics/names" metricNames
                   route "/metrics/hosts" metricHosts
                   route "/metrics/tags" metricTagKeys
                   route "/metrics/tag-values" metricTagValues

@@ -66,14 +66,17 @@ services:
       postgres: { condition: service_healthy }
     restart: "no"
 
-  api:
+  # The server is one image run as two processes, so that what agents can
+  # reach and what the panel reads from share neither a port nor a container.
+
+  # What agents send to. It owns every write to ClickHouse and its schema.
+  intake:
+    image: ninjacat/api:local
     build:
       context: ./api
+    command: ["intake"]
     restart: unless-stopped
     ports:
-      # The intake must be reachable by the agents. The internal port 8081 is
-      # deliberately NOT published — only the frontend container needs it,
-      # and it reaches it over the compose network.
       - "8080:8080"
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-ninjacat}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ninjacat}
@@ -82,11 +85,31 @@ services:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-ninjacat}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
       NINJACAT_ADDR: ":8080"
-      NINJACAT_INTERNAL_ADDR: ":8081"
     depends_on:
       clickhouse: { condition: service_healthy }
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
+
+  # What the panel reads from. Its port is deliberately NOT published:
+  # nothing on it asks for a key, and only the frontend container needs it,
+  # over the compose network. It only reads, so it can be given a ClickHouse
+  # user of its own that cannot write (CLICKHOUSE_QUERY_USER).
+  query:
+    image: ninjacat/api:local
+    command: ["query"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-ninjacat}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ninjacat}
+      CLICKHOUSE_HTTP_ADDR: clickhouse:8123
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ninjacat}
+      CLICKHOUSE_USER: ${CLICKHOUSE_QUERY_USER:-${CLICKHOUSE_USER:-ninjacat}}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_QUERY_PASSWORD:-${CLICKHOUSE_PASSWORD}}
+      NINJACAT_INTERNAL_ADDR: ":8081"
+    depends_on:
+      clickhouse: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      # Built there, and it creates the tables this one reads.
+      intake: { condition: service_started }
 
   frontend:
     image: ninjacat/frontend:local
@@ -97,14 +120,14 @@ services:
       - "3000:3000"
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-ninjacat}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ninjacat}
-      NINJACAT_INTERNAL_URL: http://api:8081
+      NINJACAT_INTERNAL_URL: http://query:8081
       # Must be the URL users actually reach, or form actions and auth break.
       ORIGIN: ${ORIGIN:?set ORIGIN, e.g. https://ninjacat.example.com}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
     depends_on:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
-      api: { condition: service_started }
+      query: { condition: service_started }
 
 volumes:
   clickhouse-data:

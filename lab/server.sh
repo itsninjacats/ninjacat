@@ -23,7 +23,7 @@ case ${1:-} in
       -e DEBUG=true -e NINJACAT_CAPTURE_DIR=/data/captures \
       -e DATABASE_URL=postgres://root:mysecretpassword@postgres:5432/local \
       -e CLICKHOUSE_HTTP_ADDR=clickhouse:8123 -e CLICKHOUSE_DB=ninjacat_lab \
-      -e NINJACAT_SELFMON_TENANT=lab-self -e NINJACAT_LOGS_TCP_ADDR=off ninjacat/api:lab >/dev/null
+      -e NINJACAT_SELFMON_TENANT=lab-self -e NINJACAT_LOGS_TCP_ADDR=off ninjacat/api:lab intake >/dev/null
     aliases=""
     for host in app agent-http-intake.logs process trace.agent dbm-metrics-intake sds-intake ndm-intake snmp-traps-intake ndmflow-intake netpath-intake; do
       aliases="$aliases --alias $host.ninjacat.lab"

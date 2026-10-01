@@ -1,13 +1,17 @@
 # ninjacat-api
 
-The NinjaCat server, in F#: one process that takes what Datadog Agents send,
-stores it in ClickHouse and answers queries about it.
+The NinjaCat server, in F#. One program, run as two processes that share
+ClickHouse and Postgres and nothing else: `intake` takes what Datadog Agents
+send and stores it, `query` answers questions about it. There is no mode that
+does both, so what agents can reach and what the panel reads from never share
+a port or a container.
 
-| Port | Who reaches it | What it serves |
-| --- | --- | --- |
-| 8080 (`NINJACAT_ADDR`) | agent machines | the intake: Datadog's wire protocol, behind an API key |
-| 8081 (`NINJACAT_INTERNAL_ADDR`) | the panel only | `/internal/*` for the panel and Datadog's query API. No key is asked for, so it stays on an internal network |
-| 10516 (`NINJACAT_LOGS_TCP_ADDR`) | agent machines | the agent's TCP transport for logs; `off` disables it |
+| Process | Port | Who reaches it | What it serves |
+| --- | --- | --- | --- |
+| `ninjacat-api intake` | 8080 (`NINJACAT_ADDR`) | agent machines | the intake: Datadog's wire protocol, behind an API key |
+| | 10516 (`NINJACAT_LOGS_TCP_ADDR`) | agent machines | the agent's TCP transport for logs; `off` disables it |
+| `ninjacat-api query` | 8081 (`NINJACAT_INTERNAL_ADDR`) | the panel only | `/internal/*` for the panel and Datadog's query API. No key is asked for, so it stays on an internal network. It only reads, and can be given a ClickHouse user that cannot write |
+| `ninjacat-api migrate` | | | applies the ClickHouse migrations and exits |
 
 The query side speaks Datadog's public API (`/api/v1/...`, `/api/v2/...`)
 rather than one of our own, so the panel, `datadog-api-client`, Terraform and
@@ -45,7 +49,7 @@ service never migrates it, and a table it needs is added there first.
 
 **Routing follows Datadog's hostnames.** Datadog puts every product on its own
 host (`app.<site>`, `trace.agent.<site>`, `http-intake.logs.<site>`, about
-forty more), and so does the table in `Routes.fs`. A host it does not know is
+forty more), and so does `Routes.fs`: one plain chain of host prefixes. A host it does not know is
 refused by name, so a wrong `DD_SITE` fails loudly. That is also why
 `curl localhost:8080/ping` answers 404: send
 `-H 'Host: api.ninjacat.local'`.
@@ -79,7 +83,7 @@ SHA-256 of a key.
    INSERT order), and a migration in `schema/migrations/` if the table is new.
    A migration that has been applied anywhere is never edited; add the next one.
 2. Handlers and their route list in `src/Intake/Routers/<X>.fs`.
-3. The host in `Routes.fs`.
+3. The host in `Routes.fs`: a named intake and a line in the chain.
 4. Tests in `tests/Intake.Tests/<X>Tests.fs`.
 
 `Routers/Logs.fs` with `Rows/Logs.fs` is the example to read first.
@@ -227,9 +231,10 @@ And what the Go server kept as bytes or in `raw_payloads` is decoded:
 ```bash
 dotnet build
 dotnet test
-DATABASE_URL=postgres://root:mysecretpassword@localhost:5433/local \
-  dotnet run --project src/Server        # :8080 intake, :8081 internal
-dotnet watch --project src/Server run    # with reload
+export DATABASE_URL=postgres://root:mysecretpassword@localhost:5433/local
+dotnet run --project src/Server -- intake    # :8080
+dotnet run --project src/Server -- query     # :8081
+dotnet watch --project src/Server run -- intake   # with reload
 dotnet run --project src/Server -- migrate   # apply the ClickHouse migrations and exit
 ```
 
@@ -239,8 +244,8 @@ Package versions live in `Directory.Packages.props` only.
 
 | Variable | Default |
 | --- | --- |
-| `NINJACAT_ADDR` | `:8080` — the intake |
-| `NINJACAT_INTERNAL_ADDR` | `:8081` — panel and query API |
+| `NINJACAT_ADDR` | `:8080` — where `intake` listens |
+| `NINJACAT_INTERNAL_ADDR` | `:8081` — where `query` listens |
 | `NINJACAT_LOGS_TCP_ADDR` | `:10516`; `off` disables the listener |
 | `NINJACAT_TLS_CERT`, `NINJACAT_TLS_KEY` | PEM files; set both and the logs TCP listener speaks TLS |
 | `CLICKHOUSE_HTTP_ADDR` | `localhost:8123` |
@@ -251,7 +256,7 @@ Package versions live in `Directory.Packages.props` only.
 | `DEBUG` | `true` dumps every intake request to `NINJACAT_CAPTURE_DIR` (default `captures`) |
 | `NINJACAT_SELFMON_INTERVAL`, `NINJACAT_SELFMON_TENANT`, `NINJACAT_SELFMON_HOST` | `15s`, `default`, the machine's name |
 
-## Internal endpoints (:8081)
+## What `query` serves (:8081)
 
 | | |
 | --- | --- |
@@ -261,6 +266,9 @@ Package versions live in `Directory.Packages.props` only.
 | `POST /api/v2/query/timeseries`, `/api/v2/query/scalar` | Datadog's v2 query API: queries, formulas, functions |
 | `GET /internal/metrics/{names,hosts,tags,tag-values,query}` | the panel's metric pages |
 | `GET /internal/logs/{search,facets}` | the panel's log pages |
-| `POST /internal/apikeys/refresh`, `GET /internal/apikeys/status` | the panel says a key changed; the keeper's state |
 
 Tenant is `"default"` on this port until requests carry one.
+
+The intake's API keys are not here. The keeper lives in `intake`; the panel
+tells it a key changed with `NOTIFY ninjacat_api_keys` in Postgres, and it
+re-reads them every 30 seconds regardless.

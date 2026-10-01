@@ -5,12 +5,15 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Config.fs" />
+    <Compile Include="Hosting.fs" />
     <Compile Include="ClickHouse.fs" />
     <Compile Include="Postgres.fs" />
     <Compile Include="ApiKeysKeeper.fs" />
     <Compile Include="SelfMonitor.fs" />
     <Compile Include="Handlers.fs" />
     <Compile Include="PanelHandlers.fs" />
+    <Compile Include="IntakeHost.fs" />
+    <Compile Include="QueryHost.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

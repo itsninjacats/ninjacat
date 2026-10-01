@@ -26,8 +26,9 @@ RUN mkdir /data && chown app:app /data
 WORKDIR /data
 USER app
 
-# 8080 agent intake, 8081 panel and query API, 10516 logs over TCP.
+# `intake` listens on 8080 (and 10516, logs over TCP), `query` on 8081.
 EXPOSE 8080 8081 10516
 
-# `migrate` as the only argument applies the ClickHouse migrations and exits.
-ENTRYPOINT ["dotnet", "/app/ninjacat-api.dll"]
+# The command says which process this container is: `intake`, `query`, or
+# `migrate` (apply the ClickHouse migrations and exit). There is no default.
+ENTRYPOINT ["/app/ninjacat-api"]

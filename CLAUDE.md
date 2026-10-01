@@ -40,9 +40,9 @@ The F# server under `api/src/` is already English — match that register: comme
 
 Independent units, no shared build:
 
-- `api/` — **the server**, in F# (.NET 10): agent intake, write path, ClickHouse
-  migrations, panel API and Datadog's query API, one process. `api/README.md` is the
-  detailed guide.
+- `api/` — **the server**, in F# (.NET 10): one program run as two processes. `intake`
+  takes what agents send and owns the write path and the ClickHouse migrations; `query`
+  serves the panel API and Datadog's query API. `api/README.md` is the detailed guide.
 - `frontend/` — SvelteKit 5 panel + Postgres (Better Auth, Drizzle). Bun.
 - `server/` — the Go server that `api/` replaced. **Retired**: compose no longer builds or
   runs it. It stays until it is removed, as the reference the golden fixtures were recorded
@@ -54,11 +54,12 @@ Independent units, no shared build:
 ### Everything at once (repo root)
 
 ```bash
-docker compose up                # full dev stack, hot reload on both sides
+docker compose up                # full dev stack, hot reload
 docker compose up -d postgres clickhouse   # just the databases
-docker compose logs -f api
+docker compose logs -f intake query
 docker compose down -v           # also drops the volumes
 DD_API_KEY=<key> docker compose -f compose.yaml -f compose.lab.yaml up   # capture lab, see below
+NINJACAT_SELF_KEY=<key> docker compose -f compose.yaml -f compose.self.yaml up   # NinjaCat watching itself
 ```
 
 The dev stack bind-mounts both source trees and reloads on save: the server through
@@ -77,8 +78,8 @@ drizzle-kit anywhere near production.
 
 **The ClickHouse schema follows the same shape, owned by the server.** Migrations
 live embedded in the binary (`api/schema/migrations/*.sql`, tracked in a
-`schema_migrations` table with a checksum per file) and are applied at startup — a fresh
-ClickHouse needs no init scripts. The binary's second entrypoint is `ninjacat-api migrate`:
+`schema_migrations` table with a checksum per file) and are applied when the intake
+process starts — a fresh ClickHouse needs no init scripts. `ninjacat-api migrate` does only that:
 apply and exit, for deployments with replicas > 1 where startup races are real — there,
 set `NINJACAT_AUTO_MIGRATE=false` and run the subcommand as a pre-upgrade Job, mirroring
 the frontend's.
@@ -88,8 +89,8 @@ server refuse to start. In the dev stack the migrations are embedded resources t
 `dotnet watch` rebuilds on, so treat a saved migration as already applied. Fix a mistake with the next
 migration, never by editing the file or the ledger.
 
-Ports: 8080 agent intake, 8081 panel and query API (internal), 10516 logs over TCP,
-5173 panel (dev), 5433 Postgres, 8123/9000 ClickHouse.
+Ports: 8080 agent intake, 8081 panel and query API (internal; the dev stack publishes it
+on 127.0.0.1 only), 10516 logs over TCP, 5173 panel (dev), 5433 Postgres, 8123/9000 ClickHouse.
 
 Note the intake routes on the `Host` header, so `curl localhost:8080/ping` returns 404
 by design. Use `curl -H 'Host: api.ninjacat.local' localhost:8080/ping`.
@@ -99,7 +100,8 @@ by design. Use `curl -H 'Host: api.ninjacat.local' localhost:8080/ping`.
 ```bash
 dotnet build
 dotnet test                      # xunit v3 on Microsoft.Testing.Platform (opted in via global.json)
-dotnet run --project src/Server  # :8080 intake, :8081 internal (needs ClickHouse + DATABASE_URL)
+dotnet run --project src/Server -- intake   # :8080 (needs ClickHouse + DATABASE_URL)
+dotnet run --project src/Server -- query    # :8081
 dotnet run --project src/Server -- migrate
 cd tests/Intake.Tests && NINJACAT_GOLDEN_ROUTES=routeLogs dotnet test   # one route set's fixtures
 ```
@@ -137,32 +139,35 @@ Copy `.env.example` to `.env`: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ORIGIN`, a
 
 ## Server architecture
 
-One ASP.NET process (`api/src/Server/Program.fs`), five projects:
+One program (`api/src/Server`, `ninjacat-api`) run as two processes, five projects:
 
 ```
 src/Proto     agent protobuf schemas → generated C#
 src/Engine    query language → SQL text + typed parameters; the panel's queries
 src/Storage   rows, one writer per table, the sink, migrations
 src/Intake    host dispatch, route matching, auth, one router per Datadog product
-src/Server    host: config, the two ports, key keeper, self-monitoring, logs over TCP
+src/Server    the program: config, the two hosts, key keeper, self-monitoring, logs over TCP
 ```
 
-Two HTTP surfaces, deliberately split by port:
+Two processes, deliberately not one (`Program.fs` picks by the first argument; there is no
+mode that serves both ports):
 
-- **:8080 agent intake** (`NINJACAT_ADDR`) — reachable from agent machines; every route
-  asks for an API key.
-- **:8081 internal** (`NINJACAT_INTERNAL_ADDR`) — `/internal/*` for the panel and Datadog's
-  query API (`/api/v1/metrics`, `/api/v2/query/*`). No key, so it must stay internal.
+- **`ninjacat-api intake`, :8080** (`NINJACAT_ADDR`, `IntakeHost.fs`) — reachable from agent
+  machines; every route asks for an API key. Owns every write: the table writers, the
+  schema, the key keeper, self-monitoring, logs over TCP.
+- **`ninjacat-api query`, :8081** (`NINJACAT_INTERNAL_ADDR`, `QueryHost.fs`) — `/internal/*`
+  for the panel and Datadog's query API (`/api/v1/metrics`, `/api/v2/query/*`). It only
+  reads. No key is asked for, so it must stay on a network only the panel reaches.
 
-`Program.fs` branches on the local port: a request on the intake port never reaches the
-internal routes, and the reverse.
+They share ClickHouse and Postgres and nothing else. The panel tells the intake that a key
+changed through Postgres (`NOTIFY ninjacat_api_keys`), so the intake has no port for the panel.
 
 ### The rules that shape this code
 
 **Host-based routing mirrors Datadog.** `Intake/Routes.fs` dispatches on the `Host` header,
 because Datadog puts every product on its own hostname (`app.<site>`, `trace.agent.<site>`,
-`http-intake.logs.<site>`, ~40 more). The table there is the map from Datadog host → router;
-keep it in sync when adding one. Unknown hosts are refused by name so a misconfigured
+`http-intake.logs.<site>`, ~40 more). It is one plain `if`/`elif` chain of host prefixes, each
+with the agent setting that points at it; a new router gets a line there. Unknown hosts are refused by name so a misconfigured
 `DD_SITE` fails loudly.
 
 **Handlers are functions `Request -> Response`.** `Intake/Engine.fs` reads and decompresses

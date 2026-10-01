@@ -11,7 +11,7 @@
 # agent's flags or on what its next version adds.
 
 services:
-  api:
+  intake:
     networks:
       default: {}
       # The intake routes on the Host header, so the agent needs Datadog-shaped
@@ -26,7 +26,7 @@ services:
   agent:
     image: datadog/agent:7
     container_name: ninjacat-lab-agent
-    depends_on: [api]
+    depends_on: [intake]
     networks: [lab]
     environment:
       DD_API_KEY: ${DD_API_KEY:?create a key in the panel and pass it as DD_API_KEY}

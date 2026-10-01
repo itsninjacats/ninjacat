@@ -26,10 +26,11 @@ let private duration (key: string) (fallback: TimeSpan) : TimeSpan =
     | _ -> fallback
 
 type Config =
-    { /// Where agents send (NINJACAT_ADDR). Reachable from agent machines.
+    { /// Where the intake process listens (NINJACAT_ADDR). Reachable from
+      /// agent machines.
       IntakeUrl: string
-      /// The panel's and the query API's port (NINJACAT_INTERNAL_ADDR).
-      /// Internal only: nothing on it asks for a key.
+      /// Where the query process listens (NINJACAT_INTERNAL_ADDR): the panel's
+      /// and the query API. Internal only: nothing on it asks for a key.
       InternalUrl: string
       /// The agent's TCP transport for logs (NINJACAT_LOGS_TCP_ADDR), or
       /// None when it is "off".
@@ -54,8 +55,6 @@ type Config =
       SelfMonitorInterval: TimeSpan
       SelfMonitorTenant: string
       SelfMonitorHost: string }
-
-    member c.IntakePort = Uri(c.IntakeUrl.Replace("*", "localhost")).Port
 
 // The CLICKHOUSE_* names are the ones the Go server used, so one .env serves
 // both while they coexist. The address is the exception: Go spoke the native
