@@ -58,16 +58,22 @@ type TableWriter(table: string, limits: WriterLimits, insert: obj[][] -> Task, l
             inFlight <- inFlight + 1
             Some batch
 
+    /// Flushes still running, so that stopping can wait for them.
+    let running = System.Collections.Generic.HashSet<Task>()
+
     let flushInBackground (batch: obj[][]) =
-        Task.Run(fun () ->
-            task {
-                try
-                    do! send batch
-                finally
-                    lock gate (fun () -> inFlight <- inFlight - 1)
-            }
-            :> Task)
-        |> ignore
+        let work =
+            Task.Run(fun () ->
+                task {
+                    try
+                        do! send batch
+                    finally
+                        lock gate (fun () -> inFlight <- inFlight - 1)
+                }
+                :> Task)
+
+        lock gate (fun () -> running.Add work |> ignore)
+        work.ContinueWith(fun (finished: Task) -> lock gate (fun () -> running.Remove finished |> ignore)) |> ignore
 
     let flush () =
         match lock gate takeBatch with
@@ -100,11 +106,13 @@ type TableWriter(table: string, limits: WriterLimits, insert: obj[][] -> Task, l
               Failed = Interlocked.Read &failed
               InFlight = inFlight })
 
-    /// Stops the timer and inserts what is left, waiting for it: at shutdown
-    /// there is nothing left to protect from a slow insert.
+    /// Stops the timer, waits for the flushes under way and inserts what is
+    /// left: at shutdown there is nothing left to protect from a slow insert.
     member _.StopAsync() : Task =
         task {
             do! timer.DisposeAsync()
+            let underWay = lock gate (fun () -> Array.ofSeq running)
+            do! Task.WhenAll underWay
 
             let rest =
                 lock gate (fun () ->
