@@ -118,7 +118,7 @@ let metadataRows (tenant: string) (payload: JsonElement) : Result<MetadataRows, 
     let subnet = p.String "subnet"
     let integration = p.String "integration"
     // Whole seconds: the agent fills it from time.Unix().
-    let collected = GoTime.fromUnixSeconds (p.Int64 "collect_timestamp")
+    let collected = Time.fromUnixSeconds (p.Int64 "collect_timestamp")
     let extra = extraTopLevel metadataKeys payload
 
     let deviceRow (d: GoJson.Fields) : NDMDeviceRow =
@@ -267,7 +267,7 @@ let configRows (tenant: string) (payload: JsonElement) : Result<NDMDeviceConfigR
 
     let space = p.String "namespace"
     // Seconds, like a config's own timestamp below: both are time.Unix().
-    let collected = GoTime.fromUnixSeconds (p.Int64 "collect_timestamp")
+    let collected = Time.fromUnixSeconds (p.Int64 "collect_timestamp")
     let agentHostname = p.String "agent_hostname"
     let inventories = p.Raw "inventories"
     let extra = extraTopLevel configKeys payload
@@ -285,7 +285,7 @@ let configRows (tenant: string) (payload: JsonElement) : Result<NDMDeviceConfigR
               DeviceIP = config.String "device_ip"
               ConfigType = config.String "config_type"
               ConfigSource = config.String "config_source"
-              Timestamp = GoTime.fromUnixSeconds (config.Int64 "timestamp")
+              Timestamp = Time.fromUnixSeconds (config.Int64 "timestamp")
               Tags = Tags.toMultiMap (config.Strings "tags")
               Content = config.String "content" }: NDMDeviceConfigRow)
 
@@ -331,7 +331,7 @@ let trapRow (tenant: string) (trap: JsonElement) : Result<SNMPTrapRow, string> =
         { TenantID = tenant
           // Milliseconds, unlike the collect timestamps above: the listener
           // stamps a trap with UnixMilli().
-          Timestamp = GoTime.fromUnixMillis (t.Int64 "timestamp")
+          Timestamp = Time.fromUnixMillis (t.Int64 "timestamp")
           DDSource = t.String "ddsource"
           DDTags = Tags.toMultiMap (splitTags ddtags)
           Device = tagValue ddtags "snmp_device"
@@ -417,12 +417,12 @@ let private flowRow (bad: GoJson.Mismatches) (tenant: string) (index: int) (flow
     f.Object "additional_fields" |> ignore
 
     { TenantID = tenant
-      FlushTimestamp = GoTime.fromUnixMillis (f.Int64 "flush_timestamp")
+      FlushTimestamp = Time.fromUnixMillis (f.Int64 "flush_timestamp")
       FlowType = f.String "type"
       SamplingRate = f.UInt64 "sampling_rate"
       Direction = f.String "direction"
-      Start = GoTime.fromUnixSeconds (int64 (f.UInt64 "start"))
-      End = GoTime.fromUnixSeconds (int64 (f.UInt64 "end"))
+      Start = Time.fromUnixSeconds (int64 (f.UInt64 "start"))
+      End = Time.fromUnixSeconds (int64 (f.UInt64 "end"))
       Bytes = f.UInt64 "bytes"
       Packets = f.UInt64 "packets"
       EtherType = f.String "ether_type"
@@ -559,7 +559,7 @@ let private pathRow (bad: GoJson.Mismatches) (tenant: string) (index: int) (path
         runs |> Array.map (fun run -> run.Hops |> List.map read |> Array.ofList)
 
     { TenantID = tenant
-      Timestamp = GoTime.fromUnixMillis (p.Int64 "timestamp")
+      Timestamp = Time.fromUnixMillis (p.Int64 "timestamp")
       AgentVersion = p.String "agent_version"
       Namespace = p.String "namespace"
       TestConfigID = p.String "test_config_id"

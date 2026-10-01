@@ -49,7 +49,7 @@ let parseItems (body: byte[]) : Result<JsonElement list, string> =
         | Error e -> Error $"JSON logs array: {e}"
     else
         let items = ResizeArray<JsonElement>()
-        let mutable reader = Utf8JsonReader(ReadOnlySpan body, JsonReaderOptions(AllowMultipleValues = true))
+        let mutable reader = Utf8JsonReader(ReadOnlySpan(Json.repair body), JsonReaderOptions(AllowMultipleValues = true, MaxDepth = 10_000))
 
         try
             while reader.Read() do

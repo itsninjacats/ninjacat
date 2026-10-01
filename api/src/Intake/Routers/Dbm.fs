@@ -167,11 +167,11 @@ let timestamp (wire: string) : DateTime option =
         None
     else
         match Int64.TryParse(wire, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture) with
-        | true, millis -> Some(GoTime.fromUnixMillis millis)
+        | true, millis -> Some(Time.fromUnixMillis millis)
         | false, _ ->
             match Double.TryParse(wire, NumberStyles.Float, CultureInfo.InvariantCulture) with
             | true, millis when Double.IsFinite millis ->
-                Some(GoTime.fromUnixMillis (int64 (Math.Round(millis, MidpointRounding.AwayFromZero))))
+                Some(Time.fromUnixMillis (int64 (Math.Round(millis, MidpointRounding.AwayFromZero))))
             | _ -> None
 
 /// What `db.plan.definition` says about the plan's steps. Three facts, and

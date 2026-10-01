@@ -109,12 +109,12 @@ let unixTime (value: JsonElement option) : DateTime option =
             let whole = Math.Truncate seconds
 
             if whole <= -62135596800.0 then
-                Some(GoTime.fromUnixSeconds Int64.MinValue)
+                Some(Time.fromUnixSeconds Int64.MinValue)
             elif whole >= 253402300799.0 then
-                Some(GoTime.fromUnixSeconds Int64.MaxValue)
+                Some(Time.fromUnixSeconds Int64.MaxValue)
             else
                 let nanos = int64 ((seconds - whole) * 1e9)
-                Some((GoTime.fromUnixSeconds (int64 whole)).AddTicks(nanos / 100L))
+                Some((Time.fromUnixSeconds (int64 whole)).AddTicks(nanos / 100L))
         | _ -> None
 
 type Application =

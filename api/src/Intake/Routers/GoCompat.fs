@@ -10,19 +10,6 @@ open System.Text.RegularExpressions
 open System.Text.Unicode
 open NinjaCat.Api.Intake
 
-/// Unix times as DateTime. Go's time.Time holds any int64; a DateTime does
-/// not, and a garbage timestamp must not fail the request, so a value out of
-/// range becomes the nearest instant a DateTime can hold.
-module GoTime =
-    let private minSeconds = -62135596800L
-    let private maxSeconds = 253402300799L
-
-    let fromUnixSeconds (seconds: int64) : DateTime =
-        Time.fromUnixSeconds (Math.Clamp(seconds, minSeconds, maxSeconds))
-
-    let fromUnixMillis (millis: int64) : DateTime =
-        Time.fromUnixMillis (Math.Clamp(millis, minSeconds * 1000L, maxSeconds * 1000L + 999L))
-
 /// Reads JSON under the rules of Go's encoding/json, which the Go intake
 /// decoded with. The rules decide what is stored and what is refused:
 ///
@@ -32,39 +19,8 @@ module GoTime =
 ///   - a value of the wrong type does not stop the read. The rest is still
 ///     read, and the document as a whole is refused afterwards.
 module GoJson =
-    // Go nests to 10000; System.Text.Json stops at 64 unless told otherwise.
-    let private documentOptions = JsonDocumentOptions(MaxDepth = 10_000)
-
-    // A valid surrogate pair, half of one, or any other escape. Matching
-    // every escape is what keeps `\\ud800` (a backslash, then text) apart.
-    let private escapes =
-        Regex(
-            @"\\u[dD][89abAB][0-9a-fA-F]{2}\\u[dD][c-fC-F][0-9a-fA-F]{2}|\\u[dD][89a-fA-F][0-9a-fA-F]{2}|\\.",
-            RegexOptions.Compiled ||| RegexOptions.Singleline
-        )
-
-    /// Go reads a string holding bytes that are not UTF-8, or half of a
-    /// surrogate pair (Python writes `\udc80` for a byte it could not decode),
-    /// with U+FFFD in their place. System.Text.Json parses such a body and
-    /// then throws when the string is read. So the body is repaired first.
-    let private repaired (body: byte[]) : byte[] =
-        let span = ReadOnlySpan body
-        let mayHoldHalfPair = span.IndexOf(ReadOnlySpan "\\ud"B) >= 0 || span.IndexOf(ReadOnlySpan "\\uD"B) >= 0
-
-        if Utf8.IsValid span && not mayHoldHalfPair then
-            body
-        else
-            let text = Encoding.UTF8.GetString body
-            // Of the three alternatives only half a pair is six characters long.
-            Encoding.UTF8.GetBytes(escapes.Replace(text, (fun found -> if found.Length = 6 then "\\ufffd" else found.Value)))
-
     /// The body as JSON, or the parser's message.
-    let parse (body: byte[]) : Result<JsonElement, string> =
-        try
-            use doc = JsonDocument.Parse(ReadOnlyMemory(repaired body), documentOptions)
-            Ok(doc.RootElement.Clone())
-        with e ->
-            Error e.Message
+    let parse (body: byte[]) : Result<JsonElement, string> = Json.tryParse body
 
     /// The name of a value's type, as it appears in a note.
     let kind (value: JsonElement) : string =

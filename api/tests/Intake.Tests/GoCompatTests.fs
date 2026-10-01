@@ -6,6 +6,7 @@ open System
 open System.Text
 open System.Text.Json
 open Xunit
+open NinjaCat.Api.Intake
 open NinjaCat.Api.Intake.Routers
 
 let private json (text: string) : JsonElement =
@@ -228,7 +229,7 @@ let ``bytes that are not UTF-8 read as U+FFFD`` () =
 
 [<Fact>]
 let ``a Unix time out of DateTime's range becomes the nearest instant`` () =
-    Assert.Equal(DateTime(2023, 11, 14, 22, 13, 20, DateTimeKind.Utc), GoTime.fromUnixSeconds 1700000000L)
-    Assert.Equal(DateTime(9999, 12, 31, 23, 59, 59, DateTimeKind.Utc), GoTime.fromUnixSeconds Int64.MaxValue)
-    Assert.Equal(DateTime(1, 1, 1, 0, 0, 0, DateTimeKind.Utc), GoTime.fromUnixMillis Int64.MinValue)
-    Assert.Equal(DateTime(9999, 12, 31, 23, 59, 59, 999, DateTimeKind.Utc), GoTime.fromUnixMillis Int64.MaxValue)
+    Assert.Equal(DateTime(2023, 11, 14, 22, 13, 20, DateTimeKind.Utc), Time.fromUnixSeconds 1700000000L)
+    Assert.Equal(DateTime(9999, 12, 31, 23, 59, 59, DateTimeKind.Utc), Time.fromUnixSeconds Int64.MaxValue)
+    Assert.Equal(DateTime(1, 1, 1, 0, 0, 0, DateTimeKind.Utc), Time.fromUnixMillis Int64.MinValue)
+    Assert.Equal(DateTime(9999, 12, 31, 23, 59, 59, 999, DateTimeKind.Utc), Time.fromUnixMillis Int64.MaxValue)

@@ -107,7 +107,7 @@ module Time =
         DateTimeOffset.FromUnixTimeSeconds(max minSeconds (min maxSeconds seconds)).UtcDateTime
 
     let fromUnixMillis (ms: int64) : DateTime =
-        DateTimeOffset.FromUnixTimeMilliseconds(max (minSeconds * 1000L) (min (maxSeconds * 1000L) ms)).UtcDateTime
+        DateTimeOffset.FromUnixTimeMilliseconds(max (minSeconds * 1000L) (min (maxSeconds * 1000L + 999L) ms)).UtcDateTime
 
     /// A timestamp off the wire, in seconds; the receive time when the sender
     /// left it out. Zero does not mean 1970, it means "not supplied" — and a
@@ -124,10 +124,37 @@ module Time =
         if present && seconds > 0L then Some(fromUnixSeconds seconds) else None
 
 module Json =
+    // A valid surrogate pair, half of one, or any other escape. Matching
+    // every escape is what keeps `\\ud800` (a backslash, then text) apart.
+    let private escapes =
+        Regex(
+            @"\\u[dD][89abAB][0-9a-fA-F]{2}\\u[dD][c-fC-F][0-9a-fA-F]{2}|\\u[dD][89a-fA-F][0-9a-fA-F]{2}|\\.",
+            RegexOptions.Compiled ||| RegexOptions.Singleline
+        )
+
+    /// Go read a string holding bytes that are not UTF-8, or half of a
+    /// surrogate pair (Python writes `\udc80` for a byte it could not
+    /// decode), with U+FFFD in their place. System.Text.Json parses such a
+    /// body and then throws when the string is read, which would turn one
+    /// odd character into a 500. So a body is repaired before it is parsed.
+    let repair (body: byte[]) : byte[] =
+        let span = ReadOnlySpan body
+        let mayHoldHalfPair = span.IndexOf(ReadOnlySpan "\\ud"B) >= 0 || span.IndexOf(ReadOnlySpan "\\uD"B) >= 0
+
+        if System.Text.Unicode.Utf8.IsValid span && not mayHoldHalfPair then
+            body
+        else
+            let text = Encoding.UTF8.GetString body
+            // Of the three alternatives only half a pair is six characters long.
+            Encoding.UTF8.GetBytes(escapes.Replace(text, (fun found -> if found.Length = 6 then "\\ufffd" else found.Value)))
+
+    // Go nests to 10000; System.Text.Json stops at 64 unless told otherwise.
+    let private documentOptions = JsonDocumentOptions(MaxDepth = 10_000)
+
     /// The body as JSON, or the parser's message.
     let tryParse (body: byte[]) : Result<JsonElement, string> =
         try
-            use doc = JsonDocument.Parse(ReadOnlyMemory body)
+            use doc = JsonDocument.Parse(ReadOnlyMemory(repair body), documentOptions)
             Ok(doc.RootElement.Clone())
         with e ->
             Error e.Message
