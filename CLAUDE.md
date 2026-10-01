@@ -166,15 +166,19 @@ changed through Postgres (`NOTIFY ninjacat_api_keys`), so the intake has no port
 
 **Host-based routing mirrors Datadog.** `Intake/Routes.fs` dispatches on the `Host` header,
 because Datadog puts every product on its own hostname (`app.<site>`, `trace.agent.<site>`,
-`http-intake.logs.<site>`, ~40 more). It is one plain `if`/`elif` chain of host prefixes, each
-with the agent setting that points at it; a new router gets a line there. Unknown hosts are refused by name so a misconfigured
-`DD_SITE` fails loudly.
+`http-intake.logs.<site>`, ~40 more). The router cannot match the START of a host name, so
+`configure` there is a plain list of host prefixes, each given a router of its own. Unknown
+hosts are refused by name so a misconfigured `DD_SITE` fails loudly.
 
-**Handlers are functions `Request -> Response`.** `Intake/Engine.fs` reads and decompresses
-the body, matches the route (Gin's semantics, kept from the Go server: `:param`, `*rest`,
-trailing-slash redirect, unknown route answered before auth), checks the key and calls the
-handler. A handler touches neither `HttpContext` nor the driver, which is what makes the
-golden tests possible.
+**Paths are the framework's.** Every path of the intake is an Oxpecker route in
+`Intake/Routes.fs`, matched by ASP.NET's router; there is no matcher of our own. Do not write
+one: where the framework's behaviour differs from the old Go server's (case, trailing
+slashes, 405), the framework's stands.
+
+**Handlers are functions `Request -> Response`.** `Routes.keyed` runs one as an Oxpecker
+handler: it checks the key (`Intake/Auth.fs`), reads and decompresses the body, calls the
+handler and writes the answer. An unknown path is answered before any key is asked for. A
+handler touches neither the response nor the driver, which keeps it testable on its own.
 
 **Writes are asynchronous, reads are not.** A handler turns the Datadog wire format into the
 plain records in `Storage/Rows/*.fs` and hands them to the sink — the agent gets its 202
@@ -203,7 +207,8 @@ or computation expressions.
 
 `tests/Intake.Tests/Fixtures/go/` are **golden fixtures**: requests recorded from the Go
 server, each with its answer and the rows it stored. `GoldenTests.fs` replays every one
-against the F# intake and compares field by field; `Fixtures/overrides.json` lists the
+against the F# intake, through an in-memory server (`Golden/Replay.fs`) so the real router is
+in the path, and compares field by field; `Fixtures/overrides.json` lists the
 accepted differences, each with a reason, and is not a place to hide a change in behaviour.
 A deliberate change to what a route stores means updating its fixture by hand and saying why
 in an `edited` key inside it. `ClickHouseRoundTripTests.fs` inserts every fixture's rows through the real

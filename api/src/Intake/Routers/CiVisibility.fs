@@ -1031,7 +1031,7 @@ let readConfigRequest (body: byte[]) : ConfigRequest * (string * string) option 
 /// answer. A body that does not parse still gets a row and a well-formed
 /// answer: "a tracer sends something we cannot read" is what the table is
 /// for, and a 4xx here is terminal for the client.
-let private answerConfig (endpoint: string) (answer: ConfigRequest -> string) (r: Request) : Response =
+let answerConfig (endpoint: string) (answer: ConfigRequest -> string) (r: Request) : Response =
     let request, problem = readConfigRequest r.Body
 
     match problem with
@@ -1074,7 +1074,7 @@ let private answerConfig (endpoint: string) (answer: ConfigRequest -> string) (r
 /// tracer unshallowing its clone to upload packfiles.
 ///
 /// The keys are dd-trace-go's settingsResponse (settings_api.go).
-let private settingsAnswer (request: ConfigRequest) : string =
+let settingsAnswer (request: ConfigRequest) : string =
     """{"data":{"id":""" + quoted request.ID + ""","type":"ci_app_test_service_libraries_settings","attributes":{"code_coverage":false,"coverage_report_upload_enabled":false,"early_flake_detection":{"enabled":false,"slow_test_retries":{"5s":0,"10s":0,"30s":0,"5m":0},"faulty_session_threshold":null},"flaky_test_retries_enabled":false,"itr_enabled":false,"require_git":false,"tests_skipping":false,"known_tests_enabled":false,"impacted_tests_enabled":false,"test_management":{"enabled":false,"attempt_to_fix_retries":0}}}}"""
 
 /// Which tests may be skipped: none. `meta` is sent although empty, because
@@ -1083,7 +1083,7 @@ let private settingsAnswer (request: ConfigRequest) : string =
 /// upload, unchanged: they are in ci_coverage.files_bitmap.
 ///
 /// The keys are dd-trace-go's skippableResponse (skippable.go).
-let private skippableAnswer (_: ConfigRequest) : string =
+let skippableAnswer (_: ConfigRequest) : string =
     """{"meta":{"correlation_id":"","coverage":{}},"data":[]}"""
 
 /// Which tests has this service run before: none.
@@ -1097,12 +1097,12 @@ let private skippableAnswer (_: ConfigRequest) : string =
 /// shape is, a 404 in the middle of a test run is not.
 ///
 /// The keys are dd-trace-go's knownTestsResponse (known_tests_api.go).
-let private testListAnswer (request: ConfigRequest) : string =
+let testListAnswer (request: ConfigRequest) : string =
     """{"data":{"id":""" + quoted request.ID + ""","type":"ci_app_libraries_tests","attributes":{"tests":{},"page_info":{"cursor":"","size":0,"has_next":false}}}}"""
 
 /// Which tests are quarantined, disabled or being fixed: none. The keys are
 /// dd-trace-go's testManagementTestsResponse.
-let private testManagementAnswer (request: ConfigRequest) : string =
+let testManagementAnswer (request: ConfigRequest) : string =
     """{"data":{"id":""" + quoted request.ID + ""","type":"ci_app_libraries_tests","attributes":{"modules":{}}}}"""
 
 /// The commit list of a search_commits request: the repository and the shas
@@ -1320,28 +1320,8 @@ let private storePipelineEvent (kind: string) (r: Request) : unit =
 ///
 /// 202 whatever happened: the CLI retries five times on an error, so a 5xx
 /// would stall somebody's CI job for half a minute.
-let private handlePipelineEvent (kind: string) (r: Request) : Response =
+let handlePipelineEvent (kind: string) (r: Request) : Response =
     if r.Body.Length > 0 then
         storePipelineEvent kind r
 
     accepted
-
-let testCycleRoutes: Route list = [ Route.post "/api/v2/citestcycle" handleTestCycle ]
-
-let testCovRoutes: Route list = [ Route.post "/api/v2/citestcov" handleTestCov ]
-
-/// The CI Visibility endpoints on api.<site>. A tracer never calls the four
-/// after `setting` while every flag in the settings answer is false; they
-/// exist because a tracer configured by hand must not get a 404 in the middle
-/// of a test run.
-let apiRoutes: Route list =
-    [ Route.post "/api/v2/libraries/tests/services/setting" (answerConfig "settings" settingsAnswer)
-      Route.post "/api/v2/ci/tests/skippable" (answerConfig "skippable" skippableAnswer)
-      Route.post "/api/v2/ci/libraries/tests" (answerConfig "known_tests" testListAnswer)
-      Route.post "/api/v2/ci/libraries/tests/flaky" (answerConfig "flaky_tests" testListAnswer)
-      Route.post "/api/v2/test/libraries/test-management/tests" (answerConfig "test_management" testManagementAnswer)
-      Route.post "/api/v2/git/repository/search_commits" handleSearchCommits
-      Route.post "/api/v2/git/repository/packfile" handlePackfile
-      Route.post "/api/v2/ci/pipeline/tags" (handlePipelineEvent "tag")
-      Route.post "/api/v2/ci/pipeline/metrics" (handlePipelineEvent "measure")
-      Route.post "/api/intake/ci/custom_spans" (handlePipelineEvent "custom_span") ]

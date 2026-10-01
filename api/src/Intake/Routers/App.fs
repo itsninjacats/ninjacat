@@ -651,7 +651,7 @@ let private parse (body: byte[]) : Result<Payload, string> =
         Error e.Message
 
 /// `label` names the route in raw_payloads and in the log.
-let private handle (label: string) (r: Request) : Response =
+let handle (label: string) (r: Request) : Response =
     match parse r.Body with
     | Error message ->
         r.Log.LogWarning("[{Label}] protobuf: {Error} ({Bytes} bytes)", label, message, r.Body.Length)
@@ -706,9 +706,3 @@ let private handle (label: string) (r: Request) : Response =
                 Raw.store r label "int64_precision" $"{decoded.WideInts} sint64 values beyond 2^53 widened to Float64" r.Body
 
     Response.json 202 "{}"
-
-let routes: Route list =
-    [ Route.post "/api/intake/metrics/v3/series" (handle "v3series")
-      Route.post "/api/intake/metrics/v3/sketches" (handle "v3sketches")
-      // A shadow copy of the v2 traffic on /api/beta/sketches.
-      Route.post "/api/intake/metrics/v3beta/sketches" (handle "v3beta") ]

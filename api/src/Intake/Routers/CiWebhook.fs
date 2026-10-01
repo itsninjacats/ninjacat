@@ -218,12 +218,3 @@ let handle (r: Request) : Response =
 /// intake does not have; until then the empty list is the honest answer.
 /// Nothing is stored: the poll carries no telemetry.
 let handleSyntheticsAgentTests (_: Request) : Response = Response.json 200 """{"tests":[]}"""
-
-/// Both spellings, because the plugin's URL ends in a slash: a redirect on a
-/// POST drops the body, and a dropped body is a CI run that never appears.
-let routes: Route list =
-    [ Route.post "/api/v2/webhook" handle
-      Route.post "/api/v2/webhook/" handle ]
-
-let syntheticsAgentRoutes: Route list =
-    [ Route.get "/api/unstable/synthetics/agents/tests" handleSyntheticsAgentTests ]

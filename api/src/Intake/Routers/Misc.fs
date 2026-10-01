@@ -38,7 +38,7 @@ let private quoted (text: string) : string =
 /// an integration hands it bytes, and no schema for them is published
 /// anywhere. So the bytes are kept as they are, with the sender's identity,
 /// which the event platform carries in headers, in the note.
-let private handleGenResources (r: Request) : Response =
+let handleGenResources (r: Request) : Response =
     let header (name: string) = quoted (r.Header name)
 
     let note =
@@ -47,7 +47,6 @@ let private handleGenResources (r: Request) : Response =
     Raw.store r "genresources" "no_schema" note r.Body
     accepted
 
-let resourcesRoutes: Route list = [ Route.post "/api/v2/genresources" handleGenResources ]
 
 // instrumentation-telemetry-intake: one path, five producers, one envelope
 // with `request_type` as the discriminator.
@@ -283,7 +282,7 @@ let private batchEntries (payload: JsonElement option) : Map<string, JsonElement
 /// One row for the request, whoever sent it. A message-batch, whose payload
 /// is [{request_type, payload}, …], adds one row per entry on top of that
 /// row, which keeps the whole batch.
-let private handleTelemetry (r: Request) : Response =
+let handleTelemetry (r: Request) : Response =
     let refuse (error: string) =
         r.Log.LogWarning("[apmtelemetry] not a JSON object: {Error}", error)
         Raw.store r "apmtelemetry" "decode_error" error r.Body
@@ -323,5 +322,3 @@ let private handleTelemetry (r: Request) : Response =
             Sink.write r.Sink ApmTelemetry.table (Array.ofList (parent :: children))
 
     accepted
-
-let telemetryRoutes: Route list = [ Route.post "/api/v2/apmtelemetry" handleTelemetry ]

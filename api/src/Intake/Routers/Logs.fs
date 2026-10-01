@@ -260,15 +260,11 @@ let handle (r: Request) : Response =
                 | Error(Undecodable error) ->
                     r.Log.LogWarning("[logs] item #{Index}: {Error}", i, error)
                     Raw.store r "logs" "decode_error" $"item #{i}: {error}" rawBytes
+                // `{}` says nothing: a probe, not a log.
+                | Ok item when item.Message = "" && item.Attributes.IsEmpty && item.Source = "" && item.Service = "" -> ()
                 | Ok item ->
                     if r.Tenant <> "" then
                         rows.Add(toRow r.Tenant item arrival defaults))
 
             Sink.write r.Sink Logs.table (rows.ToArray())
             accepted
-
-let routes: Route list =
-    [ Route.post "/api/v2/logs" handle
-      Route.post "/v1/input" handle
-      // Older clients put the key in the path.
-      Route.post "/v1/input/:apikey" handle ]

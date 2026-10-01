@@ -335,7 +335,7 @@ let flattenTree (tenant: string) (receivedAt: DateTime) (dumpId: Guid) (tree: Pr
 ///
 /// The parts are decoded independently: a broken "event" does not lose the
 /// "dump", and the other way round.
-let private handleSecDump (r: Request) : Response =
+let handleSecDump (r: Request) : Response =
     match Multipart.boundary (r.Header "Content-Type") with
     | None ->
         r.Log.LogWarning("[secdump] not multipart: content-type {ContentType}", r.Header "Content-Type")
@@ -472,7 +472,7 @@ let eventRows (tenant: string) (receivedAt: DateTime) (track: string) (envelopes
 
 /// A logs-pipeline batch: a JSON array of envelopes. One handler serves
 /// three tracks; the rows share a table and carry the track.
-let private handleTrack (track: string) : Handler =
+let handleTrack (track: string) : Handler =
     fun r ->
         match decodeEnvelopes r.Body with
         | Error problem ->
@@ -667,7 +667,7 @@ let sbomRows
     entities.ToArray(), components.ToArray(), vulnerabilities.ToArray()
 
 /// POST /api/v2/sbom: one SBOMPayload per request, protobuf.
-let private handleSbom (r: Request) : Response =
+let handleSbom (r: Request) : Response =
     let payload =
         try
             Ok(SBOMPayload.Parser.ParseFrom r.Body)
@@ -1092,7 +1092,7 @@ let private sdsIsBlank (payload: SdsResultPayload) : bool =
 /// into a message with nothing in it. A payload that names no resource and
 /// has no result is therefore kept raw, its wire layout in the note, instead
 /// of becoming an empty scan.
-let private handleSdsResult (r: Request) : Response =
+let handleSdsResult (r: Request) : Response =
     let layout () =
         match wireLayout r.Body with
         | None -> "protobuf did not parse as a sequence of top-level fields"
@@ -1119,15 +1119,3 @@ let private handleSdsResult (r: Request) : Response =
             Sink.write r.Sink SdsMatches.table (Array.ofList rows.Matches)
 
     accepted
-
-let cwsRoutes: Route list = [ Route.post "/api/v2/secdump" handleSecDump ]
-
-let runtimeSecurityRoutes: Route list =
-    [ Route.post "/api/v2/secruntime" (handleTrack "secruntime")
-      Route.post "/api/v2/secinfo" (handleTrack "secinfo") ]
-
-let cspmRoutes: Route list = [ Route.post "/api/v2/compliance" (handleTrack "compliance") ]
-
-let sbomRoutes: Route list = [ Route.post "/api/v2/sbom" handleSbom ]
-
-let sdsRoutes: Route list = [ Route.post "/api/v2/sdsresult" handleSdsResult ]

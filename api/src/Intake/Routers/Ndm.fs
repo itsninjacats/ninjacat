@@ -224,7 +224,7 @@ let metadataRows (tenant: string) (payload: JsonElement) : Result<MetadataRows, 
 
     if bad.Count = 0 then Ok rows else Error bad[0]
 
-let private handleMetadata (r: Request) : Response =
+let handleMetadata (r: Request) : Response =
     match entries r.Body with
     | Error e ->
         r.Log.LogWarning("[ndm] not a JSON array: {Error}", e)
@@ -291,7 +291,7 @@ let configRows (tenant: string) (payload: JsonElement) : Result<NDMDeviceConfigR
 
     if bad.Count = 0 then Ok rows else Error bad[0]
 
-let private handleConfig (r: Request) : Response =
+let handleConfig (r: Request) : Response =
     match entries r.Body with
     | Error e ->
         r.Log.LogWarning("[ndmconfig] not a JSON array: {Error}", e)
@@ -351,7 +351,7 @@ let trapRow (tenant: string) (trap: JsonElement) : Result<SNMPTrapRow, string> =
 
     if bad.Count = 0 then Ok row else Error bad[0]
 
-let private handleTraps (r: Request) : Response =
+let handleTraps (r: Request) : Response =
     match entries r.Body with
     | Error e ->
         r.Log.LogWarning("[ndmtraps] not a JSON array: {Error}", e)
@@ -465,7 +465,7 @@ let decodeFlows (tenant: string) (body: byte[]) : Result<NetflowFlowRow[], strin
         let rows = flows |> List.mapi (flowRow bad tenant) |> Array.ofList
         if bad.Count = 0 then Ok rows else Error bad[0]
 
-let private handleFlow (r: Request) : Response =
+let handleFlow (r: Request) : Response =
     match decodeFlows r.Tenant r.Body with
     | Error e ->
         r.Log.LogWarning("[ndmflow] not a list of flows: {Error}", e)
@@ -624,7 +624,7 @@ let decodePaths (tenant: string) (body: byte[]) : Result<NetworkPathRow[], strin
         let rows = paths |> List.mapi (pathRow bad tenant) |> Array.ofList
         if bad.Count = 0 then Ok rows else Error bad[0]
 
-let private handleNetpath (r: Request) : Response =
+let handleNetpath (r: Request) : Response =
     match decodePaths r.Tenant r.Body with
     | Error e ->
         r.Log.LogWarning("[netpath] not a list of network paths: {Error}", e)
@@ -634,10 +634,3 @@ let private handleNetpath (r: Request) : Response =
             Sink.write r.Sink NetworkPaths.table rows
 
     accepted
-
-let routes: Route list =
-    [ Route.post "/api/v2/ndm" handleMetadata
-      Route.post "/api/v2/ndmconfig" handleConfig
-      Route.post "/api/v2/ndmtraps" handleTraps
-      Route.post "/api/v2/ndmflow" handleFlow
-      Route.post "/api/v2/netpath" handleNetpath ]

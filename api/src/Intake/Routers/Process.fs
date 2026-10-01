@@ -1231,9 +1231,3 @@ let handleDiscovery (r: Request) : Response =
         | _ -> unexpected r "discovery" frame
 
     reply
-
-let routes: Route list =
-    [ Route.post "/api/v1/collector" handleCollector
-      Route.post "/api/v1/container" handleContainer
-      Route.post "/api/v1/connections" handleConnections
-      Route.post "/api/v1/discovery" handleDiscovery ]

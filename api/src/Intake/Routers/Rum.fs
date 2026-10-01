@@ -31,6 +31,7 @@ open System.Text
 open System.Text.Encodings.Web
 open System.Text.Json
 open System.Text.Unicode
+open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.WebUtilities
 open Microsoft.Extensions.Logging
@@ -131,33 +132,26 @@ let unwrapForward (log: ILogger) (http: HttpContext) : unit =
             http.Request.Path <- PathString(Uri.UnescapeDataString path)
             http.Request.QueryString <- QueryString.Create merged
 
-/// What sits above the router on browser-intake.
+/// What sits above the router on browser-intake, as a middleware.
 ///
 /// CORS has to be on EVERY answer, the 403 and the 404 included. To the
 /// browser SDK a cross-origin response it may not read is status 0 while
 /// online, which it counts as success: it drops the batch and tells nobody.
 /// A bad key or an unserved path would be invisible on both sides.
-let wrapWith
-    (log: ILogger)
-    (allowedOrigins: string list)
-    (inner: HttpContext -> byte[] -> Response)
-    : HttpContext -> byte[] -> Response =
-    fun http rawBody ->
-        unwrapForward log http
-        let cors = corsHeaders (http.Request.Headers.Origin.ToString()) allowedOrigins
+let browserGate (log: ILogger) (allowedOrigins: string list) (http: HttpContext) (next: RequestDelegate) : Task =
+    unwrapForward log http
 
-        // A preflight carries no credential, so it is answered before anything
-        // can ask for one — and for paths that are not served too: the browser
-        // must get as far as the POST to see a 404 it can act on.
-        if http.Request.Method = "OPTIONS" then
-            { Status = 204; Headers = cors; Body = [||] }
-        else
-            let response = inner http rawBody
-            { response with Headers = cors @ response.Headers }
+    for name, value in corsHeaders (http.Request.Headers.Origin.ToString()) allowedOrigins do
+        http.Response.Headers[name] <- value
 
-let wrap (inner: HttpContext -> byte[] -> Response) : HttpContext -> byte[] -> Response =
-    let allowed = parseAllowedOrigins (Environment.GetEnvironmentVariable "NINJACAT_RUM_ALLOWED_ORIGINS")
-    wrapWith NullLogger.Instance allowed inner
+    // A preflight carries no credential, so it is answered before anything
+    // can ask for one — and for paths that are not served too: the browser
+    // must get as far as the POST to see a 404 it can act on.
+    if http.Request.Method = "OPTIONS" then
+        http.Response.StatusCode <- 204
+        Task.CompletedTask
+    else
+        next.Invoke http
 
 // One path-walking reader over JsonElement serves every event variant: their
 // `view` and `session` objects are the same JSON whatever the variant, and a
@@ -1038,18 +1032,5 @@ let handleSpans (r: Request) : Response =
 /// before it starts whether this session may be profiled. There is no quota
 /// here, so every session is admitted. Without an answer the SDK profiles
 /// anyway, but marks the session's events with the reason "api-error".
-let private handleProfilingQuota (_: Request) : Response =
+let handleProfilingQuota (_: Request) : Response =
     Response.json 200 """{"data":{"attributes":{"admitted":true,"reason":"quota_ok"}}}"""
-
-let routes: Route list =
-    [ Route.post "/api/v2/rum" handleRum
-      // Logs from an SDK are the wire format the agent sends; only the
-      // framing differs, and the logs handler sniffs it.
-      Route.post "/api/v2/logs" Logs.handle
-      Route.post "/api/v2/replay" handleReplay
-      Route.post "/api/v2/spans" handleSpans
-      // The browser profiler's multipart is the envelope the tracers send,
-      // so it reuses that handler under its own label.
-      Route.post "/api/v2/profile" (Profiling.handleProfile "profile-browser")
-      Route.get "/api/v2/profiling/quota" handleProfilingQuota
-      Route.post "/api/v2/debugger" Profiling.handleDebugger ]

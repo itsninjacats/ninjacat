@@ -284,13 +284,3 @@ let handle (track: string) (r: Request) : Response =
         Sink.write r.Sink DbmEvents.table (rows.ToArray())
 
     Response.json 202 "{}"
-
-let routes: Route list =
-    [ Route.post "/api/v2/dbmmetrics" (handle "dbmmetrics") // query and lock metrics
-      Route.post "/api/v2/dbmactivity" (handle "dbmactivity") // active sessions
-      Route.post "/api/v2/databasequery" (handle "databasequery") // query samples and plans
-      Route.post "/api/v2/dbmmetadata" (handle "dbmmetadata") // instances and schemas
-      // No producer of these two is in the agent's source: only the envelope
-      // can be claimed about them.
-      Route.post "/api/v2/dbmhealth" (handle "dbmhealth")
-      Route.post "/api/v2/dbmcolumnstatistics" (handle "dbmcolumnstatistics") ]

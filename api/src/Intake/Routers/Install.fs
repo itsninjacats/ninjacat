@@ -63,30 +63,25 @@ let private fromRegistry (response: Response) : Response =
 let private ociError (code: string) (message: string) : Response =
     Response.jsonOf 404 {| errors = [ {| code = code; message = message |} ] |} |> fromRegistry
 
-let private handleManifest (r: Request) : Response =
-    ociError "MANIFEST_UNKNOWN" ("ninjacat does not host packages: " + r.Param "repo" + ":" + r.Param "tag")
+/// The diagnose sweep's HEAD /: any 2xx is "Success".
+let handleProbe (_: Request) : Response = Response.status 200
 
-let private handleBlob (r: Request) : Response =
-    ociError "BLOB_UNKNOWN" ("ninjacat does not host packages: " + r.Param "repo" + "@" + r.Param "digest")
+/// The API version check every registry client starts with.
+let handleVersionCheck (_: Request) : Response =
+    Response.json 200 "{}" |> fromRegistry
+
+let handleManifest (repo: string) (tag: string) (_: Request) : Response =
+    ociError "MANIFEST_UNKNOWN" ("ninjacat does not host packages: " + repo + ":" + tag)
+
+let handleBlob (repo: string) (digest: string) (_: Request) : Response =
+    ociError "BLOB_UNKNOWN" ("ninjacat does not host packages: " + repo + "@" + digest)
 
 /// system-probe fetching a kernel BTF archive. Its SHA256 is checked against
 /// the BTF_DD remote config catalog, so no substitute could be served; a
 /// non-200 makes the loader fall back to its next BTF source.
-let private handleBtf (_: Request) : Response =
+let handleBtf (_: Request) : Response =
     Response.errors 404 [ "BTF archives are not hosted here" ]
 
-/// install.datadoghq.com / install.datad0g.com.
-///
-///   agent config: installer.registry.url (OCI); none for /btfs (hardcoded host)
-let routes: Route list =
-    [ // The diagnose sweep: any 2xx is "Success".
-      Route.head "/" (fun _ -> Response.status 200)
-      // The API version check every registry client starts with.
-      Route.get "/v2/" (fun _ -> Response.json 200 "{}" |> fromRegistry)
-      Route.get "/v2/:repo/manifests/:tag" handleManifest
-      Route.get "/v2/:repo/blobs/:digest" handleBlob
-      // :kernel is <kernel>.btf.tar.xz.
-      Route.get "/btfs/:platform/:ver/:arch/:kernel" handleBtf ]
 
 /// The note of a payload with no published schema: the event platform's
 /// origin headers and the Content-Type are all the context there is beside
@@ -102,21 +97,15 @@ let private accepted = Response.json 202 "{}"
 /// The Rust ai_prompt_logger posts through the local evp_proxy, which adds
 /// the API key; it only checks for a 2xx. The producer is not in
 /// datadog-agent and publishes no schema, so the body is kept as it arrived.
-let private handleAIUsage (r: Request) : Response =
+let handleAIUsage (r: Request) : Response =
     Raw.store r "aiusage" "no_schema" (originNote r) r.Body
     accepted
 
 /// The agent never sends LLM Observability data here; the only caller is the
 /// connectivity diagnose, which posts no body and wants a 2xx.
-let private handleLLMObs (r: Request) : Response =
+let handleLLMObs (r: Request) : Response =
     if r.Body.Length > 0 && not (Diagnose.isSweep r) then
         r.Log.LogWarning("[llmobs] unexpected payload — the agent only probes this host")
         Raw.store r "llmobs" "no_schema" ("unexpected payload — the agent only probes this host; " + originNote r) r.Body
 
     accepted
-
-/// eudm-intake.<site>.
-let aiUsageRoutes: Route list = [ Route.post "/api/v2/aiusage" handleAIUsage ]
-
-/// llmobs-intake.<site>.
-let llmObsRoutes: Route list = [ Route.post "/api/v2/llmobs" handleLLMObs ]

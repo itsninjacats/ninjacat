@@ -289,3 +289,9 @@ let ``logs from Datadog's .NET tracer, which have no message field, become log r
         Assert.Equal("warn", refused.Status)
         Assert.Contains("\"dd_trace_id\":\"6abec5e5000000002f9a60afb73b9615\"", refused.Attributes)
     | rows -> Assert.Fail $"expected two log rows, got {rows.Length}"
+
+[<Fact>]
+let ``an empty object among the logs is not stored`` () =
+    let sink = post "routeLogs" "/api/v2/logs" "" (Text.Encoding.UTF8.GetBytes """[{}, {"message":"kept"}]""")
+    Assert.Empty(sink.Rows<RawPayloadRow>())
+    Assert.Equal<string list>([ "kept" ], sink.Rows<LogRow>() |> List.map _.Message)

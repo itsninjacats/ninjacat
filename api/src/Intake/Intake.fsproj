@@ -13,7 +13,7 @@
     <Compile Include="DDSketch.fs" />
     <Compile Include="ProcessFrame.fs" />
     <Compile Include="Routers/Flare.fs" />
-    <Compile Include="Engine.fs" />
+    <Compile Include="Auth.fs" />
     <Compile Include="Routers/Logs.fs" />
     <Compile Include="Routers/ApiPayloads.fs" />
     <Compile Include="Routers/Api.fs" />
@@ -47,6 +47,7 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Oxpecker" />
     <PackageReference Include="ZstdSharp.Port" />
     <PackageReference Include="Google.Protobuf" />
     <PackageReference Include="MessagePack" />

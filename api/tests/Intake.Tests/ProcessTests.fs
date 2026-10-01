@@ -707,7 +707,6 @@ let ``without a tenant nothing is stored, and the agent still gets its reply`` (
     let request: Request =
         { Http = http
           Body = ProcessFrame.encode 12uy 0L (fullCollectorProc ())
-          Params = Map.empty
           Key = None
           Sink = sink
           Log = NullLogger.Instance }

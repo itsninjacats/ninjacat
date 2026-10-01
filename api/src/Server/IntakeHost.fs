@@ -6,6 +6,7 @@
 module NinjaCat.Api.Server.IntakeHost
 
 open System
+open System.IO
 open System.Net
 open System.Net.Sockets
 open System.Security.Cryptography.X509Certificates
@@ -13,9 +14,11 @@ open System.Threading
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
+open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
+open Oxpecker
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 
@@ -79,30 +82,35 @@ let run (cfg: Config.Config) (args: string[]) : int =
         .AddHostedService<ApiKeysKeeper>(fun services -> services.GetRequiredService<ApiKeysKeeper>())
         .AddHostedService<SelfMonitor>()
         .AddHostedService<LogsTcpListener>()
+        .AddRouting()
+        .AddOxpecker()
     |> ignore
 
     let app = builder.Build()
     app.Services.GetRequiredService<ApiKeysKeeper>().FetchNow()
 
-    let deps = app.Services.GetRequiredService<Deps>()
-    let intake = Routes.create deps
+    if cfg.Debug then
+        // The capture lab: every request is dumped, the ones nothing serves
+        // above all. The body is read here and put back for the handler.
+        let log = app.Services.GetRequiredService<Deps>().Log
 
-    // No routing table: the intake picks the product by the Host header.
-    (app :> IApplicationBuilder).Run(fun http ->
-        task {
-            let started = DateTime.UtcNow
-            let! body = Engine.readBody http
-            let response = intake http body
-            do! Engine.write http response
+        (app :> IApplicationBuilder).Use(fun (http: HttpContext) (next: RequestDelegate) ->
+            task {
+                let started = DateTime.UtcNow
+                let! body = Body.read http
+                http.Request.Body <- new MemoryStream(body)
+                do! next.Invoke http
 
-            if cfg.Debug then
                 try
-                    let decoded = Body.decompress deps.Log (http.Request.Headers.ContentEncoding.ToString()) body
-                    Capture.write cfg.CaptureDir http body decoded response.Status started |> ignore
+                    let decoded = Body.decompress log (http.Request.Headers.ContentEncoding.ToString()) body
+                    Capture.write cfg.CaptureDir http body decoded http.Response.StatusCode started |> ignore
                 with e ->
-                    deps.Log.LogWarning("capture not written: {Error}", e.Message)
-        }
-        :> Task)
+                    log.LogWarning("capture not written: {Error}", e.Message)
+            }
+            :> Task)
+        |> ignore
+
+    Routes.configure app
 
     app.Run()
     0

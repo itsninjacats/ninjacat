@@ -60,7 +60,7 @@ let private serve (allowedOrigins: string list) (sink: CapturingSink) (http: Htt
           Log = NullLogger.Instance
           AckUnknown = false }
 
-    Rum.wrapWith NullLogger.Instance allowedOrigins (Replay.byGoNames deps [ "routeRUM" ]) http body
+    Replay.browserIntake deps allowedOrigins http body
 
 /// A POST with the test key in the header, as the mobile SDKs send it.
 let private post (sink: CapturingSink) (url: string) (headers: (string * string) list) (body: byte[]) : Response =
@@ -72,7 +72,6 @@ let private header (name: string) (response: Response) : string =
 let private requestOf (url: string) (headers: (string * string) list) : Request =
     { Http = httpContext "POST" url headers
       Body = [||]
-      Params = Map.empty
       Key = Some { ID = "test"; Name = "test"; TenantID = "t" }
       Sink = CapturingSink()
       Log = NullLogger.Instance }

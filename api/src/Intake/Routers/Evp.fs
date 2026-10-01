@@ -291,7 +291,6 @@ let handleAgentDiscovery (r: Request) : Response =
 
     accepted
 
-let agentDiscoveryRoutes: Route list = [ Route.post "/api/v2/agentdiscovery" handleAgentDiscovery ]
 
 /// Raised by the readers below; decodeHealthReport turns it into an Error.
 exception private HealthReportMismatch of string
@@ -620,7 +619,6 @@ let handleAgentHealth (r: Request) : Response =
 
     accepted
 
-let agentHealthRoutes: Route list = [ Route.post "/api/v2/agenthealth" handleAgentHealth ]
 
 /// The label in raw_payloads. Not "events": /api/v1/events on api.<site>
 /// already has that one, and the two tracks are unrelated.
@@ -702,7 +700,6 @@ let handleEventManagement (r: Request) : Response =
 
     accepted
 
-let eventManagementRoutes: Route list = [ Route.post "/api/v2/events" handleEventManagement ]
 
 let private softwareEntryKeys =
     set
@@ -750,7 +747,6 @@ let hostSoftwareRows (tenant: string) (receivedAt: DateTime) (payload: JsonEleme
 let handleSoftwareInventory (r: Request) : Response =
     handleBatch r "softinv" HostSoftware.table (hostSoftwareRows r.Tenant)
 
-let softwareInventoryRoutes: Route list = [ Route.post "/api/v2/softinv" handleSoftwareInventory ]
 
 let private syntheticsKeys = set [ "test"; "location"; "result"; "_dd"; "enrichment"; "v" ]
 
@@ -841,7 +837,6 @@ let syntheticsResultRow (tenant: string) (receivedAt: DateTime) (item: JsonEleme
 let handleSynthetics (r: Request) : Response =
     handleBatch r "synthetics" SyntheticsResults.table (fun now item -> [ syntheticsResultRow r.Tenant now item ])
 
-let syntheticsRoutes: Route list = [ Route.post "/api/v2/synthetics" handleSynthetics ]
 
 let private lineageKeys =
     set [ "eventType"; "eventTime"; "producer"; "schemaURL"; "run"; "job"; "inputs"; "outputs" ]
@@ -930,10 +925,3 @@ let handleQueryActions (r: Request) : Response =
             Keys = keys
             DDEVPOrigin = origin
             DDEVPOriginVersion = originVersion } ])
-
-/// data-obs-intake. The lineage proxy carries the key as "Authorization:
-/// Bearer <key>", the OpenLineage client's convention, which is why this host
-/// has its own guard in Routes.fs.
-let dataObsRoutes: Route list =
-    [ Route.post "/api/v1/lineage" handleOpenLineage
-      Route.post "/api/v2/query-actions" handleQueryActions ]

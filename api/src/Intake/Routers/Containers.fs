@@ -389,7 +389,3 @@ let handleImages (r: Request) : Response =
             Sink.write r.Sink ContainerImages.table rows
 
     accepted
-
-let routes: Route list =
-    [ Route.post "/api/v2/contlcycle" handleLifecycle
-      Route.post "/api/v2/contimage" handleImages ]

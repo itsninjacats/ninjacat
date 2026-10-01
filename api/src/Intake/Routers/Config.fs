@@ -23,7 +23,7 @@ open NinjaCat.Api.Intake
 /// The poll for new configuration. The request is the agent's full picture
 /// of itself: identity, the TUF versions it holds, the products it wants and
 /// every client registered with it. Nothing of it is stored yet.
-let private handleConfigurations (r: Request) : Response =
+let handleConfigurations (r: Request) : Response =
     try
         let request = LatestConfigsRequest.Parser.ParseFrom r.Body
 
@@ -41,14 +41,5 @@ let private handleConfigurations (r: Request) : Response =
     Response.json 404 """{"error":"remote configuration not served"}"""
 
 /// The org identity lookup and the org/key status check: a GET with no body.
-let private notServed (_: Request) : Response =
+let notServed (_: Request) : Response =
     Response.json 404 """{"error":"not served"}"""
-
-let routes: Route list =
-    [ Route.post "/api/v0.1/configurations" handleConfigurations
-      // The agent sends GET; POST is registered so anything else that tries
-      // gets the same explicit answer.
-      Route.get "/api/v0.1/org" notServed
-      Route.post "/api/v0.1/org" notServed
-      Route.get "/api/v0.1/status" notServed
-      Route.post "/api/v0.1/status" notServed ]

@@ -558,13 +558,11 @@ let ``without a tenant nothing is stored and the answer is the same`` () =
     let request: Request =
         { Http = http
           Body = (examplePayload ()).ToByteArray()
-          Params = Map.empty
           Key = None
           Sink = sink
           Log = NullLogger.Instance }
 
-    let route = App.routes |> List.find (fun route -> route.Pattern = seriesPath)
-    let response = route.Handler request
+    let response = App.handle "v3series" request
 
     Assert.Equal(202, response.Status)
     Assert.Equal("{}", Encoding.UTF8.GetString response.Body)

@@ -32,8 +32,9 @@ Grafana's Datadog plugin can all point at it unchanged.
   `Table` per ClickHouse table; `Writer.fs` buffers and flushes one table;
   `ClickHouseSink.fs` owns one writer per table; `Migrations.fs` applies
   `schema/migrations/*.sql`, which are embedded in the binary.
-- `src/Intake` — the agent-facing side. `Routes.fs` dispatches on the `Host`
-  header, `Engine.fs` matches the route and checks the key, `Routers/*.fs`
+- `src/Intake` — the agent-facing side. `Routes.fs` is the whole map: every
+  host, and every path on it as an Oxpecker route (ASP.NET's router does the
+  matching); `Auth.fs` finds the key; `Routers/*.fs` hold the handlers, which
   turn a payload into rows.
 - `src/Server` — the host: configuration, the two HTTP surfaces, the API key
   keeper, self-monitoring. `ClickHouse.fs` and `Postgres.fs` are the only
@@ -49,8 +50,10 @@ service never migrates it, and a table it needs is added there first.
 
 **Routing follows Datadog's hostnames.** Datadog puts every product on its own
 host (`app.<site>`, `trace.agent.<site>`, `http-intake.logs.<site>`, about
-forty more), and so does `Routes.fs`: one plain chain of host prefixes. A host it does not know is
-refused by name, so a wrong `DD_SITE` fails loudly. That is also why
+forty more), and so does `Routes.fs`: a plain list of host prefixes, each with
+a router of its own. A host it does not know is refused by name, so a wrong
+`DD_SITE` fails loudly. Paths are the framework's to match, so they ignore
+case and a trailing slash, and a known path under another method is a 405. That is also why
 `curl localhost:8080/ping` answers 404: send
 `-H 'Host: api.ninjacat.local'`.
 
@@ -82,8 +85,8 @@ SHA-256 of a key.
 1. Rows: a record and a `Table` in `src/Storage/Rows/<X>.fs` (columns in
    INSERT order), and a migration in `schema/migrations/` if the table is new.
    A migration that has been applied anywhere is never edited; add the next one.
-2. Handlers and their route list in `src/Intake/Routers/<X>.fs`.
-3. The host in `Routes.fs`: a named intake and a line in the chain.
+2. Handlers (`Request -> Response`) in `src/Intake/Routers/<X>.fs`.
+3. In `Routes.fs`: the host's routes, and a line for the host in `configure`.
 4. Tests in `tests/Intake.Tests/<X>Tests.fs`.
 
 `Routers/Logs.fs` with `Rows/Logs.fs` is the example to read first.

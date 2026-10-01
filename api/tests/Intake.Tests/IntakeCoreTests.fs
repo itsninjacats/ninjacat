@@ -1,11 +1,13 @@
-/// The parts every router stands on: the key guard, route matching, the host
-/// dispatch, raw payloads, tags.
+/// The parts every router stands on: the key guard, the host dispatch, raw
+/// payloads, tags. Matching a path is the framework's router's job and is not
+/// tested here.
 module NinjaCat.Api.Intake.Tests.IntakeCoreTests
 
 open System.Text
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Logging.Abstractions
 open Microsoft.Extensions.Primitives
+open Oxpecker
 open Xunit
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Intake.Tests.Golden
@@ -39,15 +41,20 @@ let private request (method: string) (host: string) (target: string) (headers: (
 
 let private ok: Handler = fun _ -> Response.status 200
 
-let private statusOf (auth: Auth) (routes: Route list) (method: string) (target: string) (headers: (string * string) list) : int =
-    let engine = Engine.create auth routes
-    (Engine.respond (deps (CapturingSink())) engine (request method "example.com" target headers) [||]).Status
+/// One host's router with the given endpoints, as the server mounts it.
+let private send (sink: CapturingSink) (auth: Auth) (endpoints: Endpoint list) (http: HttpContext) : Response =
+    Replay.through (deps sink) (fun app -> Routes.mount app (Routes.keyed auth) endpoints) http [||]
+
+let private statusOf (auth: Auth) (endpoints: Endpoint list) (method: string) (target: string) (headers: (string * string) list) : int =
+    (send (CapturingSink()) auth endpoints (request method "example.com" target headers)).Status
 
 // --- the key guard -------------------------------------------------------------------
 
 [<Fact>]
 let ``the standard guard takes the header, then the api_key query parameter`` () =
-    let status target headers = statusOf Auth.standard [ Route.get "/x" ok ] "GET" target headers
+    let status target headers =
+        statusOf Auth.standard [ GET [ route "/x" (Routes.keyed Auth.standard ok) ] ] "GET" target headers
+
     Assert.Equal(200, status "/x" [ "Dd-Api-Key", key ])
     Assert.Equal(200, status ("/x?api_key=" + key) [])
     Assert.Equal(403, status "/x?api_key=wrong" [])
@@ -58,7 +65,7 @@ let ``the standard guard takes the header, then the api_key query parameter`` ()
 [<Fact>]
 let ``key sources are tried in order, and a non-bearer credential is not a key`` () =
     let all = Auth.fromSources [ KeyFromHeader "Dd-Api-Key"; KeyFromBearer; KeyFromQuery "api_key" ]
-    let status target headers = statusOf all [ Route.get "/x" ok ] "GET" target headers
+    let status target headers = statusOf all [ GET [ route "/x" (Routes.keyed all ok) ] ] "GET" target headers
     Assert.Equal(200, status "/x" [ "Dd-Api-Key", key ])
     Assert.Equal(200, status "/x" [ "DD-API-KEY", key ])
     Assert.Equal(200, status "/x" [ "Authorization", "Bearer " + key ])
@@ -69,70 +76,18 @@ let ``key sources are tried in order, and a non-bearer credential is not a key``
 
 [<Fact>]
 let ``the probes need no key, an unknown path is answered before the guard`` () =
-    let status method target = statusOf Auth.standard [ Route.post "/x" ok ] method target []
+    let status method target =
+        statusOf Auth.standard [ POST [ route "/x" (Routes.keyed Auth.standard ok) ] ] method target []
+
     Assert.Equal(200, status "GET" "/ping")
     Assert.Equal(200, status "GET" "/_health")
     Assert.Equal(404, status "POST" "/nowhere")
-    // A route under another method is not a route.
-    Assert.Equal(404, status "GET" "/x")
+    // A known path under another method is the router's own 405.
+    Assert.Equal(405, status "GET" "/x")
     Assert.Equal(403, status "POST" "/x")
-
-// --- route matching --------------------------------------------------------------------
-
-[<Fact>]
-let ``routes match literals, parameters and a trailing wildcard`` () =
-    let seen = ResizeArray<string>()
-    let record (name: string) : Handler =
-        fun r ->
-            let id = r.Param "id"
-            let rest = r.Param "rest"
-            seen.Add $"{name} id={id} rest={rest}"
-            Response.status 200
-
-    let routes =
-        [ Route.get "/v2/items/:id" (record "item")
-          Route.get "/v2/items/all" (record "all")
-          Route.get "/files/*rest" (record "files")
-          Route.post "/api/v2/webhook" (record "plain")
-          Route.post "/api/v2/webhook/" (record "slash") ]
-
-    let call method target = statusOf Auth.none routes method target [] |> ignore
-    call "GET" "/v2/items/42"
-    call "GET" "/v2/items/all"
-    call "GET" "/files/a/b.txt"
-    call "POST" "/api/v2/webhook"
-    call "POST" "/api/v2/webhook/"
-
-    Assert.Equal<string list>(
-        [ "item id=42 rest="
-          // A literal beats a parameter.
-          "all id= rest="
-          // As in Gin, the wildcard's value keeps its leading slash.
-          "files id= rest=/a/b.txt"
-          "plain id= rest="
-          "slash id= rest=" ],
-        List.ofSeq seen
-    )
-
-    Assert.Equal(404, statusOf Auth.none routes "GET" "/v2/items/1/2" [])
-
-[<Fact>]
-let ``a path one trailing slash away from a route is redirected to it`` () =
-    let engine = Engine.create Auth.standard [ Route.get "/v2/" ok; Route.post "/upload" ok ]
-
-    let respond method target =
-        Engine.respond (deps (CapturingSink())) engine (request method "example.com" target []) [||]
-
-    let toSlash = respond "GET" "/v2?x=1"
-    Assert.Equal(301, toSlash.Status)
-    Assert.Equal<(string * string) list>([ "Location", "/v2/?x=1" ], toSlash.Headers)
-
-    // Not GET: 307, so the client repeats the method and the body.
-    let fromSlash = respond "POST" "/upload/"
-    Assert.Equal(307, fromSlash.Status)
-    Assert.Equal<(string * string) list>([ "Location", "/upload" ], fromSlash.Headers)
-
-    Assert.Equal(404, (respond "GET" "/v3").Status)
+    // The router does not tell /x from /x/ or from /X.
+    Assert.Equal(403, status "POST" "/x/")
+    Assert.Equal(403, status "POST" "/X")
 
 [<Theory>]
 [<InlineData("agent-http-intake.logs.x", "/api/v2/logs", "routeLogs", """[{"message":"m","deep":DEEP}]""")>]
@@ -180,7 +135,7 @@ let ``a timestamp beyond year 9999 is kept at the limit, not an error`` () =
 
 [<Fact>]
 let ``a handler that throws is a 500, not a crash`` () =
-    Assert.Equal(500, statusOf Auth.none [ Route.get "/x" (fun _ -> failwith "boom") ] "GET" "/x" [])
+    Assert.Equal(500, statusOf Auth.none [ GET [ route "/x" (Routes.keyed Auth.none (fun _ -> failwith "boom")) ] ] "GET" "/x" [])
 
 // --- the host dispatch -------------------------------------------------------------------
 
@@ -190,7 +145,7 @@ let ``a handler that throws is a 500, not a crash`` () =
 // A dash instead of a dot: not our prefix.
 [<InlineData("sbom-intake-ninjacat.local")>]
 let ``a host no intake serves is refused by name`` (host: string) =
-    let intake = Routes.create (deps (CapturingSink()))
+    let intake = Replay.wholeIntake (deps (CapturingSink()))
     let response = intake (request "POST" host "/api/v2/sbom" [ "Dd-Api-Key", key ]) [||]
     Assert.Equal(404, response.Status)
     Assert.Equal("{\"errors\":[\"no intake for host \\\"" + host + "\\\"\"]}\n", Encoding.UTF8.GetString response.Body)
@@ -198,22 +153,24 @@ let ``a host no intake serves is refused by name`` (host: string) =
 
 [<Fact>]
 let ``an unknown host is refused even for the probes, port or not`` () =
-    let intake = Routes.create (deps (CapturingSink()))
+    let intake = Replay.wholeIntake (deps (CapturingSink()))
     let response = intake (request "GET" "nobody.ninjacat.local:8443" "/ping" []) [||]
     Assert.Equal(404, response.Status)
     Assert.Contains("nobody.ninjacat.local", Encoding.UTF8.GetString response.Body)
 
 // --- raw payloads ----------------------------------------------------------------------
 
-let private storing (body: string) : Route list =
-    [ Route.post "/api/v2/databasequery" (fun r ->
-          Raw.store r "dbm" "no_schema" "no decoder for this track yet" (Encoding.UTF8.GetBytes body)
-          Response.status 202) ]
+let private storing (auth: Auth) (body: string) : Endpoint list =
+    let store: Handler =
+        fun r ->
+            Raw.store r "dbm" "no_schema" "no decoder for this track yet" (Encoding.UTF8.GetBytes body)
+            Response.status 202
+
+    [ POST [ route "/api/v2/databasequery" (Routes.keyed auth store) ] ]
 
 [<Fact>]
 let ``a raw payload keeps what identifies the request, and no credentials`` () =
     let sink = CapturingSink()
-    let engine = Engine.create Auth.standard (storing """{"x":1}""")
 
     let http =
         request
@@ -226,7 +183,7 @@ let ``a raw payload keeps what identifies the request, and no credentials`` () =
               "User-Agent", "datadog-agent/7.58.2"
               "Authorization", "Bearer secret-value" ]
 
-    Assert.Equal(202, (Engine.respond (deps sink) engine http [||]).Status)
+    Assert.Equal(202, (send sink Auth.standard (storing Auth.standard """{"x":1}""") http).Status)
     let row = Assert.Single(sink.Rows<RawPayloadRow>())
     Assert.Equal("t1", row.TenantID)
     Assert.Equal("dbm", row.Intake)
@@ -245,8 +202,7 @@ let ``a raw payload keeps what identifies the request, and no credentials`` () =
 [<Fact>]
 let ``nothing is stored without a tenant`` () =
     let sink = CapturingSink()
-    let engine = Engine.create Auth.none (storing "body")
-    Engine.respond (deps sink) engine (request "POST" "example.com" "/api/v2/databasequery" []) [||] |> ignore
+    send sink Auth.none (storing Auth.none "body") (request "POST" "example.com" "/api/v2/databasequery" []) |> ignore
     Assert.Empty sink.Writes
 
 [<Theory>]
@@ -256,8 +212,8 @@ let ``nothing is stored without a tenant`` () =
 [<InlineData(" {} \n")>]
 let ``the agent's empty probes are not stored`` (body: string) =
     let sink = CapturingSink()
-    let engine = Engine.create Auth.standard (storing body)
-    Engine.respond (deps sink) engine (request "POST" "example.com" "/api/v2/databasequery" [ "Dd-Api-Key", key ]) [||] |> ignore
+    send sink Auth.standard (storing Auth.standard body) (request "POST" "example.com" "/api/v2/databasequery" [ "Dd-Api-Key", key ])
+    |> ignore
     Assert.Empty sink.Writes
     Assert.False(Raw.isProbe (Encoding.UTF8.GetBytes """{"a":1}"""))
     Assert.False(Raw.isProbe (Encoding.UTF8.GetBytes "x"))

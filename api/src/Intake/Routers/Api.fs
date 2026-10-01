@@ -1444,30 +1444,3 @@ let handleActionConnections (r: Request) : Response =
             Sink.write r.Sink ActionConnections.table [| row |]
 
     Response.json 202 "{}"
-
-let routes: Route list =
-    [ Route.post "/intake/" handleIntake
-      Route.post "/api/v1/series" handleSeriesV1
-      Route.post "/api/v2/series" handleSeriesV2
-      Route.post "/api/v1/check_run" handleCheckRun
-      Route.post "/api/v1/metadata" handleMetadata
-      Route.post "/api/beta/sketches" handleSketches
-
-      // Not sent by any agent: API clients only.
-      Route.post "/api/v1/events" handleEvents
-      Route.post "/api/v1/distribution_points" handleDistributionPoints
-
-      Route.post "/api/v2/intake-key" handleIntakeKey
-      Route.get "/api/v1/query" handleQuery
-      Route.post "/api/v2/profiles/symbols/query" handleSymbolsQuery
-      // The agent sends GET; POST gets the same answer.
-      Route.get "/api/v2/validate" handleOpmValidate
-      Route.post "/api/v2/validate" handleOpmValidate
-
-      Route.post "/api/unstable/on_prem_runners" handleRunnerEnroll
-      Route.post "/api/unstable/on_prem_runners/api_key_only" handleRunnerEnroll
-      Route.post "/api/v2/on-prem-management-service/workflow-tasks/dequeue" handleRunnerDequeue
-      Route.post "/api/v2/on-prem-management-service/workflow-tasks/publish-task-update" handleRunnerTaskUpdate
-      Route.post "/api/v2/on-prem-management-service/workflow-tasks/heartbeat" handleRunnerHeartbeat
-      Route.get "/api/v2/on-prem-management-service/runner/health-check" handleRunnerHealthCheck
-      Route.post "/api/v2/actions/connections" handleActionConnections ]

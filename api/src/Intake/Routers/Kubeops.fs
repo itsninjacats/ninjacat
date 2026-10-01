@@ -1083,9 +1083,3 @@ let handleActions (r: Request) : Response =
             Sink.write r.Sink K8sActions.table (events |> Seq.map (actionRow r.Tenant arrival) |> Array.ofSeq)
 
     accepted
-
-let routes: Route list =
-    [ Route.post "/api/v2/orch" handleOrchestrator
-      Route.post "/api/v2/orchmanif" handleManifests
-      Route.post "/api/v1/orchestrator" handleOrchestrator
-      Route.post "/api/v2/kubeactions" handleActions ]

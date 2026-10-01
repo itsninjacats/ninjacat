@@ -1140,9 +1140,3 @@ let handleDataStreamsMessages (r: Request) : Response =
             Sink.write r.Sink DsmMessages.table rows
 
     Response.json 202 "{}"
-
-let routes: Route list =
-    [ Route.post "/api/v0.2/traces" handleTraces
-      Route.post "/api/v0.2/stats" handleStats
-      Route.post "/api/v0.1/pipeline_stats" handlePipelineStats
-      Route.post "/api/v2/data_streams_messages" handleDataStreamsMessages ]

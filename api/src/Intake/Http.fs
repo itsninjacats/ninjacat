@@ -6,13 +6,14 @@ open System.IO.Compression
 open System.Text
 open System.Text.Encodings.Web
 open System.Text.Json
+open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.WebUtilities
 open Microsoft.Extensions.Logging
 open Microsoft.Net.Http.Headers
 open NinjaCat.Api.Storage
 
-/// What a handler answers with. Handlers return it; the engine writes it.
+/// What a handler answers with. Handlers return it; `Response.write` sends it.
 type Response =
     { Status: int
       Headers: (string * string) list
@@ -43,6 +44,18 @@ module Response =
     let withHeader (name: string) (value: string) (response: Response) : Response =
         { response with Headers = response.Headers @ [ name, value ] }
 
+    let write (http: HttpContext) (response: Response) : Task =
+        task {
+            http.Response.StatusCode <- response.Status
+
+            for name, value in response.Headers do
+                http.Response.Headers[name] <- value
+
+            if response.Body.Length > 0 && http.Request.Method <> "HEAD" then
+                http.Response.ContentLength <- int64 response.Body.Length
+                do! http.Response.Body.WriteAsync(response.Body, 0, response.Body.Length)
+        }
+
 module Query =
     /// A query parameter's first value, or "", with the name matched exactly.
     /// ASP.NET's own lookup ignores case; Go's did not.
@@ -60,8 +73,6 @@ module Query =
 type Request =
     { Http: HttpContext
       Body: byte[]
-      /// Path parameters of the matched route (`:case_id`).
-      Params: Map<string, string>
       /// The API key the request was admitted with; None on public routes.
       Key: ApiKeys.Key option
       Sink: ISink
@@ -87,32 +98,7 @@ type Request =
     /// as Go matched it: `?DDSOURCE=` is not `ddsource`.
     member r.Query(name: string) : string = Query.first r.Http name
 
-    /// The path parameter, or "".
-    member r.Param(name: string) : string =
-        match r.Params.TryFind name with
-        | Some value -> value
-        | None -> ""
-
 type Handler = Request -> Response
-
-type Route =
-    { Method: string
-      /// Gin's syntax: `/support/flare/:case_id`, `/v2/*path`.
-      Pattern: string
-      Handler: Handler }
-
-module Route =
-    let get (pattern: string) (handler: Handler) : Route =
-        { Method = "GET"; Pattern = pattern; Handler = handler }
-
-    let post (pattern: string) (handler: Handler) : Route =
-        { Method = "POST"; Pattern = pattern; Handler = handler }
-
-    let put (pattern: string) (handler: Handler) : Route =
-        { Method = "PUT"; Pattern = pattern; Handler = handler }
-
-    let head (pattern: string) (handler: Handler) : Route =
-        { Method = "HEAD"; Pattern = pattern; Handler = handler }
 
 /// Request bodies arrive compressed three ways, one per agent subsystem: zstd
 /// for metrics, gzip for traces, deflate for distribution points. No proxy
@@ -122,6 +108,14 @@ module Body =
         use buffer = new MemoryStream()
         stream.CopyTo buffer
         buffer.ToArray()
+
+    /// The request's body as it arrived, still compressed.
+    let read (http: HttpContext) : Task<byte[]> =
+        task {
+            use buffer = new MemoryStream()
+            do! http.Request.Body.CopyToAsync buffer
+            return buffer.ToArray()
+        }
 
     let private inflate (wrap: Stream -> Stream) (body: byte[]) : byte[] =
         use input = new MemoryStream(body)

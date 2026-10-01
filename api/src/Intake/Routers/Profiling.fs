@@ -802,7 +802,7 @@ let symbolUploadRow (tenant: string) (parts: Map<string, byte[]>) (meta: JsonEle
 /// POST /api/v2/srcmap: an ELF symbol file (elf_symbol_file) and its
 /// metadata (event), usually zstd-compressed as a whole. The agent sends it
 /// only after /api/v2/profiles/symbols/query said the symbols are missing.
-let private handleSourcemap (r: Request) : Response =
+let handleSourcemap (r: Request) : Response =
     match readParts r "srcmap" with
     | Error problem ->
         let contentType = r.Header "Content-Type"
@@ -815,14 +815,3 @@ let private handleSourcemap (r: Request) : Response =
             Sink.write r.Sink SymbolUploads.table [| symbolUploadRow r.Tenant parts meta |]
 
     accepted
-
-let profileRoutes: Route list =
-    [ // What the trace-agent forwards from /profiling/v1/input: the tracer's
-      // own multipart, byte for byte.
-      Route.post "/api/v2/profile" (handleProfile "profile")
-      // The old path, still used by the agent's internal profiling.
-      Route.post "/v1/input" (handleProfile "profile-v1") ]
-
-let debuggerRoutes: Route list = [ Route.post "/api/v2/debugger" handleDebugger ]
-
-let sourcemapRoutes: Route list = [ Route.post "/api/v2/srcmap" handleSourcemap ]

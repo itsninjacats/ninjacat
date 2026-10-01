@@ -33,7 +33,8 @@ let private caseNumber (caseId: string) : int64 =
     | true, n -> n
     | false, _ -> int64 (BinaryPrimitives.ReadUInt64BigEndian(ReadOnlySpan(Guid.NewGuid().ToByteArray(true))) >>> 1)
 
-let handle (r: Request) : Response =
+/// `pathCaseId` is the case id from the path, "" for a new flare.
+let handle (pathCaseId: string) (r: Request) : Response =
     if r.Method = "HEAD" then
         // The uploader's redirect probe: 200 means reachable.
         Response.status 200
@@ -68,7 +69,7 @@ let handle (r: Request) : Response =
 
                 // A flare for an existing case carries its id in the path and
                 // in the form; the form wins if they ever disagree.
-                let caseId = Text.firstNonEmpty [ field "case_id"; r.Param "case_id" ]
+                let caseId = Text.firstNonEmpty [ field "case_id"; pathCaseId ]
 
                 if r.Tenant <> "" then
                     Sink.write

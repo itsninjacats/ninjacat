@@ -345,7 +345,6 @@ let ``without a tenant nothing is stored and the answer is still 202`` () =
     let request: Request =
         { Http = DefaultHttpContext()
           Body = Encoding.UTF8.GetBytes """{"host":"db1","database_instance":"db1/orcl"}"""
-          Params = Map.empty
           Key = None
           Sink = sink
           Log = NullLogger.Instance }
