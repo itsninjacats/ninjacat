@@ -127,7 +127,12 @@ services:
     ports:
       - "8082:8082"   # F# API — internal
     environment:
-      NINJACAT_API_URL: http://0.0.0.0:8082
+      # While the Go server still takes the agents' traffic, this one only
+      # serves the internal port; its intake listens where nothing sends.
+      NINJACAT_INTERNAL_ADDR: ":8082"
+      NINJACAT_ADDR: ":8083"
+      NINJACAT_LOGS_TCP_ADDR: "off"
+      NINJACAT_AUTO_MIGRATE: "false"
       CLICKHOUSE_HTTP_ADDR: clickhouse:8123
       CLICKHOUSE_DB: ninjacat
       CLICKHOUSE_USER: ninjacat

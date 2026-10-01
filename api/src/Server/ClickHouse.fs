@@ -10,35 +10,38 @@ open ClickHouse.Driver.Utility
 open NinjaCat.Api.Engine
 
 /// Server-side limit for a single query, in seconds.
-///
-/// Mirrors the Go query worker: a slow query fails in ClickHouse with a
-/// readable message, before the HTTP client gives up with an opaque timeout.
 let private maxExecutionSeconds = 7
 
-let createClient (cfg: Config.Config) =
+let private settings (cfg: Config.Config) (timeout: TimeSpan) =
     let host, port =
         match cfg.ClickHouseHttpAddr.Split ':' with
         | [| h; p |] -> h, UInt16.Parse p
         | _ -> cfg.ClickHouseHttpAddr, 8123us
 
-    let settings =
-        ClickHouseClientSettings(
-            Host = host,
-            Port = port,
-            Database = cfg.ClickHouseDb,
-            Username = cfg.ClickHouseUser,
-            Password = cfg.ClickHousePassword,
-            Timeout = TimeSpan.FromSeconds(float maxExecutionSeconds + 1.0)
-        )
+    ClickHouseClientSettings(
+        Host = host,
+        Port = port,
+        Database = cfg.ClickHouseDb,
+        Username = cfg.ClickHouseUser,
+        Password = cfg.ClickHousePassword,
+        Timeout = timeout
+    )
 
-    // This service only reads — the Go server owns the schema and every
-    // write. readonly=2 makes ClickHouse enforce that per request while still
-    // letting the driver set its own session settings (readonly=1 would not).
-    // A dedicated read-only ClickHouse user is the stronger form of the same
-    // rule; this holds until one exists.
+/// The client queries run on. It cannot write: readonly=2 makes ClickHouse
+/// refuse anything but reads on it, while still letting the driver set its
+/// own session settings (readonly=1 would not). A slow query must fail in
+/// ClickHouse with a readable message before the HTTP client gives up.
+let createClient (cfg: Config.Config) =
+    let settings = settings cfg (TimeSpan.FromSeconds(float maxExecutionSeconds + 1.0))
     settings.CustomSettings["readonly"] <- box 2
     settings.CustomSettings["max_execution_time"] <- box maxExecutionSeconds
     new ClickHouseClient(settings)
+
+/// The client the write path and the migrations use. Kept apart from the
+/// read client so no query can ever write, and so a slow query and a slow
+/// insert do not share a timeout. Migrations rebuild tables: two minutes.
+let createWriteClient (cfg: Config.Config) =
+    new ClickHouseClient(settings cfg (TimeSpan.FromMinutes 2.0))
 
 let private toDriverValue =
     function

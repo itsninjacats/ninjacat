@@ -7,7 +7,10 @@
     <Compile Include="Config.fs" />
     <Compile Include="ClickHouse.fs" />
     <Compile Include="Postgres.fs" />
+    <Compile Include="ApiKeysKeeper.fs" />
+    <Compile Include="SelfMonitor.fs" />
     <Compile Include="Handlers.fs" />
+    <Compile Include="PanelHandlers.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
@@ -17,5 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Engine/Engine.fsproj" />
+    <ProjectReference Include="../Intake/Intake.fsproj" />
+    <ProjectReference Include="../Storage/Storage.fsproj" />
   </ItemGroup>
 </Project>

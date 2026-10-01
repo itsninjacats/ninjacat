@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="MetricsTests.fs" />
+    <Compile Include="PanelTests.fs" />
     <Compile Include="TagFilterTests.fs" />
     <Compile Include="MetricQueryTests.fs" />
     <Compile Include="ExpressionTests.fs" />
