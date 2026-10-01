@@ -327,7 +327,8 @@ let ``a message is decoded when it is an object or holds one`` (message: string,
 [<InlineData("null", "")>]
 [<InlineData("true", "")>]
 // Milliseconds past the year 9999: Go has such a time, a DateTime does not.
-[<InlineData("999999999999999999", "")>]
+// Past year 9999: kept at the limit.
+[<InlineData("999999999999999999", "9999-12-31T23:59:59.9990000Z")>]
 let ``an envelope's timestamp is a millisecond epoch or RFC 3339 text`` (value: string, expected: string) =
     let shown =
         match Security.parseTimestamp (Some(jsonValue value)) with

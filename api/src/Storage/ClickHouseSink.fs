@@ -74,7 +74,10 @@ type ClickHouseSink(client: ClickHouseClient, log: ILogger) =
         else
             id
 
-    let createWriter (name: string) (columns: string list) (limits: WriterLimits) : TableWriter =
+    let createWriter (name: string) (quotedColumns: string list) (limits: WriterLimits) : TableWriter =
+        // A column named like a keyword (`group`) is written with backticks
+        // in a table's column list; the driver quotes names itself.
+        let columns = quotedColumns |> List.map (fun column -> column.Trim '`')
         let mutable options: InsertOptions = null
         let mutable adjusters: (obj -> obj)[] = [||]
 

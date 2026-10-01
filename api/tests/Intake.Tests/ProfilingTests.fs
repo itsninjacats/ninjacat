@@ -197,7 +197,8 @@ let ``start is kept as the text it had on the wire`` (start: string, expected: s
 [<InlineData("\"1758623400\"", "")>]
 [<InlineData("true", "")>]
 // Seconds past the year 9999: Go has such a time, a DateTime does not.
-[<InlineData("253402300800", "")>]
+// The first second of year 10000: kept at the limit.
+[<InlineData("253402300800", "9999-12-31T23:59:59.0000000Z")>]
 let ``timestamps are RFC 3339 text or an epoch whose magnitude gives the unit`` (value: string, expected: string) =
     let parsed = Profiling.parseTimestamp (Some(jsonValue value))
 
