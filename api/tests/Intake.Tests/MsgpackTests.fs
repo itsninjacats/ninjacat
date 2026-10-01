@@ -44,3 +44,8 @@ let ``the reader walks a known layout`` () =
     Assert.Equal(42L, reader.ReadInt64())
     Assert.True(reader.TryReadNil())
     Assert.True reader.AtEnd
+
+[<Fact>]
+let ``a map key that is not a string is refused`` () =
+    // {bin"a": 1}
+    Assert.True(Result.isError (decode [ 0x81uy; 0xc4uy; 0x01uy; byte 'a'; 0x01uy ]))

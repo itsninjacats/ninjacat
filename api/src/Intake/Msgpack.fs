@@ -21,7 +21,7 @@ type MsgValue =
     | MsgStr of string
     | MsgBin of byte[]
     | MsgArray of MsgValue list
-    /// Entries in wire order. Keys are strings (a binary key is read as one).
+    /// Entries in wire order. Keys are strings.
     | MsgMap of (string * MsgValue) list
     | MsgExt of extType: sbyte * data: byte[]
 
@@ -257,6 +257,10 @@ type MsgpackReader(data: byte[]) =
 
             MsgMap
                 [ for _ in 1..count ->
+                      // A key must be a string; Go's reader refuses anything else.
+                      if r.PeekType() <> StrType then
+                          fail $"map key at byte {position} is not a string"
+
                       let key = r.ReadString()
                       key, r.ReadValue() ]
         | ExtType -> r.ReadExt()
