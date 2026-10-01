@@ -32,6 +32,7 @@ open System.Text.Encodings.Web
 open System.Text.Json
 open System.Text.Unicode
 open System.Threading.Tasks
+open Microsoft.AspNetCore.Cors.Infrastructure
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.WebUtilities
 open Microsoft.Extensions.Logging
@@ -59,15 +60,21 @@ let gate: Auth =
 /// mobile SDKs and for a browser deployment that chose headers over the query
 /// string; Content-Encoding because a proxy in front of the page may add it.
 let private corsAllowedHeaders =
-    "Content-Type, Content-Encoding, DD-API-KEY, DD-CLIENT-TOKEN, "
-    + "DD-EVP-ORIGIN, DD-EVP-ORIGIN-VERSION, DD-REQUEST-ID, DD-IDEMPOTENCY-KEY"
+    [| "Content-Type"
+       "Content-Encoding"
+       "DD-API-KEY"
+       "DD-CLIENT-TOKEN"
+       "DD-EVP-ORIGIN"
+       "DD-EVP-ORIGIN-VERSION"
+       "DD-REQUEST-ID"
+       "DD-IDEMPOTENCY-KEY" |]
 
 /// The value of NINJACAT_RUM_ALLOWED_ORIGINS as a list: comma-separated
 /// origins allowed to post RUM data. Unset, empty or "*" gives no list, which
-/// means "echo whatever Origin the request carried".
+/// means "any origin".
 ///
-/// Echoing is the default on purpose. The key is compiled into a web page, so
-/// an allowlist keeps nobody out, and a mandatory one would turn every new
+/// Any origin is the default on purpose. The key is compiled into a web page,
+/// so an allowlist keeps nobody out, and a mandatory one would turn every new
 /// subdomain into silent data loss.
 let parseAllowedOrigins (raw: string) : string list =
     if String.IsNullOrEmpty raw || raw.Trim() = "*" then
@@ -75,26 +82,25 @@ let parseAllowedOrigins (raw: string) : string list =
     else
         raw.Split ',' |> Array.map _.Trim() |> Array.filter (fun origin -> origin <> "") |> List.ofArray
 
-/// The access-control headers for a request that carried `origin`.
-let corsHeaders (origin: string) (allowed: string list) : (string * string) list =
-    let forOrigin =
-        if origin = "" then
-            // Not a browser: iOS, Android, curl.
-            [ "Access-Control-Allow-Origin", "*" ]
-        elif allowed.IsEmpty then
-            // The answer varies by request header, so a cache must key on it.
-            [ "Access-Control-Allow-Origin", origin; "Vary", "Origin" ]
-        elif List.contains origin allowed then
-            [ "Vary", "Origin"; "Access-Control-Allow-Origin", origin ]
-        else
-            // Not on the list: no header, the browser blocks the read, and
-            // the operator gets the failure they asked for.
-            [ "Vary", "Origin" ]
+/// The CORS policy of browser-intake, for ASP.NET's CORS middleware.
+///
+/// The middleware puts the headers on EVERY answer to an allowed origin, the
+/// 403 and the 404 included, and that matters: to the browser SDK a
+/// cross-origin response it may not read is status 0 while online, which it
+/// counts as success. It drops the batch and tells nobody, so a bad key or an
+/// unserved path would be invisible on both sides. A preflight carries no
+/// credential and is answered by the middleware itself, whatever the path.
+let corsPolicy (allowedOrigins: string list) (policy: CorsPolicyBuilder) : unit =
+    if allowedOrigins.IsEmpty then
+        policy.SetIsOriginAllowed(fun _ -> true) |> ignore
+    else
+        policy.WithOrigins(Array.ofList allowedOrigins) |> ignore
 
-    forOrigin
-    @ [ "Access-Control-Allow-Methods", "POST, GET, OPTIONS"
-        "Access-Control-Allow-Headers", corsAllowedHeaders
-        "Access-Control-Max-Age", "86400" ]
+    policy
+        .WithMethods("POST", "GET")
+        .WithHeaders(corsAllowedHeaders)
+        .SetPreflightMaxAge(TimeSpan.FromDays 1.0)
+    |> ignore
 
 /// Turns the browser SDK's `proxy: '<url>'` form back into the request it
 /// stands for. That form sends POST <url>?ddforward=<encoded path and query>,
@@ -131,27 +137,6 @@ let unwrapForward (log: ILogger) (http: HttpContext) : unit =
 
             http.Request.Path <- PathString(Uri.UnescapeDataString path)
             http.Request.QueryString <- QueryString.Create merged
-
-/// What sits above the router on browser-intake, as a middleware.
-///
-/// CORS has to be on EVERY answer, the 403 and the 404 included. To the
-/// browser SDK a cross-origin response it may not read is status 0 while
-/// online, which it counts as success: it drops the batch and tells nobody.
-/// A bad key or an unserved path would be invisible on both sides.
-let browserGate (log: ILogger) (allowedOrigins: string list) (http: HttpContext) (next: RequestDelegate) : Task =
-    unwrapForward log http
-
-    for name, value in corsHeaders (http.Request.Headers.Origin.ToString()) allowedOrigins do
-        http.Response.Headers[name] <- value
-
-    // A preflight carries no credential, so it is answered before anything
-    // can ask for one — and for paths that are not served too: the browser
-    // must get as far as the POST to see a 404 it can act on.
-    if http.Request.Method = "OPTIONS" then
-        http.Response.StatusCode <- 204
-        Task.CompletedTask
-    else
-        next.Invoke http
 
 // One path-walking reader over JsonElement serves every event variant: their
 // `view` and `session` objects are the same JSON whatever the variant, and a
@@ -344,28 +329,15 @@ let private tryParseInt64 (text: string) : int64 option =
     | true, n -> Some n
     | false, _ -> None
 
-/// The sender's address as Gin's ClientIP gave it with the defaults the Go
-/// engine ran on: every peer counts as a trusted proxy, so the leftmost
-/// X-Forwarded-For address wins, then X-Real-Ip, then the peer itself.
+/// The sender's address. Behind a proxy the operator has named
+/// (NINJACAT_TRUSTED_PROXIES), ASP.NET's forwarded-headers middleware has
+/// already replaced the peer with the address from X-Forwarded-For.
 let private clientIP (r: Request) : string =
     let peer = r.Http.Connection.RemoteIpAddress
 
-    if isNull peer then
-        ""
-    else
-        // One entry that is not an address discredits the whole header.
-        let forwarded (header: string) : string option =
-            let items = r.Http.Request.Headers[header].ToString().Split ',' |> Array.map _.Trim()
-
-            if items |> Array.forall (fun item -> fst (IPAddress.TryParse item)) then
-                Some items[0]
-            else
-                None
-
-        match forwarded "X-Forwarded-For", forwarded "X-Real-Ip" with
-        | Some address, _ -> address
-        | None, Some address -> address
-        | None, None -> (if peer.IsIPv4MappedToIPv6 then peer.MapToIPv4() else peer).ToString()
+    if isNull peer then ""
+    elif peer.IsIPv4MappedToIPv6 then peer.MapToIPv4().ToString()
+    else peer.ToString()
 
 /// The sender columns shared by every RUM table. The browser puts its
 /// identity in the query string (it sets no headers at all), iOS and Android

@@ -409,10 +409,26 @@ let mount (app: IApplicationBuilder) (guard: Handler -> EndpointHandler) (endpoi
     app.UseRouting().UseOxpecker(endpoints @ onEveryHost guard) |> ignore
     app.Run unknownEndpoint
 
+/// browser-intake's router, with what sits above it.
+let mountBrowser (app: IApplicationBuilder) (log: ILogger) (allowedOrigins: string list) : unit =
+    app.UseCors(fun policy -> Rum.corsPolicy allowedOrigins policy) |> ignore
+
+    app.Use(fun (http: HttpContext) (next: RequestDelegate) ->
+        Rum.unwrapForward log http
+        next.Invoke http)
+    |> ignore
+
+    mount app browserKey rum
+
 /// The whole intake: the request's host picks the product, the router the
 /// handler.
 let configure (pipeline: IApplicationBuilder) : unit =
     let deps = pipeline.ApplicationServices.GetRequiredService<Deps>()
+
+    // Does nothing until the host names the proxies it trusts
+    // (ForwardedHeadersOptions); then a request's address is the one such a
+    // proxy forwarded, not the proxy's own.
+    pipeline.UseForwardedHeaders() |> ignore
 
     let rumOrigins =
         Rum.parseAllowedOrigins (System.Environment.GetEnvironmentVariable "NINJACAT_RUM_ALLOWED_ORIGINS")
@@ -480,15 +496,8 @@ let configure (pipeline: IApplicationBuilder) : unit =
     on "llmobs-intake." agent llmObs
 
     // browser-intake is the one host whose clients are not agents: it needs
-    // CORS and a URL rewrite above its router.
-    pipeline.MapWhen(
-        (fun http -> (hostName http).StartsWith "browser-intake."),
-        fun branch ->
-            branch.Use(fun (http: HttpContext) (next: RequestDelegate) -> Rum.browserGate deps.Log rumOrigins http next)
-            |> ignore
-
-            mount branch browserKey rum
-    )
+    // CORS, and a URL rewrite for the SDK's `proxy` form, above its router.
+    pipeline.MapWhen((fun http -> (hostName http).StartsWith "browser-intake."), (fun branch -> mountBrowser branch deps.Log rumOrigins))
     |> ignore
 
     pipeline.Run unknownHost

@@ -13,18 +13,6 @@
    "message": "pong"
   },
   "headers": {
-   "Access-Control-Allow-Headers": [
-    "Content-Type, Content-Encoding, DD-API-KEY, DD-CLIENT-TOKEN, DD-EVP-ORIGIN, DD-EVP-ORIGIN-VERSION, DD-REQUEST-ID, DD-IDEMPOTENCY-KEY"
-   ],
-   "Access-Control-Allow-Methods": [
-    "POST, GET, OPTIONS"
-   ],
-   "Access-Control-Allow-Origin": [
-    "*"
-   ],
-   "Access-Control-Max-Age": [
-    "86400"
-   ],
    "Content-Type": [
     "application/json; charset=utf-8"
    ]
@@ -37,5 +25,6 @@
  "sends": [],
  "seq": 1,
  "test": "TestRUMEngineKeepsProbes",
- "volatile": []
+ "volatile": [],
+ "edited": "The CORS headers of the response are the ones ASP.NET's CORS middleware sets. The Go server wrote its own: Allow-Methods, Allow-Headers and Max-Age on every answer, and Allow-Origin: * for a request with no Origin. The middleware keeps those three for preflights and says nothing to a request that names no origin."
 }

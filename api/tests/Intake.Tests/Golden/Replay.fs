@@ -8,6 +8,7 @@ open System.Text.Json.Nodes
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.Http
+open Microsoft.AspNetCore.HttpOverrides
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Logging.Abstractions
@@ -54,7 +55,16 @@ let all: Fixture list =
 let through (deps: Deps) (configure: IApplicationBuilder -> unit) (http: HttpContext) (body: byte[]) : Response =
     let builder = WebApplication.CreateEmptyBuilder(WebApplicationOptions())
     builder.WebHost.UseTestServer() |> ignore
-    builder.Services.AddSingleton<Deps>(deps).AddRouting().AddOxpecker() |> ignore
+    builder.Services.AddSingleton<Deps>(deps).AddRouting().AddCors().AddOxpecker() |> ignore
+
+    // The peer every recorded request comes from is a proxy the server
+    // trusts, as an operator would name theirs.
+    builder.Services.Configure<ForwardedHeadersOptions>(fun (options: ForwardedHeadersOptions) ->
+        options.ForwardedHeaders <- ForwardedHeaders.XForwardedFor
+        options.ForwardLimit <- Nullable()
+        options.KnownProxies.Add(Net.IPAddress.Parse "192.0.2.1"))
+    |> ignore
+
     use app = builder.Build()
     configure app
     app.StartAsync().GetAwaiter().GetResult()
@@ -135,10 +145,8 @@ let byGoNames (deps: Deps) (names: string list) : HttpContext -> byte[] -> Respo
 /// browser-intake as the server mounts it: the gate above the router.
 let browserIntake (deps: Deps) (allowedOrigins: string list) : HttpContext -> byte[] -> Response =
     through deps (fun app ->
-        app.Use(fun (http: HttpContext) (next: RequestDelegate) -> Routers.Rum.browserGate NullLogger.Instance allowedOrigins http next)
-        |> ignore
-
-        Routes.mount app Routes.browserKey Routes.rum)
+        app.UseForwardedHeaders() |> ignore
+        Routes.mountBrowser app NullLogger.Instance allowedOrigins)
 
 /// Every host, as the server mounts them.
 let wholeIntake (deps: Deps) : HttpContext -> byte[] -> Response = through deps Routes.configure

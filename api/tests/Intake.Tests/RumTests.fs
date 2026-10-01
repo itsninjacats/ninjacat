@@ -465,16 +465,21 @@ let ``the sender's address is the peer when nothing was forwarded`` () =
     Assert.Equal("192.0.2.1", request.RemoteAddr)
     Assert.Equal("Mozilla/5.0", request.UserAgent)
 
-/// Gin's ClientIP with the defaults the Go engine ran on.
+/// The address a trusted proxy forwarded replaces the peer. The middleware
+/// reads X-Forwarded-For from the right: the last entry is the one the
+/// trusted proxy itself wrote, the ones before it are the client's claim.
 [<Theory>]
-[<InlineData("X-Forwarded-For", "203.0.113.7, 10.0.0.1", "203.0.113.7")>]
-[<InlineData("X-Real-Ip", "198.51.100.9", "198.51.100.9")>]
+[<InlineData("X-Forwarded-For", "203.0.113.7", "203.0.113.7")>]
+[<InlineData("X-Forwarded-For", "198.51.100.1, 203.0.113.7", "203.0.113.7")>]
+// Not a header the middleware reads.
+[<InlineData("X-Real-Ip", "198.51.100.9", "192.0.2.1")>]
 [<InlineData("X-Forwarded-For", "203.0.113.7, not-an-address", "192.0.2.1")>]
-let ``a forwarded address wins over the peer, unless the header holds something else``
-    (name: string, value: string, expected: string)
-    =
-    let request = Rum.requestInfo (requestOf "/api/v2/rum" [ name, value ])
-    Assert.Equal(expected, request.RemoteAddr)
+let ``the address forwarded by a trusted proxy is the sender's`` (name: string, value: string, expected: string) =
+    let sink = CapturingSink()
+    let http = httpContext "POST" ("/api/v2/rum?ddsource=browser&dd-api-key=" + Replay.testKey) [ name, value ]
+
+    Assert.Equal(202, (serve [] sink http (utf8 action)).Status)
+    Assert.Equal(expected, (Assert.Single(sink.Rows<RumEventRow>())).Req.RemoteAddr)
 
 let private forwarded (target: string) : string = Uri.EscapeDataString target
 
@@ -575,11 +580,11 @@ let ``every answer carries the origin, the refusals included`` (method: string, 
     Assert.Equal("https://shop.example", header "Access-Control-Allow-Origin" response)
 
 [<Fact>]
-let ``a request with no origin is not a browser and is answered with a star`` () =
+let ``a request with no origin is not a browser and gets no access-control headers`` () =
     let response = post (CapturingSink()) "/api/v2/rum" [] (utf8 action)
 
-    Assert.Equal("*", header "Access-Control-Allow-Origin" response)
-    Assert.Equal("", header "Vary" response)
+    Assert.Equal(202, response.Status)
+    Assert.Empty(response.Headers |> List.filter (fun (name, _) -> name.StartsWith "Access-Control-" || name = "Vary"))
 
 [<Theory>]
 [<InlineData(null)>]
@@ -587,7 +592,7 @@ let ``a request with no origin is not a browser and is answered with a star`` ()
 [<InlineData("*")>]
 [<InlineData(" * ")>]
 [<InlineData(" , ")>]
-let ``no allowlist, an empty one or a star all mean "echo the origin"`` (raw: string) =
+let ``no allowlist, an empty one or a star all mean "any origin"`` (raw: string) =
     Assert.Empty(Rum.parseAllowedOrigins raw)
 
 /// An allowlist is the operator's choice and is honoured exactly: an origin
@@ -600,10 +605,13 @@ let ``an allowlist admits its origins and gives the others no header`` (origin: 
     let allowed = Rum.parseAllowedOrigins "https://shop.example, https://admin.example"
     Assert.Equal<string list>([ "https://shop.example"; "https://admin.example" ], allowed)
 
-    let response = serve allowed (CapturingSink()) (httpContext "OPTIONS" "/api/v2/rum" [ "Origin", origin ]) [||]
+    let preflight =
+        httpContext "OPTIONS" "/api/v2/rum" [ "Origin", origin; "Access-Control-Request-Method", "POST" ]
 
+    let response = serve allowed (CapturingSink()) preflight [||]
+
+    Assert.Equal(204, response.Status)
     Assert.Equal(expected, header "Access-Control-Allow-Origin" response)
-    Assert.Equal("Origin", header "Vary" response)
 
 /// The fixtures Go recorded on its bare engine or behind rumEngine. The
 /// golden replay runs them without the wrapper and without a peer address,
