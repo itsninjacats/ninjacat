@@ -10,6 +10,7 @@
     <Compile Include="Http.fs" />
     <Compile Include="Common.fs" />
     <Compile Include="Msgpack.fs" />
+    <Compile Include="DDSketch.fs" />
     <Compile Include="Routers/Flare.fs" />
     <Compile Include="Engine.fs" />
     <Compile Include="Routers/Logs.fs" />

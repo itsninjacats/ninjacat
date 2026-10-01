@@ -9,6 +9,25 @@
     <Compile Include="Golden/Compare.fs" />
     <Compile Include="Golden/Replay.fs" />
     <Compile Include="GoldenTests.fs" />
+    <Compile Include="DDSketchTests.fs" />
+    <Compile Include="MsgpackTests.fs" />
+    <Compile Include="ApiTests.fs" />
+    <Compile Include="AppTests.fs" />
+    <Compile Include="ConfigTests.fs" />
+    <Compile Include="InstallTests.fs" />
+    <Compile Include="ContainersTests.fs" />
+    <Compile Include="KubeopsTests.fs" />
+    <Compile Include="DbmTests.fs" />
+    <Compile Include="NdmTests.fs" />
+    <Compile Include="MiscTests.fs" />
+    <Compile Include="ProfilingTests.fs" />
+    <Compile Include="SecurityTests.fs" />
+    <Compile Include="EvpTests.fs" />
+    <Compile Include="CiVisibilityTests.fs" />
+    <Compile Include="CiWebhookTests.fs" />
+    <Compile Include="TraceTests.fs" />
+    <Compile Include="ProcessTests.fs" />
+    <Compile Include="RumTests.fs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Fixtures/go/**/*.json" CopyToOutputDirectory="PreserveNewest" />
@@ -17,9 +36,11 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Google.Protobuf" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Intake/Intake.fsproj" />
     <ProjectReference Include="../../src/Storage/Storage.fsproj" />
+    <ProjectReference Include="../../src/Proto/NinjaCat.Api.Proto.csproj" />
   </ItemGroup>
 </Project>
