@@ -143,7 +143,11 @@ let create (deps: Deps) : Intake =
     let install = engine [ "routeInstall" ]
     // browser-intake is the one host whose clients are not agents: it needs
     // CORS and a URL rewrite above its router.
-    let rum = Rum.wrap (engine [ "routeRUM" ])
+    let rum =
+        Rum.wrapWith
+            deps.Log
+            (Rum.parseAllowedOrigins (System.Environment.GetEnvironmentVariable "NINJACAT_RUM_ALLOWED_ORIGINS"))
+            (engine [ "routeRUM" ])
 
     let byPrefix: (string * Intake) list =
         [ "app.", app

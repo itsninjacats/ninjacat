@@ -80,6 +80,8 @@ let private request (fixture: JsonNode) : HttpContext * byte[] =
         | -1 -> url, ""
         | i -> url.Substring(0, i), url.Substring i
 
+    // The peer of every Go httptest request.
+    http.Connection.RemoteIpAddress <- Net.IPAddress.Parse "192.0.2.1"
     http.Request.Method <- request["method"].GetValue<string>()
     http.Request.Host <- HostString(request["host"].GetValue<string>())
     http.Request.Path <- PathString(Uri.UnescapeDataString path)
@@ -115,10 +117,13 @@ let send (fixture: Fixture) : Response * CapturedWrite list =
     // Most Go tests built one engine and sent to "example.com"; the ones that
     // went through the host dispatch carry a real intake host.
     let intake =
-        if http.Request.Host.Host = "example.com" then
-            Routes.byGoNames deps fixture.RouteSets
-        else
+        if http.Request.Host.Host <> "example.com" then
             Routes.create deps
+        elif fixture.RouteSets = [ "routeRUM" ] then
+            // Go's RUM tests went through what sits above that router too.
+            Routers.Rum.wrap (Routes.byGoNames deps fixture.RouteSets)
+        else
+            Routes.byGoNames deps fixture.RouteSets
 
     intake http body, sink.Writes
 

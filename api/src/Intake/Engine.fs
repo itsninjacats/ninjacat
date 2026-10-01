@@ -24,7 +24,7 @@ module Auth =
 
         match source with
         | KeyFromHeader name -> first http.Request.Headers[name]
-        | KeyFromQuery name -> first http.Request.Query[name]
+        | KeyFromQuery name -> Query.first http name
         | KeyFromBearer ->
             // Anything that is not a Bearer credential yields nothing, so the
             // next source gets its turn.

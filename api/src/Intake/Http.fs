@@ -43,6 +43,18 @@ module Response =
     let withHeader (name: string) (value: string) (response: Response) : Response =
         { response with Headers = response.Headers @ [ name, value ] }
 
+module Query =
+    /// A query parameter's first value, or "", with the name matched exactly.
+    /// ASP.NET's own lookup ignores case; Go's did not.
+    let first (http: HttpContext) (name: string) : string =
+        let mutable found = ""
+
+        for pair in http.Request.Query do
+            if found = "" && pair.Key = name && pair.Value.Count > 0 then
+                found <- pair.Value[0]
+
+        found
+
 /// One request as a handler sees it. The body is already read and
 /// decompressed.
 type Request =
@@ -71,11 +83,9 @@ type Request =
         | true, values when values.Count > 0 -> values[0]
         | _ -> ""
 
-    /// The query parameter's first value, or "".
-    member r.Query(name: string) : string =
-        match r.Http.Request.Query.TryGetValue name with
-        | true, values when values.Count > 0 -> values[0]
-        | _ -> ""
+    /// The query parameter's first value, or "". The name is matched exactly,
+    /// as Go matched it: `?DDSOURCE=` is not `ddsource`.
+    member r.Query(name: string) : string = Query.first r.Http name
 
     /// The path parameter, or "".
     member r.Param(name: string) : string =
