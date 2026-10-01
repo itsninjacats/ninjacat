@@ -139,5 +139,54 @@
       "/sends/0/args/0/13"
     ],
     "why": "The note quotes the decoder's error message, and the .NET JSON and protobuf libraries word theirs differently from Go's."
+  },
+  "TestCITestCycleStoresUndecodableBodiesRaw__not_json/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestCIConfigEndpointsKeepUndecodableRequests/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestCIPipelineEventsStoreUndecodableBodiesRaw/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestCIWebhookStoresUndecodableBatchesRaw/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestCITestCovStoresUndecodablePayloadsRaw__coverage_part_is_garbage/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the msgpack reader's error, and MsgpackReader words it differently from Go's msgp."
+  },
+  "TestCIVisibilityRefusesForgedArrayHeaders__citestcov/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the msgpack reader's error. msgp fails on the first missing entry (coverages[0]); MsgpackReader refuses the forged array header itself, one step earlier."
+  },
+  "TestCIVisibilityRefusesForgedArrayHeaders__citestcycle/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the msgpack reader's error, and MsgpackReader words it differently from Go's msgp."
   }
 }
