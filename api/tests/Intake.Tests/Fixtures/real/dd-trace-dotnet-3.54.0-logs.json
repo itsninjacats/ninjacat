@@ -1,0 +1,38 @@
+[
+  {
+    "@t": "2026-10-01T20:43:16.4091692Z",
+    "@m": "Now listening on: http://[::]:8080",
+    "@i": 14,
+    "Category": "Microsoft.Hosting.Lifetime",
+    "address": "http://[::]:8080",
+    "dd_service": "ninjacat-api",
+    "dd_env": "dev",
+    "dd_version": "",
+    "ddsource": "csharp",
+    "host": "9f06fd4497f5",
+    "ddtags": "git.commit.sha:,git.repository_url:"
+  },
+  {
+    "@t": "2026-10-01T20:43:17.3114734Z",
+    "@m": "[logs] item #0: required field message missing",
+    "@l": "Warning",
+    "Category": "NinjaCat.Api.Intake",
+    "Index": 0,
+    "Error": "required field message missing",
+    "dd_service": "ninjacat-api",
+    "dd_env": "dev",
+    "dd_version": "",
+    "dd_trace_id": "6abec5e5000000002f9a60afb73b9615",
+    "dd_span_id": "15783778972989627304",
+    "SpanId": "66f4598fbf39940d",
+    "TraceId": "2f7a40175fc74bd6a2100df1ac820583",
+    "ParentId": "0000000000000000",
+    "ConnectionId": "0HNOVVIFIBQ8J",
+    "RequestId": "0HNOVVIFIBQ8J:00000001",
+    "RequestPath": "/api/v2/logs",
+    "@i": "7b4e2244",
+    "ddsource": "csharp",
+    "host": "9f06fd4497f5",
+    "ddtags": "git.commit.sha:,git.repository_url:"
+  }
+]

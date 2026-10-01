@@ -59,8 +59,9 @@ let parseItems (body: byte[]) : Result<JsonElement list, string> =
         with e ->
             Error $"JSON logs item {items.Count}: {e.Message}"
 
-/// Reads one item the way Datadog's own model does: the five declared fields
-/// must be strings (or absent), and `message` is required.
+/// Reads one item: the five declared fields must be strings (or absent).
+/// Datadog's published model calls `message` required, but its intake takes
+/// an item without one, and its own .NET tracer sends such items.
 let decodeItem (raw: JsonElement) : Result<LogItem, ItemProblem> =
     if raw.ValueKind <> JsonValueKind.Object then
         Error(Undecodable "a log item must be a JSON object")
@@ -76,16 +77,13 @@ let decodeItem (raw: JsonElement) : Result<LogItem, ItemProblem> =
 
         match declared "ddsource", declared "ddtags", declared "hostname", declared "message", declared "service" with
         | Ok source, Ok tags, Ok hostname, Ok message, Ok service ->
-            match message with
-            | None -> Error(Undecodable "required field message missing")
-            | Some message ->
-                Ok
-                    { Source = defaultArg source ""
-                      Tags = defaultArg tags ""
-                      Hostname = defaultArg hostname ""
-                      Message = message
-                      Service = defaultArg service ""
-                      Attributes = properties |> Map.filter (fun name _ -> not (declaredFields.Contains name)) }
+            Ok
+                { Source = defaultArg source ""
+                  Tags = defaultArg tags ""
+                  Hostname = defaultArg hostname ""
+                  Message = defaultArg message ""
+                  Service = defaultArg service ""
+                  Attributes = properties |> Map.filter (fun name _ -> not (declaredFields.Contains name)) }
         | _ -> Error(NotALog(Json.keys raw))
 
 let private attributeString (name: string) (attributes: Map<string, JsonElement>) : string option =
@@ -105,13 +103,15 @@ let private attributeInt64 (name: string) (attributes: Map<string, JsonElement>)
 
 /// The row's timestamp, where it came from, and the attribute it used.
 ///
-/// Four wire forms exist for the same idea. The order is Datadog's own:
-/// `timestamp` before `date`, a millisecond number before an RFC 3339 string.
-/// A value that does not parse falls through to the next candidate, and is
-/// then left among the attributes rather than lost.
+/// Five wire forms exist for the same idea. The order is Datadog's own:
+/// `timestamp` before `date`, a millisecond number before an RFC 3339 string;
+/// `@t` is the compact form (see `compact` below). A value that does not
+/// parse falls through to the next candidate, and is then left among the
+/// attributes rather than lost.
 type LogTime =
     { Time: DateTime
-      /// "timestamp_ms", "timestamp_string", "date_ms", "date_string" or "arrival".
+      /// "timestamp_ms", "timestamp_string", "date_ms", "date_string",
+      /// "compact_string" or "arrival".
       Source: string
       /// The attribute the time was read from; "" when it is the arrival time.
       Key: string }
@@ -123,15 +123,16 @@ let timestamp (attributes: Map<string, JsonElement>) (arrival: DateTime) : LogTi
     let text (name: string) =
         attributeString name attributes |> Option.bind Time.tryRfc3339
 
-    match millis "timestamp", text "timestamp", millis "date", text "date" with
-    | Some t, _, _, _ -> { Time = t; Source = "timestamp_ms"; Key = "timestamp" }
-    | None, Some t, _, _ -> { Time = t; Source = "timestamp_string"; Key = "timestamp" }
-    | None, None, Some t, _ -> { Time = t; Source = "date_ms"; Key = "date" }
-    | None, None, None, Some t -> { Time = t; Source = "date_string"; Key = "date" }
+    match millis "timestamp", text "timestamp", millis "date", text "date", text "@t" with
+    | Some t, _, _, _, _ -> { Time = t; Source = "timestamp_ms"; Key = "timestamp" }
+    | None, Some t, _, _, _ -> { Time = t; Source = "timestamp_string"; Key = "timestamp" }
+    | None, None, Some t, _, _ -> { Time = t; Source = "date_ms"; Key = "date" }
+    | None, None, None, Some t, _ -> { Time = t; Source = "date_string"; Key = "date" }
+    | None, None, None, None, Some t -> { Time = t; Source = "compact_string"; Key = "@t" }
     // HTTPLogItem has no timestamp field at all, so official clients cannot
     // always send one. The row says so instead of passing arrival off as the
     // sender's clock.
-    | None, None, None, None -> { Time = arrival; Source = "arrival"; Key = "" }
+    | None, None, None, None, None -> { Time = arrival; Source = "arrival"; Key = "" }
 
 /// The attributes left after some became columns, as JSON text; "" if none.
 let private attributesJson (attributes: Map<string, JsonElement>) : string =
@@ -152,6 +153,20 @@ let private attributesJson (attributes: Map<string, JsonElement>) : string =
 
         Encoding.UTF8.GetString(buffer.ToArray())
 
+/// A .NET log level (Microsoft's names and Serilog's) under the status names
+/// the agent and the browser SDK use.
+let private compactStatus (level: string) : string =
+    match level.ToLowerInvariant() with
+    | "trace"
+    | "verbose"
+    | "debug" -> "debug"
+    | "information" -> "info"
+    | "warning" -> "warn"
+    | "error" -> "error"
+    | "critical"
+    | "fatal" -> "critical"
+    | other -> other
+
 /// What the query string says about the whole batch.
 type BatchDefaults =
     { Source: string
@@ -169,21 +184,41 @@ let toRow (tenant: string) (item: LogItem) (arrival: DateTime) (defaults: BatchD
             None
 
     let time = timestamp item.Attributes arrival
+
+    // Datadog's .NET tracer sends logs in Serilog's compact form: @m for the
+    // message, @t for the time, @l for the level (left out when it is
+    // Information), and dd_service where its log injection already put one.
+    // Each stands in only where the usual field is missing.
     let status = attributeString "status" item.Attributes
+    let compactMessage = if item.Message = "" then attributeString "@m" item.Attributes else None
+    let compactLevel = if status.IsNone then attributeString "@l" item.Attributes else None
+    let compactService = if item.Service = "" then attributeString "dd_service" item.Attributes else None
 
     // Only attributes that were actually USED leave the JSON column.
     let rest =
         item.Attributes
         |> Map.filter (fun name _ ->
-            not (name = time.Key || (name = "status" && status.IsSome) || (name = "host" && hostAttribute.IsSome)))
+            not (
+                name = time.Key
+                || (name = "status" && status.IsSome)
+                || (name = "host" && hostAttribute.IsSome)
+                || (name = "@m" && compactMessage.IsSome)
+                || (name = "@l" && compactLevel.IsSome)
+                || (name = "dd_service" && compactService.IsSome)
+            ))
 
     { TenantID = tenant
       Timestamp = time.Time
       Host = Text.firstNonEmpty [ item.Hostname; defaultArg hostAttribute ""; defaults.Host ]
-      Service = Text.firstNonEmpty [ item.Service; defaults.Service ]
+      Service = Text.firstNonEmpty [ item.Service; defaultArg compactService ""; defaults.Service ]
       Source = Text.firstNonEmpty [ item.Source; defaults.Source ]
-      Status = defaultArg status ""
-      Message = item.Message
+      Status =
+        match status, compactLevel with
+        | Some status, _ -> status
+        | None, Some level -> compactStatus level
+        | None, None when compactMessage.IsSome -> "info"
+        | None, None -> ""
+      Message = defaultArg compactMessage item.Message
       // Batch tags first: they are the weaker statement.
       Tags = Tags.toMultiMap (defaults.Tags @ Tags.splitDDTags item.Tags)
       Attributes = attributesJson rest

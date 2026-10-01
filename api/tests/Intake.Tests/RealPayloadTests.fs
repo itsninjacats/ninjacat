@@ -264,3 +264,28 @@ let ``a traceroute the agent ran becomes one network path with its hops`` () =
     // Three traceroute runs, one hop each: the two containers share a network.
     Assert.Equal(3, path.RunIDs.Length)
     Assert.All(path.HopTTLs, (fun ttls -> Assert.Equal(1, ttls.Length)))
+
+[<Fact>]
+let ``logs from Datadog's .NET tracer, which have no message field, become log rows`` () =
+    let sink = post "routeLogs" "/api/v2/logs" "" (fixture "dd-trace-dotnet-3.54.0-logs.json")
+
+    Assert.Empty(sink.Rows<RawPayloadRow>())
+
+    match sink.Rows<LogRow>() with
+    | [ started; refused ] ->
+        Assert.Equal("Now listening on: http://[::]:8080", started.Message)
+        Assert.Equal("info", started.Status)
+        Assert.Equal("ninjacat-api", started.Service)
+        Assert.Equal("csharp", started.Source)
+        Assert.Equal("9f06fd4497f5", started.Host)
+        Assert.Equal(DateTime(2026, 10, 1, 20, 43, 16, DateTimeKind.Utc).AddTicks 4091692L, started.Timestamp)
+        Assert.Equal("compact_string", started.TimestampSource)
+        // What became a column is not repeated among the attributes.
+        Assert.DoesNotContain("\"@m\"", started.Attributes)
+        Assert.DoesNotContain("\"@t\"", started.Attributes)
+        Assert.DoesNotContain("dd_service", started.Attributes)
+        Assert.Contains("\"Category\":\"Microsoft.Hosting.Lifetime\"", started.Attributes)
+
+        Assert.Equal("warn", refused.Status)
+        Assert.Contains("\"dd_trace_id\":\"6abec5e5000000002f9a60afb73b9615\"", refused.Attributes)
+    | rows -> Assert.Fail $"expected two log rows, got {rows.Length}"
