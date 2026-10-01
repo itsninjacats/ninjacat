@@ -38,6 +38,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Fixtures/go/**/*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures/trace/**/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Fixtures/overrides.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Fixtures/frames/*.bin" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

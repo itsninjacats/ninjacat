@@ -30,6 +30,8 @@
     <Compile Include="Routers/Evp.fs" />
     <Compile Include="Routers/CiVisibility.fs" />
     <Compile Include="Routers/CiWebhook.fs" />
+    <Compile Include="Routers/TraceMsgp.fs" />
+    <Compile Include="Routers/TraceSketch.fs" />
     <Compile Include="Routers/Trace.fs" />
     <Compile Include="Routers/ProcessBuffers.fs" />
     <Compile Include="Routers/Process.fs" />
