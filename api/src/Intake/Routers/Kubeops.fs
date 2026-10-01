@@ -33,103 +33,6 @@ open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
 
-/// JSON the way Go's encoding/json wrote the agent's generated structs, which
-/// is what the JSON columns of these tables have held from the start. It is
-/// not protobuf's own JSON: a field at its zero value is left out, 64-bit
-/// integers and enums are numbers, bytes are base64, and an empty list on its
-/// own is `null`.
-module GoJson =
-    let private isZero (value: obj) : bool =
-        match value with
-        | null -> true
-        | :? string as text -> text = ""
-        | :? bool as flag -> not flag
-        | :? int32 as n -> n = 0
-        | :? int64 as n -> n = 0L
-        | :? uint32 as n -> n = 0u
-        | :? uint64 as n -> n = 0UL
-        | :? float32 as n -> n = 0.0f
-        | :? float as n -> n = 0.0
-        | :? Enum as number -> Convert.ToInt32 number = 0
-        | :? ByteString as bytes -> bytes.IsEmpty
-        | :? ICollection as items -> items.Count = 0
-        | _ -> false
-
-    let private mapKey (key: obj) : string =
-        match key with
-        | :? string as text -> text
-        | :? bool as flag -> if flag then "true" else "false"
-        | other -> Convert.ToString(other, CultureInfo.InvariantCulture)
-
-    let rec private writeValue (writer: Utf8JsonWriter) (value: obj) : unit =
-        match value with
-        | null -> writer.WriteNullValue()
-        | :? string as text -> writer.WriteStringValue text
-        | :? bool as flag -> writer.WriteBooleanValue flag
-        | :? int32 as n -> writer.WriteNumberValue n
-        | :? int64 as n -> writer.WriteNumberValue n
-        | :? uint32 as n -> writer.WriteNumberValue n
-        | :? uint64 as n -> writer.WriteNumberValue n
-        | :? float32 as n -> writer.WriteNumberValue n
-        | :? float as n -> writer.WriteNumberValue n
-        | :? Enum as number -> writer.WriteNumberValue(Convert.ToInt32 number)
-        | :? ByteString as bytes -> writer.WriteBase64StringValue bytes.Span
-        | :? IMessage as message -> writeMessage writer message None
-        | :? IDictionary as map ->
-            let keys = map.Keys |> Seq.cast<obj> |> Seq.sortWith (fun a b -> String.CompareOrdinal(mapKey a, mapKey b))
-            writer.WriteStartObject()
-
-            for key in keys do
-                writer.WritePropertyName(mapKey key)
-                writeValue writer map[key]
-
-            writer.WriteEndObject()
-        | :? IList as items ->
-            writer.WriteStartArray()
-
-            for item in items do
-                writeValue writer item
-
-            writer.WriteEndArray()
-        | other -> invalidArg "value" $"no JSON form for {other.GetType().FullName}"
-
-    and private writeMessage (writer: Utf8JsonWriter) (message: IMessage) (leftOut: FieldDescriptor option) : unit =
-        writer.WriteStartObject()
-
-        for field in message.Descriptor.Fields.InDeclarationOrder() do
-            let value = field.Accessor.GetValue message
-
-            if Some field <> leftOut && not (isZero value) then
-                writer.WritePropertyName field.Name
-                writeValue writer value
-
-        writer.WriteEndObject()
-
-    /// "" when a value has no JSON form (NaN, infinity): the column is extra
-    /// detail, and losing the row over it would be the worse trade.
-    let private text (write: Utf8JsonWriter -> unit) : string =
-        try
-            use buffer = new MemoryStream()
-
-            do
-                use writer = new Utf8JsonWriter(buffer, JsonWriterOptions(Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping))
-                write writer
-
-            Encoding.UTF8.GetString(buffer.ToArray())
-        with :? ArgumentException ->
-            ""
-
-    /// A message, a list of them, or a map. A missing message and an empty
-    /// list are both `null`.
-    let render (value: obj) : string =
-        match value with
-        | :? ICollection as items when items.Count = 0 -> "null"
-        | _ -> text (fun writer -> writeValue writer value)
-
-    /// A message without one of its fields.
-    let renderWithout (leftOut: FieldDescriptor) (message: IMessage) : string =
-        text (fun writer -> writeMessage writer message (Some leftOut))
-
 /// An enum value under its name in the .proto, which is what the Go server
 /// stored; the number when the schema has no name for it.
 let private protoName (value: 'enum when 'enum: enum<int32>) : string =
@@ -184,114 +87,164 @@ let private orEmpty (message: 'message) : 'message when 'message: null and 'mess
 
 // ---- object collections → k8s_resources ----
 
-// The 24 collectors share a shape but no type: the same envelope fields and
-// one list of objects, each with a Metadata. So one converter reads them by
-// field name instead of 24 near-identical branches. The names are the Go
-// server's: the .proto name with its first letter in upper case.
+// The 24 kinds share a shape but no type: every collector message has the
+// same envelope and one list of objects, and every object has metadata and
+// tags. What differs is written out per kind below, plainly, so the compiler
+// checks every field name.
 
-let private isNamed (name: string) (field: FieldDescriptor) : bool =
-    field.Name.Length = name.Length
-    && Char.ToUpperInvariant field.Name[0] = name[0]
-    && String.CompareOrdinal(field.Name, 1, name, 1, name.Length - 1) = 0
+/// One condition of an object. Each kind declares a condition message of its
+/// own; a time a kind does not have is 0.
+type private Condition =
+    { Type: string
+      Status: string
+      Reason: string
+      Message: string
+      LastTransition: int64
+      LastUpdate: int64
+      LastProbe: int64 }
 
-let private fieldValue (message: IMessage) (name: string) : obj =
-    match message.Descriptor.Fields.InDeclarationOrder() |> Seq.tryFind (isNamed name) with
-    | Some field -> field.Accessor.GetValue message
-    | None -> null
+/// What a row takes from an object besides the columns of its kind.
+type private ObjectParts =
+    { Object: IMessage
+      Metadata: Metadata
+      Tags: string seq
+      Conditions: Condition list
+      /// The agent's own one-line summary of what is wrong, where it sends one.
+      ConditionMessage: string
+      ResourceRequirements: ResourceRequirements seq
+      /// Null for the kinds that carry no computed metrics.
+      Metrics: ResourceMetrics }
 
-let private stringField (message: IMessage) (name: string) : string =
-    match fieldValue message name with
-    | :? string as text -> text
-    | _ -> ""
+/// An object with metadata and tags and nothing else in common.
+let private plainParts (object: IMessage) (metadata: Metadata) (tags: string seq) : ObjectParts =
+    { Object = object
+      Metadata = metadata
+      Tags = tags
+      Conditions = []
+      ConditionMessage = ""
+      ResourceRequirements = Seq.empty
+      Metrics = null }
 
-let private int32Field (message: IMessage) (name: string) : int32 =
-    match fieldValue message name with
-    | :? int32 as n -> n
-    | _ -> 0
+let private condition (kind: string) (status: string) (reason: string) (message: string) (lastTransition: int64) : Condition =
+    { Type = kind
+      Status = status
+      Reason = reason
+      Message = message
+      LastTransition = lastTransition
+      LastUpdate = 0L
+      LastProbe = 0L }
 
-let private int64Field (message: IMessage) (name: string) : int64 =
-    match fieldValue message name with
-    | :? int64 as n -> n
-    | :? int32 as n -> int64 n
-    | _ -> 0L
+let private podParts (pod: Pod) : ObjectParts =
+    { plainParts pod pod.Metadata pod.Tags with
+        Conditions =
+            [ for c in pod.Conditions ->
+                  { condition c.Type c.Status c.Reason c.Message c.LastTransitionTime with LastProbe = c.LastProbeTime } ]
+        ConditionMessage = pod.ConditionMessage
+        ResourceRequirements = pod.ResourceRequirements
+        Metrics = pod.Metrics }
 
-let private messageField (message: IMessage) (name: string) : IMessage option =
-    match fieldValue message name with
-    | :? IMessage as inner -> Some inner
-    | _ -> None
+let private podDisruptionBudgetParts (budget: PodDisruptionBudget) : ObjectParts =
+    { plainParts budget budget.Metadata budget.Tags with
+        Conditions =
+            [ if not (isNull budget.Status) then
+                  for c in budget.Status.Conditions -> condition c.Type c.Status c.Reason c.Message c.LastTransitionTime ] }
 
-let private stringList (message: IMessage) (name: string) : string list =
-    match fieldValue message name with
-    | :? RepeatedField<string> as items -> List.ofSeq items
-    | _ -> []
+let private replicaSetParts (replicaSet: ReplicaSet) : ObjectParts =
+    { plainParts replicaSet replicaSet.Metadata replicaSet.Tags with
+        Conditions = [ for c in replicaSet.Conditions -> condition c.Type c.Status c.Reason c.Message c.LastTransitionTime ]
+        ResourceRequirements = replicaSet.ResourceRequirements
+        Metrics = replicaSet.Metrics }
 
-/// The named list when the message has one and it is not empty.
-let private filledList (message: IMessage) (name: string) : IList option =
-    match fieldValue message name with
-    | :? IList as items when items.Count > 0 -> Some items
-    | _ -> None
+let private deploymentParts (deployment: Deployment) : ObjectParts =
+    { plainParts deployment deployment.Metadata deployment.Tags with
+        Conditions =
+            [ for c in deployment.Conditions ->
+                  { condition c.Type c.Status c.Reason c.Message c.LastTransitionTime with LastUpdate = c.LastUpdateTime } ]
+        ConditionMessage = deployment.ConditionMessage
+        ResourceRequirements = deployment.ResourceRequirements
+        Metrics = deployment.Metrics }
 
-let private firstNonEmptyString (message: IMessage) (names: string list) : string =
-    names |> List.map (stringField message) |> Text.firstNonEmpty
+let private serviceParts (service: Service) : ObjectParts =
+    { plainParts service service.Metadata service.Tags with Metrics = service.Metrics }
 
-/// What every kind can carry but only some do: conditions, the agent's
-/// condition summary, resource requirements and computed metrics.
-///
-/// Read by name because each kind declares its own condition message
-/// (PodCondition, NodeCondition, DeploymentCondition, ...) with the same
-/// field names and slightly different sets, and because these live on the
-/// object for some kinds and inside Status or Spec for others.
-let private withCommonFields (object: IMessage) (row: K8sResourceRow) : K8sResourceRow =
-    let status = messageField object "Status"
+let private nodeParts (node: Node) : ObjectParts =
+    { plainParts node node.Metadata node.Tags with
+        Conditions =
+            [ if not (isNull node.Status) then
+                  for c in node.Status.Conditions -> condition c.Type c.Status c.Reason c.Message c.LastTransitionTime ]
+        Metrics = node.Metrics }
 
-    let conditionsOf (owner: IMessage) : IMessage list =
-        match fieldValue owner "Conditions" with
-        | :? IList as items -> List.ofSeq (Enumerable.OfType<IMessage> items)
-        | _ -> []
+let private namespaceParts (ns: Namespace) : ObjectParts =
+    { plainParts ns ns.Metadata ns.Tags with
+        Conditions = [ for c in ns.Conditions -> condition c.Type c.Status c.Reason c.Message c.LastTransitionTime ]
+        ConditionMessage = ns.ConditionMessage }
 
-    // A VerticalPodAutoscaler has two condition lists, on the object and in
-    // Status, and they are different messages; the nested one is what a real
-    // autoscaler fills. Both are read, the object's first.
-    let conditions =
-        match status with
-        | Some status -> conditionsOf object @ conditionsOf status
-        | None -> conditionsOf object
+let private jobParts (job: Job) : ObjectParts =
+    { plainParts job job.Metadata job.Tags with
+        Conditions =
+            [ for c in job.Conditions ->
+                  { condition c.Type c.Status c.Reason c.Message c.LastTransitionTime with LastProbe = c.LastProbeTime } ]
+        ConditionMessage = (if isNull job.Status then "" else job.Status.ConditionMessage)
+        ResourceRequirements = (if isNull job.Spec then Seq.empty else job.Spec.ResourceRequirements) }
 
-    let conditionTimes (name: string) : DateTime option[] =
-        conditions |> List.map (fun condition -> seconds (int64Field condition name)) |> Array.ofList
+let private cronJobParts (cronJob: CronJob) : ObjectParts =
+    { plainParts cronJob cronJob.Metadata cronJob.Tags with
+        ResourceRequirements = (if isNull cronJob.Spec then Seq.empty else cronJob.Spec.ResourceRequirements) }
 
-    let conditionMessage =
-        match stringField object "ConditionMessage", status with
-        | "", Some status -> stringField status "ConditionMessage"
-        | summary, _ -> summary
+let private daemonSetParts (daemonSet: DaemonSet) : ObjectParts =
+    { plainParts daemonSet daemonSet.Metadata daemonSet.Tags with
+        Conditions = [ for c in daemonSet.Conditions -> condition c.Type c.Status c.Reason c.Message c.LastTransitionTime ]
+        ResourceRequirements = (if isNull daemonSet.Spec then Seq.empty else daemonSet.Spec.ResourceRequirements)
+        Metrics = daemonSet.Metrics }
 
-    // A kind can declare the list in both places and fill only the inner
-    // one, so a filled list wins wherever it sits.
-    let resourceRequirements =
-        match filledList object "ResourceRequirements", messageField object "Spec" with
-        | Some items, _ -> Some items
-        | None, Some spec -> filledList spec "ResourceRequirements"
-        | None, None -> None
+let private statefulSetParts (statefulSet: StatefulSet) : ObjectParts =
+    { plainParts statefulSet statefulSet.Metadata statefulSet.Tags with
+        Conditions = [ for c in statefulSet.Conditions -> condition c.Type c.Status c.Reason c.Message c.LastTransitionTime ]
+        ResourceRequirements = (if isNull statefulSet.Spec then Seq.empty else statefulSet.Spec.ResourceRequirements)
+        Metrics = statefulSet.Metrics }
+
+let private persistentVolumeClaimParts (claim: PersistentVolumeClaim) : ObjectParts =
+    { plainParts claim claim.Metadata claim.Tags with
+        Conditions =
+            [ if not (isNull claim.Status) then
+                  for c in claim.Status.Conditions ->
+                      { condition c.Type c.Status c.Reason c.Message c.LastTransitionTime with LastProbe = c.LastProbeTime } ] }
+
+let private clusterRoleParts (role: ClusterRole) : ObjectParts =
+    { plainParts role role.Metadata role.Tags with Metrics = role.Metrics }
+
+/// A VerticalPodAutoscaler has two condition lists, on the object and in its
+/// status, and they are different messages; the nested one is what a real
+/// autoscaler fills. Both are read, the object's first.
+let private verticalPodAutoscalerParts (autoscaler: VerticalPodAutoscaler) : ObjectParts =
+    { plainParts autoscaler autoscaler.Metadata autoscaler.Tags with
+        Conditions =
+            [ for c in autoscaler.Conditions -> condition c.Type c.Status c.Reason c.Message c.LastTransitionTime
+              if not (isNull autoscaler.Status) then
+                  for c in autoscaler.Status.Conditions ->
+                      condition c.ConditionType c.ConditionStatus c.Reason c.Message c.LastTransitionTime ] }
+
+let private horizontalPodAutoscalerParts (autoscaler: HorizontalPodAutoscaler) : ObjectParts =
+    { plainParts autoscaler autoscaler.Metadata autoscaler.Tags with
+        Conditions =
+            [ for c in autoscaler.Conditions ->
+                  condition c.ConditionType c.ConditionStatus c.Reason c.Message c.LastTransitionTime ] }
+
+/// The columns every kind can fill, from the parts read above.
+let private withCommonFields (parts: ObjectParts) (row: K8sResourceRow) : K8sResourceRow =
+    let conditions = Array.ofList parts.Conditions
 
     { row with
-        // Most conditions call their fields Type/Status; the autoscalers'
-        // call them ConditionType/ConditionStatus.
-        ConditionTypes = conditions |> List.map (fun c -> firstNonEmptyString c [ "Type"; "ConditionType" ]) |> Array.ofList
-        ConditionStatuses = conditions |> List.map (fun c -> firstNonEmptyString c [ "Status"; "ConditionStatus" ]) |> Array.ofList
-        ConditionReasons = conditions |> List.map (fun c -> stringField c "Reason") |> Array.ofList
-        ConditionMessages = conditions |> List.map (fun c -> stringField c "Message") |> Array.ofList
-        ConditionLastTransition = conditionTimes "LastTransitionTime"
-        ConditionLastUpdate = conditionTimes "LastUpdateTime"
-        ConditionLastProbe = conditionTimes "LastProbeTime"
-        ConditionMessage = conditionMessage
-        ResourceRequirements =
-            (match resourceRequirements with
-             | Some items -> GoJson.render items
-             | None -> "")
-        Metrics =
-            (match fieldValue object "Metrics" with
-             | :? ResourceMetrics as metrics -> toMap metrics.MetricValues
-             | _ -> Map.empty) }
+        ConditionTypes = conditions |> Array.map _.Type
+        ConditionStatuses = conditions |> Array.map _.Status
+        ConditionReasons = conditions |> Array.map _.Reason
+        ConditionMessages = conditions |> Array.map _.Message
+        ConditionLastTransition = conditions |> Array.map (fun c -> seconds c.LastTransition)
+        ConditionLastUpdate = conditions |> Array.map (fun c -> seconds c.LastUpdate)
+        ConditionLastProbe = conditions |> Array.map (fun c -> seconds c.LastProbe)
+        ConditionMessage = parts.ConditionMessage
+        ResourceRequirements = ProtoJson.messages parts.ResourceRequirements
+        Metrics = (if isNull parts.Metrics then Map.empty else toMap parts.Metrics.MetricValues) }
 
 /// The numbers and typed extras of the kinds people ask about by name. Every
 /// kind names its counters differently, so this is the part that cannot be
@@ -415,10 +368,14 @@ let private withKindFields (object: IMessage) (row: K8sResourceRow) : K8sResourc
             Unschedulable = Text.flag node.Unschedulable
             ProviderID = node.ProviderID
             NodeRoles = Array.ofSeq node.Roles
-            Taints = (if node.Taints.Count > 0 then GoJson.render node.Taints else "")
+            Taints = ProtoJson.messages node.Taints
             Capacity = toMap status.Capacity
             Allocatable = toMap status.Allocatable
-            NodeAddresses = (if status.NodeAddresses.Count > 0 then GoJson.render status.NodeAddresses else "")
+            NodeAddresses =
+                (if status.NodeAddresses.Count > 0 then
+                     JsonSerializer.Serialize(status.NodeAddresses :> Generic.IDictionary<string, string>)
+                 else
+                     "")
             KubeletVersion = status.KubeletVersion
             KubeProxyVersion = status.KubeProxyVersion
             OperatingSystem = status.OperatingSystem
@@ -436,25 +393,25 @@ let private withKindFields (object: IMessage) (row: K8sResourceRow) : K8sResourc
         { row with
             ServiceType = spec.Type
             ClusterIP = spec.ClusterIP
-            ServicePorts = (if spec.Ports.Count > 0 then GoJson.render spec.Ports else "")
+            ServicePorts = ProtoJson.messages spec.Ports
             Counts = Map [ "ports", int64 spec.Ports.Count ] }
     | :? Role as role ->
         { row with
-            RBACRules = GoJson.render role.Rules
+            RBACRules = ProtoJson.messages role.Rules
             Counts = Map [ "rules", int64 role.Rules.Count ] }
     | :? ClusterRole as role ->
         { row with
-            RBACRules = GoJson.render role.Rules
+            RBACRules = ProtoJson.messages role.Rules
             Counts = Map [ "rules", int64 role.Rules.Count; "aggregation_rules", int64 role.AggregationRules.Count ] }
     | :? RoleBinding as binding ->
         { row with
-            RBACSubjects = GoJson.render binding.Subjects
-            RBACRoleRef = GoJson.render binding.RoleRef
+            RBACSubjects = ProtoJson.messages binding.Subjects
+            RBACRoleRef = ProtoJson.message binding.RoleRef
             Counts = Map [ "subjects", int64 binding.Subjects.Count ] }
     | :? ClusterRoleBinding as binding ->
         { row with
-            RBACSubjects = GoJson.render binding.Subjects
-            RBACRoleRef = GoJson.render binding.RoleRef
+            RBACSubjects = ProtoJson.messages binding.Subjects
+            RBACRoleRef = ProtoJson.message binding.RoleRef
             Counts = Map [ "subjects", int64 binding.Subjects.Count ] }
     | :? Job as job ->
         let status = orEmpty job.Status
@@ -511,89 +468,190 @@ let private withKindFields (object: IMessage) (row: K8sResourceRow) : K8sResourc
                       "disrupted_pods", int64 status.DisruptedPods.Count ] }
     | _ -> row
 
-/// One row per object of a collector message.
+/// The rows of one collector message: the envelope's columns on every row,
+/// then each object's own.
 ///
-/// The kind is the object's message name ("Pod", "StorageClass"): the agent
-/// names its messages after the objects they mirror. An object without
-/// Metadata is skipped: with no namespace, name or uid the row could never
-/// be queried or joined.
+/// An object without Metadata is skipped: with no namespace, name or uid the
+/// row could never be queried or joined.
+let private rowsOf
+    (tenant: string)
+    (now: DateTime)
+    (frame: FrameColumns)
+    (kind: string)
+    (clusterName: string)
+    (clusterId: string)
+    (groupId: int32)
+    (groupSize: int32)
+    (hostName: string)
+    (envelopeTags: string seq)
+    (agentVersion: AgentVersion)
+    (envelopeWithoutObjects: IMessage)
+    (objects: ObjectParts seq)
+    : K8sResourceRow[] =
+    let envelopeTags = List.ofSeq envelopeTags
+
+    // The same on every row of the frame.
+    let envelope: K8sResourceRow =
+        { K8sResources.empty with
+            TenantID = tenant
+            // The sender leaves the frame's timestamp unset, so arrival is
+            // the collection time there is.
+            CollectedAt = now
+            ClusterID = clusterId
+            ClusterName = clusterName
+            Kind = kind
+            AgentVersion = agentVersionText agentVersion
+            GroupID = groupId
+            GroupSize = groupSize
+            OrgID = frame.OrgID
+            SubscriptionID = frame.SubscriptionID
+            HeaderTimestamp = frame.Timestamp
+            Encoding = frame.Encoding
+            HostName = hostName
+            // Without the object list: the list is the rows.
+            Envelope = ProtoJson.message envelopeWithoutObjects }
+
+    let toRow (parts: ObjectParts) : K8sResourceRow =
+        let metadata = parts.Metadata
+        let owners = Array.ofSeq metadata.OwnerReferences
+
+        { envelope with
+            Namespace = metadata.Namespace
+            Name = metadata.Name
+            UID = metadata.Uid
+            ResourceVersion = metadata.ResourceVersion
+            // Kubernetes allows several owners but in practice writes one
+            // controller; the first is the convenience column.
+            OwnerKind = (if owners.Length > 0 then owners[0].Kind else "")
+            OwnerName = (if owners.Length > 0 then owners[0].Name else "")
+            OwnerKinds = owners |> Array.map _.Kind
+            OwnerNames = owners |> Array.map _.Name
+            OwnerUIDs = owners |> Array.map _.Uid
+            // Labels and annotations travel as "key:value" like tags, but
+            // Kubernetes forbids duplicate keys.
+            Labels = Tags.toMap metadata.Labels
+            Annotations = Tags.toMap metadata.Annotations
+            // The frame's tags apply to every object, the object's own on top.
+            Tags = Tags.toMultiMap (envelopeTags @ List.ofSeq parts.Tags)
+            CreationTimestamp = seconds metadata.CreationTimestamp
+            DeletionTimestamp = seconds metadata.DeletionTimestamp
+            // Only meaningful while the object is being deleted, and 0 is
+            // then a real value (force delete), not absence.
+            DeletionGracePeriodSeconds =
+                (if metadata.DeletionTimestamp <> 0L then Some metadata.DeletionGracePeriodSeconds else None)
+            Finalizers = Array.ofSeq metadata.Finalizers
+            Object = ProtoJson.message parts.Object }
+        |> withCommonFields parts
+        |> withKindFields parts.Object
+
+    objects
+    |> Seq.filter (fun parts -> not (isNull parts.Metadata))
+    |> Seq.map toRow
+    |> Array.ofSeq
+
+/// One row per object of a collector message; none for a message that is not
+/// a collection of Kubernetes objects.
 let resourceRows (tenant: string) (now: DateTime) (frame: FrameColumns) (body: IMessage) : K8sResourceRow[] =
-    let objectList =
-        body.Descriptor.Fields.InDeclarationOrder()
-        |> Seq.tryFind (fun field -> field.IsRepeated && not field.IsMap && field.FieldType = FieldType.Message)
-
-    match objectList with
-    | None -> [||]
-    | Some objectList ->
-        let envelopeTags = stringList body "Tags"
-
-        // The same on every row of the frame.
-        let envelope: K8sResourceRow =
-            { K8sResources.empty with
-                TenantID = tenant
-                // The sender leaves the frame's timestamp unset, so arrival
-                // is the collection time there is.
-                CollectedAt = now
-                ClusterID = stringField body "ClusterId"
-                ClusterName = stringField body "ClusterName"
-                Kind = objectList.MessageType.Name
-                AgentVersion =
-                    (match fieldValue body "AgentVersion" with
-                     | :? AgentVersion as version -> agentVersionText version
-                     | _ -> "")
-                GroupID = int32Field body "GroupId"
-                GroupSize = int32Field body "GroupSize"
-                OrgID = frame.OrgID
-                SubscriptionID = frame.SubscriptionID
-                HeaderTimestamp = frame.Timestamp
-                Encoding = frame.Encoding
-                HostName = stringField body "HostName"
-                // Without the object list: the list is the rows.
-                Envelope = GoJson.renderWithout objectList body }
-
-        let toRow (object: IMessage) (metadata: Metadata) : K8sResourceRow =
-            let owners = Array.ofSeq metadata.OwnerReferences
-
-            { envelope with
-                Namespace = metadata.Namespace
-                Name = metadata.Name
-                UID = metadata.Uid
-                ResourceVersion = metadata.ResourceVersion
-                // Kubernetes allows several owners but in practice writes one
-                // controller; the first is the convenience column.
-                OwnerKind = (if owners.Length > 0 then owners[0].Kind else "")
-                OwnerName = (if owners.Length > 0 then owners[0].Name else "")
-                OwnerKinds = owners |> Array.map _.Kind
-                OwnerNames = owners |> Array.map _.Name
-                OwnerUIDs = owners |> Array.map _.Uid
-                // Labels and annotations travel as "key:value" like tags,
-                // but Kubernetes forbids duplicate keys.
-                Labels = Tags.toMap metadata.Labels
-                Annotations = Tags.toMap metadata.Annotations
-                // The frame's tags apply to every object, the object's own on top.
-                Tags = Tags.toMultiMap (envelopeTags @ stringList object "Tags")
-                CreationTimestamp = seconds metadata.CreationTimestamp
-                DeletionTimestamp = seconds metadata.DeletionTimestamp
-                // Only meaningful while the object is being deleted, and 0 is
-                // then a real value (force delete), not absence.
-                DeletionGracePeriodSeconds =
-                    (if metadata.DeletionTimestamp <> 0L then Some metadata.DeletionGracePeriodSeconds else None)
-                Finalizers = Array.ofSeq metadata.Finalizers
-                Object = GoJson.render object }
-            |> withCommonFields object
-            |> withKindFields object
-
-        objectList.Accessor.GetValue body :?> IList
-        |> Seq.cast<IMessage>
-        |> Seq.choose (fun object ->
-            match fieldValue object "Metadata" with
-            | :? Metadata as metadata -> Some(toRow object metadata)
-            | _ -> None)
-        |> Array.ofSeq
+    match body with
+    | :? CollectorPod as c ->
+        let bare = c.Clone()
+        bare.Pods.Clear()
+        rowsOf tenant now frame "Pod" c.ClusterName c.ClusterId c.GroupId c.GroupSize c.HostName c.Tags c.AgentVersion bare (Seq.map podParts c.Pods)
+    | :? CollectorPodDisruptionBudget as c ->
+        let bare = c.Clone()
+        bare.PodDisruptionBudgets.Clear()
+        rowsOf tenant now frame "PodDisruptionBudget" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (Seq.map podDisruptionBudgetParts c.PodDisruptionBudgets)
+    | :? CollectorReplicaSet as c ->
+        let bare = c.Clone()
+        bare.ReplicaSets.Clear()
+        rowsOf tenant now frame "ReplicaSet" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (Seq.map replicaSetParts c.ReplicaSets)
+    | :? CollectorDeployment as c ->
+        let bare = c.Clone()
+        bare.Deployments.Clear()
+        rowsOf tenant now frame "Deployment" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (Seq.map deploymentParts c.Deployments)
+    | :? CollectorService as c ->
+        let bare = c.Clone()
+        bare.Services.Clear()
+        rowsOf tenant now frame "Service" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (Seq.map serviceParts c.Services)
+    | :? CollectorNode as c ->
+        let bare = c.Clone()
+        bare.Nodes.Clear()
+        rowsOf tenant now frame "Node" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (Seq.map nodeParts c.Nodes)
+    | :? CollectorNamespace as c ->
+        let bare = c.Clone()
+        bare.Namespaces.Clear()
+        rowsOf tenant now frame "Namespace" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (Seq.map namespaceParts c.Namespaces)
+    | :? CollectorJob as c ->
+        let bare = c.Clone()
+        bare.Jobs.Clear()
+        rowsOf tenant now frame "Job" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (Seq.map jobParts c.Jobs)
+    | :? CollectorCronJob as c ->
+        let bare = c.Clone()
+        bare.CronJobs.Clear()
+        rowsOf tenant now frame "CronJob" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (Seq.map cronJobParts c.CronJobs)
+    | :? CollectorDaemonSet as c ->
+        let bare = c.Clone()
+        bare.DaemonSets.Clear()
+        rowsOf tenant now frame "DaemonSet" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (Seq.map daemonSetParts c.DaemonSets)
+    | :? CollectorStatefulSet as c ->
+        let bare = c.Clone()
+        bare.StatefulSets.Clear()
+        rowsOf tenant now frame "StatefulSet" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (Seq.map statefulSetParts c.StatefulSets)
+    | :? CollectorPersistentVolume as c ->
+        let bare = c.Clone()
+        bare.PersistentVolumes.Clear()
+        rowsOf tenant now frame "PersistentVolume" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (c.PersistentVolumes |> Seq.map (fun o -> plainParts o o.Metadata o.Tags))
+    | :? CollectorPersistentVolumeClaim as c ->
+        let bare = c.Clone()
+        bare.PersistentVolumeClaims.Clear()
+        rowsOf tenant now frame "PersistentVolumeClaim" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (Seq.map persistentVolumeClaimParts c.PersistentVolumeClaims)
+    | :? CollectorRole as c ->
+        let bare = c.Clone()
+        bare.Roles.Clear()
+        rowsOf tenant now frame "Role" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (c.Roles |> Seq.map (fun o -> plainParts o o.Metadata o.Tags))
+    | :? CollectorRoleBinding as c ->
+        let bare = c.Clone()
+        bare.RoleBindings.Clear()
+        rowsOf tenant now frame "RoleBinding" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (c.RoleBindings |> Seq.map (fun o -> plainParts o o.Metadata o.Tags))
+    | :? CollectorClusterRole as c ->
+        let bare = c.Clone()
+        bare.ClusterRoles.Clear()
+        rowsOf tenant now frame "ClusterRole" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (Seq.map clusterRoleParts c.ClusterRoles)
+    | :? CollectorClusterRoleBinding as c ->
+        let bare = c.Clone()
+        bare.ClusterRoleBindings.Clear()
+        rowsOf tenant now frame "ClusterRoleBinding" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (c.ClusterRoleBindings |> Seq.map (fun o -> plainParts o o.Metadata o.Tags))
+    | :? CollectorServiceAccount as c ->
+        let bare = c.Clone()
+        bare.ServiceAccounts.Clear()
+        rowsOf tenant now frame "ServiceAccount" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (c.ServiceAccounts |> Seq.map (fun o -> plainParts o o.Metadata o.Tags))
+    | :? CollectorIngress as c ->
+        let bare = c.Clone()
+        bare.Ingresses.Clear()
+        rowsOf tenant now frame "Ingress" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (c.Ingresses |> Seq.map (fun o -> plainParts o o.Metadata o.Tags))
+    | :? CollectorVerticalPodAutoscaler as c ->
+        let bare = c.Clone()
+        bare.VerticalPodAutoscalers.Clear()
+        rowsOf tenant now frame "VerticalPodAutoscaler" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (Seq.map verticalPodAutoscalerParts c.VerticalPodAutoscalers)
+    | :? CollectorHorizontalPodAutoscaler as c ->
+        let bare = c.Clone()
+        bare.HorizontalPodAutoscalers.Clear()
+        rowsOf tenant now frame "HorizontalPodAutoscaler" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (Seq.map horizontalPodAutoscalerParts c.HorizontalPodAutoscalers)
+    | :? CollectorNetworkPolicy as c ->
+        let bare = c.Clone()
+        bare.NetworkPolicies.Clear()
+        rowsOf tenant now frame "NetworkPolicy" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (c.NetworkPolicies |> Seq.map (fun o -> plainParts o o.Metadata o.Tags))
+    | :? CollectorLimitRange as c ->
+        let bare = c.Clone()
+        bare.LimitRanges.Clear()
+        rowsOf tenant now frame "LimitRange" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (c.LimitRanges |> Seq.map (fun o -> plainParts o o.Metadata o.Tags))
+    | :? CollectorStorageClass as c ->
+        let bare = c.Clone()
+        bare.StorageClasses.Clear()
+        rowsOf tenant now frame "StorageClass" c.ClusterName c.ClusterId c.GroupId c.GroupSize "" c.Tags c.AgentVersion bare (c.StorageClasses |> Seq.map (fun o -> plainParts o o.Metadata o.Tags))
+    | _ -> [||]
 
 // ---- manifests → k8s_manifests ----
-
-let private manifestList = CollectorManifest.Descriptor.FindFieldByNumber CollectorManifest.ManifestsFieldNumber
 
 /// One row per manifest, its content stored whole. `collector` is null for a
 /// CRD or CR frame whose inner envelope the agent left out.
@@ -613,7 +671,10 @@ let manifestRows
     else
         let envelopeTags = List.ofSeq collector.Tags
         let wrapperTags = List.ofSeq wrapperTags
-        let envelope = GoJson.renderWithout manifestList collector
+        // Without the manifest list: the list is the rows.
+        let bare = collector.Clone()
+        bare.Manifests.Clear()
+        let envelope = ProtoJson.message bare
 
         let toRow (manifest: Manifest) : K8sManifestRow =
             let manifestTags = List.ofSeq manifest.Tags
@@ -651,7 +712,7 @@ let manifestRows
               ExtraAttributes = toMap manifest.ExtraAttributes
               ContentIsUTF8 = Text.flag (Utf8.IsValid(ReadOnlySpan content))
               Envelope = envelope
-              ManifestHost = (if isNull manifest.Host then "" else GoJson.render manifest.Host) }
+              ManifestHost = ProtoJson.message manifest.Host }
 
         collector.Manifests |> Seq.map toRow |> Array.ofSeq
 
@@ -711,15 +772,15 @@ let clusterRows (tenant: string) (now: DateTime) (frame: FrameColumns) (collecto
 
 // ---- ECS tasks → ecs_tasks ----
 
-let private taskList = CollectorECSTask.Descriptor.FindFieldByNumber CollectorECSTask.TasksFieldNumber
-
 /// One row per task. The ARN is the identity: a task has no Kubernetes
 /// metadata.
 let ecsTaskRows (tenant: string) (now: DateTime) (frame: FrameColumns) (collector: CollectorECSTask) : ECSTaskRow[] =
     let envelopeTags = Tags.toMultiMap collector.Tags
     // The envelope has a Host and an Info of its own (the machine and agent
     // that reported the pass) and no column holds either.
-    let envelope = GoJson.renderWithout taskList collector
+    let bare = collector.Clone()
+    bare.Tasks.Clear()
+    let envelope = ProtoJson.message bare
 
     let toRow (task: ECSTask) : ECSTaskRow =
         { TenantID = tenant
@@ -756,13 +817,13 @@ let ecsTaskRows (tenant: string) (now: DateTime) (frame: FrameColumns) (collecto
           PullStartedAt = seconds task.PullStartedAt
           PullStoppedAt = seconds task.PullStoppedAt
           ExecutionStoppedAt = seconds task.ExecutionStoppedAt
-          Containers = GoJson.render task.Containers
+          Containers = ProtoJson.messages task.Containers
           ContainerCount = uint32 task.Containers.Count
           Tags = Tags.toMultiMap task.Tags
           ECSTags = Tags.toMultiMap task.EcsTags
           ContainerInstanceTags = Tags.toMultiMap task.ContainerInstanceTags
           Envelope = envelope
-          TaskHost = (if isNull task.Host then "" else GoJson.render task.Host) }
+          TaskHost = ProtoJson.message task.Host }
 
     collector.Tasks |> Seq.map toRow |> Array.ofSeq
 

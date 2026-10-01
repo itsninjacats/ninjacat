@@ -297,7 +297,7 @@
      "",
      "",
      {},
-     "{\"metadata\":{\"name\":\"s10\",\"namespace\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"creationTimestamp\":-15,\"labels\":[\"k18:v18\",\"k18:other:with:colons\",\"bare18\",\"z18:last\"],\"ownerReferences\":[{\"name\":\"s22\",\"uid\":\"s24 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"name\":\"s27\",\"kind\":\"s30\"}],\"finalizers\":[\"k33:v33\",\"k33:other:with:colons\",\"bare33\",\"z33:last\"]},\"spec\":{\"minAvailable\":{\"intVal\":39},\"selector\":[{\"key\":\"s43\",\"operator\":\"s45\"},{\"key\":\"s48 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k51:v51\",\"k51:other:with:colons\",\"bare51\",\"z51:last\"]}],\"unhealthyPodEvictionPolicy\":\"s54\"},\"tags\":[\"k57:v57\",\"k57:other:with:colons\",\"bare57\",\"z57:last\"]}",
+     "{ \"metadata\": { \"name\": \"s10\", \"namespace\": \"s12 \\u003c&\\u003e \\\"é\\\"\\n\", \"creationTimestamp\": \"-15\", \"labels\": [ \"k18:v18\", \"k18:other:with:colons\", \"bare18\", \"z18:last\" ], \"ownerReferences\": [ { \"name\": \"s22\", \"uid\": \"s24 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"name\": \"s27\", \"kind\": \"s30\" } ], \"finalizers\": [ \"k33:v33\", \"k33:other:with:colons\", \"bare33\", \"z33:last\" ] }, \"spec\": { \"minAvailable\": { \"intVal\": 39 }, \"selector\": [ { \"key\": \"s43\", \"operator\": \"s45\" }, { \"key\": \"s48 \\u003c&\\u003e \\\"é\\\"\\n\", \"values\": [ \"k51:v51\", \"k51:other:with:colons\", \"bare51\", \"z51:last\" ] } ], \"unhealthyPodEvictionPolicy\": \"s54\" }, \"tags\": [ \"k57:v57\", \"k57:other:with:colons\", \"bare57\", \"z57:last\" ] }",
      "",
      "",
      "",
@@ -336,7 +336,7 @@
      "",
      "",
      "",
-     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"tags\":[\"k108:v108\",\"k108:other:with:colons\",\"bare108\",\"z108:last\"],\"groupSize\":110,\"agentVersion\":{\"Minor\":1700000114,\"Pre\":\"s117\",\"Commit\":\"s120 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}}"
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"tags\": [ \"k108:v108\", \"k108:other:with:colons\", \"bare108\", \"z108:last\" ], \"groupSize\": 110, \"agentVersion\": { \"Minor\": \"1700000114\", \"Pre\": \"s117\", \"Commit\": \"s120 \\u003c&\\u003e \\\"é\\\"\\n\" } }"
     ],
     [
      "test",
@@ -426,7 +426,7 @@
      "",
      "",
      {},
-     "{\"metadata\":{\"name\":\"s60 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s63\",\"deletionTimestamp\":4102444866,\"annotations\":[\"k69:v69\",\"k69:other:with:colons\",\"bare69\",\"z69:last\"],\"resourceVersion\":\"s72 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"deletionGracePeriodSeconds\":-75},\"status\":{\"disruptedPods\":{\"key79\":-80,\"key81\":1700000082},\"disruptionsAllowed\":-84,\"desiredHealthy\":87,\"conditions\":[{\"type\":\"s91\",\"status\":\"s93\",\"reason\":\"s96 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"type\":\"s99\",\"lastTransitionTime\":1700000102,\"message\":\"s105\"}]}}",
+     "{ \"metadata\": { \"name\": \"s60 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s63\", \"deletionTimestamp\": \"4102444866\", \"annotations\": [ \"k69:v69\", \"k69:other:with:colons\", \"bare69\", \"z69:last\" ], \"resourceVersion\": \"s72 \\u003c&\\u003e \\\"é\\\"\\n\", \"deletionGracePeriodSeconds\": \"-75\" }, \"status\": { \"disruptedPods\": { \"key81\": \"1700000082\", \"key79\": \"-80\" }, \"disruptionsAllowed\": -84, \"desiredHealthy\": 87, \"conditions\": [ { \"type\": \"s91\", \"status\": \"s93\", \"reason\": \"s96 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"type\": \"s99\", \"lastTransitionTime\": \"1700000102\", \"message\": \"s105\" } ] } }",
      "",
      "",
      "",
@@ -465,7 +465,7 @@
      "",
      "",
      "",
-     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"tags\":[\"k108:v108\",\"k108:other:with:colons\",\"bare108\",\"z108:last\"],\"groupSize\":110,\"agentVersion\":{\"Minor\":1700000114,\"Pre\":\"s117\",\"Commit\":\"s120 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}}"
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"tags\": [ \"k108:v108\", \"k108:other:with:colons\", \"bare108\", \"z108:last\" ], \"groupSize\": 110, \"agentVersion\": { \"Minor\": \"1700000114\", \"Pre\": \"s117\", \"Commit\": \"s120 \\u003c&\\u003e \\\"é\\\"\\n\" } }"
     ]
    ],
    "insert": "INSERT INTO k8s_resources\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,\n\t\t\t uid, resource_version, owner_kind, owner_name, node_name, phase, status,\n\t\t\t ready, desired, available, counts, labels, annotations, tags,\n\t\t\t agent_version, group_id, group_size,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t creation_timestamp, deletion_timestamp, deletion_grace_period_seconds,\n\t\t\t finalizers, owner_kinds, owner_names, owner_uids,\n\t\t\t condition_types, condition_statuses, condition_reasons, condition_messages,\n\t\t\t condition_last_transition, condition_last_update, condition_last_probe,\n\t\t\t condition_message, resource_requirements, metrics, object,\n\t\t\t pod_ip, nominated_node_name, qos_class, priority_class,\n\t\t\t start_time, scheduled_time, host_name,\n\t\t\t container_names, container_ids, container_ready, container_restarts,\n\t\t\t container_states, container_messages, container_images,\n\t\t\t container_image_ids, container_is_init,\n\t\t\t pod_cidr, pod_cidrs, unschedulable, taints, provider_id, node_roles,\n\t\t\t capacity, allocatable, node_addresses,\n\t\t\t kubelet_version, kube_proxy_version, operating_system, architecture,\n\t\t\t kernel_version, os_image, container_runtime_version,\n\t\t\t service_type, cluster_ip, service_ports,\n\t\t\t rbac_rules, rbac_subjects, rbac_role_ref, envelope)",
@@ -511,7 +511,7 @@
      "DeletionTimestamp": null,
      "Desired": 0,
      "Encoding": "protobuf",
-     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"tags\":[\"k108:v108\",\"k108:other:with:colons\",\"bare108\",\"z108:last\"],\"groupSize\":110,\"agentVersion\":{\"Minor\":1700000114,\"Pre\":\"s117\",\"Commit\":\"s120 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}}",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"tags\": [ \"k108:v108\", \"k108:other:with:colons\", \"bare108\", \"z108:last\" ], \"groupSize\": 110, \"agentVersion\": { \"Minor\": \"1700000114\", \"Pre\": \"s117\", \"Commit\": \"s120 \\u003c&\\u003e \\\"é\\\"\\n\" } }",
      "Finalizers": [
       "k33:v33",
       "k33:other:with:colons",
@@ -539,7 +539,7 @@
      "NodeRoles": [],
      "NominatedNodeName": "",
      "OSImage": "",
-     "Object": "{\"metadata\":{\"name\":\"s10\",\"namespace\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"creationTimestamp\":-15,\"labels\":[\"k18:v18\",\"k18:other:with:colons\",\"bare18\",\"z18:last\"],\"ownerReferences\":[{\"name\":\"s22\",\"uid\":\"s24 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"name\":\"s27\",\"kind\":\"s30\"}],\"finalizers\":[\"k33:v33\",\"k33:other:with:colons\",\"bare33\",\"z33:last\"]},\"spec\":{\"minAvailable\":{\"intVal\":39},\"selector\":[{\"key\":\"s43\",\"operator\":\"s45\"},{\"key\":\"s48 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k51:v51\",\"k51:other:with:colons\",\"bare51\",\"z51:last\"]}],\"unhealthyPodEvictionPolicy\":\"s54\"},\"tags\":[\"k57:v57\",\"k57:other:with:colons\",\"bare57\",\"z57:last\"]}",
+     "Object": "{ \"metadata\": { \"name\": \"s10\", \"namespace\": \"s12 \\u003c&\\u003e \\\"é\\\"\\n\", \"creationTimestamp\": \"-15\", \"labels\": [ \"k18:v18\", \"k18:other:with:colons\", \"bare18\", \"z18:last\" ], \"ownerReferences\": [ { \"name\": \"s22\", \"uid\": \"s24 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"name\": \"s27\", \"kind\": \"s30\" } ], \"finalizers\": [ \"k33:v33\", \"k33:other:with:colons\", \"bare33\", \"z33:last\" ] }, \"spec\": { \"minAvailable\": { \"intVal\": 39 }, \"selector\": [ { \"key\": \"s43\", \"operator\": \"s45\" }, { \"key\": \"s48 \\u003c&\\u003e \\\"é\\\"\\n\", \"values\": [ \"k51:v51\", \"k51:other:with:colons\", \"bare51\", \"z51:last\" ] } ], \"unhealthyPodEvictionPolicy\": \"s54\" }, \"tags\": [ \"k57:v57\", \"k57:other:with:colons\", \"bare57\", \"z57:last\" ] }",
      "OperatingSystem": "",
      "OrgID": 4242,
      "OwnerKind": "",
@@ -668,7 +668,7 @@
      "DeletionTimestamp": "2100-01-01T00:01:06Z",
      "Desired": 0,
      "Encoding": "protobuf",
-     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"tags\":[\"k108:v108\",\"k108:other:with:colons\",\"bare108\",\"z108:last\"],\"groupSize\":110,\"agentVersion\":{\"Minor\":1700000114,\"Pre\":\"s117\",\"Commit\":\"s120 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}}",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"tags\": [ \"k108:v108\", \"k108:other:with:colons\", \"bare108\", \"z108:last\" ], \"groupSize\": 110, \"agentVersion\": { \"Minor\": \"1700000114\", \"Pre\": \"s117\", \"Commit\": \"s120 \\u003c&\\u003e \\\"é\\\"\\n\" } }",
      "Finalizers": [],
      "GroupID": 6,
      "GroupSize": 110,
@@ -687,7 +687,7 @@
      "NodeRoles": [],
      "NominatedNodeName": "",
      "OSImage": "",
-     "Object": "{\"metadata\":{\"name\":\"s60 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s63\",\"deletionTimestamp\":4102444866,\"annotations\":[\"k69:v69\",\"k69:other:with:colons\",\"bare69\",\"z69:last\"],\"resourceVersion\":\"s72 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"deletionGracePeriodSeconds\":-75},\"status\":{\"disruptedPods\":{\"key79\":-80,\"key81\":1700000082},\"disruptionsAllowed\":-84,\"desiredHealthy\":87,\"conditions\":[{\"type\":\"s91\",\"status\":\"s93\",\"reason\":\"s96 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"type\":\"s99\",\"lastTransitionTime\":1700000102,\"message\":\"s105\"}]}}",
+     "Object": "{ \"metadata\": { \"name\": \"s60 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s63\", \"deletionTimestamp\": \"4102444866\", \"annotations\": [ \"k69:v69\", \"k69:other:with:colons\", \"bare69\", \"z69:last\" ], \"resourceVersion\": \"s72 \\u003c&\\u003e \\\"é\\\"\\n\", \"deletionGracePeriodSeconds\": \"-75\" }, \"status\": { \"disruptedPods\": { \"key81\": \"1700000082\", \"key79\": \"-80\" }, \"disruptionsAllowed\": -84, \"desiredHealthy\": 87, \"conditions\": [ { \"type\": \"s91\", \"status\": \"s93\", \"reason\": \"s96 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"type\": \"s99\", \"lastTransitionTime\": \"1700000102\", \"message\": \"s105\" } ] } }",
      "OperatingSystem": "",
      "OrgID": 4242,
      "OwnerKind": "",
@@ -743,5 +743,6 @@
   "/sends/0/args/1/1",
   "/sends/0/rows/0/CollectedAt",
   "/sends/0/rows/1/CollectedAt"
- ]
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
 }

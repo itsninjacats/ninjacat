@@ -177,8 +177,8 @@
       "key52": "s53"
      },
      0,
-     "{\"clusterName\":\"s3\",\"clusterId\":\"s5\",\"groupId\":7,\"groupSize\":9,\"tags\":[\"k98:v98\",\"k98:other:with:colons\",\"bare98\",\"z98:last\"],\"hostName\":\"s100 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"agentVersion\":{\"Major\":1700000103,\"Minor\":-105,\"Patch\":1700000107,\"Pre\":\"s109\",\"Meta\":\"s111\",\"Commit\":\"s113\"},\"originCollector\":2,\"systemInfo\":{\"uuid\":\"s118\",\"os\":{\"name\":\"s121\",\"platform\":\"s123\",\"family\":\"s125\",\"version\":\"s127\",\"kernelVersion\":\"s129\"},\"cpus\":[{\"number\":-132,\"vendor\":\"s134\",\"family\":\"s136 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"model\":\"s138\",\"physicalId\":\"s140 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"coreId\":\"s142\",\"cores\":-144,\"mhz\":4102444946,\"cacheSize\":-148},{\"number\":150,\"vendor\":\"s152 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"family\":\"s154\",\"model\":\"s156 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"physicalId\":\"s158\",\"coreId\":\"s160 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"cores\":162,\"mhz\":1700000164,\"cacheSize\":166}],\"totalMemory\":9007199254741161}}",
-     "{\"id\":9007199254741027,\"orgId\":-36,\"name\":\"s38\",\"allTags\":[\"k40:v40\",\"k40:other:with:colons\",\"bare40\",\"z40:last\"],\"numCpus\":42,\"totalMemory\":9007199254741037,\"tagIndex\":46,\"tagsModified\":1700000048}"
+     "{ \"clusterName\": \"s3\", \"clusterId\": \"s5\", \"groupId\": 7, \"groupSize\": 9, \"tags\": [ \"k98:v98\", \"k98:other:with:colons\", \"bare98\", \"z98:last\" ], \"hostName\": \"s100 \\u003c&\\u003e \\\"é\\\"\\n\", \"agentVersion\": { \"Major\": \"1700000103\", \"Minor\": \"-105\", \"Patch\": \"1700000107\", \"Pre\": \"s109\", \"Meta\": \"s111\", \"Commit\": \"s113\" }, \"originCollector\": \"datadogExporter\", \"systemInfo\": { \"uuid\": \"s118\", \"os\": { \"name\": \"s121\", \"platform\": \"s123\", \"family\": \"s125\", \"version\": \"s127\", \"kernelVersion\": \"s129\" }, \"cpus\": [ { \"number\": -132, \"vendor\": \"s134\", \"family\": \"s136 \\u003c&\\u003e \\\"é\\\"\\n\", \"model\": \"s138\", \"physicalId\": \"s140 \\u003c&\\u003e \\\"é\\\"\\n\", \"coreId\": \"s142\", \"cores\": -144, \"mhz\": \"4102444946\", \"cacheSize\": -148 }, { \"number\": 150, \"vendor\": \"s152 \\u003c&\\u003e \\\"é\\\"\\n\", \"family\": \"s154\", \"model\": \"s156 \\u003c&\\u003e \\\"é\\\"\\n\", \"physicalId\": \"s158\", \"coreId\": \"s160 \\u003c&\\u003e \\\"é\\\"\\n\", \"cores\": 162, \"mhz\": \"1700000164\", \"cacheSize\": 166 } ], \"totalMemory\": \"9007199254741161\" } }",
+     "{ \"id\": \"9007199254741027\", \"orgId\": -36, \"name\": \"s38\", \"allTags\": [ \"k40:v40\", \"k40:other:with:colons\", \"bare40\", \"z40:last\" ], \"numCpus\": 42, \"totalMemory\": \"9007199254741037\", \"tagIndex\": 46, \"tagsModified\": \"1700000048\" }"
     ],
     [
      "test",
@@ -261,8 +261,8 @@
       "key95": "s96 <&> \"é\"\n"
      },
      1,
-     "{\"clusterName\":\"s3\",\"clusterId\":\"s5\",\"groupId\":7,\"groupSize\":9,\"tags\":[\"k98:v98\",\"k98:other:with:colons\",\"bare98\",\"z98:last\"],\"hostName\":\"s100 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"agentVersion\":{\"Major\":1700000103,\"Minor\":-105,\"Patch\":1700000107,\"Pre\":\"s109\",\"Meta\":\"s111\",\"Commit\":\"s113\"},\"originCollector\":2,\"systemInfo\":{\"uuid\":\"s118\",\"os\":{\"name\":\"s121\",\"platform\":\"s123\",\"family\":\"s125\",\"version\":\"s127\",\"kernelVersion\":\"s129\"},\"cpus\":[{\"number\":-132,\"vendor\":\"s134\",\"family\":\"s136 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"model\":\"s138\",\"physicalId\":\"s140 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"coreId\":\"s142\",\"cores\":-144,\"mhz\":4102444946,\"cacheSize\":-148},{\"number\":150,\"vendor\":\"s152 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"family\":\"s154\",\"model\":\"s156 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"physicalId\":\"s158\",\"coreId\":\"s160 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"cores\":162,\"mhz\":1700000164,\"cacheSize\":166}],\"totalMemory\":9007199254741161}}",
-     "{\"id\":9007199254741070,\"orgId\":79,\"name\":\"s81\",\"allTags\":[\"k83:v83\",\"k83:other:with:colons\",\"bare83\",\"z83:last\"],\"numCpus\":85,\"totalMemory\":9007199254741080,\"tagIndex\":89,\"tagsModified\":4102444891}"
+     "{ \"clusterName\": \"s3\", \"clusterId\": \"s5\", \"groupId\": 7, \"groupSize\": 9, \"tags\": [ \"k98:v98\", \"k98:other:with:colons\", \"bare98\", \"z98:last\" ], \"hostName\": \"s100 \\u003c&\\u003e \\\"é\\\"\\n\", \"agentVersion\": { \"Major\": \"1700000103\", \"Minor\": \"-105\", \"Patch\": \"1700000107\", \"Pre\": \"s109\", \"Meta\": \"s111\", \"Commit\": \"s113\" }, \"originCollector\": \"datadogExporter\", \"systemInfo\": { \"uuid\": \"s118\", \"os\": { \"name\": \"s121\", \"platform\": \"s123\", \"family\": \"s125\", \"version\": \"s127\", \"kernelVersion\": \"s129\" }, \"cpus\": [ { \"number\": -132, \"vendor\": \"s134\", \"family\": \"s136 \\u003c&\\u003e \\\"é\\\"\\n\", \"model\": \"s138\", \"physicalId\": \"s140 \\u003c&\\u003e \\\"é\\\"\\n\", \"coreId\": \"s142\", \"cores\": -144, \"mhz\": \"4102444946\", \"cacheSize\": -148 }, { \"number\": 150, \"vendor\": \"s152 \\u003c&\\u003e \\\"é\\\"\\n\", \"family\": \"s154\", \"model\": \"s156 \\u003c&\\u003e \\\"é\\\"\\n\", \"physicalId\": \"s158\", \"coreId\": \"s160 \\u003c&\\u003e \\\"é\\\"\\n\", \"cores\": 162, \"mhz\": \"1700000164\", \"cacheSize\": 166 } ], \"totalMemory\": \"9007199254741161\" } }",
+     "{ \"id\": \"9007199254741070\", \"orgId\": 79, \"name\": \"s81\", \"allTags\": [ \"k83:v83\", \"k83:other:with:colons\", \"bare83\", \"z83:last\" ], \"numCpus\": 85, \"totalMemory\": \"9007199254741080\", \"tagIndex\": 89, \"tagsModified\": \"4102444891\" }"
     ]
    ],
    "insert": "INSERT INTO k8s_manifests\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, uid, kind, api_version,\n\t\t\t resource_version, content, content_type, is_terminated,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t group_id, group_size, host_name, agent_version, origin_collector,\n\t\t\t tags, tag_sources, node_name, type, version, extra_attributes,\n\t\t\t content_is_utf8, envelope, manifest_host)",
@@ -279,7 +279,7 @@
      "ContentIsUTF8": 0,
      "ContentType": "s20 <&> \"é\"\n",
      "Encoding": "protobuf",
-     "Envelope": "{\"clusterName\":\"s3\",\"clusterId\":\"s5\",\"groupId\":7,\"groupSize\":9,\"tags\":[\"k98:v98\",\"k98:other:with:colons\",\"bare98\",\"z98:last\"],\"hostName\":\"s100 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"agentVersion\":{\"Major\":1700000103,\"Minor\":-105,\"Patch\":1700000107,\"Pre\":\"s109\",\"Meta\":\"s111\",\"Commit\":\"s113\"},\"originCollector\":2,\"systemInfo\":{\"uuid\":\"s118\",\"os\":{\"name\":\"s121\",\"platform\":\"s123\",\"family\":\"s125\",\"version\":\"s127\",\"kernelVersion\":\"s129\"},\"cpus\":[{\"number\":-132,\"vendor\":\"s134\",\"family\":\"s136 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"model\":\"s138\",\"physicalId\":\"s140 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"coreId\":\"s142\",\"cores\":-144,\"mhz\":4102444946,\"cacheSize\":-148},{\"number\":150,\"vendor\":\"s152 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"family\":\"s154\",\"model\":\"s156 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"physicalId\":\"s158\",\"coreId\":\"s160 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"cores\":162,\"mhz\":1700000164,\"cacheSize\":166}],\"totalMemory\":9007199254741161}}",
+     "Envelope": "{ \"clusterName\": \"s3\", \"clusterId\": \"s5\", \"groupId\": 7, \"groupSize\": 9, \"tags\": [ \"k98:v98\", \"k98:other:with:colons\", \"bare98\", \"z98:last\" ], \"hostName\": \"s100 \\u003c&\\u003e \\\"é\\\"\\n\", \"agentVersion\": { \"Major\": \"1700000103\", \"Minor\": \"-105\", \"Patch\": \"1700000107\", \"Pre\": \"s109\", \"Meta\": \"s111\", \"Commit\": \"s113\" }, \"originCollector\": \"datadogExporter\", \"systemInfo\": { \"uuid\": \"s118\", \"os\": { \"name\": \"s121\", \"platform\": \"s123\", \"family\": \"s125\", \"version\": \"s127\", \"kernelVersion\": \"s129\" }, \"cpus\": [ { \"number\": -132, \"vendor\": \"s134\", \"family\": \"s136 \\u003c&\\u003e \\\"é\\\"\\n\", \"model\": \"s138\", \"physicalId\": \"s140 \\u003c&\\u003e \\\"é\\\"\\n\", \"coreId\": \"s142\", \"cores\": -144, \"mhz\": \"4102444946\", \"cacheSize\": -148 }, { \"number\": 150, \"vendor\": \"s152 \\u003c&\\u003e \\\"é\\\"\\n\", \"family\": \"s154\", \"model\": \"s156 \\u003c&\\u003e \\\"é\\\"\\n\", \"physicalId\": \"s158\", \"coreId\": \"s160 \\u003c&\\u003e \\\"é\\\"\\n\", \"cores\": 162, \"mhz\": \"1700000164\", \"cacheSize\": 166 } ], \"totalMemory\": \"9007199254741161\" } }",
      "ExtraAttributes": {
       "key50": "s51",
       "key52": "s53"
@@ -290,7 +290,7 @@
      "HostName": "s100 <&> \"é\"\n",
      "IsTerminated": 1,
      "Kind": "s31",
-     "ManifestHost": "{\"id\":9007199254741027,\"orgId\":-36,\"name\":\"s38\",\"allTags\":[\"k40:v40\",\"k40:other:with:colons\",\"bare40\",\"z40:last\"],\"numCpus\":42,\"totalMemory\":9007199254741037,\"tagIndex\":46,\"tagsModified\":1700000048}",
+     "ManifestHost": "{ \"id\": \"9007199254741027\", \"orgId\": -36, \"name\": \"s38\", \"allTags\": [ \"k40:v40\", \"k40:other:with:colons\", \"bare40\", \"z40:last\" ], \"numCpus\": 42, \"totalMemory\": \"9007199254741037\", \"tagIndex\": 46, \"tagsModified\": \"1700000048\" }",
      "NodeName": "s29",
      "OrgID": 4242,
      "OriginCollector": "datadogExporter",
@@ -363,7 +363,7 @@
      "ContentIsUTF8": 1,
      "ContentType": "s63",
      "Encoding": "protobuf",
-     "Envelope": "{\"clusterName\":\"s3\",\"clusterId\":\"s5\",\"groupId\":7,\"groupSize\":9,\"tags\":[\"k98:v98\",\"k98:other:with:colons\",\"bare98\",\"z98:last\"],\"hostName\":\"s100 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"agentVersion\":{\"Major\":1700000103,\"Minor\":-105,\"Patch\":1700000107,\"Pre\":\"s109\",\"Meta\":\"s111\",\"Commit\":\"s113\"},\"originCollector\":2,\"systemInfo\":{\"uuid\":\"s118\",\"os\":{\"name\":\"s121\",\"platform\":\"s123\",\"family\":\"s125\",\"version\":\"s127\",\"kernelVersion\":\"s129\"},\"cpus\":[{\"number\":-132,\"vendor\":\"s134\",\"family\":\"s136 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"model\":\"s138\",\"physicalId\":\"s140 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"coreId\":\"s142\",\"cores\":-144,\"mhz\":4102444946,\"cacheSize\":-148},{\"number\":150,\"vendor\":\"s152 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"family\":\"s154\",\"model\":\"s156 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"physicalId\":\"s158\",\"coreId\":\"s160 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"cores\":162,\"mhz\":1700000164,\"cacheSize\":166}],\"totalMemory\":9007199254741161}}",
+     "Envelope": "{ \"clusterName\": \"s3\", \"clusterId\": \"s5\", \"groupId\": 7, \"groupSize\": 9, \"tags\": [ \"k98:v98\", \"k98:other:with:colons\", \"bare98\", \"z98:last\" ], \"hostName\": \"s100 \\u003c&\\u003e \\\"é\\\"\\n\", \"agentVersion\": { \"Major\": \"1700000103\", \"Minor\": \"-105\", \"Patch\": \"1700000107\", \"Pre\": \"s109\", \"Meta\": \"s111\", \"Commit\": \"s113\" }, \"originCollector\": \"datadogExporter\", \"systemInfo\": { \"uuid\": \"s118\", \"os\": { \"name\": \"s121\", \"platform\": \"s123\", \"family\": \"s125\", \"version\": \"s127\", \"kernelVersion\": \"s129\" }, \"cpus\": [ { \"number\": -132, \"vendor\": \"s134\", \"family\": \"s136 \\u003c&\\u003e \\\"é\\\"\\n\", \"model\": \"s138\", \"physicalId\": \"s140 \\u003c&\\u003e \\\"é\\\"\\n\", \"coreId\": \"s142\", \"cores\": -144, \"mhz\": \"4102444946\", \"cacheSize\": -148 }, { \"number\": 150, \"vendor\": \"s152 \\u003c&\\u003e \\\"é\\\"\\n\", \"family\": \"s154\", \"model\": \"s156 \\u003c&\\u003e \\\"é\\\"\\n\", \"physicalId\": \"s158\", \"coreId\": \"s160 \\u003c&\\u003e \\\"é\\\"\\n\", \"cores\": 162, \"mhz\": \"1700000164\", \"cacheSize\": 166 } ], \"totalMemory\": \"9007199254741161\" } }",
      "ExtraAttributes": {
       "key93": "s94",
       "key95": "s96 <&> \"é\"\n"
@@ -374,7 +374,7 @@
      "HostName": "s100 <&> \"é\"\n",
      "IsTerminated": 1,
      "Kind": "s74",
-     "ManifestHost": "{\"id\":9007199254741070,\"orgId\":79,\"name\":\"s81\",\"allTags\":[\"k83:v83\",\"k83:other:with:colons\",\"bare83\",\"z83:last\"],\"numCpus\":85,\"totalMemory\":9007199254741080,\"tagIndex\":89,\"tagsModified\":4102444891}",
+     "ManifestHost": "{ \"id\": \"9007199254741070\", \"orgId\": 79, \"name\": \"s81\", \"allTags\": [ \"k83:v83\", \"k83:other:with:colons\", \"bare83\", \"z83:last\" ], \"numCpus\": 85, \"totalMemory\": \"9007199254741080\", \"tagIndex\": 89, \"tagsModified\": \"4102444891\" }",
      "NodeName": "s72 <&> \"é\"\n",
      "OrgID": 4242,
      "OriginCollector": "datadogExporter",
@@ -449,5 +449,6 @@
   "/sends/0/args/1/1",
   "/sends/0/rows/0/CollectedAt",
   "/sends/0/rows/1/CollectedAt"
- ]
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
 }

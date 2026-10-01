@@ -286,7 +286,7 @@
       "key81": 82.123456789,
       "key83": 84.123456789
      },
-     "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s14\",\"creationTimestamp\":1700000017,\"labels\":[\"k20:v20\",\"k20:other:with:colons\",\"bare20\",\"z20:last\"],\"ownerReferences\":[{\"name\":\"s24 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s26\"},{\"name\":\"s29\",\"kind\":\"s32 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"finalizers\":[\"k35:v35\",\"k35:other:with:colons\",\"bare35\",\"z35:last\"]},\"spec\":{\"ports\":[{\"protocol\":\"s41\",\"targetPort\":\"s44 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"name\":\"s47\",\"port\":50,\"nodePort\":53}],\"clusterIP\":\"s56 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"externalIPs\":[\"k59:v59\",\"k59:other:with:colons\",\"bare59\",\"z59:last\"],\"loadBalancerIP\":\"s62\",\"externalName\":\"s65\",\"healthCheckNodePort\":-68,\"sessionAffinityConfig\":{\"clientIPTimeoutSeconds\":-72},\"ipFamily\":\"s74\"},\"yaml\":\"a2luZDogVGhpbmc3Nwo=\",\"metrics\":{\"metricValues\":{\"key81\":82.123456789,\"key83\":84.123456789}}}",
+     "{ \"metadata\": { \"name\": \"s12 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s14\", \"creationTimestamp\": \"1700000017\", \"labels\": [ \"k20:v20\", \"k20:other:with:colons\", \"bare20\", \"z20:last\" ], \"ownerReferences\": [ { \"name\": \"s24 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s26\" }, { \"name\": \"s29\", \"kind\": \"s32 \\u003c&\\u003e \\\"é\\\"\\n\" } ], \"finalizers\": [ \"k35:v35\", \"k35:other:with:colons\", \"bare35\", \"z35:last\" ] }, \"spec\": { \"ports\": [ { \"protocol\": \"s41\", \"targetPort\": \"s44 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"name\": \"s47\", \"port\": 50, \"nodePort\": 53 } ], \"clusterIP\": \"s56 \\u003c&\\u003e \\\"é\\\"\\n\", \"externalIPs\": [ \"k59:v59\", \"k59:other:with:colons\", \"bare59\", \"z59:last\" ], \"loadBalancerIP\": \"s62\", \"externalName\": \"s65\", \"healthCheckNodePort\": -68, \"sessionAffinityConfig\": { \"clientIPTimeoutSeconds\": -72 }, \"ipFamily\": \"s74\" }, \"yaml\": \"a2luZDogVGhpbmc3Nwo=\", \"metrics\": { \"metricValues\": { \"key83\": 84.123456789, \"key81\": 82.123456789 } } }",
      "",
      "",
      "",
@@ -325,7 +325,7 @@
      "",
      "",
      "",
-     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k161:v161\",\"k161:other:with:colons\",\"bare161\",\"z161:last\"],\"agentVersion\":{\"Major\":1700000164,\"Patch\":1700000167,\"Meta\":\"s170\"}}"
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k161:v161\", \"k161:other:with:colons\", \"bare161\", \"z161:last\" ], \"agentVersion\": { \"Major\": \"1700000164\", \"Patch\": \"1700000167\", \"Meta\": \"s170\" } }"
     ],
     [
      "test",
@@ -407,7 +407,7 @@
       "key156": 157.123456789,
       "key158": 159.123456789
      },
-     "{\"metadata\":{\"name\":\"s87\",\"namespace\":\"s89\",\"creationTimestamp\":1700000092,\"labels\":[\"k95:v95\",\"k95:other:with:colons\",\"bare95\",\"z95:last\"],\"ownerReferences\":[{\"name\":\"s99\",\"uid\":\"s101\"},{\"name\":\"s104 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"kind\":\"s107\"}],\"finalizers\":[\"k110:v110\",\"k110:other:with:colons\",\"bare110\",\"z110:last\"]},\"spec\":{\"ports\":[{\"protocol\":\"s116 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"targetPort\":\"s119\"},{\"name\":\"s122\",\"port\":125,\"nodePort\":-128}],\"clusterIP\":\"s131\",\"externalIPs\":[\"k134:v134\",\"k134:other:with:colons\",\"bare134\",\"z134:last\"],\"loadBalancerIP\":\"s137\",\"externalName\":\"s140 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"healthCheckNodePort\":143,\"sessionAffinityConfig\":{\"clientIPTimeoutSeconds\":147},\"ipFamily\":\"s149\"},\"yaml\":\"/wCY\",\"metrics\":{\"metricValues\":{\"key156\":157.123456789,\"key158\":159.123456789}}}",
+     "{ \"metadata\": { \"name\": \"s87\", \"namespace\": \"s89\", \"creationTimestamp\": \"1700000092\", \"labels\": [ \"k95:v95\", \"k95:other:with:colons\", \"bare95\", \"z95:last\" ], \"ownerReferences\": [ { \"name\": \"s99\", \"uid\": \"s101\" }, { \"name\": \"s104 \\u003c&\\u003e \\\"é\\\"\\n\", \"kind\": \"s107\" } ], \"finalizers\": [ \"k110:v110\", \"k110:other:with:colons\", \"bare110\", \"z110:last\" ] }, \"spec\": { \"ports\": [ { \"protocol\": \"s116 \\u003c&\\u003e \\\"é\\\"\\n\", \"targetPort\": \"s119\" }, { \"name\": \"s122\", \"port\": 125, \"nodePort\": -128 } ], \"clusterIP\": \"s131\", \"externalIPs\": [ \"k134:v134\", \"k134:other:with:colons\", \"bare134\", \"z134:last\" ], \"loadBalancerIP\": \"s137\", \"externalName\": \"s140 \\u003c&\\u003e \\\"é\\\"\\n\", \"healthCheckNodePort\": 143, \"sessionAffinityConfig\": { \"clientIPTimeoutSeconds\": 147 }, \"ipFamily\": \"s149\" }, \"yaml\": \"/wCY\", \"metrics\": { \"metricValues\": { \"key158\": 159.123456789, \"key156\": 157.123456789 } } }",
      "",
      "",
      "",
@@ -446,7 +446,7 @@
      "",
      "",
      "",
-     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k161:v161\",\"k161:other:with:colons\",\"bare161\",\"z161:last\"],\"agentVersion\":{\"Major\":1700000164,\"Patch\":1700000167,\"Meta\":\"s170\"}}"
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k161:v161\", \"k161:other:with:colons\", \"bare161\", \"z161:last\" ], \"agentVersion\": { \"Major\": \"1700000164\", \"Patch\": \"1700000167\", \"Meta\": \"s170\" } }"
     ]
    ],
    "insert": "INSERT INTO k8s_resources\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,\n\t\t\t uid, resource_version, owner_kind, owner_name, node_name, phase, status,\n\t\t\t ready, desired, available, counts, labels, annotations, tags,\n\t\t\t agent_version, group_id, group_size,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t creation_timestamp, deletion_timestamp, deletion_grace_period_seconds,\n\t\t\t finalizers, owner_kinds, owner_names, owner_uids,\n\t\t\t condition_types, condition_statuses, condition_reasons, condition_messages,\n\t\t\t condition_last_transition, condition_last_update, condition_last_probe,\n\t\t\t condition_message, resource_requirements, metrics, object,\n\t\t\t pod_ip, nominated_node_name, qos_class, priority_class,\n\t\t\t start_time, scheduled_time, host_name,\n\t\t\t container_names, container_ids, container_ready, container_restarts,\n\t\t\t container_states, container_messages, container_images,\n\t\t\t container_image_ids, container_is_init,\n\t\t\t pod_cidr, pod_cidrs, unschedulable, taints, provider_id, node_roles,\n\t\t\t capacity, allocatable, node_addresses,\n\t\t\t kubelet_version, kube_proxy_version, operating_system, architecture,\n\t\t\t kernel_version, os_image, container_runtime_version,\n\t\t\t service_type, cluster_ip, service_ports,\n\t\t\t rbac_rules, rbac_subjects, rbac_role_ref, envelope)",
@@ -488,7 +488,7 @@
      "DeletionTimestamp": null,
      "Desired": 0,
      "Encoding": "protobuf",
-     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k161:v161\",\"k161:other:with:colons\",\"bare161\",\"z161:last\"],\"agentVersion\":{\"Major\":1700000164,\"Patch\":1700000167,\"Meta\":\"s170\"}}",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k161:v161\", \"k161:other:with:colons\", \"bare161\", \"z161:last\" ], \"agentVersion\": { \"Major\": \"1700000164\", \"Patch\": \"1700000167\", \"Meta\": \"s170\" } }",
      "Finalizers": [
       "k35:v35",
       "k35:other:with:colons",
@@ -519,7 +519,7 @@
      "NodeRoles": [],
      "NominatedNodeName": "",
      "OSImage": "",
-     "Object": "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s14\",\"creationTimestamp\":1700000017,\"labels\":[\"k20:v20\",\"k20:other:with:colons\",\"bare20\",\"z20:last\"],\"ownerReferences\":[{\"name\":\"s24 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s26\"},{\"name\":\"s29\",\"kind\":\"s32 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"finalizers\":[\"k35:v35\",\"k35:other:with:colons\",\"bare35\",\"z35:last\"]},\"spec\":{\"ports\":[{\"protocol\":\"s41\",\"targetPort\":\"s44 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"name\":\"s47\",\"port\":50,\"nodePort\":53}],\"clusterIP\":\"s56 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"externalIPs\":[\"k59:v59\",\"k59:other:with:colons\",\"bare59\",\"z59:last\"],\"loadBalancerIP\":\"s62\",\"externalName\":\"s65\",\"healthCheckNodePort\":-68,\"sessionAffinityConfig\":{\"clientIPTimeoutSeconds\":-72},\"ipFamily\":\"s74\"},\"yaml\":\"a2luZDogVGhpbmc3Nwo=\",\"metrics\":{\"metricValues\":{\"key81\":82.123456789,\"key83\":84.123456789}}}",
+     "Object": "{ \"metadata\": { \"name\": \"s12 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s14\", \"creationTimestamp\": \"1700000017\", \"labels\": [ \"k20:v20\", \"k20:other:with:colons\", \"bare20\", \"z20:last\" ], \"ownerReferences\": [ { \"name\": \"s24 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s26\" }, { \"name\": \"s29\", \"kind\": \"s32 \\u003c&\\u003e \\\"é\\\"\\n\" } ], \"finalizers\": [ \"k35:v35\", \"k35:other:with:colons\", \"bare35\", \"z35:last\" ] }, \"spec\": { \"ports\": [ { \"protocol\": \"s41\", \"targetPort\": \"s44 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"name\": \"s47\", \"port\": 50, \"nodePort\": 53 } ], \"clusterIP\": \"s56 \\u003c&\\u003e \\\"é\\\"\\n\", \"externalIPs\": [ \"k59:v59\", \"k59:other:with:colons\", \"bare59\", \"z59:last\" ], \"loadBalancerIP\": \"s62\", \"externalName\": \"s65\", \"healthCheckNodePort\": -68, \"sessionAffinityConfig\": { \"clientIPTimeoutSeconds\": -72 }, \"ipFamily\": \"s74\" }, \"yaml\": \"a2luZDogVGhpbmc3Nwo=\", \"metrics\": { \"metricValues\": { \"key83\": 84.123456789, \"key81\": 82.123456789 } } }",
      "OperatingSystem": "",
      "OrgID": 0,
      "OwnerKind": "",
@@ -609,7 +609,7 @@
      "DeletionTimestamp": null,
      "Desired": 0,
      "Encoding": "protobuf",
-     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k161:v161\",\"k161:other:with:colons\",\"bare161\",\"z161:last\"],\"agentVersion\":{\"Major\":1700000164,\"Patch\":1700000167,\"Meta\":\"s170\"}}",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k161:v161\", \"k161:other:with:colons\", \"bare161\", \"z161:last\" ], \"agentVersion\": { \"Major\": \"1700000164\", \"Patch\": \"1700000167\", \"Meta\": \"s170\" } }",
      "Finalizers": [
       "k110:v110",
       "k110:other:with:colons",
@@ -640,7 +640,7 @@
      "NodeRoles": [],
      "NominatedNodeName": "",
      "OSImage": "",
-     "Object": "{\"metadata\":{\"name\":\"s87\",\"namespace\":\"s89\",\"creationTimestamp\":1700000092,\"labels\":[\"k95:v95\",\"k95:other:with:colons\",\"bare95\",\"z95:last\"],\"ownerReferences\":[{\"name\":\"s99\",\"uid\":\"s101\"},{\"name\":\"s104 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"kind\":\"s107\"}],\"finalizers\":[\"k110:v110\",\"k110:other:with:colons\",\"bare110\",\"z110:last\"]},\"spec\":{\"ports\":[{\"protocol\":\"s116 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"targetPort\":\"s119\"},{\"name\":\"s122\",\"port\":125,\"nodePort\":-128}],\"clusterIP\":\"s131\",\"externalIPs\":[\"k134:v134\",\"k134:other:with:colons\",\"bare134\",\"z134:last\"],\"loadBalancerIP\":\"s137\",\"externalName\":\"s140 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"healthCheckNodePort\":143,\"sessionAffinityConfig\":{\"clientIPTimeoutSeconds\":147},\"ipFamily\":\"s149\"},\"yaml\":\"/wCY\",\"metrics\":{\"metricValues\":{\"key156\":157.123456789,\"key158\":159.123456789}}}",
+     "Object": "{ \"metadata\": { \"name\": \"s87\", \"namespace\": \"s89\", \"creationTimestamp\": \"1700000092\", \"labels\": [ \"k95:v95\", \"k95:other:with:colons\", \"bare95\", \"z95:last\" ], \"ownerReferences\": [ { \"name\": \"s99\", \"uid\": \"s101\" }, { \"name\": \"s104 \\u003c&\\u003e \\\"é\\\"\\n\", \"kind\": \"s107\" } ], \"finalizers\": [ \"k110:v110\", \"k110:other:with:colons\", \"bare110\", \"z110:last\" ] }, \"spec\": { \"ports\": [ { \"protocol\": \"s116 \\u003c&\\u003e \\\"é\\\"\\n\", \"targetPort\": \"s119\" }, { \"name\": \"s122\", \"port\": 125, \"nodePort\": -128 } ], \"clusterIP\": \"s131\", \"externalIPs\": [ \"k134:v134\", \"k134:other:with:colons\", \"bare134\", \"z134:last\" ], \"loadBalancerIP\": \"s137\", \"externalName\": \"s140 \\u003c&\\u003e \\\"é\\\"\\n\", \"healthCheckNodePort\": 143, \"sessionAffinityConfig\": { \"clientIPTimeoutSeconds\": 147 }, \"ipFamily\": \"s149\" }, \"yaml\": \"/wCY\", \"metrics\": { \"metricValues\": { \"key158\": 159.123456789, \"key156\": 157.123456789 } } }",
      "OperatingSystem": "",
      "OrgID": 0,
      "OwnerKind": "",
@@ -705,5 +705,6 @@
   "/sends/0/args/1/1",
   "/sends/0/rows/0/CollectedAt",
   "/sends/0/rows/1/CollectedAt"
- ]
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
 }

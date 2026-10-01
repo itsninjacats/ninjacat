@@ -344,7 +344,7 @@ let handleSketches (r: Request) : Response =
                             "sketches"
                             "no_schema"
                             $"legacy pre-DDSketch Distribution for {sketch.Metric} has no row shape"
-                            (sketchJson sketch)
+                            (Encoding.UTF8.GetBytes(ProtoJson.message sketch))
 
                     let origin =
                         if isNull sketch.Metadata || isNull sketch.Metadata.Origin then
@@ -1269,12 +1269,7 @@ let handleSymbolsQuery (r: Request) : Response =
 /// (FNV-64a): stable across restarts without a table, never zero, inside the
 /// int64 the runner parses it into.
 let tenantOrgId (tenant: string) : int64 =
-    let mutable hash = 14695981039346656037UL
-
-    for b in Encoding.UTF8.GetBytes tenant do
-        hash <- (hash ^^^ uint64 b) * 1099511628211UL
-
-    int64 (hash >>> 1) ||| 1L
+    int64 (Fnv.hash64 (Encoding.UTF8.GetBytes tenant) >>> 1) ||| 1L
 
 /// POST /api/unstable/on_prem_runners and its api_key_only variant.
 ///

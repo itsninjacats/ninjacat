@@ -64,221 +64,6 @@ let private createTime (millis: int64) : DateTime * uint8 =
 let private secondsOrNone (seconds: int64) : DateTime option =
     Time.optionalSeconds true (min seconds lastSeconds)
 
-/// Sub-messages the rows keep whole, as the JSON Go's encoding/json writes
-/// for the generated structs: the .proto field names, zero values left out,
-/// map keys as text. "" stands for a sub-message that was absent, so a
-/// reader can tell it from one that was present but empty.
-module GoJson =
-    let render (write: Utf8JsonWriter -> unit) : string =
-        use buffer = new MemoryStream()
-
-        do
-            use writer = new Utf8JsonWriter(buffer, JsonWriterOptions(Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping))
-            write writer
-
-        Encoding.UTF8.GetString(buffer.ToArray())
-
-    let private text (w: Utf8JsonWriter) (name: string) (value: string) =
-        if value <> "" then
-            w.WriteString(name, value)
-
-    let private signed (w: Utf8JsonWriter) (name: string) (value: int64) =
-        if value <> 0L then
-            w.WriteNumber(name, value)
-
-    let private unsigned (w: Utf8JsonWriter) (name: string) (value: uint64) =
-        if value <> 0UL then
-            w.WriteNumber(name, value)
-
-    let private flag (w: Utf8JsonWriter) (name: string) (value: bool) =
-        if value then
-            w.WriteBoolean(name, true)
-
-    let private texts (w: Utf8JsonWriter) (name: string) (values: RepeatedField<string>) =
-        if values.Count > 0 then
-            w.WriteStartArray name
-
-            for value in values do
-                w.WriteStringValue value
-
-            w.WriteEndArray()
-
-    /// A map as an object, keys sorted as text, as Go writes one.
-    let writeMap (w: Utf8JsonWriter) (entries: seq<KeyValuePair<'key, 'value>>) (writeValue: 'value -> unit) =
-        w.WriteStartObject()
-
-        for entry in entries |> Seq.sortBy (fun e -> string e.Key) do
-            w.WritePropertyName(string entry.Key)
-            writeValue entry.Value
-
-        w.WriteEndObject()
-
-    let private writeHost (w: Utf8JsonWriter) (host: Host) =
-        w.WriteStartObject()
-        signed w "id" host.Id
-        signed w "orgId" (int64 host.OrgId)
-        text w "name" host.Name
-        texts w "allTags" host.AllTags
-        signed w "numCpus" (int64 host.NumCpus)
-        signed w "totalMemory" host.TotalMemory
-        signed w "tagIndex" (int64 host.TagIndex)
-        signed w "tagsModified" host.TagsModified
-        w.WriteEndObject()
-
-    let private writeDnsStats (w: Utf8JsonWriter) (stats: DNSStats) =
-        w.WriteStartObject()
-        unsigned w "dnsTimeouts" (uint64 stats.DnsTimeouts)
-        unsigned w "dnsSuccessLatencySum" stats.DnsSuccessLatencySum
-        unsigned w "dnsFailureLatencySum" stats.DnsFailureLatencySum
-
-        if stats.DnsCountByRcode.Count > 0 then
-            w.WritePropertyName "dnsCountByRcode"
-            writeMap w stats.DnsCountByRcode (fun (count: uint32) -> w.WriteNumberValue count)
-
-        w.WriteEndObject()
-
-    let host (host: Host) : string =
-        if isNull host then "" else render (fun w -> writeHost w host)
-
-    /// ServiceDiscovery.resources: a list of oneofs. Go's struct wraps the
-    /// oneof in a field called Resource, hence the nesting.
-    let resources (resources: RepeatedField<Resource>) : string =
-        if resources.Count = 0 then
-            ""
-        else
-            render (fun w ->
-                w.WriteStartArray()
-
-                for resource in resources do
-                    w.WriteStartObject()
-                    w.WritePropertyName "Resource"
-
-                    if resource.ResourceCase = Resource.ResourceOneofCase.Logs then
-                        w.WriteStartObject()
-                        w.WriteStartObject "logs"
-                        text w "path" resource.Logs.Path
-                        w.WriteEndObject()
-                        w.WriteEndObject()
-                    else
-                        w.WriteNullValue()
-
-                    w.WriteEndObject()
-
-                w.WriteEndArray())
-
-    let resolvedResources (resources: MapField<string, ResourceMetadata>) : string =
-        if resources.Count = 0 then
-            ""
-        else
-            render (fun w ->
-                writeMap w resources (fun resource ->
-                    w.WriteStartObject()
-                    text w "id" resource.Id
-
-                    if resource.ByteKey.Length > 0 then
-                        w.WriteBase64String("byteKey", resource.ByteKey.Span)
-
-                    texts w "tags" resource.Tags
-                    signed w "tagIndex" (int64 resource.TagIndex)
-                    signed w "tagsModified" resource.TagsModified
-                    w.WriteEndObject()))
-
-    let routeMetadata (routes: RepeatedField<RouteMetadata>) : string =
-        if routes.Count = 0 then
-            ""
-        else
-            render (fun w ->
-                w.WriteStartArray()
-
-                for route in routes do
-                    w.WriteStartObject()
-                    text w "alias" route.Alias
-                    signed w "tagIndex" (int64 route.TagIndex)
-                    signed w "tagsModified" route.TagsModified
-                    texts w "tags" route.Tags
-                    w.WriteEndObject()
-
-                w.WriteEndArray())
-
-    let agentConfiguration (configuration: AgentConfiguration) : string =
-        if isNull configuration then
-            ""
-        else
-            render (fun w ->
-                w.WriteStartObject()
-                flag w "npmEnabled" configuration.NpmEnabled
-                flag w "usmEnabled" configuration.UsmEnabled
-                flag w "dsmEnabled" configuration.DsmEnabled
-                flag w "ccmEnabled" configuration.CcmEnabled
-                flag w "csmEnabled" configuration.CsmEnabled
-                flag w "eudmEnabled" configuration.EudmEnabled
-                flag w "discoveryServiceMapEnabled" configuration.DiscoveryServiceMapEnabled
-                w.WriteEndObject())
-
-    let hostsByName (hosts: MapField<string, Host>) : string =
-        if hosts.Count = 0 then "" else render (fun w -> writeMap w hosts (writeHost w))
-
-    let publicIps (ips: MapField<string, PublicIpMetadata>) : string =
-        if ips.Count = 0 then
-            ""
-        else
-            render (fun w ->
-                writeMap w ips (fun ip ->
-                    w.WriteStartObject()
-                    text w "ip" ip.Ip
-                    text w "cloudProvider" ip.CloudProvider
-                    text w "region" ip.Region
-                    texts w "tags" ip.Tags
-                    w.WriteEndObject()))
-
-    let dnsStatsByDomain (stats: MapField<int32, DNSStats>) : string =
-        if stats.Count = 0 then "" else render (fun w -> writeMap w stats (writeDnsStats w))
-
-    let dnsStatsByQueryType (stats: MapField<int32, DNSStatsByQueryType>) : string =
-        if stats.Count = 0 then
-            ""
-        else
-            render (fun w ->
-                writeMap w stats (fun byQueryType ->
-                    w.WriteStartObject()
-
-                    if byQueryType.DnsStatsByQueryType.Count > 0 then
-                        w.WritePropertyName "dnsStatsByQueryType"
-                        writeMap w byQueryType.DnsStatsByQueryType (writeDnsStats w)
-
-                    w.WriteEndObject()))
-
-/// The runtime-compilation result per eBPF asset, enums spelled out.
-let compilationTelemetryJson (byAsset: MapField<string, RuntimeCompilationTelemetry>) : string =
-    if byAsset.Count = 0 then
-        ""
-    else
-        GoJson.render (fun w ->
-            GoJson.writeMap w byAsset (fun telemetry ->
-                w.WriteStartObject()
-                w.WriteBoolean("runtime_compilation_enabled", telemetry.RuntimeCompilationEnabled)
-                w.WriteString("runtime_compilation_result", ProcessEnum.name telemetry.RuntimeCompilationResult)
-                w.WriteNumber("runtime_compilation_duration", telemetry.RuntimeCompilationDuration)
-                w.WriteString("kernel_header_fetch_result", ProcessEnum.name telemetry.KernelHeaderFetchResult)
-                w.WriteEndObject()))
-
-/// The routing table, flattened to two strings per route. The INDEX is what
-/// matters: connections.route_idx is a position in this list.
-let routesJson (routes: seq<Datadog.ProcessAgent.Route>) : string =
-    if Seq.isEmpty routes then
-        ""
-    else
-        GoJson.render (fun w ->
-            w.WriteStartArray()
-
-            for route in routes do
-                w.WriteStartObject()
-                w.WriteString("subnet_alias", (if isNull route.Subnet then "" else route.Subnet.Alias))
-                w.WriteString("hardware_addr", (if isNull route.Interface then "" else route.Interface.HardwareAddr))
-                w.WriteEndObject()
-
-            w.WriteEndArray())
-
 /// The sender identity the process-agent stamps on every submit. Every table
 /// of this intake keeps at least the version and the request id: "which agent
 /// wrote this row" is the first question asked of a payload that looks wrong.
@@ -574,7 +359,7 @@ let processRow (info: FrameInfo) (proc: CollectorProc) (p: Process) : ProcessRow
       TracerRuntimeIDs = discovery.TracerMetadata |> Seq.map _.RuntimeId |> Array.ofSeq
       TracerServiceNames = discovery.TracerMetadata |> Seq.map _.ServiceName |> Array.ofSeq
       APMInstrumentation = Text.flag discovery.ApmInstrumentation
-      ServiceResources = GoJson.resources discovery.Resources
+      ServiceResources = ProtoJson.messages discovery.Resources
       InjectionState = ProcessEnum.name p.InjectionState
       ZombieChildrenCount = p.ZombieChildrenCount
       ZombieNetRate = p.ZombieNetRate
@@ -583,7 +368,7 @@ let processRow (info: FrameInfo) (proc: CollectorProc) (p: Process) : ProcessRow
       ByteKey = p.ByteKey.ToByteArray()
       ContainerByteKey = p.ContainerByteKey.ToByteArray()
       HasCreateTime = hasCreateTime
-      ProcessHost = GoJson.host p.Host
+      ProcessHost = ProtoJson.message p.Host
       NetworkID = proc.NetworkId
       GroupID = proc.GroupId
       GroupSize = proc.GroupSize
@@ -723,7 +508,7 @@ let containerRow (info: FrameInfo) (envelope: ContainerEnvelope) (host: string) 
       AddrPorts = c.Addresses |> Seq.map _.Port |> Array.ofSeq
       AddrProtocols = c.Addresses |> Seq.map (fun a -> ProcessEnum.name a.Protocol) |> Array.ofSeq
       Tags = Tags.toMultiMap c.Tags
-      HostInfo = GoJson.host c.Host
+      HostInfo = ProtoJson.message c.Host
       NetworkID = envelope.NetworkID
       GroupID = envelope.GroupID
       GroupSize = envelope.GroupSize
@@ -880,7 +665,7 @@ let discoveryRow (info: FrameInfo) (discoveries: CollectorProcDiscovery) (d: Pro
       EGID = user.Egid
       SUID = user.Suid
       SGID = user.Sgid
-      HostInfo = GoJson.host d.Host
+      HostInfo = ProtoJson.message d.Host
       GroupID = discoveries.GroupId
       GroupSize = discoveries.GroupSize
       AgentVersion = info.Agent.Version
@@ -935,7 +720,7 @@ let connectionsPayloadRow (info: FrameInfo) (conns: CollectorConnections) (dnsNa
       KernelVersion = conns.KernelVersion
       Platform = conns.Platform
       PlatformVersion = conns.PlatformVersion
-      ResolvedResources = GoJson.resolvedResources conns.ResolvedResources
+      ResolvedResources = ProtoJson.messageMap conns.ResolvedResources
       ContainerForPID = conns.ContainerForPid |> Seq.map (fun e -> e.Key, e.Value) |> Map.ofSeq
       EncodedTags = encodedTags
       EncodedConnectionsTags = conns.EncodedConnectionsTags.ToByteArray()
@@ -943,21 +728,21 @@ let connectionsPayloadRow (info: FrameInfo) (conns: CollectorConnections) (dnsNa
       HostTags = Tags.toMultiMap (sharedTags encodedTags conns.HostTagsIndex)
       ConnTelemetry = connTelemetry conns.ConnTelemetry
       ConnTelemetryMap = conns.ConnTelemetryMap |> Seq.map (fun e -> e.Key, e.Value) |> Map.ofSeq
-      CompilationTelemetry = compilationTelemetryJson conns.CompilationTelemetryByAsset
+      CompilationTelemetry = ProtoJson.messageMap conns.CompilationTelemetryByAsset
       KernelHeaderFetchResult = ProcessEnum.name conns.KernelHeaderFetchResult
       // The CO-RE result per asset, by name.
       CORETelemetry = conns.CORETelemetryByAsset |> Seq.map (fun e -> e.Key, ProcessEnum.name e.Value) |> Map.ofSeq
       PrebuiltEBPFAssets = Array.ofSeq conns.PrebuiltEBPFAssets
-      Routes = routesJson conns.Routes
-      RouteMetadata = GoJson.routeMetadata conns.RouteMetadata
-      AgentConfiguration = GoJson.agentConfiguration conns.AgentConfiguration
+      Routes = ProtoJson.messages conns.Routes
+      RouteMetadata = ProtoJson.messages conns.RouteMetadata
+      AgentConfiguration = ProtoJson.message conns.AgentConfiguration
       EncodedDNS = conns.EncodedDNS.ToByteArray()
       Domains = Array.ofSeq conns.Domains
       EncodedDomainDatabase = conns.EncodedDomainDatabase.ToByteArray()
       EncodedDNSLookups = conns.EncodedDnsLookups.ToByteArray()
       DNSNames = dnsNames
-      ResolvedHostsByName = GoJson.hostsByName conns.ResolvedHostsByName
-      ResolvedPublicIPs = GoJson.publicIps conns.ResolvedPublicIps
+      ResolvedHostsByName = ProtoJson.messageMap conns.ResolvedHostsByName
+      ResolvedPublicIPs = ProtoJson.messageMap conns.ResolvedPublicIps
       EcsTask = conns.EcsTask
       ResolvConfs = Array.ofSeq conns.ResolvConfs
       AgentHostname = info.Agent.Hostname
@@ -1017,9 +802,9 @@ let connectionRow (info: FrameInfo) (host: string) (encodedTags: byte[]) (connec
       DNSSuccessLatencySum = c.DnsSuccessLatencySum
       DNSFailureLatencySum = c.DnsFailureLatencySum
       DNSCountByRcode = c.DnsCountByRcode |> Seq.map (fun e -> e.Key, e.Value) |> Map.ofSeq
-      DNSStatsByDomain = GoJson.dnsStatsByDomain c.DnsStatsByDomain
-      DNSStatsByDomainByQueryType = GoJson.dnsStatsByQueryType c.DnsStatsByDomainByQueryType
-      DNSStatsByDomainOffsetByQueryType = GoJson.dnsStatsByQueryType c.DnsStatsByDomainOffsetByQueryType
+      DNSStatsByDomain = ProtoJson.messageMap c.DnsStatsByDomain
+      DNSStatsByDomainByQueryType = ProtoJson.messageMap c.DnsStatsByDomainByQueryType
+      DNSStatsByDomainOffsetByQueryType = ProtoJson.messageMap c.DnsStatsByDomainOffsetByQueryType
       LastTCPEstablished = c.LastTcpEstablished
       LastTCPClosed = c.LastTcpClosed
       RouteIdx = c.RouteIdx

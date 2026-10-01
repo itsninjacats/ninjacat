@@ -305,7 +305,7 @@ let ``every field of a process reaches its column`` () =
     Assert.Equal<string[]>([| "traced" |], row.TracerServiceNames)
     Assert.Equal<string[]>([| "extra" |], row.AdditionalGeneratedNames)
     Assert.Equal<string[]>([| "SERVICE_NAME_SOURCE_SPRING" |], row.AdditionalGeneratedNameSources)
-    sameJson """[{"Resource":{"logs":{"path":"/var/log/app.log"}}}]""" row.ServiceResources
+    sameJson """[{"logs":{"path":"/var/log/app.log"}}]""" row.ServiceResources
 
 [<Fact>]
 let ``tags sharing a key all survive`` () =
@@ -518,12 +518,12 @@ let ``a route without subnet or interface keeps its position`` () =
           Route(Interface = Interface(HardwareAddr = "02:42:ac:11:00:02")) ]
 
     sameJson
-        """[{"subnet_alias":"subnet-a","hardware_addr":""},
-            {"subnet_alias":"","hardware_addr":""},
-            {"subnet_alias":"","hardware_addr":"02:42:ac:11:00:02"}]"""
-        (routesJson routes)
+        """[{"subnet":{"alias":"subnet-a"}},
+            {},
+            {"interface":{"HardwareAddr":"02:42:ac:11:00:02"}}]"""
+        (ProtoJson.messages routes)
 
-    Assert.Equal("", routesJson [])
+    Assert.Equal("", ProtoJson.messages (List.empty<Route>))
 
 // Buffers made by the encoders of agent-payload v5.0.207, each holding three
 // tag sets: [env:prod kube_service:a kube_service:b], [env:prod role:db] and
@@ -759,37 +759,37 @@ let ``every route keeps a frame of a type it has no table for`` () =
         Assert.Equal($"{path} decoded to {goType} (frame type {messageType})", raw.Note)
         Assert.Single(sink.Writes) |> ignore
 
-// Frames encoded by agent-payload v5.0.207, and beside them what Go's
-// encoding/json made of the sub-messages after decoding the same frames.
+// Frames encoded by agent-payload v5.0.207, and beside them the sub-messages
+// in proto3's JSON mapping, as the protobuf library writes them.
 let private connectionsFrame = bytes "AwAWAAAAAAAAAAAAAAAAABIGaG9zdC1hGoYBCAGSAiUIAhIhCAEQ////////////ARgDIgQIChACIgQIAxABIgQIABAFkgINCP///////////wESANICMwgEEi8KBggcEgIIAgolCAESIQgBEP///////////wEYAyIECAoQAiIECAMQASIECAAQBdICBAgFEgDaAgwIERIICgYIARICGAlCCQoFY2lkLTISAEIeCgVjaWQtMRIVCgVjaWQtMRoD+/8BIgN0OjEoBDAJcl8BAgACMwEAAQADCDEwLjAuMC4xAgAMCDEwLjAuMC4yAQAIMTAuMC4wLjMBGAtleGFtcGxlLmNvbQtleGFtcGxlLm9yZxppbnRlcm5hbC5zdmMuY2x1c3Rlci5sb2NhbKoBDQoJY29ubnRyYWNrEgCqARMKBnRyYWNlchIJCAEQARjSCSAF+gEMCgoKCHN1Ym5ldC1h+gEA+gEVEhMKETAyOjQyOmFjOjExOjAwOjAykgITCghzdWJuZXQtYRABGAIiA3g6eZICAJoCBggBKAE4AcICCgoGaG9zdC1iEgDCAjYKBmhvc3QtYRIsCAUQBxoGaG9zdC1hMghlbnY6cHJvZDIDYTxiOAhAgICAgIAgSANQgOLPqgbyAikKBzEuMi4zLjQSHgoHMS4yLjMuNBIDYXdzGgl1cy1lYXN0LTEiA2E6Yg=="
 let private procFrame = bytes "AwAMAAAAAAAAAAAAAAAAABIGaG9zdC1hGk8QARosCAUQBxoGaG9zdC1hMghlbnY6cHJvZDIDYTxiOAhAgICAgIAgSANQgOLPqgbSARwyFAoSChAvdmFyL2xvZy9hcHAubG9nMgIKADIAUgYSAWO6AQA="
 
 [<Fact>]
-let ``the whole sub-messages of a connections payload are the JSON Go wrote`` () =
+let ``the whole sub-messages of a connections payload are protobuf's own JSON`` () =
     let _, sink = post "/api/v1/connections" connectionsFrame
     let payload = Assert.Single(sink.Rows<ConnectionsPayloadRow>())
 
     sameJson
-        """{"cid-1":{"id":"cid-1","byteKey":"+/8B","tags":["t:1"],"tagIndex":4,"tagsModified":9},"cid-2":{}}"""
+        """{"cid-1":{"id":"cid-1","byteKey":"+/8B","tags":["t:1"],"tagIndex":4,"tagsModified":"9"},"cid-2":{}}"""
         payload.ResolvedResources
 
-    sameJson """[{"alias":"subnet-a","tagIndex":1,"tagsModified":2,"tags":["x:y"]},{}]""" payload.RouteMetadata
+    sameJson """[{"alias":"subnet-a","tagIndex":1,"tagsModified":"2","tags":["x:y"]},{}]""" payload.RouteMetadata
     sameJson """{"npmEnabled":true,"csmEnabled":true,"discoveryServiceMapEnabled":true}""" payload.AgentConfiguration
 
     sameJson
-        """{"host-a":{"id":5,"orgId":7,"name":"host-a","allTags":["env:prod","a<b"],"numCpus":8,"totalMemory":1099511627776,"tagIndex":3,"tagsModified":1700000000},"host-b":{}}"""
+        """{"host-a":{"id":"5","orgId":7,"name":"host-a","allTags":["env:prod","a<b"],"numCpus":8,"totalMemory":"1099511627776","tagIndex":3,"tagsModified":"1700000000"},"host-b":{}}"""
         payload.ResolvedHostsByName
 
     sameJson """{"1.2.3.4":{"ip":"1.2.3.4","cloudProvider":"aws","region":"us-east-1","tags":["a:b"]}}""" payload.ResolvedPublicIPs
 
-    // The handler's own shapes: enums spelled out, a slot per route.
+    // Enums by name, and a result at its default left out like any field.
     sameJson
-        """{"conntrack":{"runtime_compilation_enabled":false,"runtime_compilation_result":"NotAttempted","runtime_compilation_duration":0,"kernel_header_fetch_result":"FetchNotAttempted"},
-            "tracer":{"runtime_compilation_enabled":true,"runtime_compilation_result":"CompilationSuccess","runtime_compilation_duration":1234,"kernel_header_fetch_result":"DownloadSuccess"}}"""
+        """{"conntrack":{},
+            "tracer":{"runtimeCompilationEnabled":true,"runtimeCompilationResult":"CompilationSuccess","runtimeCompilationDuration":"1234","kernelHeaderFetchResult":"DownloadSuccess"}}"""
         payload.CompilationTelemetry
 
     sameJson
-        """[{"subnet_alias":"subnet-a","hardware_addr":""},{"subnet_alias":"","hardware_addr":""},{"subnet_alias":"","hardware_addr":"02:42:ac:11:00:02"}]"""
+        """[{"subnet":{"alias":"subnet-a"}},{},{"interface":{"HardwareAddr":"02:42:ac:11:00:02"}}]"""
         payload.Routes
 
     Assert.Equal<string[]>(dnsNames, payload.DNSNames)
@@ -798,18 +798,19 @@ let ``the whole sub-messages of a connections payload are the JSON Go wrote`` ()
     let connection = Assert.Single(sink.Rows<ConnectionRow>())
     Assert.Equal(payload.PayloadID, connection.PayloadID)
 
-    // 18446744073709551615 is the largest uint64: it must not pass through a float.
+    // 18446744073709551615 is the largest uint64: a 64-bit integer is a string
+    // in protobuf's JSON, so it cannot pass through a float.
     sameJson
-        """{"-1":{},"2":{"dnsTimeouts":1,"dnsSuccessLatencySum":18446744073709551615,"dnsFailureLatencySum":3,"dnsCountByRcode":{"0":5,"10":2,"3":1}}}"""
+        """{"-1":{},"2":{"dnsTimeouts":1,"dnsSuccessLatencySum":"18446744073709551615","dnsFailureLatencySum":"3","dnsCountByRcode":{"0":5,"10":2,"3":1}}}"""
         connection.DNSStatsByDomain
 
     Assert.Contains("18446744073709551615", connection.DNSStatsByDomain)
 
     sameJson
-        """{"4":{"dnsStatsByQueryType":{"1":{"dnsTimeouts":1,"dnsSuccessLatencySum":18446744073709551615,"dnsFailureLatencySum":3,"dnsCountByRcode":{"0":5,"10":2,"3":1}},"28":{"dnsTimeouts":2}}},"5":{}}"""
+        """{"4":{"dnsStatsByQueryType":{"1":{"dnsTimeouts":1,"dnsSuccessLatencySum":"18446744073709551615","dnsFailureLatencySum":"3","dnsCountByRcode":{"0":5,"10":2,"3":1}},"28":{"dnsTimeouts":2}}},"5":{}}"""
         connection.DNSStatsByDomainByQueryType
 
-    sameJson """{"17":{"dnsStatsByQueryType":{"1":{"dnsFailureLatencySum":9}}}}""" connection.DNSStatsByDomainOffsetByQueryType
+    sameJson """{"17":{"dnsStatsByQueryType":{"1":{"dnsFailureLatencySum":"9"}}}}""" connection.DNSStatsByDomainOffsetByQueryType
 
 [<Fact>]
 let ``a connections payload with nothing in it stores empty strings, not empty JSON`` () =
@@ -835,21 +836,21 @@ let ``a connections payload with nothing in it stores empty strings, not empty J
     Assert.Equal(2, sink.Writes.Length)
 
 [<Fact>]
-let ``the whole sub-messages of a process are the JSON Go wrote`` () =
+let ``the whole sub-messages of a process are protobuf's own JSON`` () =
     let _, sink = post "/api/v1/collector" procFrame
     let row = Assert.Single(sink.Rows<ProcessRow>())
 
     sameJson
-        """{"id":5,"orgId":7,"name":"host-a","allTags":["env:prod","a<b"],"numCpus":8,"totalMemory":1099511627776,"tagIndex":3,"tagsModified":1700000000}"""
+        """{"id":"5","orgId":7,"name":"host-a","allTags":["env:prod","a<b"],"numCpus":8,"totalMemory":"1099511627776","tagIndex":3,"tagsModified":"1700000000"}"""
         row.ProcessHost
 
     // A log resource with a path, one without, and a resource of a kind this
     // build does not know.
-    sameJson """[{"Resource":{"logs":{"path":"/var/log/app.log"}}},{"Resource":{"logs":{}}},{"Resource":null}]""" row.ServiceResources
+    sameJson """[{"logs":{"path":"/var/log/app.log"}},{"logs":{}},{}]""" row.ServiceResources
 
     // A host that was sent but empty is "{}", not "".
     let container = Assert.Single(sink.Rows<ContainerRow>())
-    Assert.Equal("{}", container.HostInfo)
+    Assert.Equal("{ }", container.HostInfo)
 
 [<Fact>]
 let ``what system-probe saw inside a connection becomes stat rows that point back at it`` () =

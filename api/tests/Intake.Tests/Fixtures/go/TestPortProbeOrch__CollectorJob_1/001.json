@@ -308,9 +308,9 @@
       null
      ],
      "",
-     "[{\"requests\":{\"key49\":-50,\"key51\":1700000052},\"type\":2},{\"requests\":{\"key58\":1700000059,\"key60\":4102444861},\"type\":1}]",
+     "[{ \"requests\": { \"key51\": \"1700000052\", \"key49\": \"-50\" }, \"type\": \"initContainer\" },{ \"requests\": { \"key60\": \"4102444861\", \"key58\": \"1700000059\" }, \"type\": \"container\" }]",
      {},
-     "{\"metadata\":{\"namespace\":\"s13\",\"creationTimestamp\":4102444816,\"labels\":[\"k19:v19\",\"k19:other:with:colons\",\"bare19\",\"z19:last\"],\"ownerReferences\":[{\"name\":\"s23\",\"uid\":\"s25\"},{\"name\":\"s28 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"kind\":\"s31\"}],\"finalizers\":[\"k34:v34\",\"k34:other:with:colons\",\"bare34\",\"z34:last\"]},\"spec\":{\"parallelism\":38,\"completions\":-40,\"backoffLimit\":43,\"manualSelector\":true,\"resourceRequirements\":[{\"requests\":{\"key49\":-50,\"key51\":1700000052},\"type\":2},{\"requests\":{\"key58\":1700000059,\"key60\":4102444861},\"type\":1}]},\"yaml\":\"a2luZDogVGhpbmc2Nwo=\",\"conditions\":[{\"type\":\"s71\",\"status\":\"s73\",\"lastTransitionTime\":4102444876,\"message\":\"s79\"},{\"status\":\"s82\",\"lastTransitionTime\":-85,\"message\":\"s88 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}]}",
+     "{ \"metadata\": { \"namespace\": \"s13\", \"creationTimestamp\": \"4102444816\", \"labels\": [ \"k19:v19\", \"k19:other:with:colons\", \"bare19\", \"z19:last\" ], \"ownerReferences\": [ { \"name\": \"s23\", \"uid\": \"s25\" }, { \"name\": \"s28 \\u003c&\\u003e \\\"é\\\"\\n\", \"kind\": \"s31\" } ], \"finalizers\": [ \"k34:v34\", \"k34:other:with:colons\", \"bare34\", \"z34:last\" ] }, \"spec\": { \"parallelism\": 38, \"completions\": -40, \"backoffLimit\": 43, \"manualSelector\": true, \"resourceRequirements\": [ { \"requests\": { \"key51\": \"1700000052\", \"key49\": \"-50\" }, \"type\": \"initContainer\" }, { \"requests\": { \"key60\": \"4102444861\", \"key58\": \"1700000059\" }, \"type\": \"container\" } ] }, \"yaml\": \"a2luZDogVGhpbmc2Nwo=\", \"conditions\": [ { \"type\": \"s71\", \"status\": \"s73\", \"lastTransitionTime\": \"4102444876\", \"message\": \"s79\" }, { \"status\": \"s82\", \"lastTransitionTime\": \"-85\", \"message\": \"s88 \\u003c&\\u003e \\\"é\\\"\\n\" } ] }",
      "",
      "",
      "",
@@ -349,7 +349,7 @@
      "",
      "",
      "",
-     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k124:v124\",\"k124:other:with:colons\",\"bare124\",\"z124:last\"],\"agentVersion\":{\"Major\":1700000127,\"Patch\":-130,\"Meta\":\"s133\"}}"
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k124:v124\", \"k124:other:with:colons\", \"bare124\", \"z124:last\" ], \"agentVersion\": { \"Major\": \"1700000127\", \"Patch\": \"-130\", \"Meta\": \"s133\" } }"
     ],
     [
      "test",
@@ -430,7 +430,7 @@
      "s110",
      "",
      {},
-     "{\"metadata\":{\"name\":\"s91\",\"uid\":\"s94\",\"deletionTimestamp\":1700000097,\"annotations\":[\"k100:v100\",\"k100:other:with:colons\",\"bare100\",\"z100:last\"],\"resourceVersion\":\"s103\",\"deletionGracePeriodSeconds\":4102444906},\"status\":{\"conditionMessage\":\"s110\",\"startTime\":1700000112,\"active\":115,\"failed\":118},\"tags\":[\"k121:v121\",\"k121:other:with:colons\",\"bare121\",\"z121:last\"]}",
+     "{ \"metadata\": { \"name\": \"s91\", \"uid\": \"s94\", \"deletionTimestamp\": \"1700000097\", \"annotations\": [ \"k100:v100\", \"k100:other:with:colons\", \"bare100\", \"z100:last\" ], \"resourceVersion\": \"s103\", \"deletionGracePeriodSeconds\": \"4102444906\" }, \"status\": { \"conditionMessage\": \"s110\", \"startTime\": \"1700000112\", \"active\": 115, \"failed\": 118 }, \"tags\": [ \"k121:v121\", \"k121:other:with:colons\", \"bare121\", \"z121:last\" ] }",
      "",
      "",
      "",
@@ -469,7 +469,7 @@
      "",
      "",
      "",
-     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k124:v124\",\"k124:other:with:colons\",\"bare124\",\"z124:last\"],\"agentVersion\":{\"Major\":1700000127,\"Patch\":-130,\"Meta\":\"s133\"}}"
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k124:v124\", \"k124:other:with:colons\", \"bare124\", \"z124:last\" ], \"agentVersion\": { \"Major\": \"1700000127\", \"Patch\": \"-130\", \"Meta\": \"s133\" } }"
     ]
    ],
    "insert": "INSERT INTO k8s_resources\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,\n\t\t\t uid, resource_version, owner_kind, owner_name, node_name, phase, status,\n\t\t\t ready, desired, available, counts, labels, annotations, tags,\n\t\t\t agent_version, group_id, group_size,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t creation_timestamp, deletion_timestamp, deletion_grace_period_seconds,\n\t\t\t finalizers, owner_kinds, owner_names, owner_uids,\n\t\t\t condition_types, condition_statuses, condition_reasons, condition_messages,\n\t\t\t condition_last_transition, condition_last_update, condition_last_probe,\n\t\t\t condition_message, resource_requirements, metrics, object,\n\t\t\t pod_ip, nominated_node_name, qos_class, priority_class,\n\t\t\t start_time, scheduled_time, host_name,\n\t\t\t container_names, container_ids, container_ready, container_restarts,\n\t\t\t container_states, container_messages, container_images,\n\t\t\t container_image_ids, container_is_init,\n\t\t\t pod_cidr, pod_cidrs, unschedulable, taints, provider_id, node_roles,\n\t\t\t capacity, allocatable, node_addresses,\n\t\t\t kubelet_version, kube_proxy_version, operating_system, architecture,\n\t\t\t kernel_version, os_image, container_runtime_version,\n\t\t\t service_type, cluster_ip, service_ports,\n\t\t\t rbac_rules, rbac_subjects, rbac_role_ref, envelope)",
@@ -538,7 +538,7 @@
      "DeletionTimestamp": null,
      "Desired": 0,
      "Encoding": "protobuf",
-     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k124:v124\",\"k124:other:with:colons\",\"bare124\",\"z124:last\"],\"agentVersion\":{\"Major\":1700000127,\"Patch\":-130,\"Meta\":\"s133\"}}",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k124:v124\", \"k124:other:with:colons\", \"bare124\", \"z124:last\" ], \"agentVersion\": { \"Major\": \"1700000127\", \"Patch\": \"-130\", \"Meta\": \"s133\" } }",
      "Finalizers": [
       "k34:v34",
       "k34:other:with:colons",
@@ -566,7 +566,7 @@
      "NodeRoles": [],
      "NominatedNodeName": "",
      "OSImage": "",
-     "Object": "{\"metadata\":{\"namespace\":\"s13\",\"creationTimestamp\":4102444816,\"labels\":[\"k19:v19\",\"k19:other:with:colons\",\"bare19\",\"z19:last\"],\"ownerReferences\":[{\"name\":\"s23\",\"uid\":\"s25\"},{\"name\":\"s28 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"kind\":\"s31\"}],\"finalizers\":[\"k34:v34\",\"k34:other:with:colons\",\"bare34\",\"z34:last\"]},\"spec\":{\"parallelism\":38,\"completions\":-40,\"backoffLimit\":43,\"manualSelector\":true,\"resourceRequirements\":[{\"requests\":{\"key49\":-50,\"key51\":1700000052},\"type\":2},{\"requests\":{\"key58\":1700000059,\"key60\":4102444861},\"type\":1}]},\"yaml\":\"a2luZDogVGhpbmc2Nwo=\",\"conditions\":[{\"type\":\"s71\",\"status\":\"s73\",\"lastTransitionTime\":4102444876,\"message\":\"s79\"},{\"status\":\"s82\",\"lastTransitionTime\":-85,\"message\":\"s88 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}]}",
+     "Object": "{ \"metadata\": { \"namespace\": \"s13\", \"creationTimestamp\": \"4102444816\", \"labels\": [ \"k19:v19\", \"k19:other:with:colons\", \"bare19\", \"z19:last\" ], \"ownerReferences\": [ { \"name\": \"s23\", \"uid\": \"s25\" }, { \"name\": \"s28 \\u003c&\\u003e \\\"é\\\"\\n\", \"kind\": \"s31\" } ], \"finalizers\": [ \"k34:v34\", \"k34:other:with:colons\", \"bare34\", \"z34:last\" ] }, \"spec\": { \"parallelism\": 38, \"completions\": -40, \"backoffLimit\": 43, \"manualSelector\": true, \"resourceRequirements\": [ { \"requests\": { \"key51\": \"1700000052\", \"key49\": \"-50\" }, \"type\": \"initContainer\" }, { \"requests\": { \"key60\": \"4102444861\", \"key58\": \"1700000059\" }, \"type\": \"container\" } ] }, \"yaml\": \"a2luZDogVGhpbmc2Nwo=\", \"conditions\": [ { \"type\": \"s71\", \"status\": \"s73\", \"lastTransitionTime\": \"4102444876\", \"message\": \"s79\" }, { \"status\": \"s82\", \"lastTransitionTime\": \"-85\", \"message\": \"s88 \\u003c&\\u003e \\\"é\\\"\\n\" } ] }",
      "OperatingSystem": "",
      "OrgID": 4242,
      "OwnerKind": "",
@@ -594,7 +594,7 @@
      "RBACRules": "",
      "RBACSubjects": "",
      "Ready": 0,
-     "ResourceRequirements": "[{\"requests\":{\"key49\":-50,\"key51\":1700000052},\"type\":2},{\"requests\":{\"key58\":1700000059,\"key60\":4102444861},\"type\":1}]",
+     "ResourceRequirements": "[{ \"requests\": { \"key51\": \"1700000052\", \"key49\": \"-50\" }, \"type\": \"initContainer\" },{ \"requests\": { \"key60\": \"4102444861\", \"key58\": \"1700000059\" }, \"type\": \"container\" }]",
      "ResourceVersion": "",
      "ScheduledTime": null,
      "ServicePorts": "",
@@ -666,7 +666,7 @@
      "DeletionTimestamp": "2023-11-14T22:14:57Z",
      "Desired": 0,
      "Encoding": "protobuf",
-     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k124:v124\",\"k124:other:with:colons\",\"bare124\",\"z124:last\"],\"agentVersion\":{\"Major\":1700000127,\"Patch\":-130,\"Meta\":\"s133\"}}",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k124:v124\", \"k124:other:with:colons\", \"bare124\", \"z124:last\" ], \"agentVersion\": { \"Major\": \"1700000127\", \"Patch\": \"-130\", \"Meta\": \"s133\" } }",
      "Finalizers": [],
      "GroupID": 6,
      "GroupSize": -8,
@@ -685,7 +685,7 @@
      "NodeRoles": [],
      "NominatedNodeName": "",
      "OSImage": "",
-     "Object": "{\"metadata\":{\"name\":\"s91\",\"uid\":\"s94\",\"deletionTimestamp\":1700000097,\"annotations\":[\"k100:v100\",\"k100:other:with:colons\",\"bare100\",\"z100:last\"],\"resourceVersion\":\"s103\",\"deletionGracePeriodSeconds\":4102444906},\"status\":{\"conditionMessage\":\"s110\",\"startTime\":1700000112,\"active\":115,\"failed\":118},\"tags\":[\"k121:v121\",\"k121:other:with:colons\",\"bare121\",\"z121:last\"]}",
+     "Object": "{ \"metadata\": { \"name\": \"s91\", \"uid\": \"s94\", \"deletionTimestamp\": \"1700000097\", \"annotations\": [ \"k100:v100\", \"k100:other:with:colons\", \"bare100\", \"z100:last\" ], \"resourceVersion\": \"s103\", \"deletionGracePeriodSeconds\": \"4102444906\" }, \"status\": { \"conditionMessage\": \"s110\", \"startTime\": \"1700000112\", \"active\": 115, \"failed\": 118 }, \"tags\": [ \"k121:v121\", \"k121:other:with:colons\", \"bare121\", \"z121:last\" ] }",
      "OperatingSystem": "",
      "OrgID": 4242,
      "OwnerKind": "",
@@ -751,5 +751,6 @@
   "/sends/0/args/1/1",
   "/sends/0/rows/0/CollectedAt",
   "/sends/0/rows/1/CollectedAt"
- ]
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
 }

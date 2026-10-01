@@ -8,6 +8,7 @@ module NinjaCat.Api.Intake.Tests.KubeopsTests
 open System
 open System.Text
 open System.Text.Json
+open System.Text.Json.Nodes
 open Xunit
 open Google.Protobuf
 open Microsoft.AspNetCore.Http
@@ -18,6 +19,10 @@ open NinjaCat.Api.Intake
 open NinjaCat.Api.Intake.Routers
 open NinjaCat.Api.Intake.Tests.Golden
 open NinjaCat.Api.Storage.Rows
+
+/// Equal as JSON: the formatter's spacing is not what is being tested.
+let private sameJson (expected: string) (actual: string) =
+    Assert.True(JsonNode.DeepEquals(JsonNode.Parse expected, JsonNode.Parse actual), $"expected {expected}\nactual   {actual}")
 
 let private now = DateTime(2026, 9, 21, 12, 0, 0, DateTimeKind.Utc)
 
@@ -322,7 +327,7 @@ let ``a pod keeps each container's status, regular containers first, then init c
     // A pod condition has no lastUpdateTime: the slot is None, not a made-up date.
     Assert.Equal<DateTime option[]>([| None |], row.ConditionLastUpdate)
 
-    Assert.Equal("""[{"limits":{"memory":536870912},"requests":{"cpu":100},"name":"app"}]""", row.ResourceRequirements)
+    sameJson """[{"limits":{"memory":"536870912"},"requests":{"cpu":"100"},"name":"app"}]""" row.ResourceRequirements
     Assert.Equal<Map<string, float>>(Map [ "cpu.usage", 0.42 ], row.Metrics)
 
 [<Fact>]
@@ -372,7 +377,7 @@ let ``a node keeps its cordon flag, taints, capacity, versions and the condition
     Assert.Equal<string[]>([| "10.244.1.0/24" |], row.PodCIDRs)
     Assert.Equal("aws:///eu-west-1a/i-0abc", row.ProviderID)
     Assert.Equal<string[]>([| "worker" |], row.NodeRoles)
-    Assert.Equal("""[{"key":"node.kubernetes.io/unreachable","effect":"NoExecute","timeAdded":1600000000}]""", row.Taints)
+    sameJson """[{"key":"node.kubernetes.io/unreachable","effect":"NoExecute","timeAdded":"1600000000"}]""" row.Taints
     Assert.Equal<Map<string, int64>>(Map [ "cpu", 8000L; "memory", 33554432000L ], row.Capacity)
     Assert.Equal<Map<string, int64>>(Map [ "cpu", 7800L ], row.Allocatable)
     Assert.Equal("""{"InternalIP":"10.0.1.7"}""", row.NodeAddresses)
@@ -538,7 +543,7 @@ let ``each workload kind stores its own numbers under stable keys`` () =
     services.Services.Add service
     let serviceRow = rowOf services
     Assert.Equal(("ClusterIP", "10.96.0.10"), (serviceRow.ServiceType, serviceRow.ClusterIP))
-    Assert.Equal("""[{"name":"http","protocol":"TCP","port":80,"targetPort":"8080"}]""", serviceRow.ServicePorts)
+    sameJson """[{"name":"http","protocol":"TCP","port":80,"targetPort":"8080"}]""" serviceRow.ServicePorts
     Assert.Equal<Map<string, int64>>(Map [ "ports", 1L ], serviceRow.Counts)
 
     let namespaces = CollectorNamespace()
@@ -564,9 +569,9 @@ let ``a role keeps the permissions it grants`` () =
     let rows = Kubeops.resourceRows "t" now frame collector
 
     Assert.Equal(1L, rows[0].Counts["rules"])
-    Assert.Equal("""[{"verbs":["get","list"],"apiGroups":[""],"resources":["secrets"]}]""", rows[0].RBACRules)
-    // What the Go server stored for a role with no rules.
-    Assert.Equal("null", rows[1].RBACRules)
+    sameJson """[{"verbs":["get","list"],"apiGroups":[""],"resources":["secrets"]}]""" rows[0].RBACRules
+    // A role with no rules.
+    Assert.Equal("", rows[1].RBACRules)
 
 [<Fact>]
 let ``a role binding keeps its subjects and the role it refers to`` () =
@@ -582,10 +587,10 @@ let ``a role binding keeps its subjects and the role it refers to`` () =
 
     let rows = Kubeops.resourceRows "t" now frame collector
 
-    Assert.Equal("""[{"kind":"ServiceAccount","name":"ci","namespace":"shop"}]""", rows[0].RBACSubjects)
-    Assert.Equal("""{"kind":"Role","name":"secret-reader"}""", rows[0].RBACRoleRef)
+    sameJson """[{"kind":"ServiceAccount","name":"ci","namespace":"shop"}]""" rows[0].RBACSubjects
+    sameJson """{"kind":"Role","name":"secret-reader"}""" rows[0].RBACRoleRef
     Assert.Equal<Map<string, int64>>(Map [ "subjects", 1L ], rows[0].Counts)
-    Assert.Equal(("null", "null"), (rows[1].RBACSubjects, rows[1].RBACRoleRef))
+    Assert.Equal(("", ""), (rows[1].RBACSubjects, rows[1].RBACRoleRef))
 
 [<Fact>]
 let ``a kind with no column of its own is kept whole in the object column`` () =
@@ -610,13 +615,13 @@ let ``a kind with no column of its own is kept whole in the object column`` () =
         Assert.Contains(expected, row.Object)
 
     // The envelope must not repeat the object list: that would square the payload.
-    Assert.Equal("""{"clusterName":"prod"}""", row.Envelope)
+    sameJson """{"clusterName":"prod"}""" row.Envelope
 
 [<Fact>]
-let ``the JSON columns hold what Go's encoding/json wrote, not protobuf's JSON`` () =
-    // The expected text is the Go server's own output for this frame: .proto
-    // field names, zero values left out, 64-bit integers and enums as
-    // numbers, bytes as base64, an empty message still present.
+let ``the JSON columns hold protobuf's own JSON`` () =
+    // proto3's JSON mapping, as the protobuf library writes it: values at
+    // their default left out, 64-bit integers as strings, enums by name,
+    // bytes as base64, an empty message still present.
     let requirements = ResourceRequirements(Name = "app", Type = enum<ResourceRequirementsType> 1)
     requirements.Requests["memory"] <- 9007199254740993L
     requirements.Requests["cpu"] <- 100L
@@ -656,31 +661,29 @@ let ``the JSON columns hold what Go's encoding/json wrote, not protobuf's JSON``
 
     let row = Kubeops.resourceRows "t" now frame collector |> Assert.Single
 
-    Assert.Equal(
-        """{"metadata":{"name":"web-1","namespace":"shop","uid":"u-1","labels":["app:web"]},"IP":"10.0.0.1","containerStatuses":[{"name":"app","ready":true,"restartCount":2}],"yaml":"/wA=","host":{"id":9007199254740993,"name":"node-1"},"resourceRequirements":[{"requests":{"cpu":100,"memory":9007199254740993},"name":"app","type":1}],"QOSClass":"Burstable","metrics":{"metricValues":{"cpu.usage":0.42}},"nodeAffinity":{}}""",
+    sameJson
+        """{"metadata":{"name":"web-1","namespace":"shop","uid":"u-1","labels":["app:web"]},"IP":"10.0.0.1","containerStatuses":[{"name":"app","ready":true,"restartCount":2}],"yaml":"/wA=","host":{"id":"9007199254740993","name":"node-1"},"resourceRequirements":[{"requests":{"cpu":"100","memory":"9007199254740993"},"name":"app","type":"container"}],"QOSClass":"Burstable","metrics":{"metricValues":{"cpu.usage":0.42}},"nodeAffinity":{}}"""
         row.Object
-    )
 
     // The envelope keeps the extras no column holds: the cluster agent's own
     // system info, and the flag that says this is the terminated-pods batch.
-    Assert.Equal(
-        """{"hostName":"cluster-agent-1","clusterName":"prod","clusterId":"cid","groupId":1,"groupSize":2,"tags":["env:prod"],"info":{"uuid":"sys-uuid","totalMemory":9007199254740993},"isTerminated":true,"agentVersion":{"Major":7,"Minor":55,"Patch":1}}""",
+    sameJson
+        """{"hostName":"cluster-agent-1","clusterName":"prod","clusterId":"cid","groupId":1,"groupSize":2,"tags":["env:prod"],"info":{"uuid":"sys-uuid","totalMemory":"9007199254740993"},"isTerminated":true,"agentVersion":{"Major":"7","Minor":"55","Patch":"1"}}"""
         row.Envelope
-    )
 
-    Assert.Equal("""[{"requests":{"cpu":100,"memory":9007199254740993},"name":"app","type":1}]""", row.ResourceRequirements)
+    sameJson """[{"requests":{"cpu":"100","memory":"9007199254740993"},"name":"app","type":"container"}]""" row.ResourceRequirements
     Assert.Equal("7.55.1", row.AgentVersion)
     // The pod names its own host, which wins over the envelope's.
     Assert.Equal("node-1", row.HostName)
 
 [<Fact>]
-let ``a number with no JSON form empties the object column and keeps the row`` () =
+let ``a number JSON has no form for is written as text, and the row is kept`` () =
     let pod = Pod(Metadata = metadata "" "p" "u", Metrics = ResourceMetrics())
     pod.Metrics.MetricValues["nan"] <- nan
 
     let row = podRow pod
 
-    Assert.Equal("", row.Object)
+    Assert.Contains("\"NaN\"", row.Object)
     Assert.True(Double.IsNaN row.Metrics["nan"])
 
 [<Fact>]
@@ -878,12 +881,11 @@ let ``a manifest row keeps the sender's system info and the host the object was 
     let row = Kubeops.manifestRows "t" now frame collector [] |> Assert.Single
 
     // Without the manifest list: the list is the rows.
-    Assert.Equal(
-        """{"clusterId":"cid","systemInfo":{"uuid":"agent-uuid-1","os":{"name":"linux","platform":"ubuntu"},"totalMemory":8589934592}}""",
+    sameJson
+        """{"clusterId":"cid","systemInfo":{"uuid":"agent-uuid-1","os":{"name":"linux","platform":"ubuntu"},"totalMemory":"8589934592"}}"""
         row.Envelope
-    )
 
-    Assert.Equal("""{"id":42,"orgId":7,"name":"node-1","numCpus":8}""", row.ManifestHost)
+    sameJson """{"id":"42","orgId":7,"name":"node-1","numCpus":8}""" row.ManifestHost
 
 // ---- ECS tasks ----
 
@@ -943,7 +945,7 @@ let ``an ECS task row is keyed on its ARN and keeps its four tag sets apart`` ()
     // A task still running has no stop time, and unset must not become 1970.
     Assert.Equal((Some(at 1600000000L), Some(at 1600000030L), None), (row.PullStartedAt, row.PullStoppedAt, row.ExecutionStoppedAt))
     Assert.Equal(1u, row.ContainerCount)
-    Assert.Equal("""[{"dockerID":"d1","name":"app"}]""", row.Containers)
+    sameJson """[{"dockerID":"d1","name":"app"}]""" row.Containers
     Assert.Equal<Map<string, string[]>>(Map [ "env", [| "prod" |] ], row.EnvelopeTags)
     Assert.Equal<Map<string, string[]>>(Map [ "service", [| "checkout" |] ], row.Tags)
     Assert.Equal<Map<string, string[]>>(Map [ "ecs", [| "tag" |] ], row.ECSTags)
@@ -966,15 +968,14 @@ let ``an ECS task row keeps the envelope's own host and info, and the task's hos
 
     let row = Kubeops.ecsTaskRows "t" now frame collector |> Assert.Single
 
-    Assert.Equal(
-        """{"clusterId":"ecs-cid","host":{"id":11,"name":"ecs-collector","allTags":["role:collector"]},"info":{"uuid":"ecs-agent-uuid","totalMemory":4294967296}}""",
+    sameJson
+        """{"clusterId":"ecs-cid","host":{"id":"11","name":"ecs-collector","allTags":["role:collector"]},"info":{"uuid":"ecs-agent-uuid","totalMemory":"4294967296"}}"""
         row.Envelope
-    )
 
-    Assert.Equal("""{"id":99,"orgId":7,"name":"ip-10-0-1-7","numCpus":4}""", row.TaskHost)
+    sameJson """{"id":"99","orgId":7,"name":"ip-10-0-1-7","numCpus":4}""" row.TaskHost
     Assert.Equal("ip-10-0-1-7", row.TaskHostName)
     // What the Go server stored for a task with no containers.
-    Assert.Equal("null", row.Containers)
+    Assert.Equal("", row.Containers)
 
 // ---- kubeactions ----
 

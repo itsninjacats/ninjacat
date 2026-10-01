@@ -177,7 +177,7 @@
       "nan": "NaN",
       "ok": 1.5
      },
-     "",
+     "{ \"metadata\": { \"name\": \"p\", \"uid\": \"u\" }, \"metrics\": { \"metricValues\": { \"inf\": \"Infinity\", \"nan\": \"NaN\", \"ok\": 1.5 } } }",
      "",
      "",
      "",
@@ -287,7 +287,7 @@
      "NodeRoles": [],
      "NominatedNodeName": "",
      "OSImage": "",
-     "Object": "",
+     "Object": "{ \"metadata\": { \"name\": \"p\", \"uid\": \"u\" }, \"metrics\": { \"metricValues\": { \"inf\": \"Infinity\", \"nan\": \"NaN\", \"ok\": 1.5 } } }",
      "OperatingSystem": "",
      "OrgID": 4242,
      "OwnerKind": "",
@@ -330,5 +330,6 @@
  "volatile": [
   "/sends/0/args/0/1",
   "/sends/0/rows/0/CollectedAt"
- ]
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
 }

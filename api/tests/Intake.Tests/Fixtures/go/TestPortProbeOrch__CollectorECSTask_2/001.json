@@ -164,7 +164,7 @@
      "2100-01-01T00:00:36Z",
      null,
      "2023-11-14T22:13:59Z",
-     "null",
+     "",
      0,
      {
       "bare42": [
@@ -191,7 +191,7 @@
        "last"
       ]
      },
-     "{\"awsAccountID\":9007199254740995,\"clusterName\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"clusterId\":\"s6\",\"region\":\"s8 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":10,\"groupSize\":-12,\"tags\":[\"k87:v87\",\"k87:other:with:colons\",\"bare87\",\"z87:last\"],\"host\":{\"id\":9007199254741083,\"name\":\"s93\",\"numCpus\":-96,\"tagIndex\":99},\"hostName\":\"s102\",\"info\":{\"uuid\":\"s105\",\"cpus\":[{\"number\":109,\"vendor\":\"s111\",\"model\":\"s114\",\"coreId\":\"s117\",\"mhz\":-120},{\"number\":123,\"family\":\"s126\",\"physicalId\":\"s129\",\"cores\":-132,\"cacheSize\":135}]},\"agentVersion\":{\"Major\":1700000139,\"Minor\":4102444941,\"Pre\":\"s144 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Commit\":\"s147\"}}",
+     "{ \"awsAccountID\": \"9007199254740995\", \"clusterName\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"clusterId\": \"s6\", \"region\": \"s8 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 10, \"groupSize\": -12, \"tags\": [ \"k87:v87\", \"k87:other:with:colons\", \"bare87\", \"z87:last\" ], \"host\": { \"id\": \"9007199254741083\", \"name\": \"s93\", \"numCpus\": -96, \"tagIndex\": 99 }, \"hostName\": \"s102\", \"info\": { \"uuid\": \"s105\", \"cpus\": [ { \"number\": 109, \"vendor\": \"s111\", \"model\": \"s114\", \"coreId\": \"s117\", \"mhz\": \"-120\" }, { \"number\": 123, \"family\": \"s126\", \"physicalId\": \"s129\", \"cores\": -132, \"cacheSize\": 135 } ] }, \"agentVersion\": { \"Major\": \"1700000139\", \"Minor\": \"4102444941\", \"Pre\": \"s144 \\u003c&\\u003e \\\"é\\\"\\n\", \"Commit\": \"s147\" } }",
      ""
     ],
     [
@@ -242,7 +242,7 @@
      "2023-11-14T22:14:32Z",
      null,
      null,
-     "null",
+     "",
      0,
      {
       "bare78": [
@@ -269,7 +269,7 @@
        "last"
       ]
      },
-     "{\"awsAccountID\":9007199254740995,\"clusterName\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"clusterId\":\"s6\",\"region\":\"s8 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":10,\"groupSize\":-12,\"tags\":[\"k87:v87\",\"k87:other:with:colons\",\"bare87\",\"z87:last\"],\"host\":{\"id\":9007199254741083,\"name\":\"s93\",\"numCpus\":-96,\"tagIndex\":99},\"hostName\":\"s102\",\"info\":{\"uuid\":\"s105\",\"cpus\":[{\"number\":109,\"vendor\":\"s111\",\"model\":\"s114\",\"coreId\":\"s117\",\"mhz\":-120},{\"number\":123,\"family\":\"s126\",\"physicalId\":\"s129\",\"cores\":-132,\"cacheSize\":135}]},\"agentVersion\":{\"Major\":1700000139,\"Minor\":4102444941,\"Pre\":\"s144 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Commit\":\"s147\"}}",
+     "{ \"awsAccountID\": \"9007199254740995\", \"clusterName\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"clusterId\": \"s6\", \"region\": \"s8 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 10, \"groupSize\": -12, \"tags\": [ \"k87:v87\", \"k87:other:with:colons\", \"bare87\", \"z87:last\" ], \"host\": { \"id\": \"9007199254741083\", \"name\": \"s93\", \"numCpus\": -96, \"tagIndex\": 99 }, \"hostName\": \"s102\", \"info\": { \"uuid\": \"s105\", \"cpus\": [ { \"number\": 109, \"vendor\": \"s111\", \"model\": \"s114\", \"coreId\": \"s117\", \"mhz\": \"-120\" }, { \"number\": 123, \"family\": \"s126\", \"physicalId\": \"s129\", \"cores\": -132, \"cacheSize\": 135 } ] }, \"agentVersion\": { \"Major\": \"1700000139\", \"Minor\": \"4102444941\", \"Pre\": \"s144 \\u003c&\\u003e \\\"é\\\"\\n\", \"Commit\": \"s147\" } }",
      ""
     ]
    ],
@@ -297,12 +297,12 @@
        "last"
       ]
      },
-     "Containers": "null",
+     "Containers": "",
      "DaemonName": "",
      "DesiredStatus": "",
      "ECSTags": {},
      "Encoding": "protobuf",
-     "Envelope": "{\"awsAccountID\":9007199254740995,\"clusterName\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"clusterId\":\"s6\",\"region\":\"s8 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":10,\"groupSize\":-12,\"tags\":[\"k87:v87\",\"k87:other:with:colons\",\"bare87\",\"z87:last\"],\"host\":{\"id\":9007199254741083,\"name\":\"s93\",\"numCpus\":-96,\"tagIndex\":99},\"hostName\":\"s102\",\"info\":{\"uuid\":\"s105\",\"cpus\":[{\"number\":109,\"vendor\":\"s111\",\"model\":\"s114\",\"coreId\":\"s117\",\"mhz\":-120},{\"number\":123,\"family\":\"s126\",\"physicalId\":\"s129\",\"cores\":-132,\"cacheSize\":135}]},\"agentVersion\":{\"Major\":1700000139,\"Minor\":4102444941,\"Pre\":\"s144 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Commit\":\"s147\"}}",
+     "Envelope": "{ \"awsAccountID\": \"9007199254740995\", \"clusterName\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"clusterId\": \"s6\", \"region\": \"s8 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 10, \"groupSize\": -12, \"tags\": [ \"k87:v87\", \"k87:other:with:colons\", \"bare87\", \"z87:last\" ], \"host\": { \"id\": \"9007199254741083\", \"name\": \"s93\", \"numCpus\": -96, \"tagIndex\": 99 }, \"hostName\": \"s102\", \"info\": { \"uuid\": \"s105\", \"cpus\": [ { \"number\": 109, \"vendor\": \"s111\", \"model\": \"s114\", \"coreId\": \"s117\", \"mhz\": \"-120\" }, { \"number\": 123, \"family\": \"s126\", \"physicalId\": \"s129\", \"cores\": -132, \"cacheSize\": 135 } ] }, \"agentVersion\": { \"Major\": \"1700000139\", \"Minor\": \"4102444941\", \"Pre\": \"s144 \\u003c&\\u003e \\\"é\\\"\\n\", \"Commit\": \"s147\" } }",
      "EnvelopeTags": {
       "bare87": [
        ""
@@ -375,12 +375,12 @@
        "last"
       ]
      },
-     "Containers": "null",
+     "Containers": "",
      "DaemonName": "",
      "DesiredStatus": "",
      "ECSTags": {},
      "Encoding": "protobuf",
-     "Envelope": "{\"awsAccountID\":9007199254740995,\"clusterName\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"clusterId\":\"s6\",\"region\":\"s8 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":10,\"groupSize\":-12,\"tags\":[\"k87:v87\",\"k87:other:with:colons\",\"bare87\",\"z87:last\"],\"host\":{\"id\":9007199254741083,\"name\":\"s93\",\"numCpus\":-96,\"tagIndex\":99},\"hostName\":\"s102\",\"info\":{\"uuid\":\"s105\",\"cpus\":[{\"number\":109,\"vendor\":\"s111\",\"model\":\"s114\",\"coreId\":\"s117\",\"mhz\":-120},{\"number\":123,\"family\":\"s126\",\"physicalId\":\"s129\",\"cores\":-132,\"cacheSize\":135}]},\"agentVersion\":{\"Major\":1700000139,\"Minor\":4102444941,\"Pre\":\"s144 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Commit\":\"s147\"}}",
+     "Envelope": "{ \"awsAccountID\": \"9007199254740995\", \"clusterName\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"clusterId\": \"s6\", \"region\": \"s8 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 10, \"groupSize\": -12, \"tags\": [ \"k87:v87\", \"k87:other:with:colons\", \"bare87\", \"z87:last\" ], \"host\": { \"id\": \"9007199254741083\", \"name\": \"s93\", \"numCpus\": -96, \"tagIndex\": 99 }, \"hostName\": \"s102\", \"info\": { \"uuid\": \"s105\", \"cpus\": [ { \"number\": 109, \"vendor\": \"s111\", \"model\": \"s114\", \"coreId\": \"s117\", \"mhz\": \"-120\" }, { \"number\": 123, \"family\": \"s126\", \"physicalId\": \"s129\", \"cores\": -132, \"cacheSize\": 135 } ] }, \"agentVersion\": { \"Major\": \"1700000139\", \"Minor\": \"4102444941\", \"Pre\": \"s144 \\u003c&\\u003e \\\"é\\\"\\n\", \"Commit\": \"s147\" } }",
      "EnvelopeTags": {
       "bare87": [
        ""
@@ -443,5 +443,6 @@
   "/sends/0/args/1/1",
   "/sends/0/rows/0/CollectedAt",
   "/sends/0/rows/1/CollectedAt"
- ]
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
 }

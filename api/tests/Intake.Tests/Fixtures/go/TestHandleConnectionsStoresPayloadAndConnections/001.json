@@ -328,7 +328,7 @@
      [
       "tracer.o"
      ],
-     "[{\"subnet_alias\":\"subnet-a\",\"hardware_addr\":\"\"}]",
+     "[{ \"subnet\": { \"alias\": \"subnet-a\" } }]",
      "",
      "{\"npmEnabled\":true,\"usmEnabled\":true}",
      "",
@@ -424,7 +424,7 @@
      "ResolvedPublicIPs": "",
      "ResolvedResources": "",
      "RouteMetadata": "",
-     "Routes": "[{\"subnet_alias\":\"subnet-a\",\"hardware_addr\":\"\"}]",
+     "Routes": "[{ \"subnet\": { \"alias\": \"subnet-a\" } }]",
      "TenantID": "test"
     }
    ],
@@ -975,5 +975,5 @@
   "/sends/2/rows/1/PayloadID",
   "/sends/2/rows/1/Timestamp"
  ],
- "edited": "LocalContainerTags and RemoteServiceTags of storage_connections were {} in the Go recording. Go resolved both indices against encodedConnectionsTags; the agent encodes them into encodedTags (pkg/process/checks/net.go). This payload leaves both indices unset (0) and its encodedTags holds the host's tags at 0, without the \"-\" set a real agent puts there, so both now resolve to that set."
+ "edited": "LocalContainerTags and RemoteServiceTags of storage_connections were {} in the Go recording. Go resolved both indices against encodedConnectionsTags; the agent encodes them into encodedTags (pkg/process/checks/net.go). This payload leaves both indices unset (0) and its encodedTags holds the host's tags at 0, without the \"-\" set a real agent puts there, so both now resolve to that set. The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
 }

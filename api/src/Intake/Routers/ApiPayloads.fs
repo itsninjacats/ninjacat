@@ -377,103 +377,14 @@ let private seriesOfJson (path: string) (value: JsonElement) : MetricPayload.Typ
 
     series
 
-/// The varint at `at` and the index after it; nothing when the bytes run out
-/// before `stop`.
-let private varint (data: byte[]) (at: int) (stop: int) : struct (uint64 * int) voption =
-    let mutable value = 0UL
-    let mutable shift = 0
-    let mutable i = at
-    let mutable result = ValueNone
-
-    while result.IsNone && i < stop && shift < 64 do
-        let b = data[i]
-        value <- value ||| (uint64 (b &&& 0x7Fuy) <<< shift)
-        shift <- shift + 7
-        i <- i + 1
-
-        if b < 0x80uy then
-            result <- ValueSome(struct (value, i))
-
-    result
-
-/// gogo's generated Unmarshal — what Go parses these payloads with — refuses
-/// a known field sent with the wrong wire type. Google.Protobuf keeps such a
-/// field as an unknown one and carries on, so the bytes are walked once more
-/// here, without copying them. The text is gogo's.
-let rec private wrongWireType (descriptor: MessageDescriptor) (data: byte[]) (start: int) (stop: int) : string option =
-    let mutable found = None
-    let mutable at = start
-
-    while found.IsNone && at < stop do
-        match varint data at stop with
-        | ValueNone -> at <- stop
-        | ValueSome(struct (tag, afterTag)) ->
-            let wireType = int (tag &&& 7UL)
-
-            // Where the field's value starts and ends; -1 when it cannot be
-            // told, which ParseFrom has already ruled out.
-            let valueStart, valueEnd =
-                match wireType with
-                | 0 ->
-                    match varint data afterTag stop with
-                    | ValueSome(struct (_, after)) -> afterTag, after
-                    | ValueNone -> afterTag, -1
-                | 1 -> afterTag, afterTag + 8
-                | 5 -> afterTag, afterTag + 4
-                | 2 ->
-                    match varint data afterTag stop with
-                    | ValueSome(struct (length, after)) when length <= uint64 (stop - after) -> after, after + int length
-                    | _ -> afterTag, -1
-                | _ -> afterTag, -1
-
-            if valueEnd < 0 || valueEnd > stop then
-                at <- stop
-            else
-                let field = descriptor.FindFieldByNumber(int (tag >>> 3))
-
-                if not (isNull field) then
-                    let expected =
-                        match field.FieldType with
-                        | FieldType.Message
-                        | FieldType.String
-                        | FieldType.Bytes -> 2
-                        | FieldType.Double
-                        | FieldType.Fixed64
-                        | FieldType.SFixed64 -> 1
-                        | FieldType.Float
-                        | FieldType.Fixed32
-                        | FieldType.SFixed32 -> 5
-                        | _ -> 0
-
-                    // A repeated number arrives one by one, or packed in a block.
-                    let packed = field.IsRepeated && wireType = 2
-
-                    if wireType <> expected && not packed then
-                        found <- Some $"proto: wrong wireType = {wireType} for field {field.PropertyName}"
-                    elif field.FieldType = FieldType.Message then
-                        found <- wrongWireType field.MessageType data valueStart valueEnd
-
-                at <- valueEnd
-
-    found
-
-let private parseProtobuf
-    (name: string)
-    (parser: MessageParser<'message>)
-    (descriptor: MessageDescriptor)
-    (body: byte[])
-    : Result<'message, string> =
+let private parseProtobuf (name: string) (parser: MessageParser<'message>) (body: byte[]) : Result<'message, string> =
     try
-        let message = parser.ParseFrom body
-
-        match wrongWireType descriptor body 0 body.Length with
-        | Some error -> Error $"protobuf {name}: {error}"
-        | None -> Ok message
+        Ok(parser.ParseFrom body)
     with :? InvalidProtocolBufferException as e ->
         Error $"protobuf {name}: {e.Message}"
 
 let parseSeriesV2Protobuf (body: byte[]) : Result<MetricPayload, string> =
-    parseProtobuf "MetricPayload" MetricPayload.Parser MetricPayload.Descriptor body
+    parseProtobuf "MetricPayload" MetricPayload.Parser body
 
 let parseSeriesV2Json (body: byte[]) : Result<MetricPayload, string> =
     match GoJson.parse body with
@@ -550,7 +461,7 @@ let private sketchOfJson (path: string) (value: JsonElement) : SketchPayload.Typ
     sketch
 
 let parseSketchesProtobuf (body: byte[]) : Result<SketchPayload, string> =
-    parseProtobuf "SketchPayload" SketchPayload.Parser SketchPayload.Descriptor body
+    parseProtobuf "SketchPayload" SketchPayload.Parser body
 
 let parseSketchesJson (body: byte[]) : Result<SketchPayload, string> =
     match GoJson.parse body with
@@ -595,119 +506,6 @@ let hasUnknownFields<'message when 'message :> IMessage<'message>>
     : bool =
     let known = parser.WithDiscardUnknownFields(true).ParseFrom(MessageExtensions.ToByteArray message)
     known.CalculateSize() <> message.CalculateSize()
-
-/// One sketch as JSON, with the keys and the omissions of Go's encoding of
-/// the same struct: what a raw row holds for a sketch that has no row shape.
-let sketchJson (sketch: SketchPayload.Types.Sketch) : byte[] =
-    use buffer = new MemoryStream()
-
-    do
-        use writer =
-            new Utf8JsonWriter(buffer, JsonWriterOptions(Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping))
-
-        // JSON has no NaN or infinity; they are written as text.
-        let floatValue (value: float) =
-            if Double.IsFinite value then writer.WriteNumberValue value else writer.WriteStringValue(string value)
-
-        let writeFloat (name: string) (value: float) =
-            if BitConverter.DoubleToInt64Bits value <> 0L then
-                writer.WritePropertyName name
-                floatValue value
-
-        let writeInt64 (name: string) (value: int64) =
-            if value <> 0L then
-                writer.WriteNumber(name, value)
-
-        let writeUInt32 (name: string) (value: uint32) =
-            if value <> 0u then
-                writer.WriteNumber(name, value)
-
-        let writeList (name: string) (count: int) (writeItems: unit -> unit) =
-            if count > 0 then
-                writer.WriteStartArray name
-                writeItems ()
-                writer.WriteEndArray()
-
-        let writeFloats (name: string) (values: float seq) =
-            writeList name (Seq.length values) (fun () ->
-                for value in values do
-                    floatValue value)
-
-        let writeUInt32s (name: string) (values: uint32 seq) =
-            writeList name (Seq.length values) (fun () ->
-                for value in values do
-                    writer.WriteNumberValue value)
-
-        writer.WriteStartObject()
-
-        if sketch.Metric <> "" then
-            writer.WriteString("metric", sketch.Metric)
-
-        if sketch.Host <> "" then
-            writer.WriteString("host", sketch.Host)
-
-        writer.WriteStartArray "distributions"
-
-        for d in sketch.Distributions do
-            writer.WriteStartObject()
-            writeInt64 "ts" d.Ts
-            writeInt64 "cnt" d.Cnt
-            writeFloat "min" d.Min
-            writeFloat "max" d.Max
-            writeFloat "avg" d.Avg
-            writeFloat "sum" d.Sum
-            writeFloats "v" d.V
-            writeUInt32s "g" d.G
-            writeUInt32s "delta" d.Delta
-            writeFloats "buf" d.Buf
-            writer.WriteEndObject()
-
-        writer.WriteEndArray()
-
-        writeList "tags" sketch.Tags.Count (fun () ->
-            for tag in sketch.Tags do
-                writer.WriteStringValue tag)
-
-        // Go writes a list it never filled as null, and `dogsketches` is
-        // always written.
-        if sketch.Dogsketches.Count = 0 then
-            writer.WriteNull "dogsketches"
-        else
-            writer.WriteStartArray "dogsketches"
-
-            for d in sketch.Dogsketches do
-                writer.WriteStartObject()
-                writeInt64 "ts" d.Ts
-                writeInt64 "cnt" d.Cnt
-                writeFloat "min" d.Min
-                writeFloat "max" d.Max
-                writeFloat "avg" d.Avg
-                writeFloat "sum" d.Sum
-
-                writeList "k" d.K.Count (fun () ->
-                    for key in d.K do
-                        writer.WriteNumberValue key)
-
-                writeUInt32s "n" d.N
-                writer.WriteEndObject()
-
-            writer.WriteEndArray()
-
-        if not (isNull sketch.Metadata) then
-            writer.WriteStartObject "metadata"
-
-            if not (isNull sketch.Metadata.Origin) then
-                writer.WriteStartObject "origin"
-                writeUInt32 "origin_product" sketch.Metadata.Origin.OriginProduct
-                writeUInt32 "origin_category" sketch.Metadata.Origin.OriginCategory
-                writeUInt32 "origin_service" sketch.Metadata.Origin.OriginService
-                writer.WriteEndObject()
-
-            writer.WriteEndObject()
-
-        writer.WriteEndObject()
-
-    buffer.ToArray()
 
 // ---------------------------------------------------------------------------
 // The datadogV1 models

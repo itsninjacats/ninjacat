@@ -316,7 +316,7 @@
      "s47",
      "",
      {},
-     "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s14\",\"uid\":\"s16 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"creationTimestamp\":1700000018,\"deletionTimestamp\":-20,\"labels\":[\"k22:v22\",\"k22:other:with:colons\",\"bare22\",\"z22:last\"],\"annotations\":[\"k24:v24\",\"k24:other:with:colons\",\"bare24\",\"z24:last\"],\"ownerReferences\":[{\"name\":\"s27\",\"uid\":\"s29\",\"kind\":\"s31\"},{\"name\":\"s33\",\"uid\":\"s35\",\"kind\":\"s37\"}],\"resourceVersion\":\"s39\",\"finalizers\":[\"k41:v41\",\"k41:other:with:colons\",\"bare41\",\"z41:last\"],\"deletionGracePeriodSeconds\":1700000043},\"status\":\"s45\",\"conditionMessage\":\"s47\",\"yaml\":\"a2luZDogVGhpbmc0OQo=\",\"tags\":[\"k51:v51\",\"k51:other:with:colons\",\"bare51\",\"z51:last\"],\"conditions\":[{\"type\":\"s54\",\"status\":\"s56 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"lastTransitionTime\":1700000058,\"reason\":\"s60 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"message\":\"s62\"},{\"type\":\"s64 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"status\":\"s66\",\"lastTransitionTime\":1700000068,\"reason\":\"s70\",\"message\":\"s72 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}]}",
+     "{ \"metadata\": { \"name\": \"s12 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s14\", \"uid\": \"s16 \\u003c&\\u003e \\\"é\\\"\\n\", \"creationTimestamp\": \"1700000018\", \"deletionTimestamp\": \"-20\", \"labels\": [ \"k22:v22\", \"k22:other:with:colons\", \"bare22\", \"z22:last\" ], \"annotations\": [ \"k24:v24\", \"k24:other:with:colons\", \"bare24\", \"z24:last\" ], \"ownerReferences\": [ { \"name\": \"s27\", \"uid\": \"s29\", \"kind\": \"s31\" }, { \"name\": \"s33\", \"uid\": \"s35\", \"kind\": \"s37\" } ], \"resourceVersion\": \"s39\", \"finalizers\": [ \"k41:v41\", \"k41:other:with:colons\", \"bare41\", \"z41:last\" ], \"deletionGracePeriodSeconds\": \"1700000043\" }, \"status\": \"s45\", \"conditionMessage\": \"s47\", \"yaml\": \"a2luZDogVGhpbmc0OQo=\", \"tags\": [ \"k51:v51\", \"k51:other:with:colons\", \"bare51\", \"z51:last\" ], \"conditions\": [ { \"type\": \"s54\", \"status\": \"s56 \\u003c&\\u003e \\\"é\\\"\\n\", \"lastTransitionTime\": \"1700000058\", \"reason\": \"s60 \\u003c&\\u003e \\\"é\\\"\\n\", \"message\": \"s62\" }, { \"type\": \"s64 \\u003c&\\u003e \\\"é\\\"\\n\", \"status\": \"s66\", \"lastTransitionTime\": \"1700000068\", \"reason\": \"s70\", \"message\": \"s72 \\u003c&\\u003e \\\"é\\\"\\n\" } ] }",
      "",
      "",
      "",
@@ -355,7 +355,7 @@
      "",
      "",
      "",
-     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k137:v137\",\"k137:other:with:colons\",\"bare137\",\"z137:last\"],\"agentVersion\":{\"Major\":-140,\"Minor\":1700000142,\"Patch\":1700000144,\"Pre\":\"s146\",\"Meta\":\"s148 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Commit\":\"s150\"}}"
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k137:v137\", \"k137:other:with:colons\", \"bare137\", \"z137:last\" ], \"agentVersion\": { \"Major\": \"-140\", \"Minor\": \"1700000142\", \"Patch\": \"1700000144\", \"Pre\": \"s146\", \"Meta\": \"s148 \\u003c&\\u003e \\\"é\\\"\\n\", \"Commit\": \"s150\" } }"
     ],
     [
      "test",
@@ -467,7 +467,7 @@
      "s110",
      "",
      {},
-     "{\"metadata\":{\"name\":\"s75\",\"namespace\":\"s77\",\"uid\":\"s79\",\"creationTimestamp\":4102444881,\"deletionTimestamp\":1700000083,\"labels\":[\"k85:v85\",\"k85:other:with:colons\",\"bare85\",\"z85:last\"],\"annotations\":[\"k87:v87\",\"k87:other:with:colons\",\"bare87\",\"z87:last\"],\"ownerReferences\":[{\"name\":\"s90\",\"uid\":\"s92 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"kind\":\"s94\"},{\"name\":\"s96 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s98\",\"kind\":\"s100 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"resourceVersion\":\"s102\",\"finalizers\":[\"k104:v104\",\"k104:other:with:colons\",\"bare104\",\"z104:last\"],\"deletionGracePeriodSeconds\":4102444906},\"status\":\"s108 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"conditionMessage\":\"s110\",\"yaml\":\"/wBw\",\"tags\":[\"k114:v114\",\"k114:other:with:colons\",\"bare114\",\"z114:last\"],\"conditions\":[{\"type\":\"s117\",\"status\":\"s119\",\"lastTransitionTime\":4102444921,\"reason\":\"s123\",\"message\":\"s125\"},{\"type\":\"s127\",\"status\":\"s129\",\"lastTransitionTime\":4102444931,\"reason\":\"s133\",\"message\":\"s135\"}]}",
+     "{ \"metadata\": { \"name\": \"s75\", \"namespace\": \"s77\", \"uid\": \"s79\", \"creationTimestamp\": \"4102444881\", \"deletionTimestamp\": \"1700000083\", \"labels\": [ \"k85:v85\", \"k85:other:with:colons\", \"bare85\", \"z85:last\" ], \"annotations\": [ \"k87:v87\", \"k87:other:with:colons\", \"bare87\", \"z87:last\" ], \"ownerReferences\": [ { \"name\": \"s90\", \"uid\": \"s92 \\u003c&\\u003e \\\"é\\\"\\n\", \"kind\": \"s94\" }, { \"name\": \"s96 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s98\", \"kind\": \"s100 \\u003c&\\u003e \\\"é\\\"\\n\" } ], \"resourceVersion\": \"s102\", \"finalizers\": [ \"k104:v104\", \"k104:other:with:colons\", \"bare104\", \"z104:last\" ], \"deletionGracePeriodSeconds\": \"4102444906\" }, \"status\": \"s108 \\u003c&\\u003e \\\"é\\\"\\n\", \"conditionMessage\": \"s110\", \"yaml\": \"/wBw\", \"tags\": [ \"k114:v114\", \"k114:other:with:colons\", \"bare114\", \"z114:last\" ], \"conditions\": [ { \"type\": \"s117\", \"status\": \"s119\", \"lastTransitionTime\": \"4102444921\", \"reason\": \"s123\", \"message\": \"s125\" }, { \"type\": \"s127\", \"status\": \"s129\", \"lastTransitionTime\": \"4102444931\", \"reason\": \"s133\", \"message\": \"s135\" } ] }",
      "",
      "",
      "",
@@ -506,7 +506,7 @@
      "",
      "",
      "",
-     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k137:v137\",\"k137:other:with:colons\",\"bare137\",\"z137:last\"],\"agentVersion\":{\"Major\":-140,\"Minor\":1700000142,\"Patch\":1700000144,\"Pre\":\"s146\",\"Meta\":\"s148 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Commit\":\"s150\"}}"
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k137:v137\", \"k137:other:with:colons\", \"bare137\", \"z137:last\" ], \"agentVersion\": { \"Major\": \"-140\", \"Minor\": \"1700000142\", \"Patch\": \"1700000144\", \"Pre\": \"s146\", \"Meta\": \"s148 \\u003c&\\u003e \\\"é\\\"\\n\", \"Commit\": \"s150\" } }"
     ]
    ],
    "insert": "INSERT INTO k8s_resources\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,\n\t\t\t uid, resource_version, owner_kind, owner_name, node_name, phase, status,\n\t\t\t ready, desired, available, counts, labels, annotations, tags,\n\t\t\t agent_version, group_id, group_size,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t creation_timestamp, deletion_timestamp, deletion_grace_period_seconds,\n\t\t\t finalizers, owner_kinds, owner_names, owner_uids,\n\t\t\t condition_types, condition_statuses, condition_reasons, condition_messages,\n\t\t\t condition_last_transition, condition_last_update, condition_last_probe,\n\t\t\t condition_message, resource_requirements, metrics, object,\n\t\t\t pod_ip, nominated_node_name, qos_class, priority_class,\n\t\t\t start_time, scheduled_time, host_name,\n\t\t\t container_names, container_ids, container_ready, container_restarts,\n\t\t\t container_states, container_messages, container_images,\n\t\t\t container_image_ids, container_is_init,\n\t\t\t pod_cidr, pod_cidrs, unschedulable, taints, provider_id, node_roles,\n\t\t\t capacity, allocatable, node_addresses,\n\t\t\t kubelet_version, kube_proxy_version, operating_system, architecture,\n\t\t\t kernel_version, os_image, container_runtime_version,\n\t\t\t service_type, cluster_ip, service_ports,\n\t\t\t rbac_rules, rbac_subjects, rbac_role_ref, envelope)",
@@ -571,7 +571,7 @@
      "DeletionTimestamp": null,
      "Desired": 0,
      "Encoding": "protobuf",
-     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k137:v137\",\"k137:other:with:colons\",\"bare137\",\"z137:last\"],\"agentVersion\":{\"Major\":-140,\"Minor\":1700000142,\"Patch\":1700000144,\"Pre\":\"s146\",\"Meta\":\"s148 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Commit\":\"s150\"}}",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k137:v137\", \"k137:other:with:colons\", \"bare137\", \"z137:last\" ], \"agentVersion\": { \"Major\": \"-140\", \"Minor\": \"1700000142\", \"Patch\": \"1700000144\", \"Pre\": \"s146\", \"Meta\": \"s148 \\u003c&\\u003e \\\"é\\\"\\n\", \"Commit\": \"s150\" } }",
      "Finalizers": [
       "k41:v41",
       "k41:other:with:colons",
@@ -599,7 +599,7 @@
      "NodeRoles": [],
      "NominatedNodeName": "",
      "OSImage": "",
-     "Object": "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s14\",\"uid\":\"s16 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"creationTimestamp\":1700000018,\"deletionTimestamp\":-20,\"labels\":[\"k22:v22\",\"k22:other:with:colons\",\"bare22\",\"z22:last\"],\"annotations\":[\"k24:v24\",\"k24:other:with:colons\",\"bare24\",\"z24:last\"],\"ownerReferences\":[{\"name\":\"s27\",\"uid\":\"s29\",\"kind\":\"s31\"},{\"name\":\"s33\",\"uid\":\"s35\",\"kind\":\"s37\"}],\"resourceVersion\":\"s39\",\"finalizers\":[\"k41:v41\",\"k41:other:with:colons\",\"bare41\",\"z41:last\"],\"deletionGracePeriodSeconds\":1700000043},\"status\":\"s45\",\"conditionMessage\":\"s47\",\"yaml\":\"a2luZDogVGhpbmc0OQo=\",\"tags\":[\"k51:v51\",\"k51:other:with:colons\",\"bare51\",\"z51:last\"],\"conditions\":[{\"type\":\"s54\",\"status\":\"s56 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"lastTransitionTime\":1700000058,\"reason\":\"s60 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"message\":\"s62\"},{\"type\":\"s64 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"status\":\"s66\",\"lastTransitionTime\":1700000068,\"reason\":\"s70\",\"message\":\"s72 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}]}",
+     "Object": "{ \"metadata\": { \"name\": \"s12 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s14\", \"uid\": \"s16 \\u003c&\\u003e \\\"é\\\"\\n\", \"creationTimestamp\": \"1700000018\", \"deletionTimestamp\": \"-20\", \"labels\": [ \"k22:v22\", \"k22:other:with:colons\", \"bare22\", \"z22:last\" ], \"annotations\": [ \"k24:v24\", \"k24:other:with:colons\", \"bare24\", \"z24:last\" ], \"ownerReferences\": [ { \"name\": \"s27\", \"uid\": \"s29\", \"kind\": \"s31\" }, { \"name\": \"s33\", \"uid\": \"s35\", \"kind\": \"s37\" } ], \"resourceVersion\": \"s39\", \"finalizers\": [ \"k41:v41\", \"k41:other:with:colons\", \"bare41\", \"z41:last\" ], \"deletionGracePeriodSeconds\": \"1700000043\" }, \"status\": \"s45\", \"conditionMessage\": \"s47\", \"yaml\": \"a2luZDogVGhpbmc0OQo=\", \"tags\": [ \"k51:v51\", \"k51:other:with:colons\", \"bare51\", \"z51:last\" ], \"conditions\": [ { \"type\": \"s54\", \"status\": \"s56 \\u003c&\\u003e \\\"é\\\"\\n\", \"lastTransitionTime\": \"1700000058\", \"reason\": \"s60 \\u003c&\\u003e \\\"é\\\"\\n\", \"message\": \"s62\" }, { \"type\": \"s64 \\u003c&\\u003e \\\"é\\\"\\n\", \"status\": \"s66\", \"lastTransitionTime\": \"1700000068\", \"reason\": \"s70\", \"message\": \"s72 \\u003c&\\u003e \\\"é\\\"\\n\" } ] }",
      "OperatingSystem": "",
      "OrgID": 4242,
      "OwnerKind": "s31",
@@ -722,7 +722,7 @@
      "DeletionTimestamp": "2023-11-14T22:14:43Z",
      "Desired": 0,
      "Encoding": "protobuf",
-     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k137:v137\",\"k137:other:with:colons\",\"bare137\",\"z137:last\"],\"agentVersion\":{\"Major\":-140,\"Minor\":1700000142,\"Patch\":1700000144,\"Pre\":\"s146\",\"Meta\":\"s148 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Commit\":\"s150\"}}",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k137:v137\", \"k137:other:with:colons\", \"bare137\", \"z137:last\" ], \"agentVersion\": { \"Major\": \"-140\", \"Minor\": \"1700000142\", \"Patch\": \"1700000144\", \"Pre\": \"s146\", \"Meta\": \"s148 \\u003c&\\u003e \\\"é\\\"\\n\", \"Commit\": \"s150\" } }",
      "Finalizers": [
       "k104:v104",
       "k104:other:with:colons",
@@ -750,7 +750,7 @@
      "NodeRoles": [],
      "NominatedNodeName": "",
      "OSImage": "",
-     "Object": "{\"metadata\":{\"name\":\"s75\",\"namespace\":\"s77\",\"uid\":\"s79\",\"creationTimestamp\":4102444881,\"deletionTimestamp\":1700000083,\"labels\":[\"k85:v85\",\"k85:other:with:colons\",\"bare85\",\"z85:last\"],\"annotations\":[\"k87:v87\",\"k87:other:with:colons\",\"bare87\",\"z87:last\"],\"ownerReferences\":[{\"name\":\"s90\",\"uid\":\"s92 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"kind\":\"s94\"},{\"name\":\"s96 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s98\",\"kind\":\"s100 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"resourceVersion\":\"s102\",\"finalizers\":[\"k104:v104\",\"k104:other:with:colons\",\"bare104\",\"z104:last\"],\"deletionGracePeriodSeconds\":4102444906},\"status\":\"s108 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"conditionMessage\":\"s110\",\"yaml\":\"/wBw\",\"tags\":[\"k114:v114\",\"k114:other:with:colons\",\"bare114\",\"z114:last\"],\"conditions\":[{\"type\":\"s117\",\"status\":\"s119\",\"lastTransitionTime\":4102444921,\"reason\":\"s123\",\"message\":\"s125\"},{\"type\":\"s127\",\"status\":\"s129\",\"lastTransitionTime\":4102444931,\"reason\":\"s133\",\"message\":\"s135\"}]}",
+     "Object": "{ \"metadata\": { \"name\": \"s75\", \"namespace\": \"s77\", \"uid\": \"s79\", \"creationTimestamp\": \"4102444881\", \"deletionTimestamp\": \"1700000083\", \"labels\": [ \"k85:v85\", \"k85:other:with:colons\", \"bare85\", \"z85:last\" ], \"annotations\": [ \"k87:v87\", \"k87:other:with:colons\", \"bare87\", \"z87:last\" ], \"ownerReferences\": [ { \"name\": \"s90\", \"uid\": \"s92 \\u003c&\\u003e \\\"é\\\"\\n\", \"kind\": \"s94\" }, { \"name\": \"s96 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s98\", \"kind\": \"s100 \\u003c&\\u003e \\\"é\\\"\\n\" } ], \"resourceVersion\": \"s102\", \"finalizers\": [ \"k104:v104\", \"k104:other:with:colons\", \"bare104\", \"z104:last\" ], \"deletionGracePeriodSeconds\": \"4102444906\" }, \"status\": \"s108 \\u003c&\\u003e \\\"é\\\"\\n\", \"conditionMessage\": \"s110\", \"yaml\": \"/wBw\", \"tags\": [ \"k114:v114\", \"k114:other:with:colons\", \"bare114\", \"z114:last\" ], \"conditions\": [ { \"type\": \"s117\", \"status\": \"s119\", \"lastTransitionTime\": \"4102444921\", \"reason\": \"s123\", \"message\": \"s125\" }, { \"type\": \"s127\", \"status\": \"s129\", \"lastTransitionTime\": \"4102444931\", \"reason\": \"s133\", \"message\": \"s135\" } ] }",
      "OperatingSystem": "",
      "OrgID": 4242,
      "OwnerKind": "s94",
@@ -825,5 +825,6 @@
   "/sends/0/args/1/1",
   "/sends/0/rows/0/CollectedAt",
   "/sends/0/rows/1/CollectedAt"
- ]
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
 }

@@ -307,7 +307,7 @@
      "",
      "",
      {},
-     "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s14\",\"creationTimestamp\":1700000017,\"labels\":[\"k20:v20\",\"k20:other:with:colons\",\"bare20\",\"z20:last\"],\"ownerReferences\":[{\"name\":\"s24 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s26\"},{\"name\":\"s29\",\"kind\":\"s32 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"finalizers\":[\"k35:v35\",\"k35:other:with:colons\",\"bare35\",\"z35:last\"]},\"spec\":{\"target\":{\"name\":\"s41\"},\"maxReplicas\":-44,\"behavior\":{\"scaleUp\":{\"selectPolicy\":\"s50\"},\"scaleDown\":{\"stabilizationWindowSeconds\":54,\"selectPolicy\":\"s56 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}}},\"status\":{\"observedGeneration\":9007199254741053,\"lastScaleTime\":1700000062,\"desiredReplicas\":65},\"yaml\":\"/wBE\",\"conditions\":[{\"conditionType\":\"s72 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"conditionStatus\":\"s74\",\"reason\":\"s77\"},{\"conditionType\":\"s80 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"lastTransitionTime\":1700000083,\"message\":\"s86\"}]}",
+     "{ \"metadata\": { \"name\": \"s12 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s14\", \"creationTimestamp\": \"1700000017\", \"labels\": [ \"k20:v20\", \"k20:other:with:colons\", \"bare20\", \"z20:last\" ], \"ownerReferences\": [ { \"name\": \"s24 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s26\" }, { \"name\": \"s29\", \"kind\": \"s32 \\u003c&\\u003e \\\"é\\\"\\n\" } ], \"finalizers\": [ \"k35:v35\", \"k35:other:with:colons\", \"bare35\", \"z35:last\" ] }, \"spec\": { \"target\": { \"name\": \"s41\" }, \"maxReplicas\": -44, \"behavior\": { \"scaleUp\": { \"selectPolicy\": \"s50\" }, \"scaleDown\": { \"stabilizationWindowSeconds\": 54, \"selectPolicy\": \"s56 \\u003c&\\u003e \\\"é\\\"\\n\" } } }, \"status\": { \"observedGeneration\": \"9007199254741053\", \"lastScaleTime\": \"1700000062\", \"desiredReplicas\": 65 }, \"yaml\": \"/wBE\", \"conditions\": [ { \"conditionType\": \"s72 \\u003c&\\u003e \\\"é\\\"\\n\", \"conditionStatus\": \"s74\", \"reason\": \"s77\" }, { \"conditionType\": \"s80 \\u003c&\\u003e \\\"é\\\"\\n\", \"lastTransitionTime\": \"1700000083\", \"message\": \"s86\" } ] }",
      "",
      "",
      "",
@@ -346,7 +346,7 @@
      "",
      "",
      "",
-     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k136:v136\",\"k136:other:with:colons\",\"bare136\",\"z136:last\"],\"agentVersion\":{\"Minor\":-140,\"Pre\":\"s143\",\"Commit\":\"s146\"}}"
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k136:v136\", \"k136:other:with:colons\", \"bare136\", \"z136:last\" ], \"agentVersion\": { \"Minor\": \"-140\", \"Pre\": \"s143\", \"Commit\": \"s146\" } }"
     ],
     [
      "test",
@@ -435,7 +435,7 @@
      "",
      "",
      {},
-     "{\"metadata\":{\"name\":\"s89\",\"uid\":\"s92 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"deletionTimestamp\":-95,\"annotations\":[\"k98:v98\",\"k98:other:with:colons\",\"bare98\",\"z98:last\"],\"resourceVersion\":\"s101\",\"deletionGracePeriodSeconds\":1700000104},\"status\":{\"observedGeneration\":9007199254741101,\"lastScaleTime\":-110,\"desiredReplicas\":113},\"yaml\":\"/wB0\",\"conditions\":[{\"conditionType\":\"s120 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"conditionStatus\":\"s122\",\"reason\":\"s125\"},{\"conditionType\":\"s128 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"lastTransitionTime\":4102444931,\"message\":\"s134\"}]}",
+     "{ \"metadata\": { \"name\": \"s89\", \"uid\": \"s92 \\u003c&\\u003e \\\"é\\\"\\n\", \"deletionTimestamp\": \"-95\", \"annotations\": [ \"k98:v98\", \"k98:other:with:colons\", \"bare98\", \"z98:last\" ], \"resourceVersion\": \"s101\", \"deletionGracePeriodSeconds\": \"1700000104\" }, \"status\": { \"observedGeneration\": \"9007199254741101\", \"lastScaleTime\": \"-110\", \"desiredReplicas\": 113 }, \"yaml\": \"/wB0\", \"conditions\": [ { \"conditionType\": \"s120 \\u003c&\\u003e \\\"é\\\"\\n\", \"conditionStatus\": \"s122\", \"reason\": \"s125\" }, { \"conditionType\": \"s128 \\u003c&\\u003e \\\"é\\\"\\n\", \"lastTransitionTime\": \"4102444931\", \"message\": \"s134\" } ] }",
      "",
      "",
      "",
@@ -474,7 +474,7 @@
      "",
      "",
      "",
-     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k136:v136\",\"k136:other:with:colons\",\"bare136\",\"z136:last\"],\"agentVersion\":{\"Minor\":-140,\"Pre\":\"s143\",\"Commit\":\"s146\"}}"
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k136:v136\", \"k136:other:with:colons\", \"bare136\", \"z136:last\" ], \"agentVersion\": { \"Minor\": \"-140\", \"Pre\": \"s143\", \"Commit\": \"s146\" } }"
     ]
    ],
    "insert": "INSERT INTO k8s_resources\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,\n\t\t\t uid, resource_version, owner_kind, owner_name, node_name, phase, status,\n\t\t\t ready, desired, available, counts, labels, annotations, tags,\n\t\t\t agent_version, group_id, group_size,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t creation_timestamp, deletion_timestamp, deletion_grace_period_seconds,\n\t\t\t finalizers, owner_kinds, owner_names, owner_uids,\n\t\t\t condition_types, condition_statuses, condition_reasons, condition_messages,\n\t\t\t condition_last_transition, condition_last_update, condition_last_probe,\n\t\t\t condition_message, resource_requirements, metrics, object,\n\t\t\t pod_ip, nominated_node_name, qos_class, priority_class,\n\t\t\t start_time, scheduled_time, host_name,\n\t\t\t container_names, container_ids, container_ready, container_restarts,\n\t\t\t container_states, container_messages, container_images,\n\t\t\t container_image_ids, container_is_init,\n\t\t\t pod_cidr, pod_cidrs, unschedulable, taints, provider_id, node_roles,\n\t\t\t capacity, allocatable, node_addresses,\n\t\t\t kubelet_version, kube_proxy_version, operating_system, architecture,\n\t\t\t kernel_version, os_image, container_runtime_version,\n\t\t\t service_type, cluster_ip, service_ports,\n\t\t\t rbac_rules, rbac_subjects, rbac_role_ref, envelope)",
@@ -540,7 +540,7 @@
      "DeletionTimestamp": null,
      "Desired": 65,
      "Encoding": "protobuf",
-     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k136:v136\",\"k136:other:with:colons\",\"bare136\",\"z136:last\"],\"agentVersion\":{\"Minor\":-140,\"Pre\":\"s143\",\"Commit\":\"s146\"}}",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k136:v136\", \"k136:other:with:colons\", \"bare136\", \"z136:last\" ], \"agentVersion\": { \"Minor\": \"-140\", \"Pre\": \"s143\", \"Commit\": \"s146\" } }",
      "Finalizers": [
       "k35:v35",
       "k35:other:with:colons",
@@ -568,7 +568,7 @@
      "NodeRoles": [],
      "NominatedNodeName": "",
      "OSImage": "",
-     "Object": "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s14\",\"creationTimestamp\":1700000017,\"labels\":[\"k20:v20\",\"k20:other:with:colons\",\"bare20\",\"z20:last\"],\"ownerReferences\":[{\"name\":\"s24 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s26\"},{\"name\":\"s29\",\"kind\":\"s32 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"finalizers\":[\"k35:v35\",\"k35:other:with:colons\",\"bare35\",\"z35:last\"]},\"spec\":{\"target\":{\"name\":\"s41\"},\"maxReplicas\":-44,\"behavior\":{\"scaleUp\":{\"selectPolicy\":\"s50\"},\"scaleDown\":{\"stabilizationWindowSeconds\":54,\"selectPolicy\":\"s56 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}}},\"status\":{\"observedGeneration\":9007199254741053,\"lastScaleTime\":1700000062,\"desiredReplicas\":65},\"yaml\":\"/wBE\",\"conditions\":[{\"conditionType\":\"s72 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"conditionStatus\":\"s74\",\"reason\":\"s77\"},{\"conditionType\":\"s80 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"lastTransitionTime\":1700000083,\"message\":\"s86\"}]}",
+     "Object": "{ \"metadata\": { \"name\": \"s12 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s14\", \"creationTimestamp\": \"1700000017\", \"labels\": [ \"k20:v20\", \"k20:other:with:colons\", \"bare20\", \"z20:last\" ], \"ownerReferences\": [ { \"name\": \"s24 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s26\" }, { \"name\": \"s29\", \"kind\": \"s32 \\u003c&\\u003e \\\"é\\\"\\n\" } ], \"finalizers\": [ \"k35:v35\", \"k35:other:with:colons\", \"bare35\", \"z35:last\" ] }, \"spec\": { \"target\": { \"name\": \"s41\" }, \"maxReplicas\": -44, \"behavior\": { \"scaleUp\": { \"selectPolicy\": \"s50\" }, \"scaleDown\": { \"stabilizationWindowSeconds\": 54, \"selectPolicy\": \"s56 \\u003c&\\u003e \\\"é\\\"\\n\" } } }, \"status\": { \"observedGeneration\": \"9007199254741053\", \"lastScaleTime\": \"1700000062\", \"desiredReplicas\": 65 }, \"yaml\": \"/wBE\", \"conditions\": [ { \"conditionType\": \"s72 \\u003c&\\u003e \\\"é\\\"\\n\", \"conditionStatus\": \"s74\", \"reason\": \"s77\" }, { \"conditionType\": \"s80 \\u003c&\\u003e \\\"é\\\"\\n\", \"lastTransitionTime\": \"1700000083\", \"message\": \"s86\" } ] }",
      "OperatingSystem": "",
      "OrgID": 0,
      "OwnerKind": "",
@@ -686,7 +686,7 @@
      "DeletionTimestamp": null,
      "Desired": 113,
      "Encoding": "protobuf",
-     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k136:v136\",\"k136:other:with:colons\",\"bare136\",\"z136:last\"],\"agentVersion\":{\"Minor\":-140,\"Pre\":\"s143\",\"Commit\":\"s146\"}}",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k136:v136\", \"k136:other:with:colons\", \"bare136\", \"z136:last\" ], \"agentVersion\": { \"Minor\": \"-140\", \"Pre\": \"s143\", \"Commit\": \"s146\" } }",
      "Finalizers": [],
      "GroupID": 6,
      "GroupSize": -8,
@@ -705,7 +705,7 @@
      "NodeRoles": [],
      "NominatedNodeName": "",
      "OSImage": "",
-     "Object": "{\"metadata\":{\"name\":\"s89\",\"uid\":\"s92 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"deletionTimestamp\":-95,\"annotations\":[\"k98:v98\",\"k98:other:with:colons\",\"bare98\",\"z98:last\"],\"resourceVersion\":\"s101\",\"deletionGracePeriodSeconds\":1700000104},\"status\":{\"observedGeneration\":9007199254741101,\"lastScaleTime\":-110,\"desiredReplicas\":113},\"yaml\":\"/wB0\",\"conditions\":[{\"conditionType\":\"s120 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"conditionStatus\":\"s122\",\"reason\":\"s125\"},{\"conditionType\":\"s128 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"lastTransitionTime\":4102444931,\"message\":\"s134\"}]}",
+     "Object": "{ \"metadata\": { \"name\": \"s89\", \"uid\": \"s92 \\u003c&\\u003e \\\"é\\\"\\n\", \"deletionTimestamp\": \"-95\", \"annotations\": [ \"k98:v98\", \"k98:other:with:colons\", \"bare98\", \"z98:last\" ], \"resourceVersion\": \"s101\", \"deletionGracePeriodSeconds\": \"1700000104\" }, \"status\": { \"observedGeneration\": \"9007199254741101\", \"lastScaleTime\": \"-110\", \"desiredReplicas\": 113 }, \"yaml\": \"/wB0\", \"conditions\": [ { \"conditionType\": \"s120 \\u003c&\\u003e \\\"é\\\"\\n\", \"conditionStatus\": \"s122\", \"reason\": \"s125\" }, { \"conditionType\": \"s128 \\u003c&\\u003e \\\"é\\\"\\n\", \"lastTransitionTime\": \"4102444931\", \"message\": \"s134\" } ] }",
      "OperatingSystem": "",
      "OrgID": 0,
      "OwnerKind": "",
@@ -761,5 +761,6 @@
   "/sends/0/args/1/1",
   "/sends/0/rows/0/CollectedAt",
   "/sends/0/rows/1/CollectedAt"
- ]
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
 }

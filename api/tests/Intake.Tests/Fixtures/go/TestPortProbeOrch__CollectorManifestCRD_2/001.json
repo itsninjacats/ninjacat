@@ -140,8 +140,8 @@
      "s18",
      {},
      1,
-     "{\"clusterName\":\"s3\",\"groupId\":6,\"hostName\":\"s66\",\"originCollector\":2}",
-     "{\"id\":9007199254741021,\"orgId\":30,\"allTags\":[\"k33:v33\",\"k33:other:with:colons\",\"bare33\",\"z33:last\"],\"totalMemory\":9007199254741029,\"tagsModified\":1700000039}"
+     "{ \"clusterName\": \"s3\", \"groupId\": 6, \"hostName\": \"s66\", \"originCollector\": \"datadogExporter\" }",
+     "{ \"id\": \"9007199254741021\", \"orgId\": 30, \"allTags\": [ \"k33:v33\", \"k33:other:with:colons\", \"bare33\", \"z33:last\" ], \"totalMemory\": \"9007199254741029\", \"tagsModified\": \"1700000039\" }"
     ],
     [
      "test",
@@ -208,7 +208,7 @@
       "key62": "s63"
      },
      1,
-     "{\"clusterName\":\"s3\",\"groupId\":6,\"hostName\":\"s66\",\"originCollector\":2}",
+     "{ \"clusterName\": \"s3\", \"groupId\": 6, \"hostName\": \"s66\", \"originCollector\": \"datadogExporter\" }",
      ""
     ]
    ],
@@ -224,7 +224,7 @@
      "ContentIsUTF8": 1,
      "ContentType": "",
      "Encoding": "protobuf",
-     "Envelope": "{\"clusterName\":\"s3\",\"groupId\":6,\"hostName\":\"s66\",\"originCollector\":2}",
+     "Envelope": "{ \"clusterName\": \"s3\", \"groupId\": 6, \"hostName\": \"s66\", \"originCollector\": \"datadogExporter\" }",
      "ExtraAttributes": {},
      "GroupID": 6,
      "GroupSize": 0,
@@ -232,7 +232,7 @@
      "HostName": "s66",
      "IsTerminated": 1,
      "Kind": "",
-     "ManifestHost": "{\"id\":9007199254741021,\"orgId\":30,\"allTags\":[\"k33:v33\",\"k33:other:with:colons\",\"bare33\",\"z33:last\"],\"totalMemory\":9007199254741029,\"tagsModified\":1700000039}",
+     "ManifestHost": "{ \"id\": \"9007199254741021\", \"orgId\": 30, \"allTags\": [ \"k33:v33\", \"k33:other:with:colons\", \"bare33\", \"z33:last\" ], \"totalMemory\": \"9007199254741029\", \"tagsModified\": \"1700000039\" }",
      "NodeName": "s24 <&> \"é\"\n",
      "OrgID": 4242,
      "OriginCollector": "datadogExporter",
@@ -273,7 +273,7 @@
      "ContentIsUTF8": 1,
      "ContentType": "s48 <&> \"é\"\n",
      "Encoding": "protobuf",
-     "Envelope": "{\"clusterName\":\"s3\",\"groupId\":6,\"hostName\":\"s66\",\"originCollector\":2}",
+     "Envelope": "{ \"clusterName\": \"s3\", \"groupId\": 6, \"hostName\": \"s66\", \"originCollector\": \"datadogExporter\" }",
      "ExtraAttributes": {
       "key60": "s61",
       "key62": "s63"
@@ -343,5 +343,6 @@
   "/sends/0/args/1/1",
   "/sends/0/rows/0/CollectedAt",
   "/sends/0/rows/1/CollectedAt"
- ]
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
 }

@@ -603,13 +603,14 @@ let ``v2 series over protobuf: the first host, an unknown type, an interval that
     | other -> Assert.Fail $"{other}"
 
 [<Fact>]
-let ``protobuf: a known field with the wrong wire type is a decode error, in gogo's words`` () =
-    // series[0].metric (field 2) sent as a varint.
+let ``protobuf: a known field with another wire type is skipped, as protobuf says`` () =
+    // series[0].metric (field 2) sent as a varint: to the parser that is a
+    // field it does not know, not a broken message.
     let body = [| 0x0Auy; 0x02uy; 0x10uy; 0x05uy |]
-    Assert.Equal(Error "protobuf MetricPayload: proto: wrong wireType = 0 for field Metric", parseSeriesV2Protobuf body |> Result.map ignore)
 
-    let _, sink = send "POST" "/api/v2/series" [ "Content-Type", "application/x-protobuf" ] body
-    Assert.Equal<string list>([ "protobuf MetricPayload: proto: wrong wireType = 0 for field Metric" ], raws sink |> List.map (fun (_, note, _) -> note))
+    match parseSeriesV2Protobuf body with
+    | Ok payload -> Assert.Equal("", (Assert.Single payload.Series).Metric)
+    | Error e -> Assert.Fail e
 
     // Repeated numbers may arrive packed or one by one; neither is an error.
     let sketch = SketchPayload.Types.Sketch.Types.Dogsketch(Ts = 1L)
@@ -718,7 +719,7 @@ let ``sketches over protobuf: a legacy distribution is kept raw, the sender's ke
     Assert.Equal<(string * string * string) list>(
         [ "no_schema",
           "legacy pre-DDSketch Distribution for s.wire has no row shape",
-          """{"metric":"s.wire","host":"h","distributions":[{"ts":1,"min":1.5,"v":[1,2.5],"g":[1]}],"tags":["a:b"],"dogsketches":null,"metadata":{}}""" ],
+          """{ "metric": "s.wire", "host": "h", "distributions": [ { "ts": "1", "min": 1.5, "v": [ 1, 2.5 ], "g": [ 1 ] } ], "tags": [ "a:b" ], "metadata": { } }""" ],
         raws sink
     )
 

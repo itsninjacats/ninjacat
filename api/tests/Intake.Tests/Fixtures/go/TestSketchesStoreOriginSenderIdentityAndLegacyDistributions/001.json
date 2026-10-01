@@ -62,16 +62,16 @@
      "application/json",
      "",
      {},
-     "{\"metric\":\"http.request.duration\",\"host\":\"h1\",\"distributions\":[{\"ts\":1790151330,\"cnt\":2,\"v\":[1,2],\"g\":[1,1]}],\"tags\":[\"env:prod\"],\"dogsketches\":[{\"ts\":1790151330,\"cnt\":3,\"min\":1,\"max\":9,\"avg\":4,\"sum\":12,\"k\":[1,2],\"n\":[2,1]}],\"metadata\":{\"origin\":{\"origin_product\":10,\"origin_category\":10,\"origin_service\":7}}}",
-     309,
+     "{ \"metric\": \"http.request.duration\", \"host\": \"h1\", \"distributions\": [ { \"ts\": \"1790151330\", \"cnt\": \"2\", \"v\": [ 1, 2 ], \"g\": [ 1, 1 ] } ], \"tags\": [ \"env:prod\" ], \"dogsketches\": [ { \"ts\": \"1790151330\", \"cnt\": \"3\", \"min\": 1, \"max\": 9, \"avg\": 4, \"sum\": 12, \"k\": [ 1, 2 ], \"n\": [ 2, 1 ] } ], \"metadata\": { \"origin\": { \"originProduct\": 10, \"originCategory\": 10, \"originService\": 7 } } }",
+     381,
      "legacy pre-DDSketch Distribution for http.request.duration has no row shape"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
    "rows": [
     {
-     "Body": "{\"metric\":\"http.request.duration\",\"host\":\"h1\",\"distributions\":[{\"ts\":1790151330,\"cnt\":2,\"v\":[1,2],\"g\":[1,1]}],\"tags\":[\"env:prod\"],\"dogsketches\":[{\"ts\":1790151330,\"cnt\":3,\"min\":1,\"max\":9,\"avg\":4,\"sum\":12,\"k\":[1,2],\"n\":[2,1]}],\"metadata\":{\"origin\":{\"origin_product\":10,\"origin_category\":10,\"origin_service\":7}}}",
-     "BodyBytes": 309,
+     "Body": "{ \"metric\": \"http.request.duration\", \"host\": \"h1\", \"distributions\": [ { \"ts\": \"1790151330\", \"cnt\": \"2\", \"v\": [ 1, 2 ], \"g\": [ 1, 1 ] } ], \"tags\": [ \"env:prod\" ], \"dogsketches\": [ { \"ts\": \"1790151330\", \"cnt\": \"3\", \"min\": 1, \"max\": 9, \"avg\": 4, \"sum\": 12, \"k\": [ 1, 2 ], \"n\": [ 2, 1 ] } ], \"metadata\": { \"origin\": { \"originProduct\": 10, \"originCategory\": 10, \"originService\": 7 } } }",
+     "BodyBytes": 381,
      "ContentEncoding": "",
      "ContentType": "application/json",
      "Headers": {},
@@ -226,5 +226,6 @@
   "/sends/0/rows/0/ReceivedAt",
   "/sends/2/args/0/1",
   "/sends/2/rows/0/ReceivedAt"
- ]
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
 }

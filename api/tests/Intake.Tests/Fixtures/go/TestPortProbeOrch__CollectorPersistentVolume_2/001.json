@@ -267,7 +267,7 @@
      "",
      "",
      {},
-     "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s15\",\"deletionTimestamp\":1700000018,\"annotations\":[\"k21:v21\",\"k21:other:with:colons\",\"bare21\",\"z21:last\"],\"resourceVersion\":\"s24 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"deletionGracePeriodSeconds\":1700000027},\"status\":{\"phase\":\"s31\",\"message\":\"s33\"},\"yaml\":\"/wAk\"}",
+     "{ \"metadata\": { \"name\": \"s12 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s15\", \"deletionTimestamp\": \"1700000018\", \"annotations\": [ \"k21:v21\", \"k21:other:with:colons\", \"bare21\", \"z21:last\" ], \"resourceVersion\": \"s24 \\u003c&\\u003e \\\"é\\\"\\n\", \"deletionGracePeriodSeconds\": \"1700000027\" }, \"status\": { \"phase\": \"s31\", \"message\": \"s33\" }, \"yaml\": \"/wAk\" }",
      "",
      "",
      "",
@@ -306,7 +306,7 @@
      "",
      "",
      "",
-     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k168:v168\",\"k168:other:with:colons\",\"bare168\",\"z168:last\"],\"agentVersion\":{\"Major\":4102444971,\"Patch\":1700000174,\"Meta\":\"s177\"}}"
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k168:v168\", \"k168:other:with:colons\", \"bare168\", \"z168:last\" ], \"agentVersion\": { \"Major\": \"4102444971\", \"Patch\": \"1700000174\", \"Meta\": \"s177\" } }"
     ],
     [
      "test",
@@ -383,7 +383,7 @@
      "",
      "",
      {},
-     "{\"metadata\":{\"name\":\"s40 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s42\",\"creationTimestamp\":-45,\"labels\":[\"k48:v48\",\"k48:other:with:colons\",\"bare48\",\"z48:last\"],\"ownerReferences\":[{\"name\":\"s52 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s54\"},{\"name\":\"s57\",\"kind\":\"s60 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"finalizers\":[\"k63:v63\",\"k63:other:with:colons\",\"bare63\",\"z63:last\"]},\"spec\":{\"capacity\":{\"key67\":1700000068,\"key69\":-70},\"persistentVolumeType\":\"s72 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"claimRef\":{\"kind\":\"s76 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s78\",\"uid\":\"s81\",\"resourceVersion\":\"s84 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"persistentVolumeReclaimPolicy\":\"s87\",\"mountOptions\":[\"k90:v90\",\"k90:other:with:colons\",\"bare90\",\"z90:last\"],\"nodeAffinity\":[{\"matchExpressions\":[{\"operator\":\"s96 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"key\":\"s99\",\"values\":[\"k102:v102\",\"k102:other:with:colons\",\"bare102\",\"z102:last\"]}]},{\"matchExpressions\":[{\"key\":\"s106\",\"operator\":\"s108 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"key\":\"s111\",\"values\":[\"k114:v114\",\"k114:other:with:colons\",\"bare114\",\"z114:last\"]}]}],\"persistentVolumeSource\":{\"gcePersistentDisk\":{\"fsType\":\"s120 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"readOnly\":true},\"awsElasticBlockStore\":{\"fsType\":\"s126\",\"readOnly\":true},\"azureFile\":{\"shareName\":\"s132 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"secretNamespace\":\"s135\"},\"csi\":{\"driver\":\"s139\",\"volumeHandle\":\"s141\",\"fsType\":\"s144 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"controllerPublishSecretRef\":{\"name\":\"s148 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s150\"},\"nodePublishSecretRef\":{\"name\":\"s154\",\"namespace\":\"s156 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"nodeExpandSecretRef\":{\"name\":\"s160 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s162\"}}}},\"yaml\":\"a2luZDogVGhpbmcxNjUK\"}",
+     "{ \"metadata\": { \"name\": \"s40 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s42\", \"creationTimestamp\": \"-45\", \"labels\": [ \"k48:v48\", \"k48:other:with:colons\", \"bare48\", \"z48:last\" ], \"ownerReferences\": [ { \"name\": \"s52 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s54\" }, { \"name\": \"s57\", \"kind\": \"s60 \\u003c&\\u003e \\\"é\\\"\\n\" } ], \"finalizers\": [ \"k63:v63\", \"k63:other:with:colons\", \"bare63\", \"z63:last\" ] }, \"spec\": { \"capacity\": { \"key69\": \"-70\", \"key67\": \"1700000068\" }, \"persistentVolumeType\": \"s72 \\u003c&\\u003e \\\"é\\\"\\n\", \"claimRef\": { \"kind\": \"s76 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s78\", \"uid\": \"s81\", \"resourceVersion\": \"s84 \\u003c&\\u003e \\\"é\\\"\\n\" }, \"persistentVolumeReclaimPolicy\": \"s87\", \"mountOptions\": [ \"k90:v90\", \"k90:other:with:colons\", \"bare90\", \"z90:last\" ], \"nodeAffinity\": [ { \"matchExpressions\": [ { \"operator\": \"s96 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"key\": \"s99\", \"values\": [ \"k102:v102\", \"k102:other:with:colons\", \"bare102\", \"z102:last\" ] } ] }, { \"matchExpressions\": [ { \"key\": \"s106\", \"operator\": \"s108 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"key\": \"s111\", \"values\": [ \"k114:v114\", \"k114:other:with:colons\", \"bare114\", \"z114:last\" ] } ] } ], \"persistentVolumeSource\": { \"gcePersistentDisk\": { \"fsType\": \"s120 \\u003c&\\u003e \\\"é\\\"\\n\", \"readOnly\": true }, \"awsElasticBlockStore\": { \"fsType\": \"s126\", \"readOnly\": true }, \"azureFile\": { \"shareName\": \"s132 \\u003c&\\u003e \\\"é\\\"\\n\", \"secretNamespace\": \"s135\" }, \"csi\": { \"driver\": \"s139\", \"volumeHandle\": \"s141\", \"fsType\": \"s144 \\u003c&\\u003e \\\"é\\\"\\n\", \"controllerPublishSecretRef\": { \"name\": \"s148 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s150\" }, \"nodePublishSecretRef\": { \"name\": \"s154\", \"namespace\": \"s156 \\u003c&\\u003e \\\"é\\\"\\n\" }, \"nodeExpandSecretRef\": { \"name\": \"s160 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s162\" } } } }, \"yaml\": \"a2luZDogVGhpbmcxNjUK\" }",
      "",
      "",
      "",
@@ -422,7 +422,7 @@
      "",
      "",
      "",
-     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k168:v168\",\"k168:other:with:colons\",\"bare168\",\"z168:last\"],\"agentVersion\":{\"Major\":4102444971,\"Patch\":1700000174,\"Meta\":\"s177\"}}"
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k168:v168\", \"k168:other:with:colons\", \"bare168\", \"z168:last\" ], \"agentVersion\": { \"Major\": \"4102444971\", \"Patch\": \"1700000174\", \"Meta\": \"s177\" } }"
     ]
    ],
    "insert": "INSERT INTO k8s_resources\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,\n\t\t\t uid, resource_version, owner_kind, owner_name, node_name, phase, status,\n\t\t\t ready, desired, available, counts, labels, annotations, tags,\n\t\t\t agent_version, group_id, group_size,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t creation_timestamp, deletion_timestamp, deletion_grace_period_seconds,\n\t\t\t finalizers, owner_kinds, owner_names, owner_uids,\n\t\t\t condition_types, condition_statuses, condition_reasons, condition_messages,\n\t\t\t condition_last_transition, condition_last_update, condition_last_probe,\n\t\t\t condition_message, resource_requirements, metrics, object,\n\t\t\t pod_ip, nominated_node_name, qos_class, priority_class,\n\t\t\t start_time, scheduled_time, host_name,\n\t\t\t container_names, container_ids, container_ready, container_restarts,\n\t\t\t container_states, container_messages, container_images,\n\t\t\t container_image_ids, container_is_init,\n\t\t\t pod_cidr, pod_cidrs, unschedulable, taints, provider_id, node_roles,\n\t\t\t capacity, allocatable, node_addresses,\n\t\t\t kubelet_version, kube_proxy_version, operating_system, architecture,\n\t\t\t kernel_version, os_image, container_runtime_version,\n\t\t\t service_type, cluster_ip, service_ports,\n\t\t\t rbac_rules, rbac_subjects, rbac_role_ref, envelope)",
@@ -466,7 +466,7 @@
      "DeletionTimestamp": "2023-11-14T22:13:38Z",
      "Desired": 0,
      "Encoding": "protobuf",
-     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k168:v168\",\"k168:other:with:colons\",\"bare168\",\"z168:last\"],\"agentVersion\":{\"Major\":4102444971,\"Patch\":1700000174,\"Meta\":\"s177\"}}",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k168:v168\", \"k168:other:with:colons\", \"bare168\", \"z168:last\" ], \"agentVersion\": { \"Major\": \"4102444971\", \"Patch\": \"1700000174\", \"Meta\": \"s177\" } }",
      "Finalizers": [],
      "GroupID": 6,
      "GroupSize": -8,
@@ -485,7 +485,7 @@
      "NodeRoles": [],
      "NominatedNodeName": "",
      "OSImage": "",
-     "Object": "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s15\",\"deletionTimestamp\":1700000018,\"annotations\":[\"k21:v21\",\"k21:other:with:colons\",\"bare21\",\"z21:last\"],\"resourceVersion\":\"s24 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"deletionGracePeriodSeconds\":1700000027},\"status\":{\"phase\":\"s31\",\"message\":\"s33\"},\"yaml\":\"/wAk\"}",
+     "Object": "{ \"metadata\": { \"name\": \"s12 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s15\", \"deletionTimestamp\": \"1700000018\", \"annotations\": [ \"k21:v21\", \"k21:other:with:colons\", \"bare21\", \"z21:last\" ], \"resourceVersion\": \"s24 \\u003c&\\u003e \\\"é\\\"\\n\", \"deletionGracePeriodSeconds\": \"1700000027\" }, \"status\": { \"phase\": \"s31\", \"message\": \"s33\" }, \"yaml\": \"/wAk\" }",
      "OperatingSystem": "",
      "OrgID": 4242,
      "OwnerKind": "",
@@ -564,7 +564,7 @@
      "DeletionTimestamp": null,
      "Desired": 0,
      "Encoding": "protobuf",
-     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k168:v168\",\"k168:other:with:colons\",\"bare168\",\"z168:last\"],\"agentVersion\":{\"Major\":4102444971,\"Patch\":1700000174,\"Meta\":\"s177\"}}",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k168:v168\", \"k168:other:with:colons\", \"bare168\", \"z168:last\" ], \"agentVersion\": { \"Major\": \"4102444971\", \"Patch\": \"1700000174\", \"Meta\": \"s177\" } }",
      "Finalizers": [
       "k63:v63",
       "k63:other:with:colons",
@@ -592,7 +592,7 @@
      "NodeRoles": [],
      "NominatedNodeName": "",
      "OSImage": "",
-     "Object": "{\"metadata\":{\"name\":\"s40 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s42\",\"creationTimestamp\":-45,\"labels\":[\"k48:v48\",\"k48:other:with:colons\",\"bare48\",\"z48:last\"],\"ownerReferences\":[{\"name\":\"s52 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s54\"},{\"name\":\"s57\",\"kind\":\"s60 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"finalizers\":[\"k63:v63\",\"k63:other:with:colons\",\"bare63\",\"z63:last\"]},\"spec\":{\"capacity\":{\"key67\":1700000068,\"key69\":-70},\"persistentVolumeType\":\"s72 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"claimRef\":{\"kind\":\"s76 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s78\",\"uid\":\"s81\",\"resourceVersion\":\"s84 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"persistentVolumeReclaimPolicy\":\"s87\",\"mountOptions\":[\"k90:v90\",\"k90:other:with:colons\",\"bare90\",\"z90:last\"],\"nodeAffinity\":[{\"matchExpressions\":[{\"operator\":\"s96 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"key\":\"s99\",\"values\":[\"k102:v102\",\"k102:other:with:colons\",\"bare102\",\"z102:last\"]}]},{\"matchExpressions\":[{\"key\":\"s106\",\"operator\":\"s108 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"key\":\"s111\",\"values\":[\"k114:v114\",\"k114:other:with:colons\",\"bare114\",\"z114:last\"]}]}],\"persistentVolumeSource\":{\"gcePersistentDisk\":{\"fsType\":\"s120 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"readOnly\":true},\"awsElasticBlockStore\":{\"fsType\":\"s126\",\"readOnly\":true},\"azureFile\":{\"shareName\":\"s132 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"secretNamespace\":\"s135\"},\"csi\":{\"driver\":\"s139\",\"volumeHandle\":\"s141\",\"fsType\":\"s144 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"controllerPublishSecretRef\":{\"name\":\"s148 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s150\"},\"nodePublishSecretRef\":{\"name\":\"s154\",\"namespace\":\"s156 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"nodeExpandSecretRef\":{\"name\":\"s160 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s162\"}}}},\"yaml\":\"a2luZDogVGhpbmcxNjUK\"}",
+     "Object": "{ \"metadata\": { \"name\": \"s40 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s42\", \"creationTimestamp\": \"-45\", \"labels\": [ \"k48:v48\", \"k48:other:with:colons\", \"bare48\", \"z48:last\" ], \"ownerReferences\": [ { \"name\": \"s52 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s54\" }, { \"name\": \"s57\", \"kind\": \"s60 \\u003c&\\u003e \\\"é\\\"\\n\" } ], \"finalizers\": [ \"k63:v63\", \"k63:other:with:colons\", \"bare63\", \"z63:last\" ] }, \"spec\": { \"capacity\": { \"key69\": \"-70\", \"key67\": \"1700000068\" }, \"persistentVolumeType\": \"s72 \\u003c&\\u003e \\\"é\\\"\\n\", \"claimRef\": { \"kind\": \"s76 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s78\", \"uid\": \"s81\", \"resourceVersion\": \"s84 \\u003c&\\u003e \\\"é\\\"\\n\" }, \"persistentVolumeReclaimPolicy\": \"s87\", \"mountOptions\": [ \"k90:v90\", \"k90:other:with:colons\", \"bare90\", \"z90:last\" ], \"nodeAffinity\": [ { \"matchExpressions\": [ { \"operator\": \"s96 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"key\": \"s99\", \"values\": [ \"k102:v102\", \"k102:other:with:colons\", \"bare102\", \"z102:last\" ] } ] }, { \"matchExpressions\": [ { \"key\": \"s106\", \"operator\": \"s108 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"key\": \"s111\", \"values\": [ \"k114:v114\", \"k114:other:with:colons\", \"bare114\", \"z114:last\" ] } ] } ], \"persistentVolumeSource\": { \"gcePersistentDisk\": { \"fsType\": \"s120 \\u003c&\\u003e \\\"é\\\"\\n\", \"readOnly\": true }, \"awsElasticBlockStore\": { \"fsType\": \"s126\", \"readOnly\": true }, \"azureFile\": { \"shareName\": \"s132 \\u003c&\\u003e \\\"é\\\"\\n\", \"secretNamespace\": \"s135\" }, \"csi\": { \"driver\": \"s139\", \"volumeHandle\": \"s141\", \"fsType\": \"s144 \\u003c&\\u003e \\\"é\\\"\\n\", \"controllerPublishSecretRef\": { \"name\": \"s148 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s150\" }, \"nodePublishSecretRef\": { \"name\": \"s154\", \"namespace\": \"s156 \\u003c&\\u003e \\\"é\\\"\\n\" }, \"nodeExpandSecretRef\": { \"name\": \"s160 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s162\" } } } }, \"yaml\": \"a2luZDogVGhpbmcxNjUK\" }",
      "OperatingSystem": "",
      "OrgID": 4242,
      "OwnerKind": "",
@@ -657,5 +657,6 @@
   "/sends/0/args/1/1",
   "/sends/0/rows/0/CollectedAt",
   "/sends/0/rows/1/CollectedAt"
- ]
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
 }

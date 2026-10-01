@@ -494,7 +494,7 @@
       "traced"
      ],
      1,
-     "[{\"Resource\":{\"logs\":{\"path\":\"/var/log/app.log\"}}}]",
+     "[{ \"logs\": { \"path\": \"/var/log/app.log\" } }]",
      "INJECTION_INJECTED",
      3,
      1.5,
@@ -617,7 +617,7 @@
      "Root": "/",
      "SGID": 4,
      "SUID": 3,
-     "ServiceResources": "[{\"Resource\":{\"logs\":{\"path\":\"/var/log/app.log\"}}}]",
+     "ServiceResources": "[{ \"logs\": { \"path\": \"/var/log/app.log\" } }]",
      "SnapshotID": "0ea22187-9ca9-46c4-8657-b71b470d1406",
      "State": "R",
      "Tags": {
@@ -1056,5 +1056,6 @@
   "/sends/2/rows/0/Timestamp",
   "/sends/2/rows/1/SnapshotID",
   "/sends/2/rows/1/Timestamp"
- ]
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
 }

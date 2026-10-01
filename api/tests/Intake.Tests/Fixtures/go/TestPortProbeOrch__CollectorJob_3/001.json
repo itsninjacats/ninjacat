@@ -308,9 +308,9 @@
       null
      ],
      "",
-     "[{\"requests\":{\"key50\":4102444851,\"key52\":1700000053},\"type\":1},{\"requests\":{\"key59\":-60,\"key61\":1700000062},\"type\":2}]",
+     "[{ \"requests\": { \"key52\": \"1700000053\", \"key50\": \"4102444851\" }, \"type\": \"container\" },{ \"requests\": { \"key61\": \"1700000062\", \"key59\": \"-60\" }, \"type\": \"initContainer\" }]",
      {},
-     "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s14\",\"creationTimestamp\":1700000017,\"labels\":[\"k20:v20\",\"k20:other:with:colons\",\"bare20\",\"z20:last\"],\"ownerReferences\":[{\"name\":\"s24 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s26\"},{\"name\":\"s29\",\"kind\":\"s32 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"finalizers\":[\"k35:v35\",\"k35:other:with:colons\",\"bare35\",\"z35:last\"]},\"spec\":{\"parallelism\":39,\"completions\":41,\"backoffLimit\":-44,\"manualSelector\":true,\"resourceRequirements\":[{\"requests\":{\"key50\":4102444851,\"key52\":1700000053},\"type\":1},{\"requests\":{\"key59\":-60,\"key61\":1700000062},\"type\":2}]},\"yaml\":\"/wBE\",\"conditions\":[{\"type\":\"s72 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"status\":\"s74\",\"lastTransitionTime\":1700000077,\"message\":\"s80 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"status\":\"s83\",\"lastTransitionTime\":4102444886,\"message\":\"s89\"}]}",
+     "{ \"metadata\": { \"name\": \"s12 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s14\", \"creationTimestamp\": \"1700000017\", \"labels\": [ \"k20:v20\", \"k20:other:with:colons\", \"bare20\", \"z20:last\" ], \"ownerReferences\": [ { \"name\": \"s24 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s26\" }, { \"name\": \"s29\", \"kind\": \"s32 \\u003c&\\u003e \\\"é\\\"\\n\" } ], \"finalizers\": [ \"k35:v35\", \"k35:other:with:colons\", \"bare35\", \"z35:last\" ] }, \"spec\": { \"parallelism\": 39, \"completions\": 41, \"backoffLimit\": -44, \"manualSelector\": true, \"resourceRequirements\": [ { \"requests\": { \"key52\": \"1700000053\", \"key50\": \"4102444851\" }, \"type\": \"container\" }, { \"requests\": { \"key61\": \"1700000062\", \"key59\": \"-60\" }, \"type\": \"initContainer\" } ] }, \"yaml\": \"/wBE\", \"conditions\": [ { \"type\": \"s72 \\u003c&\\u003e \\\"é\\\"\\n\", \"status\": \"s74\", \"lastTransitionTime\": \"1700000077\", \"message\": \"s80 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"status\": \"s83\", \"lastTransitionTime\": \"4102444886\", \"message\": \"s89\" } ] }",
      "",
      "",
      "",
@@ -349,7 +349,7 @@
      "",
      "",
      "",
-     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k125:v125\",\"k125:other:with:colons\",\"bare125\",\"z125:last\"],\"agentVersion\":{\"Major\":1700000128,\"Patch\":4102444931,\"Meta\":\"s134\"}}"
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k125:v125\", \"k125:other:with:colons\", \"bare125\", \"z125:last\" ], \"agentVersion\": { \"Major\": \"1700000128\", \"Patch\": \"4102444931\", \"Meta\": \"s134\" } }"
     ],
     [
      "test",
@@ -430,7 +430,7 @@
      "s111",
      "",
      {},
-     "{\"metadata\":{\"name\":\"s92 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s95\",\"deletionTimestamp\":1700000098,\"annotations\":[\"k101:v101\",\"k101:other:with:colons\",\"bare101\",\"z101:last\"],\"resourceVersion\":\"s104 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"deletionGracePeriodSeconds\":1700000107},\"status\":{\"conditionMessage\":\"s111\",\"startTime\":1700000113,\"active\":-116,\"failed\":119},\"tags\":[\"k122:v122\",\"k122:other:with:colons\",\"bare122\",\"z122:last\"]}",
+     "{ \"metadata\": { \"name\": \"s92 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s95\", \"deletionTimestamp\": \"1700000098\", \"annotations\": [ \"k101:v101\", \"k101:other:with:colons\", \"bare101\", \"z101:last\" ], \"resourceVersion\": \"s104 \\u003c&\\u003e \\\"é\\\"\\n\", \"deletionGracePeriodSeconds\": \"1700000107\" }, \"status\": { \"conditionMessage\": \"s111\", \"startTime\": \"1700000113\", \"active\": -116, \"failed\": 119 }, \"tags\": [ \"k122:v122\", \"k122:other:with:colons\", \"bare122\", \"z122:last\" ] }",
      "",
      "",
      "",
@@ -469,7 +469,7 @@
      "",
      "",
      "",
-     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k125:v125\",\"k125:other:with:colons\",\"bare125\",\"z125:last\"],\"agentVersion\":{\"Major\":1700000128,\"Patch\":4102444931,\"Meta\":\"s134\"}}"
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k125:v125\", \"k125:other:with:colons\", \"bare125\", \"z125:last\" ], \"agentVersion\": { \"Major\": \"1700000128\", \"Patch\": \"4102444931\", \"Meta\": \"s134\" } }"
     ]
    ],
    "insert": "INSERT INTO k8s_resources\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,\n\t\t\t uid, resource_version, owner_kind, owner_name, node_name, phase, status,\n\t\t\t ready, desired, available, counts, labels, annotations, tags,\n\t\t\t agent_version, group_id, group_size,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t creation_timestamp, deletion_timestamp, deletion_grace_period_seconds,\n\t\t\t finalizers, owner_kinds, owner_names, owner_uids,\n\t\t\t condition_types, condition_statuses, condition_reasons, condition_messages,\n\t\t\t condition_last_transition, condition_last_update, condition_last_probe,\n\t\t\t condition_message, resource_requirements, metrics, object,\n\t\t\t pod_ip, nominated_node_name, qos_class, priority_class,\n\t\t\t start_time, scheduled_time, host_name,\n\t\t\t container_names, container_ids, container_ready, container_restarts,\n\t\t\t container_states, container_messages, container_images,\n\t\t\t container_image_ids, container_is_init,\n\t\t\t pod_cidr, pod_cidrs, unschedulable, taints, provider_id, node_roles,\n\t\t\t capacity, allocatable, node_addresses,\n\t\t\t kubelet_version, kube_proxy_version, operating_system, architecture,\n\t\t\t kernel_version, os_image, container_runtime_version,\n\t\t\t service_type, cluster_ip, service_ports,\n\t\t\t rbac_rules, rbac_subjects, rbac_role_ref, envelope)",
@@ -538,7 +538,7 @@
      "DeletionTimestamp": null,
      "Desired": 0,
      "Encoding": "protobuf",
-     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k125:v125\",\"k125:other:with:colons\",\"bare125\",\"z125:last\"],\"agentVersion\":{\"Major\":1700000128,\"Patch\":4102444931,\"Meta\":\"s134\"}}",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k125:v125\", \"k125:other:with:colons\", \"bare125\", \"z125:last\" ], \"agentVersion\": { \"Major\": \"1700000128\", \"Patch\": \"4102444931\", \"Meta\": \"s134\" } }",
      "Finalizers": [
       "k35:v35",
       "k35:other:with:colons",
@@ -566,7 +566,7 @@
      "NodeRoles": [],
      "NominatedNodeName": "",
      "OSImage": "",
-     "Object": "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s14\",\"creationTimestamp\":1700000017,\"labels\":[\"k20:v20\",\"k20:other:with:colons\",\"bare20\",\"z20:last\"],\"ownerReferences\":[{\"name\":\"s24 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s26\"},{\"name\":\"s29\",\"kind\":\"s32 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"finalizers\":[\"k35:v35\",\"k35:other:with:colons\",\"bare35\",\"z35:last\"]},\"spec\":{\"parallelism\":39,\"completions\":41,\"backoffLimit\":-44,\"manualSelector\":true,\"resourceRequirements\":[{\"requests\":{\"key50\":4102444851,\"key52\":1700000053},\"type\":1},{\"requests\":{\"key59\":-60,\"key61\":1700000062},\"type\":2}]},\"yaml\":\"/wBE\",\"conditions\":[{\"type\":\"s72 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"status\":\"s74\",\"lastTransitionTime\":1700000077,\"message\":\"s80 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"status\":\"s83\",\"lastTransitionTime\":4102444886,\"message\":\"s89\"}]}",
+     "Object": "{ \"metadata\": { \"name\": \"s12 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s14\", \"creationTimestamp\": \"1700000017\", \"labels\": [ \"k20:v20\", \"k20:other:with:colons\", \"bare20\", \"z20:last\" ], \"ownerReferences\": [ { \"name\": \"s24 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s26\" }, { \"name\": \"s29\", \"kind\": \"s32 \\u003c&\\u003e \\\"é\\\"\\n\" } ], \"finalizers\": [ \"k35:v35\", \"k35:other:with:colons\", \"bare35\", \"z35:last\" ] }, \"spec\": { \"parallelism\": 39, \"completions\": 41, \"backoffLimit\": -44, \"manualSelector\": true, \"resourceRequirements\": [ { \"requests\": { \"key52\": \"1700000053\", \"key50\": \"4102444851\" }, \"type\": \"container\" }, { \"requests\": { \"key61\": \"1700000062\", \"key59\": \"-60\" }, \"type\": \"initContainer\" } ] }, \"yaml\": \"/wBE\", \"conditions\": [ { \"type\": \"s72 \\u003c&\\u003e \\\"é\\\"\\n\", \"status\": \"s74\", \"lastTransitionTime\": \"1700000077\", \"message\": \"s80 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"status\": \"s83\", \"lastTransitionTime\": \"4102444886\", \"message\": \"s89\" } ] }",
      "OperatingSystem": "",
      "OrgID": 0,
      "OwnerKind": "",
@@ -594,7 +594,7 @@
      "RBACRules": "",
      "RBACSubjects": "",
      "Ready": 0,
-     "ResourceRequirements": "[{\"requests\":{\"key50\":4102444851,\"key52\":1700000053},\"type\":1},{\"requests\":{\"key59\":-60,\"key61\":1700000062},\"type\":2}]",
+     "ResourceRequirements": "[{ \"requests\": { \"key52\": \"1700000053\", \"key50\": \"4102444851\" }, \"type\": \"container\" },{ \"requests\": { \"key61\": \"1700000062\", \"key59\": \"-60\" }, \"type\": \"initContainer\" }]",
      "ResourceVersion": "",
      "ScheduledTime": null,
      "ServicePorts": "",
@@ -666,7 +666,7 @@
      "DeletionTimestamp": "2023-11-14T22:14:58Z",
      "Desired": 0,
      "Encoding": "protobuf",
-     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k125:v125\",\"k125:other:with:colons\",\"bare125\",\"z125:last\"],\"agentVersion\":{\"Major\":1700000128,\"Patch\":4102444931,\"Meta\":\"s134\"}}",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k125:v125\", \"k125:other:with:colons\", \"bare125\", \"z125:last\" ], \"agentVersion\": { \"Major\": \"1700000128\", \"Patch\": \"4102444931\", \"Meta\": \"s134\" } }",
      "Finalizers": [],
      "GroupID": 6,
      "GroupSize": -8,
@@ -685,7 +685,7 @@
      "NodeRoles": [],
      "NominatedNodeName": "",
      "OSImage": "",
-     "Object": "{\"metadata\":{\"name\":\"s92 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s95\",\"deletionTimestamp\":1700000098,\"annotations\":[\"k101:v101\",\"k101:other:with:colons\",\"bare101\",\"z101:last\"],\"resourceVersion\":\"s104 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"deletionGracePeriodSeconds\":1700000107},\"status\":{\"conditionMessage\":\"s111\",\"startTime\":1700000113,\"active\":-116,\"failed\":119},\"tags\":[\"k122:v122\",\"k122:other:with:colons\",\"bare122\",\"z122:last\"]}",
+     "Object": "{ \"metadata\": { \"name\": \"s92 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s95\", \"deletionTimestamp\": \"1700000098\", \"annotations\": [ \"k101:v101\", \"k101:other:with:colons\", \"bare101\", \"z101:last\" ], \"resourceVersion\": \"s104 \\u003c&\\u003e \\\"é\\\"\\n\", \"deletionGracePeriodSeconds\": \"1700000107\" }, \"status\": { \"conditionMessage\": \"s111\", \"startTime\": \"1700000113\", \"active\": -116, \"failed\": 119 }, \"tags\": [ \"k122:v122\", \"k122:other:with:colons\", \"bare122\", \"z122:last\" ] }",
      "OperatingSystem": "",
      "OrgID": 0,
      "OwnerKind": "",
@@ -751,5 +751,6 @@
   "/sends/0/args/1/1",
   "/sends/0/rows/0/CollectedAt",
   "/sends/0/rows/1/CollectedAt"
- ]
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
 }
