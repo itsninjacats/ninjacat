@@ -8,8 +8,7 @@ NinjaCat is an open-source, drop-in replacement for Datadog: it speaks the Datad
 wire protocol, so an existing agent can be pointed at it by changing `DD_SITE`/`DD_*_DD_URL`
 and nothing else. Telemetry lands in ClickHouse; the panel is a SvelteKit app.
 
-Licence: **AGPL**. The repo is public. No `LICENSE` file exists yet — add one before the
-first public push.
+Licence: **AGPL-3.0** (`LICENSE` at the root). The repo is public.
 
 ## Language policy
 
@@ -44,7 +43,7 @@ Four independent units, no shared build:
 - `server/` — the Go backend. Its own module, `github.com/itsninjacats/server`.
 - `api/` — the F# read side (Oxpecker on ASP.NET Core, .NET 10). Reads ClickHouse,
   never writes it; Postgres through Npgsql, schema still owned by Drizzle. Speaks
-  Datadog's public query API. See `query/README.md` and
+  Datadog's public query API. See `api/README.md` and
   `server/docs/zadania/fsharp-query-service.md`.
 - `frontend/` — SvelteKit 5 panel + Postgres (Better Auth, Drizzle). Bun.
 - `experiments/goja-sandbox/` — a standalone spike on sandboxed user JS. Own module, not wired in.
