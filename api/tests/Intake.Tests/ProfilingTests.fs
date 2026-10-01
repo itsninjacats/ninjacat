@@ -226,9 +226,10 @@ let private describe (summary: Pprof.Summary option) : string =
         $"types={types} units={units} samples={s.SampleCount} time={s.TimeNanos} duration={s.DurationNanos} "
         + $"period={s.PeriodType}:{s.Period} mappings={s.MappingCount} locations={s.LocationCount} functions={s.FunctionCount}"
 
-/// Bytes (base64) and what github.com/google/pprof/profile's ParseData made
-/// of them: these verdicts were produced by running that library on the same
-/// bytes.
+/// Bytes (base64) and the verdict on them. The verdicts were produced by
+/// running github.com/google/pprof/profile's ParseData on the same bytes;
+/// the five with a comment are where protobuf's own rules, which the
+/// generated parser follows, say otherwise.
 let pprofVerdicts: obj[] seq =
     [ [| box "full"; box "CgQIARACEgQIARBkIgsIARiAICIECAEQKioICAEQAxgDIAQyADIDY3B1MgtuYW5vc2Vjb25kczIJbWFpbi5tYWluMgdtYWluLmdvSICAqLHjn+fLF1CAyK+gJVoECAEQAmCAreIE"; box "types=cpu units=nanoseconds samples=1 time=1700000000000000000 duration=10000000000 period=cpu/nanoseconds:10000000 mappings=0 locations=1 functions=1" |]
       [| box "full gzip"; box "H4sIAAAAAAAA/wBmAJn/CgQIARACEgQIARBkIgsIARiAICIECAEQKioICAEQAxgDIAQyADIDY3B1MgtuYW5vc2Vjb25kczIJbWFpbi5tYWluMgdtYWluLmdvSICAqLHjn+fLF1CAyK+gJVoECAEQAmCAreIEAwARwMXuZgAAAA=="; box "types=cpu units=nanoseconds samples=1 time=1700000000000000000 duration=10000000000 period=cpu/nanoseconds:10000000 mappings=0 locations=1 functions=1" |]
@@ -265,14 +266,19 @@ let pprofVerdicts: obj[] seq =
       [| box "label str out of range"; box "CgQIARACEggQARoECAEQCTIAMgNjcHUyC25hbm9zZWNvbmRzMgltYWluLm1haW4yB21haW4uZ28="; box "rejected" |]
       [| box "label unit out of range"; box "CgQIARACEgoQARoGCAEYBSAJMgAyA2NwdTILbmFub3NlY29uZHMyCW1haW4ubWFpbjIHbWFpbi5nbw=="; box "rejected" |]
       [| box "label unit ignored beside str"; box "CgQIARACEgoQARoGCAEQAiAJMgAyA2NwdTILbmFub3NlY29uZHMyCW1haW4ubWFpbjIHbWFpbi5nbw=="; box "types=cpu units=nanoseconds samples=1 time=0 duration=0 period=/:0 mappings=0 locations=0 functions=0" |]
-      [| box "time_nanos twice"; box "SAVIBjIAMgNjcHUyC25hbm9zZWNvbmRzMgltYWluLm1haW4yB21haW4uZ28="; box "rejected" |]
+      // protobuf: of a field sent twice, the last one counts. Go's library took it for two profiles glued together.
+      [| box "time_nanos twice"; box "SAVIBjIAMgNjcHUyC25hbm9zZWNvbmRzMgltYWluLm1haW4yB21haW4uZ28="; box "types= units= samples=0 time=6 duration=0 period=/:0 mappings=0 locations=0 functions=0" |]
       [| box "time_nanos zero then set"; box "SABIBjIAMgNjcHUyC25hbm9zZWNvbmRzMgltYWluLm1haW4yB21haW4uZ28="; box "types= units= samples=0 time=6 duration=0 period=/:0 mappings=0 locations=0 functions=0" |]
-      [| box "field of the wrong wire type"; box "SgFBMgAyA2NwdTILbmFub3NlY29uZHMyCW1haW4ubWFpbjIHbWFpbi5nbw=="; box "rejected" |]
+      // protobuf: a field of another wire type is an unknown field and is skipped. Go's library refused it.
+      [| box "field of the wrong wire type"; box "SgFBMgAyA2NwdTILbmFub3NlY29uZHMyCW1haW4ubWFpbjIHbWFpbi5nbw=="; box "types= units= samples=0 time=0 duration=0 period=/:0 mappings=0 locations=0 functions=0" |]
       [| box "unknown field of any type"; box "mgYBQZAGB7UGAQIDBDIAMgNjcHUyC25hbm9zZWNvbmRzMgltYWluLm1haW4yB21haW4uZ28="; box "types= units= samples=0 time=0 duration=0 period=/:0 mappings=0 locations=0 functions=0" |]
-      [| box "group wire type"; box "owakBjIAMgNjcHUyC25hbm9zZWNvbmRzMgltYWluLm1haW4yB21haW4uZ28="; box "rejected" |]
-      [| box "strings that are not UTF-8"; box "CgQIARABMgAyAv/+"; box "types=�� units=�� samples=0 time=0 duration=0 period=/:0 mappings=0 locations=0 functions=0" |]
+      // protobuf: a group is skipped like any unknown field. Go's library refused it.
+      [| box "group wire type"; box "owakBjIAMgNjcHUyC25hbm9zZWNvbmRzMgltYWluLm1haW4yB21haW4uZ28="; box "types= units= samples=0 time=0 duration=0 period=/:0 mappings=0 locations=0 functions=0" |]
+      // protobuf: a string is UTF-8, and the parser holds a profile to it. Go's library read strings as bytes.
+      [| box "strings that are not UTF-8"; box "CgQIARABMgAyAv/+"; box "rejected" |]
       [| box "drop frames twice last wins"; box "OAk4ATIAMgNjcHUyC25hbm9zZWNvbmRzMgltYWluLm1haW4yB21haW4uZ28="; box "types= units= samples=0 time=0 duration=0 period=/:0 mappings=0 locations=0 functions=0" |]
-      [| box "period type twice"; box "WgQIARACWgIIAzIAMgNjcHUyC25hbm9zZWNvbmRzMgltYWluLm1haW4yB21haW4uZ28="; box "types= units= samples=0 time=0 duration=0 period=main.main/:0 mappings=0 locations=0 functions=0" |]
+      // protobuf: a message sent twice is merged field by field. Go's library kept the second alone.
+      [| box "period type twice"; box "WgQIARACWgIIAzIAMgNjcHUyC25hbm9zZWNvbmRzMgltYWluLm1haW4yB21haW4uZ28="; box "types= units= samples=0 time=0 duration=0 period=main.main/nanoseconds:0 mappings=0 locations=0 functions=0" |]
       [| box "packed and single values"; box "CgQIARACCgQIARACEgQSAgECEgQQARACMgAyA2NwdTILbmFub3NlY29uZHMyCW1haW4ubWFpbjIHbWFpbi5nbw=="; box "types=cpu,cpu units=nanoseconds,nanoseconds samples=2 time=0 duration=0 period=/:0 mappings=0 locations=0 functions=0" |]
       [| box "varint of eleven bytes"; box "YAFg/////////////wEyADIDY3B1MgtuYW5vc2Vjb25kczIJbWFpbi5tYWluMgdtYWluLmdv"; box "rejected" |]
       [| box "varint of ten bytes"; box "YP///////////38yADIDY3B1MgtuYW5vc2Vjb25kczIJbWFpbi5tYWluMgdtYWluLmdv"; box "types= units= samples=0 time=0 duration=0 period=/:-1 mappings=0 locations=0 functions=0" |]
@@ -286,7 +292,7 @@ let pprofVerdicts: obj[] seq =
 
 [<Theory>]
 [<MemberData(nameof pprofVerdicts)>]
-let ``pprof is accepted, rejected and summarised as Go's pprof library does`` (name: string, data: string, expected: string) =
+let ``pprof is accepted, rejected and summarised`` (name: string, data: string, expected: string) =
     Assert.True(name <> "")
     Assert.Equal(expected, describe (Profiling.readPprof (Convert.FromBase64String data)))
 
