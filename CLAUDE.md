@@ -242,6 +242,10 @@ Listeners: `NINJACAT_ADDR` (`:8080`), `NINJACAT_INTERNAL_ADDR` (`:8081`),
 Migrations: `NINJACAT_AUTO_MIGRATE=false` stops the server from applying the ClickHouse
 migrations at startup (use `ninjacat-api migrate` instead).
 
+Proxies: `NINJACAT_TRUSTED_PROXIES` names the reverse proxies whose `X-Forwarded-For` is
+believed (ASP.NET's forwarded-headers middleware); `NINJACAT_RUM_ALLOWED_ORIGINS` narrows
+the CORS policy of browser-intake (ASP.NET's CORS middleware), any origin by default.
+
 Debugging: `DEBUG=true` (dumps), `NINJACAT_CAPTURE_DIR`, `NINJACAT_ACK_UNKNOWN` (202 instead
 of 404 on unknown paths), `NINJACAT_SELFMON_INTERVAL`/`_TENANT`/`_HOST`.
 

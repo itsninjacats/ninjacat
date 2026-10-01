@@ -55,8 +55,6 @@ routers that needed them, which is how the copies came about.
       `Profiling`); four protobuf-`Timestamp` readers with four rules (`sdsTime` can
       overflow); `Lenient.rfc3339` beside `Time.tryRfc3339`, which wrongly refuses a
       one-digit hour.
-- [ ] **protobuf → JSON text** written twice with byte-identical output: `Kubeops.GoJson`
-      (generic) and `Process.GoJson` (by hand, 150 lines).
 - [ ] **`JsonElement` accessors**: every router has its own `text`, string list, flag,
       integer, "keys without a column" (nine names). Decide first whether a null among the
       extra keys is stored as `""` or `"null"`: both exist.
@@ -83,38 +81,45 @@ routers that needed them, which is how the copies came about.
       `Json.tryInt64`; used only by tests: `Json.tryParseList`. Unused
       endpoint: `/internal/metrics/hosts` (check for other callers first).
 - [ ] **Parity machinery with nothing left to match**: `TraceSketch.GoMath` (125 lines
-      re-implementing Go's `math` to the last bit), `ApiPayloads.wrongWireType` and
-      `hasUnknownFields`, notes that name Go types (`cannot unmarshal … into Go value of type
+      re-implementing Go's `math` to the last bit), `ApiPayloads.hasUnknownFields`,
+      notes that name Go types (`cannot unmarshal … into Go value of type
       gogen.MetricPayload`). The Go route set names (`routeAPI`…) are out of the server:
       `Routes.fs` is a plain chain of hosts, and only `Golden/Replay.fs` knows the names.
 - [ ] 141 comment lines in `src` cite Go. Half describe Go's libraries as a format spec and
       stay; fix the ones that are false or present tense: `Server/Config.fs:60`,
-      `Intake/Routes.fs:14`, `Engine/Query/Compile.fs:102,123`, `Routers/Lenient.fs:104`,
-      `Routers/Rum.fs:353` (trusting any `X-Forwarded-For`, justified only by Gin's default
-      — a security decision that needs its own reason).
+      `Engine/Query/Compile.fs:102,123`, `Routers/Lenient.fs:104`.
 
 ## 1b. Use what the framework and the libraries already do
 
 From a second audit on 2026-10-01, of home-made replacements for things .NET, ASP.NET or a
-referenced library provides. Each replacement API was checked against the pinned version;
-the items themselves are not started. (Done already: the intake's own HTTP router, replaced
-by Oxpecker's.)
+referenced library provides. Done on 2026-10-02 unless ticked otherwise:
 
-- [ ] **Pprof**: `Routers/Pprof.fs` decodes by hand a message `src/Proto` already generates
-      (`Perftools.Profiles.Profile`). `Profile.Parser.ParseFrom` plus the soundness checks;
-      about 200 lines go. A few verdicts on malformed input change (`pprofVerdicts`).
-- [ ] **Protobuf to JSON**: three hand writers (`Kubeops.GoJson`, `Process.GoJson`,
-      `ApiPayloads.sketchJson`) beside `JsonFormatter.Default`, which `Security.fs` and
-      `Evp.fs` already use, so two dialects are stored. `JsonFormatter` cannot write the
-      Go-shaped one (64-bit integers as strings, spaces). Decide: one writer of ours, or the
-      library's everywhere and every kubeops and process fixture `edited`.
-- [ ] **Logs over TCP**: own accept loop, TLS handshake and a buffer that is quadratic on a
-      busy connection. Kestrel's `Listen` + `UseHttps` + `UseConnectionHandler`; the framing
-      code stays.
-- [ ] **RUM CORS**: hand-written headers; ASP.NET's `AddCors`/`UseCors`. Differences to
-      check against 20 fixtures: what it sends without an `Origin`, and on non-preflights.
-- [ ] **RUM client address**: re-implements Gin's trust-every-proxy default.
-      `UseForwardedHeaders`, which is also where the trust decision belongs.
+- [x] The intake's own HTTP router → Oxpecker's routes, ASP.NET's matcher.
+- [x] **Pprof**: the hand-written protobuf decoder → the class generated from
+      `profile.proto`. Five verdicts on malformed input follow protobuf's rules now
+      (a field sent twice, a wrong wire type, a group, strings that are not UTF-8).
+- [x] **Protobuf to JSON**: the three hand writers → `JsonFormatter`, through `ProtoJson` in
+      `Common.fs`. Every JSON column of the Kubernetes, ECS and process tables is proto3's
+      JSON now: 64-bit integers are strings, enums are names, absent is "". Rows written
+      before hold the Go-shaped JSON; nothing rewrites them.
+- [x] **Logs over TCP**: own accept loop and TLS → a Kestrel endpoint with a connection
+      handler (`TcpLogs.Connection`). Checked live: plain, TLS, split frames, a wrong key,
+      a server stopping with connections open.
+- [x] **RUM CORS** → ASP.NET's CORS middleware. Checked in Chromium and Firefox. No
+      headers at all for a request that names no origin; Allow-Methods, Allow-Headers and
+      Max-Age only on preflights.
+- [x] **RUM client address** → `UseForwardedHeaders`, trusting the loopback and the
+      proxies named in `NINJACAT_TRUSTED_PROXIES`. `X-Real-Ip` is no longer read.
+- [x] **Engine request errors**: the regexes over the deserializer's exception text are
+      gone; its message is passed on as it is.
+- [x] **Kubeops**: the fields read by name string → one explicit function per kind.
+- [x] Small: `parseHex64`, `isSpace`, `formatIPv6`, `median`, `movingAverage`, `dist` use
+      the library; FNV-1a is one function (`Storage/Fnv.fs`); varints are read by
+      `CodedInputStream` (`Varint` in `Common.fs`, `Capture.fs`); `wrongWireType` is gone.
+- [ ] **Native handlers**: the intake's handlers are `Request -> Response` over records of
+      our own, run through an adapter (`Routes.keyed`), with the key checked by `Auth.fs`.
+      Next: Oxpecker's own `EndpointHandler`s writing through `ctx`, and ASP.NET
+      authentication for the key; `Request`, `Response` and `keyed` go.
 - [ ] **ClickHouse inserts**: the driver already gets the rows (`InsertBinaryAsync` with
       `object[]`); nothing is hand-built there. Inserting records instead is possible
       (`InsertBinaryAsync<T>`, a `ClickHouseColumn` attribute per field) and would remove
@@ -123,15 +128,6 @@ by Oxpecker's.)
       the driver cannot write nanosecond `DateTime64` at all. A migration, not a deletion.
       Small things that can go now: `Table.Writer` (89 of 90 are `"storage_" + Name`), the
       backtick trimming for one column, `WriterLimits`.
-- [ ] **Engine request errors** are three regexes over the JSON deserializer's exception
-      text (`Api/V2/Timeseries.fs`). Reading the two request bodies by hand is longer and
-      does not depend on message wording.
-- [ ] **Kubeops** reads protobuf fields by name string to treat 24 collector kinds as one.
-      Plain: one branch per kind, about 100 lines more.
-- [ ] Small: `Trace.parseHex64` → `UInt64.TryParse(…, AllowHexSpecifier)`;
-      `Profiling.isSpace` → `Rune.IsWhiteSpace`; `Ndm.formatIPv6` → `IPAddress.ToString()`
-      (differs only for embedded IPv4); `median`, `movingAverage`, `dist` → MathNet;
-      FNV-1a written twice; the hand-written varint readers → `CodedInputStream`.
 
 Looked home-made, kept on purpose: body decompression (the middleware drops
 `Content-Encoding`, has no zstd, and throws on a mislabelled body), the migration runner
@@ -322,7 +318,7 @@ data is here; the product is not.
       and the two msgpack readers, which are gone: the MessagePack library reads the bytes
       and decoders take fields from the tree (`MsgFields`). Left: `Misfit` (ApiPayloads) and
       `HealthReportMismatch` (Evp), which go when those decoders move to the shared struct
-      reader (section 1a); `NotAProfile` (Pprof), with the shared protobuf field walker.
+      reader (section 1a). `NotAProfile` (Pprof) went with the hand-written decoder.
       `Msgpack.value` still raises the library's own exception in three places (too deep,
       a map key that is not a string, a byte that starts no value), caught once in
       `Msgpack.decode` together with the library's.

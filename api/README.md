@@ -255,6 +255,7 @@ Package versions live in `Directory.Packages.props` only.
 | `CLICKHOUSE_DB`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` | `ninjacat` |
 | `DATABASE_URL` | required — the same `postgres://` URL the panel uses |
 | `NINJACAT_AUTO_MIGRATE` | `true`; with several replicas set `false` and run `migrate` as a job |
+| `NINJACAT_TRUSTED_PROXIES` | none — reverse proxies in front of the intake, as addresses or networks (`10.0.0.0/8`), comma-separated. Only their `X-Forwarded-For` is believed; the loopback is always trusted |
 | `NINJACAT_ACK_UNKNOWN` | `true` answers 202 instead of 404 on unknown intake paths |
 | `DEBUG` | `true` dumps every intake request to `NINJACAT_CAPTURE_DIR` (default `captures`) |
 | `NINJACAT_SELFMON_INTERVAL`, `NINJACAT_SELFMON_TENANT`, `NINJACAT_SELFMON_HOST` | `15s`, `default`, the machine's name |
