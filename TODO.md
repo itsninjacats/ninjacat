@@ -96,9 +96,8 @@ routers that needed them, which is how the copies came about.
 ## 2. Intake: not served yet
 
 - [ ] **Remote Config** (`config.<site>`). Answered 404 on purpose: the agent verifies the
-      answer against a TUF root (`remote-config-tuf.md`). First step that needs no signing:
-      store what the agent reports in its poll (`LatestConfigsRequest`: its products and
-      every tracer client with service, env and version). Today it is parsed and dropped.
+      answer against a TUF root. Its own list: `TODO_REMOTE_CONFIG.md` (what travels through
+      it, what the agent checks, the steps; the first two need no signing).
 - [ ] **OTLP** (`otlp.<site>`): metrics, traces, logs, the host profiler's profiles. Its own
       host and router (`otlp-osobny-router.md`).
 - [ ] **`GET /api/v1/query`** for the cluster agent's External Metrics Provider answers an
