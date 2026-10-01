@@ -67,8 +67,16 @@ module Time =
             | true, parsed -> Some parsed.UtcDateTime
             | false, _ -> None
 
-    let fromUnixSeconds (seconds: int64) : DateTime = DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime
-    let fromUnixMillis (ms: int64) : DateTime = DateTimeOffset.FromUnixTimeMilliseconds(ms).UtcDateTime
+    let private maxSeconds = DateTimeOffset.MaxValue.ToUnixTimeSeconds()
+    let private minSeconds = DateTimeOffset.MinValue.ToUnixTimeSeconds()
+
+    /// A timestamp past what DateTime holds (year 9999) is kept at that
+    /// limit: one absurd value in a payload must not fail the request.
+    let fromUnixSeconds (seconds: int64) : DateTime =
+        DateTimeOffset.FromUnixTimeSeconds(max minSeconds (min maxSeconds seconds)).UtcDateTime
+
+    let fromUnixMillis (ms: int64) : DateTime =
+        DateTimeOffset.FromUnixTimeMilliseconds(max (minSeconds * 1000L) (min (maxSeconds * 1000L) ms)).UtcDateTime
 
     /// A timestamp off the wire, in seconds; the receive time when the sender
     /// left it out. Zero does not mean 1970, it means "not supplied" — and a

@@ -148,7 +148,17 @@ module Engine =
                 Response.json 200 """{"status":"ok"}"""
             else
                 match findRoute engine.Routes method path with
-                | None -> unknown deps http
+                | None ->
+                    // As Gin does: a path that only differs from a route by its
+                    // trailing slash is redirected there, 301 for GET and 307
+                    // otherwise, so the method and body are kept.
+                    let other = if path.EndsWith '/' then path.TrimEnd '/' else path + "/"
+
+                    if path <> "/" && (findRoute engine.Routes method other).IsSome then
+                        let location = other + http.Request.QueryString.Value
+                        Response.status (if method = "GET" then 301 else 307) |> Response.withHeader "Location" location
+                    else
+                        unknown deps http
                 | Some(route, pathParams) ->
                     match engine.Auth http deps.Store with
                     | Error refusal -> refusal

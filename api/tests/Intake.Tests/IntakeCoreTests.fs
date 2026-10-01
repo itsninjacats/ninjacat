@@ -114,8 +114,32 @@ let ``routes match literals, parameters and a trailing wildcard`` () =
         List.ofSeq seen
     )
 
-    Assert.Equal(404, statusOf Auth.none routes "GET" "/v2/items/" [])
     Assert.Equal(404, statusOf Auth.none routes "GET" "/v2/items/1/2" [])
+
+[<Fact>]
+let ``a path one trailing slash away from a route is redirected to it`` () =
+    let engine = Engine.create Auth.standard [ [ Route.get "/v2/" ok; Route.post "/upload" ok ] ]
+
+    let respond method target =
+        Engine.respond (deps (CapturingSink())) engine (request method "example.com" target []) [||]
+
+    let toSlash = respond "GET" "/v2?x=1"
+    Assert.Equal(301, toSlash.Status)
+    Assert.Equal<(string * string) list>([ "Location", "/v2/?x=1" ], toSlash.Headers)
+
+    // Not GET: 307, so the client repeats the method and the body.
+    let fromSlash = respond "POST" "/upload/"
+    Assert.Equal(307, fromSlash.Status)
+    Assert.Equal<(string * string) list>([ "Location", "/upload" ], fromSlash.Headers)
+
+    Assert.Equal(404, (respond "GET" "/v3").Status)
+
+[<Fact>]
+let ``a timestamp beyond year 9999 is kept at the limit, not an error`` () =
+    Assert.Equal(9999, (Time.fromUnixSeconds 999_999_999_999_999L).Year)
+    Assert.Equal(9999, (Time.fromUnixMillis System.Int64.MaxValue).Year)
+    Assert.Equal(1, (Time.fromUnixSeconds System.Int64.MinValue).Year)
+    Assert.Equal(System.DateTime(2026, 9, 23, 16, 10, 38, System.DateTimeKind.Utc), Time.fromUnixSeconds 1790179838L)
 
 [<Fact>]
 let ``a handler that throws is a 500, not a crash`` () =
