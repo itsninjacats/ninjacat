@@ -53,19 +53,50 @@ module Text =
 
 module Time =
     let private rfc3339 =
-        Regex(@"^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:\d{2})$", RegexOptions.Compiled)
+        Regex(@"^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:[.,](\d+))?(?:Z|([+-])(\d{2}):(\d{2}))$", RegexOptions.Compiled)
 
-    /// An RFC 3339 timestamp as UTC, or None. As strict as Go's time.RFC3339:
-    /// a 'T', seconds, and a zone are all required; a fraction is optional.
+    /// An RFC 3339 timestamp as UTC, or None. It accepts what Go's
+    /// time.Parse(time.RFC3339) accepts, since that is what decided which
+    /// timestamps were stored so far: a 'T', seconds and a zone are required,
+    /// a fraction is optional (after '.' or ','), any offset up to 23:59.
+    /// Digits past 100 ns are dropped, not rounded.
     let tryRfc3339 (text: string) : DateTime option =
         let m = rfc3339.Match text
 
         if not m.Success then
             None
         else
-            match DateTimeOffset.TryParse(text, Globalization.CultureInfo.InvariantCulture, Globalization.DateTimeStyles.None) with
-            | true, parsed -> Some parsed.UtcDateTime
-            | false, _ -> None
+            let number (group: int) = int m.Groups[group].Value
+            let year, month, day = number 1, number 2, number 3
+            let hour, minute, second = number 4, number 5, number 6
+            let offsetHours, offsetMinutes = (if m.Groups[9].Success then number 9 else 0), (if m.Groups[10].Success then number 10 else 0)
+
+            let valid =
+                year >= 1
+                && month >= 1
+                && month <= 12
+                && day >= 1
+                && day <= DateTime.DaysInMonth(year, month)
+                && hour < 24
+                && minute < 60
+                && second < 60
+                && offsetHours < 24
+                && offsetMinutes < 60
+
+            if not valid then
+                None
+            else
+                let fraction =
+                    if m.Groups[7].Success then
+                        int64 (m.Groups[7].Value.PadRight(7, '0').Substring(0, 7))
+                    else
+                        0L
+
+                let offset = TimeSpan(offsetHours, offsetMinutes, 0).Ticks * (if m.Groups[8].Value = "-" then -1L else 1L)
+                let local = DateTime(year, month, day, hour, minute, second, DateTimeKind.Utc).Ticks + fraction
+                // A time whose UTC form falls outside years 1 to 9999 is kept at the limit.
+                let utc = max DateTime.MinValue.Ticks (min DateTime.MaxValue.Ticks (local - offset))
+                Some(DateTime(utc, DateTimeKind.Utc))
 
     let private maxSeconds = DateTimeOffset.MaxValue.ToUnixTimeSeconds()
     let private minSeconds = DateTimeOffset.MinValue.ToUnixTimeSeconds()
@@ -126,6 +157,8 @@ module Json =
         match tryParse body with
         | Error e -> Error e
         | Ok root when root.ValueKind = JsonValueKind.Array -> Ok(List.ofSeq (root.EnumerateArray()))
+        // `null` is no items, not one empty item.
+        | Ok root when root.ValueKind = JsonValueKind.Null -> Ok []
         | Ok root -> Ok [ root ]
 
     /// The object's property names, sorted and comma-separated, for a log

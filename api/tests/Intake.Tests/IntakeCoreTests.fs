@@ -242,3 +242,32 @@ let ``tags are a multiset: a repeated key keeps every value, in order`` () =
 let ``labels are pairs split at the first colon`` () =
     Assert.Equal<Map<string, string>>(Map [ "app", "web"; "note", "a:b" ], Tags.toMap [ "app:web"; "note:a:b" ])
     Assert.Equal<Map<string, string>>(Map.empty, Tags.toMap [])
+
+[<Fact>]
+let ``RFC 3339 is read as Go reads it`` () =
+    let utc (y: int) (mo: int) (d: int) (h: int) (mi: int) (s: int) = System.DateTime(y, mo, d, h, mi, s, System.DateTimeKind.Utc)
+    Assert.Equal(Some(utc 2026 9 21 9 30 0), Time.tryRfc3339 "2026-09-21T09:30:00Z")
+    Assert.Equal(Some(utc 2026 9 21 7 30 0), Time.tryRfc3339 "2026-09-21T09:30:00+02:00")
+    Assert.Equal(Some((utc 2026 9 21 9 30 0).AddMilliseconds 500.0), Time.tryRfc3339 "2026-09-21T09:30:00.5Z")
+    Assert.Equal(Some((utc 2026 9 21 9 30 0).AddMilliseconds 500.0), Time.tryRfc3339 "2026-09-21T09:30:00,5Z")
+    // Past 100 ns the digits are dropped: this stays inside its second.
+    Assert.Equal(Some((utc 2026 9 21 9 30 0).AddTicks 9999999L), Time.tryRfc3339 "2026-09-21T09:30:00.99999996Z")
+    Assert.Equal(Some(utc 2026 9 20 19 0 0), Time.tryRfc3339 "2026-09-21T09:30:00+14:30")
+    Assert.Equal(9999, (Time.tryRfc3339 "9999-12-31T23:59:59.999999999Z").Value.Year)
+    Assert.Equal(9999, (Time.tryRfc3339 "9999-12-31T23:59:59-10:00").Value.Year)
+
+    for bad in [ ""; "2026-09-21"; "2026-09-21 09:30:00Z"; "2026-09-21T09:30:00"; "2026-09-21T09:30Z"; "2026-02-30T00:00:00Z"; "2026-09-21T24:00:00Z"; "2026-09-21t09:30:00z" ] do
+        Assert.Equal(None, Time.tryRfc3339 bad)
+
+[<Fact>]
+let ``a body of one object, an array, or null`` () =
+    let count (body: string) =
+        match Json.tryParseList (Encoding.UTF8.GetBytes body) with
+        | Ok items -> items.Length
+        | Error _ -> -1
+
+    Assert.Equal(1, count """{"a":1}""")
+    Assert.Equal(2, count """[{"a":1},{"a":2}]""")
+    Assert.Equal(0, count "null")
+    Assert.Equal(0, count "[]")
+    Assert.Equal(-1, count "not json")
