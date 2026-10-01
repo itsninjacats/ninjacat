@@ -1,0 +1,43 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.667807292Z",
+ "request": {
+  "body_b64": "",
+  "headers": {},
+  "host": "browser-intake.example.test",
+  "method": "POST",
+  "url": "/api/v2/rum"
+ },
+ "response": {
+  "body_b64": "eyJlcnJvcnMiOlsiaW52YWxpZCBBUEkga2V5Il19",
+  "body_json": {
+   "errors": [
+    "invalid API key"
+   ]
+  },
+  "headers": {
+   "Access-Control-Allow-Headers": [
+    "Content-Type, Content-Encoding, DD-API-KEY, DD-CLIENT-TOKEN, DD-EVP-ORIGIN, DD-EVP-ORIGIN-VERSION, DD-REQUEST-ID, DD-IDEMPOTENCY-KEY"
+   ],
+   "Access-Control-Allow-Methods": [
+    "POST, GET, OPTIONS"
+   ],
+   "Access-Control-Allow-Origin": [
+    "*"
+   ],
+   "Access-Control-Max-Age": [
+    "86400"
+   ],
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 403
+ },
+ "routes": [
+  "routeRUM"
+ ],
+ "sends": null,
+ "seq": 61,
+ "test": "anonymous",
+ "volatile": []
+}

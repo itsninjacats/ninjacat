@@ -1,0 +1,124 @@
+{
+ "recorded_at": "2026-10-01T15:21:19.005608495Z",
+ "request": {
+  "body_b64": "eyJob3N0IjoiZGIxIiwiZGF0YWJhc2VfaW5zdGFuY2UiOiJkYjEvb3JjbCIsImFnZW50X3ZlcnNpb24iOiI3LjYwLjAiLCJraW5kIjoiZGF0YWJhc2VfaW5zdGFuY2UifQ==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/dbmmetadata"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeDBM"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "*time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*float64",
+     "map[string][]string",
+     "[]string",
+     "[]string",
+     "string",
+     "*string",
+     "*string",
+     "*string",
+     "*string",
+     "*uint32"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:19.00560575Z",
+     "dbmmetadata",
+     null,
+     "db1",
+     "db1/orcl",
+     "",
+     "7.60.0",
+     "",
+     "",
+     "database_instance",
+     "",
+     "",
+     null,
+     {},
+     [],
+     [],
+     "{\"host\":\"db1\",\"database_instance\":\"db1/orcl\",\"agent_version\":\"7.60.0\",\"kind\":\"database_instance\"}",
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   ],
+   "insert": "INSERT INTO dbm_events\n\t\t\t(tenant_id, received_at, track, timestamp,\n\t\t\t host, database_instance, agent_hostname, agent_version,\n\t\t\t source, dbm_type, kind, dbms, dbms_version,\n\t\t\t collection_interval, tags,\n\t\t\t extra_keys, undecoded_keys,\n\t\t\t event,\n\t\t\t db_instance, query_signature, statement, plan_signature, plan_definition_steps)",
+   "rows": [
+    {
+     "AgentHostname": "",
+     "AgentVersion": "7.60.0",
+     "CollectionInterval": null,
+     "DBInstance": null,
+     "DBMS": "",
+     "DBMSVersion": "",
+     "DBMType": "",
+     "DatabaseInstance": "db1/orcl",
+     "Event": "{\"host\":\"db1\",\"database_instance\":\"db1/orcl\",\"agent_version\":\"7.60.0\",\"kind\":\"database_instance\"}",
+     "ExtraKeys": [],
+     "Host": "db1",
+     "Kind": "database_instance",
+     "PlanDefinitionSteps": null,
+     "PlanSignature": null,
+     "QuerySignature": null,
+     "ReceivedAt": "2026-10-01T15:21:19.00560575Z",
+     "Source": "",
+     "Statement": null,
+     "Tags": {},
+     "TenantID": "test",
+     "Timestamp": null,
+     "Track": "dbmmetadata",
+     "UndecodedKeys": []
+    }
+   ],
+   "to": "storage_dbm_events",
+   "type": "storage.WriteDBMEvents"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleDBMStoresEventsPerTrack/dbmmetadata",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

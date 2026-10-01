@@ -1,0 +1,134 @@
+{
+ "recorded_at": "2026-10-01T15:21:21.401877998Z",
+ "request": {
+  "body_b64": "eyJtZXNzYWdlIjoiZmlyc3QiLCJkYXRlIjoiMjAyNi0wOS0yM1QwODoxNTozMFoiLCJzdGF0dXMiOiJpbmZvIn0KeyJtZXNzYWdlIjoic2Vjb25kIiwiZGF0ZSI6IjIwMjYtMDktMjNUMDg6MTU6MzFaIn0K",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/logs?ddsource=browser&ddtags=env:prod&service=shop"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeLogs"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-09-23T08:15:30Z",
+     "",
+     "shop",
+     "browser",
+     "info",
+     "first",
+     {
+      "env": [
+       "prod"
+      ]
+     },
+     "{}",
+     "date_string"
+    ],
+    [
+     "test",
+     "2026-09-23T08:15:31Z",
+     "",
+     "shop",
+     "browser",
+     "",
+     "second",
+     {
+      "env": [
+       "prod"
+      ]
+     },
+     "{}",
+     "date_string"
+    ]
+   ],
+   "insert": "INSERT INTO logs\n\t\t\t(tenant_id, timestamp, host, service, source, status, message, tags,\n\t\t\t attributes, timestamp_source)",
+   "rows": [
+    {
+     "Attributes": "",
+     "Host": "",
+     "Message": "first",
+     "Service": "shop",
+     "Source": "browser",
+     "Status": "info",
+     "Tags": {
+      "env": [
+       "prod"
+      ]
+     },
+     "TenantID": "test",
+     "Timestamp": "2026-09-23T08:15:30Z",
+     "TimestampSource": "date_string"
+    },
+    {
+     "Attributes": "",
+     "Host": "",
+     "Message": "second",
+     "Service": "shop",
+     "Source": "browser",
+     "Status": "",
+     "Tags": {
+      "env": [
+       "prod"
+      ]
+     },
+     "TenantID": "test",
+     "Timestamp": "2026-09-23T08:15:31Z",
+     "TimestampSource": "date_string"
+    }
+   ],
+   "to": "storage_logs",
+   "type": "storage.WriteLogs"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleLogsAcceptsNDJSONWithQueryDefaults",
+ "volatile": []
+}

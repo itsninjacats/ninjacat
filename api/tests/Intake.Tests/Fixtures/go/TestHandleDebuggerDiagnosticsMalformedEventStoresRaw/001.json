@@ -1,0 +1,101 @@
+{
+ "recorded_at": "2026-10-01T15:21:28.466233768Z",
+ "request": {
+  "body_b64": "LS1kYzUwYjFhZmU3MjFmZDExZTkyN2FkZmE0Yzc5OGQyMTE4NmFmNTgwMjAyZTEyMTdlOWI2MjI0Y2RkZjENCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZXZlbnQiDQoNCnsibm90IjogImFuIGFycmF5In0NCi0tZGM1MGIxYWZlNzIxZmQxMWU5MjdhZGZhNGM3OThkMjExODZhZjU4MDIwMmUxMjE3ZTliNjIyNGNkZGYxLS0NCg==",
+  "headers": {
+   "Content-Type": [
+    "multipart/form-data; boundary=dc50b1afe721fd11e927adfa4c798d21186af580202e1217e9b6224cddf1"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/debugger"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeDebugger"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:28.466230562Z",
+     "debugger",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/api/v2/debugger",
+     {},
+     "multipart/form-data; boundary=dc50b1afe721fd11e927adfa4c798d21186af580202e1217e9b6224cddf1",
+     "",
+     {},
+     "--dc50b1afe721fd11e927adfa4c798d21186af580202e1217e9b6224cddf1\r\nContent-Disposition: form-data; name=\"event\"\r\n\r\n{\"not\": \"an array\"}\r\n--dc50b1afe721fd11e927adfa4c798d21186af580202e1217e9b6224cddf1--\r\n",
+     199,
+     "diagnostics variant: event part is not a JSON array"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "--dc50b1afe721fd11e927adfa4c798d21186af580202e1217e9b6224cddf1\r\nContent-Disposition: form-data; name=\"event\"\r\n\r\n{\"not\": \"an array\"}\r\n--dc50b1afe721fd11e927adfa4c798d21186af580202e1217e9b6224cddf1--\r\n",
+     "BodyBytes": 199,
+     "ContentEncoding": "",
+     "ContentType": "multipart/form-data; boundary=dc50b1afe721fd11e927adfa4c798d21186af580202e1217e9b6224cddf1",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "debugger",
+     "Method": "POST",
+     "Note": "diagnostics variant: event part is not a JSON array",
+     "Path": "/api/v2/debugger",
+     "Query": {},
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T15:21:28.466230562Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleDebuggerDiagnosticsMalformedEventStoresRaw",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/0/8",
+  "/sends/0/args/0/11",
+  "/sends/0/rows/0/Body",
+  "/sends/0/rows/0/ContentType",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

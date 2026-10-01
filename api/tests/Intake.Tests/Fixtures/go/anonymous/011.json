@@ -1,0 +1,38 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.665583098Z",
+ "request": {
+  "body_b64": "",
+  "headers": {
+   "Dd-Api-Key": [
+    "routes-test-key"
+   ]
+  },
+  "host": "7-60-0-flare.agent.example.test",
+  "method": "POST",
+  "url": "/support/flare/12345"
+ },
+ "response": {
+  "body_b64": "eyJjYXNlX2lkIjowLCJlcnJvciI6ImNvbnRlbnQtdHlwZSBpcyBub3QgbXVsdGlwYXJ0L2Zvcm0tZGF0YSIsInJlcXVlc3RfdXVpZCI6ImVkOTFjOTg3LTllMmItNGZjMS1hNmNmLWY3YmQ3ODFkOGYwMyJ9",
+  "body_json": {
+   "case_id": 0,
+   "error": "content-type is not multipart/form-data",
+   "request_uuid": "ed91c987-9e2b-4fc1-a6cf-f7bd781d8f03"
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeAPI",
+  "routeCIVisibilityAPI"
+ ],
+ "sends": null,
+ "seq": 11,
+ "test": "anonymous",
+ "volatile": [
+  "/response/body_json/request_uuid"
+ ]
+}

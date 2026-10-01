@@ -1,0 +1,349 @@
+syntax = "proto3";
+
+option go_package = "github.com/DataDog/agent-payload/v5/cws/dumpsv1";
+
+option java_multiple_files = false;
+option java_package = "com.dd.cws.adv1.pb";
+option java_outer_classname = "SecDumpProto";
+
+package datadog.cws.dumpsv1;
+
+message SecDump {
+    string host = 1;
+    string service = 2;
+    string source = 3;
+
+    Metadata metadata = 4;
+
+    repeated string tags = 5;
+    repeated ProcessActivityNode tree = 6;
+}
+
+message Metadata {
+    string agent_version = 1;
+    string agent_commit = 2;
+    string kernel_version = 3;
+    string linux_distribution = 4;
+    string arch = 13;
+
+    string name = 5;
+    string protobuf_version = 6;
+    bool differentiate_args = 7;
+    string comm = 8;
+    string container_id = 9;
+    uint64 start = 10;
+    uint64 end = 11;
+    uint64 size = 12;
+    string serialization = 14;
+    string cgroup_id = 15;
+    string cgroup_manager = 16;
+}
+
+message ProfileSelector {
+    string image_name = 1;
+    string image_tag = 2;
+}
+
+message ProfileContext {
+    uint64 first_seen = 1;
+    uint64 last_seen = 2;
+    map<uint32, event_type_state> event_type_state = 3;
+    repeated uint32 syscalls = 4;
+    repeated string tags = 5;
+}
+
+message ImageTagTimes {
+    uint64 first_seen = 1;
+    uint64 last_seen  = 2;
+}
+
+message NodeBase {
+    map<string, ImageTagTimes> seen = 1;
+}
+
+message SecurityProfile {
+    uint32 status = 1 [deprecated = true];
+    string version = 2 [deprecated = true];
+    Metadata metadata = 3;
+    repeated string tags = 4 [deprecated = true];
+    repeated uint32 syscalls = 5 [deprecated = true];
+    repeated ProcessActivityNode tree = 6;
+    map<string, ProfileContext> profile_contexts = 7;
+    ProfileSelector selector = 8;
+    bool disabled = 9;
+}
+
+message ProcessActivityNode {
+    ProcessInfo process = 1;
+    reserved 2;
+    GenerationType generation_type = 8;
+
+    repeated MatchedRule matched_rules = 9;
+    repeated ProcessActivityNode children = 3;
+    repeated FileActivityNode files = 4;
+    repeated DNSNode dns_names = 5;
+    repeated SocketNode sockets = 6;
+    repeated uint32 syscalls = 7 [deprecated = true];
+    repeated string image_tags = 10 [deprecated = true];
+    NodeBase node_base = 14;
+    repeated IMDSNode imds_events = 11;
+    repeated SyscallNode syscall_nodes = 12;
+    repeated NetworkDeviceNode network_devices = 13;
+    repeated CapabilityNode capability_nodes = 15;
+}
+
+message ProcessInfo {
+    uint32 pid = 1;
+    uint32 tid = 2;
+    uint32 ppid = 3;
+    uint32 cookie = 4 [deprecated = true];
+    bool is_thread = 5;
+
+    FileInfo file = 6;
+
+    string container_id = 7;
+
+    uint64 span_id = 8 [deprecated = true];
+    uint64 trace_id = 9 [deprecated = true];
+
+    string tty = 10;
+    string comm = 11;
+
+    uint64 fork_time = 12;
+    uint64 exit_time = 13;
+    uint64 exec_time = 14;
+
+    Credentials credentials = 15;
+
+    repeated string args = 16;
+    string argv0 = 17;
+    bool args_truncated = 18;
+    repeated string envs = 19;
+    bool envs_truncated = 20;
+
+    bool is_exec_child = 21;
+    uint64 cookie64 = 22;
+}
+
+message FileActivityNode {
+    repeated MatchedRule matched_rules = 9;
+    repeated string image_tags = 10 [deprecated = true];
+    NodeBase node_base = 11;
+
+    string name = 1;
+    bool is_pattern = 7;
+    FileInfo file = 2;
+    reserved 3;
+    GenerationType generation_type = 8;
+    uint64 first_seen = 4;
+
+    OpenNode open = 5;
+
+    repeated FileActivityNode children = 6;
+}
+
+message OpenNode {
+    sint64 retval = 1;
+    uint32 flags = 2;
+    uint32 mode = 3;
+}
+
+message DNSNode {
+    repeated MatchedRule matched_rules = 2;
+    repeated string image_tags = 3 [deprecated = true];
+    NodeBase node_base  = 4;
+
+    repeated DNSInfo requests = 1;
+}
+
+message DNSInfo {
+    string name = 1;
+    uint32 type = 2;
+    uint32 class = 3;
+    uint32 size = 4;
+    uint32 count = 5;
+}
+
+message SyscallNode {
+    repeated string image_tags = 1 [deprecated = true];
+    NodeBase node_base = 3;
+
+    int32 syscall = 2;
+}
+
+message CapabilityNode {
+    NodeBase node_base = 1;
+
+    uint64 capability = 2;
+    bool is_capable = 3;
+}
+
+message IMDSNode {
+    repeated MatchedRule matched_rules = 1;
+    repeated string image_tags = 2 [deprecated = true];
+    NodeBase node_base = 4;
+
+    IMDSEvent event = 3;
+}
+
+message IMDSEvent {
+    string type = 1;
+    string cloud_provider = 2;
+    string url = 3;
+    string host = 4;
+    string user_agent = 5;
+    string server = 6;
+    AWSIMDSEvent aws = 7;
+}
+
+message AWSIMDSEvent {
+    bool is_imds_v2 = 1;
+    AWSSecurityCredentials security_credentials = 2;
+}
+
+message AWSSecurityCredentials {
+    string code = 1;
+    string type = 2;
+    string access_key_id = 3;
+    string last_updated = 4;
+    string expiration_raw = 5;
+}
+
+message FileInfo {
+    uint32 uid = 1;
+    string user = 2;
+    uint32 gid = 3;
+    string group = 4;
+
+    uint32 mode = 5; // TODO: check conversion with uint16
+
+    uint64 ctime = 6;
+    uint64 mtime = 7;
+
+    uint32 mount_id = 8;
+    uint64 inode = 9;
+    bool in_upper_layer = 10;
+
+    string path = 11;
+    string basename = 12;
+    string filesystem = 13;
+
+    string package_name = 14;
+    string package_version = 15;
+    optional uint32 package_epoch = 19;
+    optional string package_release = 20;
+    string package_src_version = 16;
+    optional uint32 package_src_epoch = 21;
+    optional string package_src_release = 22;
+
+    repeated string hashes = 17;
+    HashState hash_state = 18;
+}
+
+enum HashState {
+    NO_HASH = 0;
+    DONE = 1;
+    FILE_NOT_FOUND = 2;
+    PATHNAME_RESOLUTION_ERROR = 3;
+    FILE_TOO_BIG = 4;
+    EVENT_TYPE_NOT_CONFIGURED = 5;
+    HASH_WAS_RATE_LIMITED = 6;
+    UNKNOWN_HASH_ERROR = 7;
+}
+
+message Credentials {
+    uint32 uid = 1;
+    uint32 gid = 2;
+    string user = 3;
+    string group = 4;
+
+    uint32 effective_uid = 5;
+    uint32 effective_gid = 6;
+    string effective_user = 7;
+    string effective_group = 8;
+
+    uint32 fs_uid = 9;
+    uint32 fs_gid = 10;
+    string fs_user = 11;
+    string fs_group = 12;
+
+    uint64 cap_effective = 13;
+    uint64 cap_permitted = 14;
+}
+
+message SocketNode {
+    string family = 1;
+    repeated BindNode bind = 2;
+}
+
+message BindNode {
+    repeated MatchedRule matched_rules = 3;
+    repeated string image_tags = 4 [deprecated = true];
+    NodeBase node_base =6;
+    
+
+    uint32 port = 1;
+    string ip = 2;
+    uint32 protocol = 5;
+}
+
+message NetworkDeviceNode {
+    repeated MatchedRule matched_rules = 1;
+
+    uint32 netns = 2;
+    uint32 ifindex = 3;
+    string ifname = 4;
+
+    repeated FlowNode flow_nodes = 5;
+}
+
+message FlowNode {
+    repeated string image_tags = 1 [deprecated = true];
+    NodeBase node_base = 8;
+    
+
+    IPPortContext source = 2;
+    IPPortContext destination = 3;
+    uint32 l3_protocol = 4;
+    uint32 l4_protocol = 5;
+    NetworkStats ingress = 6;
+    NetworkStats egress = 7;
+}
+
+message IPPortContext {
+    string ip = 1;
+    uint32 port = 2;
+}
+
+message NetworkStats {
+    uint64 data_size = 1;
+    uint64 packet_count = 2;
+}
+
+enum GenerationType {
+    UNKNOWN = 0;
+    RUNTIME = 1;
+    SNAPSHOT = 2;
+}
+
+message MatchedRule {
+    string rule_id = 1;
+    string rule_version = 2;
+    string policy_name = 3;
+    string policy_version = 4;
+    map<string, string> rule_tags = 5;
+}
+
+enum event_profile_state {
+    NO_PROFILE = 0;
+    PROFILE_AT_MAX_SIZE = 1;
+    UNSTABLE_PROFILE = 2;
+    STABLE_PROFILE = 3;
+    AUTO_LEARNING = 4;
+    WORKLOAD_WARMUP = 5;
+}
+
+message event_type_state {
+    uint64 last_anomaly_nano = 1;
+    event_profile_state event_profile_state = 2;
+}

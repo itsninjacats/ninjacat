@@ -1,0 +1,6 @@
+{
+  "TestHandleLogsKeepsAnUndecodableBodyRaw/001": {
+    "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
+    "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  }
+}

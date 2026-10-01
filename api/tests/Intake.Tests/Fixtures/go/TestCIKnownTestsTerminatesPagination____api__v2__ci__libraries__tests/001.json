@@ -1,0 +1,119 @@
+{
+ "recorded_at": "2026-10-01T15:21:18.997494727Z",
+ "request": {
+  "body_b64": "eyJkYXRhIjp7ImlkIjoia3QtMSIsInR5cGUiOiJjaV9hcHBfbGlicmFyaWVzX3Rlc3RzX3JlcXVlc3QiLAoJCQkJImF0dHJpYnV0ZXMiOnsic2VydmljZSI6Im15LXNlcnZpY2UiLCJlbnYiOiJjaSIsInJlcG9zaXRvcnlfdXJsIjoiaHR0cHM6Ly9naXQveCIsCgkJCQkiY29uZmlndXJhdGlvbnMiOnt9LCJwYWdlX2luZm8iOnsicGFnZV9zdGF0ZSI6ImN1cnNvci0xIn19fX0=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/ci/libraries/tests"
+ },
+ "response": {
+  "body_b64": "eyJkYXRhIjp7ImlkIjoia3QtMSIsInR5cGUiOiJjaV9hcHBfbGlicmFyaWVzX3Rlc3RzIiwiYXR0cmlidXRlcyI6eyJ0ZXN0cyI6e30sInBhZ2VfaW5mbyI6eyJjdXJzb3IiOiIiLCJzaXplIjowLCJoYXNfbmV4dCI6ZmFsc2V9fX19",
+  "body_json": {
+   "data": {
+    "attributes": {
+     "page_info": {
+      "cursor": "",
+      "has_next": false,
+      "size": 0
+     },
+     "tests": {}
+    },
+    "id": "kt-1",
+    "type": "ci_app_libraries_tests"
+   }
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeCIVisibilityAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:18.997477145Z",
+     "known_tests",
+     "kt-1",
+     "ci_app_libraries_tests_request",
+     "my-service",
+     "ci",
+     "https://git/x",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "cursor-1",
+     "{}",
+     "{\"data\":{\"id\":\"kt-1\",\"type\":\"ci_app_libraries_tests_request\",\n\t\t\t\t\"attributes\":{\"service\":\"my-service\",\"env\":\"ci\",\"repository_url\":\"https://git/x\",\n\t\t\t\t\"configurations\":{},\"page_info\":{\"page_state\":\"cursor-1\"}}}}",
+     "{\"data\":{\"id\":\"kt-1\",\"type\":\"ci_app_libraries_tests\",\"attributes\":{\"tests\":{},\"page_info\":{\"cursor\":\"\",\"size\":0,\"has_next\":false}}}}"
+    ]
+   ],
+   "insert": "INSERT INTO ci_settings_requests\n\t\t\t(tenant_id, received_at, endpoint, request_id, request_type,\n\t\t\t service, env, repository_url, branch, sha, test_level,\n\t\t\t module, commit_message, page_state, configurations,\n\t\t\t request_body, response_body)",
+   "rows": [
+    {
+     "Branch": "",
+     "CommitMessage": "",
+     "Configurations": "{}",
+     "Endpoint": "known_tests",
+     "Env": "ci",
+     "Module": "",
+     "PageState": "cursor-1",
+     "ReceivedAt": "2026-10-01T15:21:18.997477145Z",
+     "RepositoryURL": "https://git/x",
+     "RequestBody": "{\"data\":{\"id\":\"kt-1\",\"type\":\"ci_app_libraries_tests_request\",\n\t\t\t\t\"attributes\":{\"service\":\"my-service\",\"env\":\"ci\",\"repository_url\":\"https://git/x\",\n\t\t\t\t\"configurations\":{},\"page_info\":{\"page_state\":\"cursor-1\"}}}}",
+     "RequestID": "kt-1",
+     "RequestType": "ci_app_libraries_tests_request",
+     "ResponseBody": "{\"data\":{\"id\":\"kt-1\",\"type\":\"ci_app_libraries_tests\",\"attributes\":{\"tests\":{},\"page_info\":{\"cursor\":\"\",\"size\":0,\"has_next\":false}}}}",
+     "SHA": "",
+     "Service": "my-service",
+     "TenantID": "test",
+     "TestLevel": ""
+    }
+   ],
+   "to": "storage_ci_settings_requests",
+   "type": "storage.WriteCISettingsRequests"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCIKnownTestsTerminatesPagination//api/v2/ci/libraries/tests",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

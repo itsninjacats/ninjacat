@@ -1,0 +1,185 @@
+{
+ "recorded_at": "2026-10-01T15:21:19.007425862Z",
+ "request": {
+  "body_b64": "W3siaG9zdCI6ImRiMSIsImRhdGFiYXNlX2luc3RhbmNlIjoiZGIxL29yY2wifSwgbnVsbF0=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/dbmactivity"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeDBM"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:19.007422275Z",
+     "dbm",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/api/v2/dbmactivity",
+     {},
+     "application/json",
+     "",
+     {},
+     "null",
+     4,
+     "[dbmactivity] event 1: not an object: event is null, not a JSON object"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "null",
+     "BodyBytes": 4,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "dbm",
+     "Method": "POST",
+     "Note": "[dbmactivity] event 1: not an object: event is null, not a JSON object",
+     "Path": "/api/v2/dbmactivity",
+     "Query": {},
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T15:21:19.007422275Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "*time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*float64",
+     "map[string][]string",
+     "[]string",
+     "[]string",
+     "string",
+     "*string",
+     "*string",
+     "*string",
+     "*string",
+     "*uint32"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:19.007423137Z",
+     "dbmactivity",
+     null,
+     "db1",
+     "db1/orcl",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     null,
+     {},
+     [],
+     [],
+     "{\"host\":\"db1\",\"database_instance\":\"db1/orcl\"}",
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   ],
+   "insert": "INSERT INTO dbm_events\n\t\t\t(tenant_id, received_at, track, timestamp,\n\t\t\t host, database_instance, agent_hostname, agent_version,\n\t\t\t source, dbm_type, kind, dbms, dbms_version,\n\t\t\t collection_interval, tags,\n\t\t\t extra_keys, undecoded_keys,\n\t\t\t event,\n\t\t\t db_instance, query_signature, statement, plan_signature, plan_definition_steps)",
+   "rows": [
+    {
+     "AgentHostname": "",
+     "AgentVersion": "",
+     "CollectionInterval": null,
+     "DBInstance": null,
+     "DBMS": "",
+     "DBMSVersion": "",
+     "DBMType": "",
+     "DatabaseInstance": "db1/orcl",
+     "Event": "{\"host\":\"db1\",\"database_instance\":\"db1/orcl\"}",
+     "ExtraKeys": [],
+     "Host": "db1",
+     "Kind": "",
+     "PlanDefinitionSteps": null,
+     "PlanSignature": null,
+     "QuerySignature": null,
+     "ReceivedAt": "2026-10-01T15:21:19.007423137Z",
+     "Source": "",
+     "Statement": null,
+     "Tags": {},
+     "TenantID": "test",
+     "Timestamp": null,
+     "Track": "dbmactivity",
+     "UndecodedKeys": []
+    }
+   ],
+   "to": "storage_dbm_events",
+   "type": "storage.WriteDBMEvents"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleDBMStoresRawOnDecodeError/a_literal_null_element_beside_one_good_one",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt",
+  "/sends/1/args/0/1",
+  "/sends/1/rows/0/ReceivedAt"
+ ]
+}

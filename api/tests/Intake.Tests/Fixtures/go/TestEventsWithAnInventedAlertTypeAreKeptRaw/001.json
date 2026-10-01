@@ -1,0 +1,116 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.033790189Z",
+ "request": {
+  "body_b64": "eyJ0aXRsZSI6ImRlcGxveSIsInRleHQiOiJ2MiBpcyBvdXQiLCJhbGVydF90eXBlIjoiY2F0YXN0cm9waGUifQ==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v1/events"
+ },
+ "response": {
+  "body_b64": "eyJldmVudCI6eyJhbGVydF90eXBlIjoiaW5mbyIsImRhdGVfaGFwcGVuZWQiOjE3OTA4NjgwNzQsImRldmljZV9uYW1lIjoiIiwiaG9zdCI6IiIsImlkIjo4NDgxNjMyNDU4MTQ2NDU2NDY5LCJpZF9zdHIiOiI4NDgxNjMyNDU4MTQ2NDU2NDY5IiwicHJpb3JpdHkiOiJub3JtYWwiLCJzb3VyY2VfdHlwZV9uYW1lIjoiIiwidGFncyI6bnVsbCwidGV4dCI6InYyIGlzIG91dCIsInRpdGxlIjoiZGVwbG95IiwidXJsIjoiIn0sInN0YXR1cyI6Im9rIn0=",
+  "body_json": {
+   "event": {
+    "alert_type": "info",
+    "date_happened": 1790868074,
+    "device_name": "",
+    "host": "",
+    "id": 8481632458146456469,
+    "id_str": "8481632458146456469",
+    "priority": "normal",
+    "source_type_name": "",
+    "tags": null,
+    "text": "v2 is out",
+    "title": "deploy",
+    "url": ""
+   },
+   "status": "ok"
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.03377995Z",
+     "events",
+     "unexpected_shape",
+     "POST",
+     "example.com",
+     "/api/v1/events",
+     {},
+     "application/json",
+     "",
+     {},
+     "{\"title\":\"deploy\",\"text\":\"v2 is out\",\"alert_type\":\"catastrophe\"}",
+     64,
+     "event #0 did not fit datadogV1.EventCreateRequest"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "{\"title\":\"deploy\",\"text\":\"v2 is out\",\"alert_type\":\"catastrophe\"}",
+     "BodyBytes": 64,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "events",
+     "Method": "POST",
+     "Note": "event #0 did not fit datadogV1.EventCreateRequest",
+     "Path": "/api/v1/events",
+     "Query": {},
+     "Reason": "unexpected_shape",
+     "ReceivedAt": "2026-10-01T15:21:14.03377995Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestEventsWithAnInventedAlertTypeAreKeptRaw",
+ "volatile": [
+  "/response/body_json/event/date_happened",
+  "/response/body_json/event/id",
+  "/response/body_json/event/id_str",
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

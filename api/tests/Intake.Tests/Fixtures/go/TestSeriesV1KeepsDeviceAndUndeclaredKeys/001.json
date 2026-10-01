@@ -1,0 +1,115 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.029258828Z",
+ "request": {
+  "body_b64": "eyJzZXJpZXMiOlt7CgkJIm1ldHJpYyI6InN5c3RlbS5kaXNrLnVzZWQiLCJob3N0IjoiaDEiLCJ0eXBlIjoiZ2F1Z2UiLAoJCSJwb2ludHMiOltbMTc5MDE1MTMzMCw0Ml1dLCJ0YWdzIjpbImVudjpwcm9kIl0sCgkJImRldmljZSI6Ii9kZXYvc2RhMSIsInNvdXJjZV90eXBlX25hbWUiOiJTeXN0ZW0iLCJ1bml0IjoiYnl0ZSIsCgkJImFuX2FnZW50X3dlX2hhdmVfbm90X3NlZW5feWV0Ijp7Im5lc3RlZCI6MX0KCX1dfQ==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v1/series"
+ },
+ "response": {
+  "body_b64": "eyJlcnJvcnMiOltdfQ==",
+  "body_json": {
+   "errors": []
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint32",
+     "float64",
+     "map[string][]string",
+     "uint32",
+     "uint32",
+     "uint32",
+     "map[string]string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-09-23T08:15:30Z",
+     "system.disk.used",
+     "h1",
+     "GAUGE",
+     "System",
+     "byte",
+     0,
+     42,
+     {
+      "env": [
+       "prod"
+      ]
+     },
+     0,
+     0,
+     0,
+     {
+      "device": "/dev/sda1"
+     },
+     {
+      "an_agent_we_have_not_seen_yet": "{\"nested\":1}"
+     }
+    ]
+   ],
+   "insert": "INSERT INTO metrics\n\t\t\t(tenant_id, timestamp, metric, host, metric_type, source_type, unit, interval, value, tags,\n\t\t\t origin_product, origin_category, origin_service, resources, extra)",
+   "rows": [
+    {
+     "Extra": {
+      "an_agent_we_have_not_seen_yet": "{\"nested\":1}"
+     },
+     "Host": "h1",
+     "Interval": 0,
+     "Metric": "system.disk.used",
+     "MetricType": "GAUGE",
+     "OriginCategory": 0,
+     "OriginProduct": 0,
+     "OriginService": 0,
+     "Resources": {
+      "device": "/dev/sda1"
+     },
+     "SourceType": "System",
+     "Tags": {
+      "env": [
+       "prod"
+      ]
+     },
+     "TenantID": "test",
+     "Timestamp": "2026-09-23T08:15:30Z",
+     "Unit": "byte",
+     "Value": 42
+    }
+   ],
+   "to": "storage_metrics",
+   "type": "storage.WriteMetrics"
+  }
+ ],
+ "seq": 1,
+ "test": "TestSeriesV1KeepsDeviceAndUndeclaredKeys",
+ "volatile": []
+}

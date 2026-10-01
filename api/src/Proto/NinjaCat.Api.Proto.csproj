@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Generated code only: the protobuf messages the Datadog Agent sends, built
+    from Datadog's own .proto files under protos/ (see protos/README.md).
+    C# because that is what protoc emits; no hand-written code belongs here.
+  -->
+  <PropertyGroup>
+    <RootNamespace>NinjaCat.Api.Proto</RootNamespace>
+    <AssemblyName>NinjaCat.Api.Proto</AssemblyName>
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS8981;CS0612;CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="protos/agent-payload/proto/**/*.proto"
+              ProtoRoot="protos/agent-payload"
+              AdditionalImportDirs="protos/agent-payload/proto/deps"
+              GrpcServices="None" />
+    <Protobuf Include="protos/datadog-agent/**/*.proto" ProtoRoot="protos/datadog-agent" GrpcServices="None" />
+    <Protobuf Include="protos/sketches-go/*.proto" ProtoRoot="protos/sketches-go" GrpcServices="None" />
+    <Protobuf Include="protos/pprof/*.proto" ProtoRoot="protos/pprof" GrpcServices="None" />
+  </ItemGroup>
+
+</Project>

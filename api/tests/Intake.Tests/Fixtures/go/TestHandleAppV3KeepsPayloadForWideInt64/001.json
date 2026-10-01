@@ -1,0 +1,163 @@
+{
+ "recorded_at": "2026-10-01T15:21:16.87662044Z",
+ "request": {
+  "body_b64": "GjsKDAtieXRlcy50b3RhbFIBEVoBAmIBAGoBAHIBAHoBAYIBBYDEn9UMigEIhoCAgICAgCC6AQEAwgEBAA==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/intake/metrics/v3/series"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeApp"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint32",
+     "float64",
+     "map[string][]string",
+     "uint32",
+     "uint32",
+     "uint32",
+     "map[string]string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2023-11-14T22:13:20Z",
+     "bytes.total",
+     "",
+     "COUNT",
+     "",
+     "",
+     0,
+     9007199254740996,
+     {},
+     0,
+     0,
+     0,
+     {},
+     {}
+    ]
+   ],
+   "insert": "INSERT INTO metrics\n\t\t\t(tenant_id, timestamp, metric, host, metric_type, source_type, unit, interval, value, tags,\n\t\t\t origin_product, origin_category, origin_service, resources, extra)",
+   "rows": [
+    {
+     "Extra": {},
+     "Host": "",
+     "Interval": 0,
+     "Metric": "bytes.total",
+     "MetricType": "COUNT",
+     "OriginCategory": 0,
+     "OriginProduct": 0,
+     "OriginService": 0,
+     "Resources": {},
+     "SourceType": "",
+     "Tags": {},
+     "TenantID": "test",
+     "Timestamp": "2023-11-14T22:13:20Z",
+     "Unit": "",
+     "Value": 9007199254740996
+    }
+   ],
+   "to": "storage_metrics",
+   "type": "storage.WriteMetrics"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:16.876618256Z",
+     "v3series",
+     "int64_precision",
+     "POST",
+     "example.com",
+     "/api/intake/metrics/v3/series",
+     {},
+     "application/json",
+     "",
+     {},
+     {
+      "$b64": "GjsKDAtieXRlcy50b3RhbFIBEVoBAmIBAGoBAHIBAHoBAYIBBYDEn9UMigEIhoCAgICAgCC6AQEAwgEBAA=="
+     },
+     61,
+     "1 sint64 values beyond 2^53 widened to Float64"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": {
+      "$b64": "GjsKDAtieXRlcy50b3RhbFIBEVoBAmIBAGoBAHIBAHoBAYIBBYDEn9UMigEIhoCAgICAgCC6AQEAwgEBAA=="
+     },
+     "BodyBytes": 61,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "v3series",
+     "Method": "POST",
+     "Note": "1 sint64 values beyond 2^53 widened to Float64",
+     "Path": "/api/intake/metrics/v3/series",
+     "Query": {},
+     "Reason": "int64_precision",
+     "ReceivedAt": "2026-10-01T15:21:16.876618256Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleAppV3KeepsPayloadForWideInt64",
+ "volatile": [
+  "/sends/1/args/0/1",
+  "/sends/1/rows/0/ReceivedAt"
+ ]
+}

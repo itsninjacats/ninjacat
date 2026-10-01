@@ -1,0 +1,119 @@
+{
+ "recorded_at": "2026-10-01T15:21:28.46175238Z",
+ "request": {
+  "body_b64": "AwA1AAcAAAAAAAAAAAAAAAoGaG9zdC1h",
+  "headers": {
+   "Content-Type": [
+    "application/x-protobuf"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ],
+   "X-Dd-Containercount": [
+    "31"
+   ],
+   "X-Dd-Hostname": [
+    "ip-10-0-1-7"
+   ],
+   "X-Dd-Processagentversion": [
+    "7.58.2"
+   ],
+   "X-Dd-Request-Id": [
+    "b0a1f2c3-0000-4000-8000-000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v1/collector"
+ },
+ "response": {
+  "body_b64": "AwAXAAAAAAAAAAAAAAAAAAoCIBcaAhAK",
+  "headers": {
+   "Content-Length": [
+    "24"
+   ],
+   "Content-Type": [
+    "application/x-protobuf"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeProcess"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:28.461750386Z",
+     "process",
+     "unexpected_shape",
+     "POST",
+     "example.com",
+     "/api/v1/collector",
+     {},
+     "application/x-protobuf",
+     "",
+     {
+      "X-Dd-Hostname": "ip-10-0-1-7",
+      "X-Dd-Processagentversion": "7.58.2",
+      "X-Dd-Request-Id": "b0a1f2c3-0000-4000-8000-000000000001"
+     },
+     "\u0003\u00005\u0000\u0007\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\n\u0006host-a",
+     24,
+     "/api/v1/collector decoded to *process.CollectorProcDiscovery (frame type 53)"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "\u0003\u00005\u0000\u0007\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\n\u0006host-a",
+     "BodyBytes": 24,
+     "ContentEncoding": "",
+     "ContentType": "application/x-protobuf",
+     "Headers": {
+      "X-Dd-Hostname": "ip-10-0-1-7",
+      "X-Dd-Processagentversion": "7.58.2",
+      "X-Dd-Request-Id": "b0a1f2c3-0000-4000-8000-000000000001"
+     },
+     "Host": "example.com",
+     "Intake": "process",
+     "Method": "POST",
+     "Note": "/api/v1/collector decoded to *process.CollectorProcDiscovery (frame type 53)",
+     "Path": "/api/v1/collector",
+     "Query": {},
+     "Reason": "unexpected_shape",
+     "ReceivedAt": "2026-10-01T15:21:28.461750386Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestProcessUnexpectedTypeOnRouteGoesToRawPayloads",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

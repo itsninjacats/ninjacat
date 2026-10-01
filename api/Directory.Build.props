@@ -15,7 +15,7 @@
          reference ends up unresolved in some projects; pin it once instead. -->
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
   </PropertyGroup>
-  <ItemGroup>
+  <ItemGroup Condition="'$(MSBuildProjectExtension)' == '.fsproj'">
     <PackageReference Include="FSharp.Core" />
   </ItemGroup>
 </Project>

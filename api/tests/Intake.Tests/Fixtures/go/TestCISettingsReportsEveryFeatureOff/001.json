@@ -1,0 +1,135 @@
+{
+ "recorded_at": "2026-10-01T15:21:18.997205847Z",
+ "request": {
+  "body_b64": "eyJkYXRhIjp7ImlkIjoicmVxLTEiLCJ0eXBlIjoiY2lfYXBwX3Rlc3Rfc2VydmljZV9saWJyYXJpZXNfc2V0dGluZ3MiLAoJCSJhdHRyaWJ1dGVzIjp7InNlcnZpY2UiOiJteS1zZXJ2aWNlIiwiZW52IjoiY2kiLAoJCSJyZXBvc2l0b3J5X3VybCI6Imh0dHBzOi8vZ2l0aHViLmNvbS9pdHNuaW5qYWNhdHMvbmluamFjYXQiLAoJCSJicmFuY2giOiJmZWF0L3dyaXRlLWxheWVyIiwic2hhIjoiMGY0YzJhMWIiLAoJCSJjb25maWd1cmF0aW9ucyI6eyJvcy5wbGF0Zm9ybSI6ImxpbnV4IiwicnVudGltZS5uYW1lIjoiZ28iLCJjdXN0b20iOnsidGVhbSI6ImJhY2tlbmQifX19fX0=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/libraries/tests/services/setting"
+ },
+ "response": {
+  "body_b64": "eyJkYXRhIjp7ImlkIjoicmVxLTEiLCJ0eXBlIjoiY2lfYXBwX3Rlc3Rfc2VydmljZV9saWJyYXJpZXNfc2V0dGluZ3MiLCJhdHRyaWJ1dGVzIjp7ImNvZGVfY292ZXJhZ2UiOmZhbHNlLCJjb3ZlcmFnZV9yZXBvcnRfdXBsb2FkX2VuYWJsZWQiOmZhbHNlLCJlYXJseV9mbGFrZV9kZXRlY3Rpb24iOnsiZW5hYmxlZCI6ZmFsc2UsInNsb3dfdGVzdF9yZXRyaWVzIjp7IjVzIjowLCIxMHMiOjAsIjMwcyI6MCwiNW0iOjB9LCJmYXVsdHlfc2Vzc2lvbl90aHJlc2hvbGQiOm51bGx9LCJmbGFreV90ZXN0X3JldHJpZXNfZW5hYmxlZCI6ZmFsc2UsIml0cl9lbmFibGVkIjpmYWxzZSwicmVxdWlyZV9naXQiOmZhbHNlLCJ0ZXN0c19za2lwcGluZyI6ZmFsc2UsImtub3duX3Rlc3RzX2VuYWJsZWQiOmZhbHNlLCJpbXBhY3RlZF90ZXN0c19lbmFibGVkIjpmYWxzZSwidGVzdF9tYW5hZ2VtZW50Ijp7ImVuYWJsZWQiOmZhbHNlLCJhdHRlbXB0X3RvX2ZpeF9yZXRyaWVzIjowfX19fQ==",
+  "body_json": {
+   "data": {
+    "attributes": {
+     "code_coverage": false,
+     "coverage_report_upload_enabled": false,
+     "early_flake_detection": {
+      "enabled": false,
+      "faulty_session_threshold": null,
+      "slow_test_retries": {
+       "10s": 0,
+       "30s": 0,
+       "5m": 0,
+       "5s": 0
+      }
+     },
+     "flaky_test_retries_enabled": false,
+     "impacted_tests_enabled": false,
+     "itr_enabled": false,
+     "known_tests_enabled": false,
+     "require_git": false,
+     "test_management": {
+      "attempt_to_fix_retries": 0,
+      "enabled": false
+     },
+     "tests_skipping": false
+    },
+    "id": "req-1",
+    "type": "ci_app_test_service_libraries_settings"
+   }
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeCIVisibilityAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:18.997171694Z",
+     "settings",
+     "req-1",
+     "ci_app_test_service_libraries_settings",
+     "my-service",
+     "ci",
+     "https://github.com/itsninjacats/ninjacat",
+     "feat/write-layer",
+     "0f4c2a1b",
+     "",
+     "",
+     "",
+     "",
+     "{\"os.platform\":\"linux\",\"runtime.name\":\"go\",\"custom\":{\"team\":\"backend\"}}",
+     "{\"data\":{\"id\":\"req-1\",\"type\":\"ci_app_test_service_libraries_settings\",\n\t\t\"attributes\":{\"service\":\"my-service\",\"env\":\"ci\",\n\t\t\"repository_url\":\"https://github.com/itsninjacats/ninjacat\",\n\t\t\"branch\":\"feat/write-layer\",\"sha\":\"0f4c2a1b\",\n\t\t\"configurations\":{\"os.platform\":\"linux\",\"runtime.name\":\"go\",\"custom\":{\"team\":\"backend\"}}}}}",
+     "{\"data\":{\"id\":\"req-1\",\"type\":\"ci_app_test_service_libraries_settings\",\"attributes\":{\"code_coverage\":false,\"coverage_report_upload_enabled\":false,\"early_flake_detection\":{\"enabled\":false,\"slow_test_retries\":{\"5s\":0,\"10s\":0,\"30s\":0,\"5m\":0},\"faulty_session_threshold\":null},\"flaky_test_retries_enabled\":false,\"itr_enabled\":false,\"require_git\":false,\"tests_skipping\":false,\"known_tests_enabled\":false,\"impacted_tests_enabled\":false,\"test_management\":{\"enabled\":false,\"attempt_to_fix_retries\":0}}}}"
+    ]
+   ],
+   "insert": "INSERT INTO ci_settings_requests\n\t\t\t(tenant_id, received_at, endpoint, request_id, request_type,\n\t\t\t service, env, repository_url, branch, sha, test_level,\n\t\t\t module, commit_message, page_state, configurations,\n\t\t\t request_body, response_body)",
+   "rows": [
+    {
+     "Branch": "feat/write-layer",
+     "CommitMessage": "",
+     "Configurations": "{\"os.platform\":\"linux\",\"runtime.name\":\"go\",\"custom\":{\"team\":\"backend\"}}",
+     "Endpoint": "settings",
+     "Env": "ci",
+     "Module": "",
+     "PageState": "",
+     "ReceivedAt": "2026-10-01T15:21:18.997171694Z",
+     "RepositoryURL": "https://github.com/itsninjacats/ninjacat",
+     "RequestBody": "{\"data\":{\"id\":\"req-1\",\"type\":\"ci_app_test_service_libraries_settings\",\n\t\t\"attributes\":{\"service\":\"my-service\",\"env\":\"ci\",\n\t\t\"repository_url\":\"https://github.com/itsninjacats/ninjacat\",\n\t\t\"branch\":\"feat/write-layer\",\"sha\":\"0f4c2a1b\",\n\t\t\"configurations\":{\"os.platform\":\"linux\",\"runtime.name\":\"go\",\"custom\":{\"team\":\"backend\"}}}}}",
+     "RequestID": "req-1",
+     "RequestType": "ci_app_test_service_libraries_settings",
+     "ResponseBody": "{\"data\":{\"id\":\"req-1\",\"type\":\"ci_app_test_service_libraries_settings\",\"attributes\":{\"code_coverage\":false,\"coverage_report_upload_enabled\":false,\"early_flake_detection\":{\"enabled\":false,\"slow_test_retries\":{\"5s\":0,\"10s\":0,\"30s\":0,\"5m\":0},\"faulty_session_threshold\":null},\"flaky_test_retries_enabled\":false,\"itr_enabled\":false,\"require_git\":false,\"tests_skipping\":false,\"known_tests_enabled\":false,\"impacted_tests_enabled\":false,\"test_management\":{\"enabled\":false,\"attempt_to_fix_retries\":0}}}}",
+     "SHA": "0f4c2a1b",
+     "Service": "my-service",
+     "TenantID": "test",
+     "TestLevel": ""
+    }
+   ],
+   "to": "storage_ci_settings_requests",
+   "type": "storage.WriteCISettingsRequests"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCISettingsReportsEveryFeatureOff",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

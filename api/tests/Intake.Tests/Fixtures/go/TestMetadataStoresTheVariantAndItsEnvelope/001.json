@@ -1,0 +1,91 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.03300674Z",
+ "request": {
+  "body_b64": "ewoJCSJob3N0bmFtZSI6ImgxIiwidGltZXN0YW1wIjoxNzkwMTUxMzMwLCJ1dWlkIjoiNGYxYSIsCgkJImNoZWNrX21ldGFkYXRhIjp7ImRvY2tlciI6W3sidmVyc2lvbi5yYXciOiIxLjIuMyIsImNvbmZpZy5oYXNoIjoiYWJjIn1dfSwKCQkiYV9zaWJsaW5nX2tleSI6eyJ4IjoxfQoJfQ==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v1/metadata"
+ },
+ "response": {
+  "body_b64": "eyJzdGF0dXMiOiJvayJ9",
+  "body_json": {
+   "status": "ok"
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "string",
+     "string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.033003544Z",
+     "check_metadata",
+     "h1",
+     "",
+     "",
+     "2026-09-23T08:15:30Z",
+     "4f1a",
+     "{\"docker\":[{\"version.raw\":\"1.2.3\",\"config.hash\":\"abc\"}]}",
+     {
+      "a_sibling_key": "{\"x\":1}"
+     }
+    ]
+   ],
+   "insert": "INSERT INTO agent_metadata\n\t\t\t(tenant_id, received_at, variant, hostname, cluster_name, cluster_id,\n\t\t\t timestamp, uuid, payload, envelope_extra)",
+   "rows": [
+    {
+     "ClusterID": "",
+     "ClusterName": "",
+     "EnvelopeExtra": {
+      "a_sibling_key": "{\"x\":1}"
+     },
+     "Hostname": "h1",
+     "Payload": "{\"docker\":[{\"version.raw\":\"1.2.3\",\"config.hash\":\"abc\"}]}",
+     "ReceivedAt": "2026-10-01T15:21:14.033003544Z",
+     "TenantID": "test",
+     "Timestamp": "2026-09-23T08:15:30Z",
+     "UUID": "4f1a",
+     "Variant": "check_metadata"
+    }
+   ],
+   "to": "storage_agent_metadata",
+   "type": "storage.WriteAgentMetadata"
+  }
+ ],
+ "seq": 1,
+ "test": "TestMetadataStoresTheVariantAndItsEnvelope",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

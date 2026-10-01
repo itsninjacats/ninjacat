@@ -1,0 +1,179 @@
+{
+ "recorded_at": "2026-10-01T15:21:18.996337042Z",
+ "request": {
+  "body_b64": "LS1hYTkzNmYyOWYzZDk5ODM2ZmViNGYzNDAzMTRjMWU5NzFiNjhjNDNmNDUyMWFlMGZkZTgxMGQwZmNiZTMNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZXZlbnQiOyBmaWxlbmFtZT0iZmlsZWV2ZW50Lmpzb24iDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL2pzb24NCg0KeyJkdW1teSI6IHRydWV9DQotLWFhOTM2ZjI5ZjNkOTk4MzZmZWI0ZjM0MDMxNGMxZTk3MWI2OGM0M2Y0NTIxYWUwZmRlODEwZDBmY2JlMw0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJjb3ZlcmFnZXgiOyBmaWxlbmFtZT0iZmlsZWNvdmVyYWdleCINCkNvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vanNvbg0KDQp7ImNvdmVyYWdlcyI6W3siZmlsZXMiOlt7ImJpdG1hcCI6IkFRSUQiLCJmaWxlbmFtZSI6ImludGFrZS9yb3V0ZXJfY2l2aXNpYmlsaXR5LmdvIn0seyJmaWxlbmFtZSI6ImludGFrZS9yYXcuZ28ifV0sInNwYW5faWQiOjIyMjIyMjIyMjIyMjIyMjIyMjIsInRlc3Rfc2Vzc2lvbl9pZCI6MTIzNDU2Nzg5LCJ0ZXN0X3N1aXRlX2lkIjoxMjMxMjMxMjN9LHsiZmlsZXMiOlt7ImZpbGVuYW1lIjoiYXBwcy9zdG9yYWdlL3Jvd3NfY2kuZ28ifV0sInRlc3Rfc2Vzc2lvbl9pZCI6MTIzNDU2Nzg5LCJ0ZXN0X3N1aXRlX2lkIjo5OTl9XSwidmVyc2lvbiI6Mn0NCi0tYWE5MzZmMjlmM2Q5OTgzNmZlYjRmMzQwMzE0YzFlOTcxYjY4YzQzZjQ1MjFhZTBmZGU4MTBkMGZjYmUzLS0NCg==",
+  "headers": {
+   "Content-Type": [
+    "multipart/form-data; boundary=aa936f29f3d99836feb4f340314c1e971b68c43f4521ae0fde810d0fcbe3"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/citestcov"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeCITestCov"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "int32",
+     "uint64",
+     "uint64",
+     "*uint64",
+     "[]string",
+     "[]string",
+     "string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "int32",
+     "uint64",
+     "uint64",
+     "*uint64",
+     "[]string",
+     "[]string",
+     "string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:18.996329007Z",
+     2,
+     123456789,
+     123123123,
+     2222222222222222222,
+     [
+      "intake/router_civisibility.go",
+      "intake/raw.go"
+     ],
+     [
+      "AQID",
+      ""
+     ],
+     "{\"files\":[{\"bitmap\":\"AQID\",\"filename\":\"intake/router_civisibility.go\"},{\"filename\":\"intake/raw.go\"}],\"span_id\":2222222222222222222,\"test_session_id\":123456789,\"test_suite_id\":123123123}",
+     "json",
+     "{\"dummy\": true}",
+     {},
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "test",
+     "2026-10-01T15:21:18.996329007Z",
+     2,
+     123456789,
+     999,
+     null,
+     [
+      "apps/storage/rows_ci.go"
+     ],
+     [
+      ""
+     ],
+     "{\"files\":[{\"filename\":\"apps/storage/rows_ci.go\"}],\"test_session_id\":123456789,\"test_suite_id\":999}",
+     "json",
+     "{\"dummy\": true}",
+     {},
+     "",
+     "",
+     "",
+     ""
+    ]
+   ],
+   "insert": "INSERT INTO ci_coverage\n\t\t\t(tenant_id, received_at, payload_version, session_id, suite_id, span_id,\n\t\t\t files_filename, files_bitmap, raw, raw_format, event, extra,\n\t\t\t evp_subdomain, container_id, agent_hostname, agent_version)",
+   "rows": [
+    {
+     "AgentHostname": "",
+     "AgentVersion": "",
+     "ContainerID": "",
+     "EVPSubdomain": "",
+     "Event": "{\"dummy\": true}",
+     "Extra": {},
+     "FilesBitmap": [
+      "AQID",
+      ""
+     ],
+     "FilesFilename": [
+      "intake/router_civisibility.go",
+      "intake/raw.go"
+     ],
+     "PayloadVersion": 2,
+     "Raw": "{\"files\":[{\"bitmap\":\"AQID\",\"filename\":\"intake/router_civisibility.go\"},{\"filename\":\"intake/raw.go\"}],\"span_id\":2222222222222222222,\"test_session_id\":123456789,\"test_suite_id\":123123123}",
+     "RawFormat": "json",
+     "ReceivedAt": "2026-10-01T15:21:18.996329007Z",
+     "SessionID": 123456789,
+     "SpanID": 2222222222222222222,
+     "SuiteID": 123123123,
+     "TenantID": "test"
+    },
+    {
+     "AgentHostname": "",
+     "AgentVersion": "",
+     "ContainerID": "",
+     "EVPSubdomain": "",
+     "Event": "{\"dummy\": true}",
+     "Extra": {},
+     "FilesBitmap": [
+      ""
+     ],
+     "FilesFilename": [
+      "apps/storage/rows_ci.go"
+     ],
+     "PayloadVersion": 2,
+     "Raw": "{\"files\":[{\"filename\":\"apps/storage/rows_ci.go\"}],\"test_session_id\":123456789,\"test_suite_id\":999}",
+     "RawFormat": "json",
+     "ReceivedAt": "2026-10-01T15:21:18.996329007Z",
+     "SessionID": 123456789,
+     "SpanID": null,
+     "SuiteID": 999,
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_ci_coverage",
+   "type": "storage.WriteCICoverage"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCITestCovFindsCoveragePartByContentType/json_variant",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/ReceivedAt",
+  "/sends/0/rows/1/ReceivedAt"
+ ]
+}

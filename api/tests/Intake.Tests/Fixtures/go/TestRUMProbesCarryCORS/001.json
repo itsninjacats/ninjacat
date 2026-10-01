@@ -1,0 +1,48 @@
+{
+ "recorded_at": "2026-10-01T15:21:30.830496273Z",
+ "request": {
+  "body_b64": "",
+  "headers": {
+   "Origin": [
+    "https://shop.example"
+   ]
+  },
+  "host": "example.com",
+  "method": "GET",
+  "url": "/ping"
+ },
+ "response": {
+  "body_b64": "eyJtZXNzYWdlIjoicG9uZyJ9",
+  "body_json": {
+   "message": "pong"
+  },
+  "headers": {
+   "Access-Control-Allow-Headers": [
+    "Content-Type, Content-Encoding, DD-API-KEY, DD-CLIENT-TOKEN, DD-EVP-ORIGIN, DD-EVP-ORIGIN-VERSION, DD-REQUEST-ID, DD-IDEMPOTENCY-KEY"
+   ],
+   "Access-Control-Allow-Methods": [
+    "POST, GET, OPTIONS"
+   ],
+   "Access-Control-Allow-Origin": [
+    "https://shop.example"
+   ],
+   "Access-Control-Max-Age": [
+    "86400"
+   ],
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ],
+   "Vary": [
+    "Origin"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeRUM"
+ ],
+ "sends": [],
+ "seq": 1,
+ "test": "TestRUMProbesCarryCORS",
+ "volatile": []
+}

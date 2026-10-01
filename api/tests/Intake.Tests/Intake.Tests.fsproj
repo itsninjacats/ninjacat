@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Golden/Capture.fs" />
+    <Compile Include="Golden/Encode.fs" />
+    <Compile Include="Golden/Compare.fs" />
+    <Compile Include="Golden/Replay.fs" />
+    <Compile Include="GoldenTests.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Fixtures/go/**/*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures/overrides.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Intake/Intake.fsproj" />
+    <ProjectReference Include="../../src/Storage/Storage.fsproj" />
+  </ItemGroup>
+</Project>

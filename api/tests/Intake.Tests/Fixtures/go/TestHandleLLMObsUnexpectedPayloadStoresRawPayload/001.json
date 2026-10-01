@@ -1,0 +1,97 @@
+{
+ "recorded_at": "2026-10-01T15:21:21.398519952Z",
+ "request": {
+  "body_b64": "eyJzcGFuIjp7Im5hbWUiOiJsbG0tY2FsbCJ9fQ==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/llmobs"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeLLMObs"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:21.398514472Z",
+     "llmobs",
+     "no_schema",
+     "POST",
+     "example.com",
+     "/api/v2/llmobs",
+     {},
+     "application/json",
+     "",
+     {},
+     "{\"span\":{\"name\":\"llm-call\"}}",
+     28,
+     "unexpected payload — the agent only probes this host; DD-EVP-ORIGIN=\"\" DD-EVP-ORIGIN-VERSION=\"\" Content-Type=\"application/json\""
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "{\"span\":{\"name\":\"llm-call\"}}",
+     "BodyBytes": 28,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "llmobs",
+     "Method": "POST",
+     "Note": "unexpected payload — the agent only probes this host; DD-EVP-ORIGIN=\"\" DD-EVP-ORIGIN-VERSION=\"\" Content-Type=\"application/json\"",
+     "Path": "/api/v2/llmobs",
+     "Query": {},
+     "Reason": "no_schema",
+     "ReceivedAt": "2026-10-01T15:21:21.398514472Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleLLMObsUnexpectedPayloadStoresRawPayload",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

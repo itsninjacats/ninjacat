@@ -1,0 +1,32 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.66647712Z",
+ "request": {
+  "body_b64": "",
+  "headers": {
+   "Dd-Api-Key": [
+    "routes-test-key"
+   ]
+  },
+  "host": "api.example.test",
+  "method": "POST",
+  "url": "/api/v2/ci/pipeline/metrics"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeAPI",
+  "routeCIVisibilityAPI"
+ ],
+ "sends": null,
+ "seq": 34,
+ "test": "anonymous",
+ "volatile": []
+}

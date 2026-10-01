@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>NinjaCat.Api.Intake</RootNamespace>
+    <AssemblyName>NinjaCat.Api.Intake</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="ApiKeys.fs" />
+    <Compile Include="Http.fs" />
+    <Compile Include="Common.fs" />
+    <Compile Include="Msgpack.fs" />
+    <Compile Include="Routers/Flare.fs" />
+    <Compile Include="Engine.fs" />
+    <Compile Include="Routers/Logs.fs" />
+    <Compile Include="Routers/Api.fs" />
+    <Compile Include="Routers/App.fs" />
+    <Compile Include="Routers/Config.fs" />
+    <Compile Include="Routers/Install.fs" />
+    <Compile Include="Routers/Containers.fs" />
+    <Compile Include="Routers/Kubeops.fs" />
+    <Compile Include="Routers/Dbm.fs" />
+    <Compile Include="Routers/Ndm.fs" />
+    <Compile Include="Routers/Misc.fs" />
+    <Compile Include="Routers/Profiling.fs" />
+    <Compile Include="Routers/Security.fs" />
+    <Compile Include="Routers/Evp.fs" />
+    <Compile Include="Routers/CiVisibility.fs" />
+    <Compile Include="Routers/CiWebhook.fs" />
+    <Compile Include="Routers/Trace.fs" />
+    <Compile Include="Routers/Process.fs" />
+    <Compile Include="Routers/Rum.fs" />
+    <Compile Include="Routes.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="ZstdSharp.Port" />
+    <PackageReference Include="Google.Protobuf" />
+    <ProjectReference Include="../Storage/Storage.fsproj" />
+    <ProjectReference Include="../Proto/NinjaCat.Api.Proto.csproj" />
+  </ItemGroup>
+
+</Project>

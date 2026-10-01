@@ -1,0 +1,87 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.033181241Z",
+ "request": {
+  "body_b64": "eyJob3N0bmFtZSI6ImgxIiwiaGFfYWdlbnRfbWV0YWRhdGEiOnsiZW5hYmxlZCI6dHJ1ZX19",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v1/metadata"
+ },
+ "response": {
+  "body_b64": "eyJzdGF0dXMiOiJvayJ9",
+  "body_json": {
+   "status": "ok"
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "string",
+     "string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.033178095Z",
+     "ha_agent_metadata",
+     "h1",
+     "",
+     "",
+     null,
+     "",
+     "{\"enabled\":true}",
+     {}
+    ]
+   ],
+   "insert": "INSERT INTO agent_metadata\n\t\t\t(tenant_id, received_at, variant, hostname, cluster_name, cluster_id,\n\t\t\t timestamp, uuid, payload, envelope_extra)",
+   "rows": [
+    {
+     "ClusterID": "",
+     "ClusterName": "",
+     "EnvelopeExtra": {},
+     "Hostname": "h1",
+     "Payload": "{\"enabled\":true}",
+     "ReceivedAt": "2026-10-01T15:21:14.033178095Z",
+     "TenantID": "test",
+     "Timestamp": null,
+     "UUID": "",
+     "Variant": "ha_agent_metadata"
+    }
+   ],
+   "to": "storage_agent_metadata",
+   "type": "storage.WriteAgentMetadata"
+  }
+ ],
+ "seq": 1,
+ "test": "TestMetadataWithoutTimestampStoresNull",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

@@ -1,0 +1,85 @@
+{
+ "recorded_at": "2026-10-01T15:21:19.008637577Z",
+ "request": {
+  "body_b64": "W3sid2hhdGV2ZXJfdGhlX2ludGVncmF0aW9uX3NlbnQiOiA0MiwgIm5lc3RlZCI6IHsiYSI6IDF9fV0=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ],
+   "Dd-Evp-Origin": [
+    "python-integration"
+   ],
+   "Dd-Evp-Origin-Version": [
+    "1.2.3"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/query-actions"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeDataObs"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "[]string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:19.008620085Z",
+     "{\"nested\":{\"a\":1},\"whatever_the_integration_sent\":42}",
+     [
+      "nested",
+      "whatever_the_integration_sent"
+     ],
+     "python-integration",
+     "1.2.3"
+    ]
+   ],
+   "insert": "INSERT INTO query_action_results\n\t\t\t(tenant_id, received_at, result, keys, dd_evp_origin,\n\t\t\t dd_evp_origin_version)",
+   "rows": [
+    {
+     "DDEVPOrigin": "python-integration",
+     "DDEVPOriginVersion": "1.2.3",
+     "Keys": [
+      "nested",
+      "whatever_the_integration_sent"
+     ],
+     "ReceivedAt": "2026-10-01T15:21:19.008620085Z",
+     "Result": "{\"nested\":{\"a\":1},\"whatever_the_integration_sent\":42}",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_query_action_results",
+   "type": "storage.WriteQueryActionResults"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleQueryActionsStoresResultVerbatim",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

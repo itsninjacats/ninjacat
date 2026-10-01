@@ -1,0 +1,200 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.032570289Z",
+ "request": {
+  "body_b64": "eyJhX2tleV9mcm9tXzdfNjAiOiJzdXJwcmlzZSIsImFnZW50LWZsYXZvciI6ImFnZW50IiwiYWdlbnRWZXJzaW9uIjoiNy41OC4yIiwiYXBpS2V5IjoiZGVhZGJlZWYiLCJjb250YWluZXItbWV0YSI6eyJjbHVzdGVyX25hbWUiOiJwcm9kIn0sImZpcHNfbW9kZSI6ZmFsc2UsImZpcHNfcHJveHlfZW5hYmxlZCI6dHJ1ZSwiZ29oYWkiOiJ7XCJjcHVcIjp7XCJjcHVfY29yZXNcIjpcIjJcIn0sXCJtZW1vcnlcIjp7XCJ0b3RhbFwiOlwiOEdiXCJ9LFwicGxhdGZvcm1cIjp7XCJvc1wiOlwibGludXhcIn0sXCJmaWxlc3lzdGVtXCI6W3tcIm5hbWVcIjpcIi9kZXYvc2RhMVwifV0sXCJuZXR3b3JrXCI6e1wiaXBhZGRyZXNzXCI6XCIxMC4wLjAuNFwifSxcImdwdVwiOntcInZlbmRvclwiOlwibnZpZGlhXCJ9fSIsImhvc3QtdGFncyI6eyJnb29nbGVfdGFncyI6WyJ6b25lOmV1LXdlc3QxLWIiXSwic3lzdGVtIjpbImVudjpwcm9kIl19LCJpbnN0YWxsLW1ldGhvZCI6eyJ0b29sIjoiaGVsbSJ9LCJpbnRlcm5hbEhvc3RuYW1lIjoiaDEiLCJsb2dzIjp7InRyYW5zcG9ydCI6IkhUVFAifSwibWV0YSI6eyJzb2NrZXQtaG9zdG5hbWUiOiJoMSJ9LCJuZXR3b3JrIjp7ImlwYWRkcmVzcyI6IjEwLjAuMC40In0sIm9zIjoibGludXgiLCJvdGxwIjp7ImVuYWJsZWQiOnRydWV9LCJwcm94eS1pbmZvIjp7Im5vLXByb3h5LW5vbmV4YWN0LW1hdGNoIjpmYWxzZX0sInB5dGhvbiI6IjMuMTIuNiIsInJlc291cmNlcyI6eyJwcm9jZXNzZXMiOnsic25hcHMiOltdfX0sInN5c3RlbVN0YXRzIjp7ImNwdUNvcmVzIjoyLCJtYWNoaW5lIjoieDg2XzY0In0sInV1aWQiOiI0ZjFhIn0=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/intake/"
+ },
+ "response": {
+  "body_b64": "eyJzdGF0dXMiOiJvayJ9",
+  "body_json": {
+   "status": "ok"
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "map[string]string",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "string",
+     "string",
+     "map[string]string",
+     "map[string]string",
+     "string",
+     "map[string]string",
+     "*uint8",
+     "*uint8",
+     "map[string][]string",
+     "map[string]string",
+     "map[string]string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "h1",
+     "2026-10-01T15:21:14.032556383Z",
+     "7.58.2",
+     "linux",
+     {
+      "os": "linux"
+     },
+     {
+      "cpu_cores": "2"
+     },
+     {
+      "total": "8Gb"
+     },
+     {
+      "env": [
+       "prod"
+      ]
+     },
+     "4f1a",
+     "agent",
+     "3.12.6",
+     "{\"socket-hostname\":\"h1\"}",
+     {
+      "cpuCores": "2",
+      "machine": "\"x86_64\""
+     },
+     "{\"ipaddress\":\"10.0.0.4\"}",
+     "[{\"name\":\"/dev/sda1\"}]",
+     "{\"transport\":\"HTTP\"}",
+     {
+      "tool": "\"helm\""
+     },
+     {
+      "no-proxy-nonexact-match": "false"
+     },
+     "{\"enabled\":true}",
+     {
+      "cluster_name": "\"prod\""
+     },
+     0,
+     1,
+     {
+      "google_tags": [
+       "zone:eu-west1-b"
+      ],
+      "system": [
+       "env:prod"
+      ]
+     },
+     {
+      "gpu": "{\"vendor\":\"nvidia\"}",
+      "network": "{\"ipaddress\":\"10.0.0.4\"}"
+     },
+     {
+      "a_key_from_7_60": "\"surprise\""
+     },
+     "{\"processes\":{\"snaps\":[]}}"
+    ]
+   ],
+   "insert": "INSERT INTO hosts\n\t\t\t(tenant_id, host, seen_at, agent_version, os, platform, cpu, memory, tags,\n\t\t\t uuid, agent_flavor, python_version, meta, system_stats, network, filesystem,\n\t\t\t logs, install_method, proxy_info, otlp, container_meta,\n\t\t\t fips_mode, fips_proxy_enabled, host_tags, gohai_extra, intake_extra, resources)",
+   "rows": [
+    {
+     "AgentFlavor": "agent",
+     "AgentVersion": "7.58.2",
+     "CPU": {
+      "cpu_cores": "2"
+     },
+     "ContainerMeta": {
+      "cluster_name": "\"prod\""
+     },
+     "FIPSMode": 0,
+     "FIPSProxyEnabled": 1,
+     "Filesystem": "[{\"name\":\"/dev/sda1\"}]",
+     "GohaiExtra": {
+      "gpu": "{\"vendor\":\"nvidia\"}",
+      "network": "{\"ipaddress\":\"10.0.0.4\"}"
+     },
+     "Host": "h1",
+     "HostTags": {
+      "google_tags": [
+       "zone:eu-west1-b"
+      ],
+      "system": [
+       "env:prod"
+      ]
+     },
+     "InstallMethod": {
+      "tool": "\"helm\""
+     },
+     "IntakeExtra": {
+      "a_key_from_7_60": "\"surprise\""
+     },
+     "Logs": "{\"transport\":\"HTTP\"}",
+     "Memory": {
+      "total": "8Gb"
+     },
+     "Meta": "{\"socket-hostname\":\"h1\"}",
+     "Network": "{\"ipaddress\":\"10.0.0.4\"}",
+     "OS": "linux",
+     "OTLP": "{\"enabled\":true}",
+     "Platform": {
+      "os": "linux"
+     },
+     "ProxyInfo": {
+      "no-proxy-nonexact-match": "false"
+     },
+     "PythonVersion": "3.12.6",
+     "Resources": "{\"processes\":{\"snaps\":[]}}",
+     "SeenAt": "2026-10-01T15:21:14.032556383Z",
+     "SystemStats": {
+      "cpuCores": "2",
+      "machine": "\"x86_64\""
+     },
+     "Tags": {
+      "env": [
+       "prod"
+      ]
+     },
+     "TenantID": "test",
+     "UUID": "4f1a"
+    }
+   ],
+   "to": "storage_hosts",
+   "type": "storage.WriteHosts"
+  }
+ ],
+ "seq": 1,
+ "test": "TestIntakeHostRowKeepsTheWholeEnvelope",
+ "volatile": [
+  "/sends/0/args/0/2",
+  "/sends/0/rows/0/SeenAt"
+ ]
+}

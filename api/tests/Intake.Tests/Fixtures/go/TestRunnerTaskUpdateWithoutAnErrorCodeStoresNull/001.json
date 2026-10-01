@@ -1,0 +1,94 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.036268219Z",
+ "request": {
+  "body_b64": "eyJkYXRhIjp7InR5cGUiOiJ4IiwiaWQiOiJzdWNjZWVkX3Rhc2siLCJhdHRyaWJ1dGVzIjp7InRhc2tfaWQiOiJ0LTEiLCJwYXlsb2FkIjp7ImJyYW5jaCI6Im1haW4ifX19fQ==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/on-prem-management-service/workflow-tasks/publish-task-update"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*int64",
+     "string",
+     "string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.036260154Z",
+     "succeed_task",
+     "t-1",
+     "",
+     "",
+     "",
+     "main",
+     "",
+     null,
+     "",
+     "",
+     {}
+    ]
+   ],
+   "insert": "INSERT INTO runner_task_updates\n\t\t\t(tenant_id, at, outcome, task_id, action_fqn, job_id, client,\n\t\t\t branch, outputs, error_code, error_details, api_error, extra)",
+   "rows": [
+    {
+     "APIError": "",
+     "ActionFQN": "",
+     "At": "2026-10-01T15:21:14.036260154Z",
+     "Branch": "main",
+     "Client": "",
+     "ErrorCode": null,
+     "ErrorDetails": "",
+     "Extra": {},
+     "JobID": "",
+     "Outcome": "succeed_task",
+     "Outputs": "",
+     "TaskID": "t-1",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_runner_task_updates",
+   "type": "storage.WriteRunnerTaskUpdates"
+  }
+ ],
+ "seq": 1,
+ "test": "TestRunnerTaskUpdateWithoutAnErrorCodeStoresNull",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/At"
+ ]
+}

@@ -1,0 +1,114 @@
+{
+ "recorded_at": "2026-10-01T15:21:18.998212726Z",
+ "request": {
+  "body_b64": "LS0wMjk2NzQ2YTVlMjViMGZmZWViNDZhMjMwYjRjOTAxODkwMGE5NWRiODBjM2MxYTAyNzQ4ZjRmZDUwODUNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0icHVzaGVkU2hhIg0KQ29udGVudC1UeXBlOiBhcHBsaWNhdGlvbi9qc29uDQoNCnsiZGF0YSI6eyJpZCI6ImhlYWRzaGExMjMiLCJ0eXBlIjoiY29tbWl0In0sIm1ldGEiOnsicmVwb3NpdG9yeV91cmwiOiJodHRwczovL2dpdC94In19DQotLTAyOTY3NDZhNWUyNWIwZmZlZWI0NmEyMzBiNGM5MDE4OTAwYTk1ZGI4MGMzYzFhMDI3NDhmNGZkNTA4NQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJwYWNrZmlsZSI7IGZpbGVuYW1lPSJwYWNrLWFiYy5wYWNrIg0KQ29udGVudC1UeXBlOiBhcHBsaWNhdGlvbi9vY3RldC1zdHJlYW0NCg0KUEFDSwAAAAIAAAABYmluYXJ5LWdpdC1vYmplY3RzDQotLTAyOTY3NDZhNWUyNWIwZmZlZWI0NmEyMzBiNGM5MDE4OTAwYTk1ZGI4MGMzYzFhMDI3NDhmNGZkNTA4NS0tDQo=",
+  "headers": {
+   "Content-Type": [
+    "multipart/form-data; boundary=0296746a5e25b0ffeeb46a230b4c9018900a95db80c3c1a02748f4fd5085"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/git/repository/packfile"
+ },
+ "response": {
+  "body_b64": "",
+  "headers": {},
+  "status": 204
+ },
+ "routes": [
+  "routeCIVisibilityAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint64",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:18.998211944Z",
+     "https://git/x",
+     "headsha123",
+     "f8a8c572bb8d78178d416e26e1b2adef32a95c9c74a62efd27f3f97557162e70",
+     "pack-abc.pack",
+     "PACK\u0000\u0000\u0000\u0002\u0000\u0000\u0000\u0001binary-git-objects",
+     30,
+     {}
+    ]
+   ],
+   "insert": "INSERT INTO git_packfiles\n\t\t\t(tenant_id, received_at, repository_url, pushed_sha, packfile_id,\n\t\t\t filename, packfile, size_bytes, other_parts)",
+   "rows": [
+    {
+     "Filename": "pack-abc.pack",
+     "OtherParts": {},
+     "Packfile": "PACK\u0000\u0000\u0000\u0002\u0000\u0000\u0000\u0001binary-git-objects",
+     "PackfileID": "f8a8c572bb8d78178d416e26e1b2adef32a95c9c74a62efd27f3f97557162e70",
+     "PushedSHA": "headsha123",
+     "ReceivedAt": "2026-10-01T15:21:18.998211944Z",
+     "RepositoryURL": "https://git/x",
+     "SizeBytes": 30,
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_git_packfiles",
+   "type": "storage.WriteGitPackfiles"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "string",
+     "string",
+     "time.Time",
+     "*string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "https://git/x",
+     "headsha123",
+     "2026-10-01T15:21:18.998211944Z",
+     "f8a8c572bb8d78178d416e26e1b2adef32a95c9c74a62efd27f3f97557162e70",
+     "packfile"
+    ]
+   ],
+   "insert": "INSERT INTO git_commits\n\t\t\t(tenant_id, repository_url, sha, seen_at, packfile_id, source)",
+   "rows": [
+    {
+     "PackfileID": "f8a8c572bb8d78178d416e26e1b2adef32a95c9c74a62efd27f3f97557162e70",
+     "RepositoryURL": "https://git/x",
+     "SHA": "headsha123",
+     "SeenAt": "2026-10-01T15:21:18.998211944Z",
+     "Source": "packfile",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_git_commits",
+   "type": "storage.WriteGitCommits"
+  }
+ ],
+ "seq": 1,
+ "test": "TestGitPackfileAnswers204AndStoresBothTables",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt",
+  "/sends/1/args/0/3",
+  "/sends/1/rows/0/SeenAt"
+ ]
+}

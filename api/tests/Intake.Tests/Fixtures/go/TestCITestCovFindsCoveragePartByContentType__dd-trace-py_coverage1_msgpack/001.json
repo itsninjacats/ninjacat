@@ -1,0 +1,189 @@
+{
+ "recorded_at": "2026-10-01T15:21:18.996136844Z",
+ "request": {
+  "body_b64": "LS1iMWI3MzUzMjhiZGVjZTYwNzJlZTE0YzExZmQ0OGQ5NDcyNjJmM2Q0MjU4MTg2YTg4MTI3M2Q1MjE4ZWENCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZXZlbnQiOyBmaWxlbmFtZT0iZmlsZWV2ZW50Lmpzb24iDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL2pzb24NCg0KeyJkdW1teSI6IHRydWV9DQotLWIxYjczNTMyOGJkZWNlNjA3MmVlMTRjMTFmZDQ4ZDk0NzI2MmYzZDQyNTgxODZhODgxMjczZDUyMThlYQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJjb3ZlcmFnZTEiOyBmaWxlbmFtZT0iZmlsZWNvdmVyYWdleCINCkNvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vbXNncGFjaw0KDQqCp3ZlcnNpb24CqWNvdmVyYWdlc5KEr3Rlc3Rfc2Vzc2lvbl9pZM4HW80VrXRlc3Rfc3VpdGVfaWTOB1a1s6dzcGFuX2lkzx7W61ZXiOOOpWZpbGVzkoKoZmlsZW5hbWW9aW50YWtlL3JvdXRlcl9jaXZpc2liaWxpdHkuZ2+mYml0bWFwxAMBAgOBqGZpbGVuYW1lrWludGFrZS9yYXcuZ2+Dr3Rlc3Rfc2Vzc2lvbl9pZM4HW80VrXRlc3Rfc3VpdGVfaWTNA+elZmlsZXORgahmaWxlbmFtZbdhcHBzL3N0b3JhZ2Uvcm93c19jaS5nbw0KLS1iMWI3MzUzMjhiZGVjZTYwNzJlZTE0YzExZmQ0OGQ5NDcyNjJmM2Q0MjU4MTg2YTg4MTI3M2Q1MjE4ZWEtLQ0K",
+  "headers": {
+   "Content-Type": [
+    "multipart/form-data; boundary=b1b735328bdece6072ee14c11fd48d947262f3d4258186a881273d5218ea"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/citestcov"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeCITestCov"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "int32",
+     "uint64",
+     "uint64",
+     "*uint64",
+     "[]string",
+     "[]string",
+     "string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "int32",
+     "uint64",
+     "uint64",
+     "*uint64",
+     "[]string",
+     "[]string",
+     "string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:18.996127527Z",
+     2,
+     123456789,
+     123123123,
+     2222222222222222222,
+     [
+      "intake/router_civisibility.go",
+      "intake/raw.go"
+     ],
+     [
+      "\u0001\u0002\u0003",
+      ""
+     ],
+     {
+      "$b64": "hK90ZXN0X3Nlc3Npb25faWTOB1vNFa10ZXN0X3N1aXRlX2lkzgdWtbOnc3Bhbl9pZM8e1utWV4jjjqVmaWxlc5KCqGZpbGVuYW1lvWludGFrZS9yb3V0ZXJfY2l2aXNpYmlsaXR5LmdvpmJpdG1hcMQDAQIDgahmaWxlbmFtZa1pbnRha2UvcmF3Lmdv"
+     },
+     "msgpack",
+     "{\"dummy\": true}",
+     {},
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "test",
+     "2026-10-01T15:21:18.996127527Z",
+     2,
+     123456789,
+     999,
+     null,
+     [
+      "apps/storage/rows_ci.go"
+     ],
+     [
+      ""
+     ],
+     {
+      "$b64": "g690ZXN0X3Nlc3Npb25faWTOB1vNFa10ZXN0X3N1aXRlX2lkzQPnpWZpbGVzkYGoZmlsZW5hbWW3YXBwcy9zdG9yYWdlL3Jvd3NfY2kuZ28="
+     },
+     "msgpack",
+     "{\"dummy\": true}",
+     {},
+     "",
+     "",
+     "",
+     ""
+    ]
+   ],
+   "insert": "INSERT INTO ci_coverage\n\t\t\t(tenant_id, received_at, payload_version, session_id, suite_id, span_id,\n\t\t\t files_filename, files_bitmap, raw, raw_format, event, extra,\n\t\t\t evp_subdomain, container_id, agent_hostname, agent_version)",
+   "rows": [
+    {
+     "AgentHostname": "",
+     "AgentVersion": "",
+     "ContainerID": "",
+     "EVPSubdomain": "",
+     "Event": "{\"dummy\": true}",
+     "Extra": {},
+     "FilesBitmap": [
+      "\u0001\u0002\u0003",
+      ""
+     ],
+     "FilesFilename": [
+      "intake/router_civisibility.go",
+      "intake/raw.go"
+     ],
+     "PayloadVersion": 2,
+     "Raw": {
+      "$b64": "hK90ZXN0X3Nlc3Npb25faWTOB1vNFa10ZXN0X3N1aXRlX2lkzgdWtbOnc3Bhbl9pZM8e1utWV4jjjqVmaWxlc5KCqGZpbGVuYW1lvWludGFrZS9yb3V0ZXJfY2l2aXNpYmlsaXR5LmdvpmJpdG1hcMQDAQIDgahmaWxlbmFtZa1pbnRha2UvcmF3Lmdv"
+     },
+     "RawFormat": "msgpack",
+     "ReceivedAt": "2026-10-01T15:21:18.996127527Z",
+     "SessionID": 123456789,
+     "SpanID": 2222222222222222222,
+     "SuiteID": 123123123,
+     "TenantID": "test"
+    },
+    {
+     "AgentHostname": "",
+     "AgentVersion": "",
+     "ContainerID": "",
+     "EVPSubdomain": "",
+     "Event": "{\"dummy\": true}",
+     "Extra": {},
+     "FilesBitmap": [
+      ""
+     ],
+     "FilesFilename": [
+      "apps/storage/rows_ci.go"
+     ],
+     "PayloadVersion": 2,
+     "Raw": {
+      "$b64": "g690ZXN0X3Nlc3Npb25faWTOB1vNFa10ZXN0X3N1aXRlX2lkzQPnpWZpbGVzkYGoZmlsZW5hbWW3YXBwcy9zdG9yYWdlL3Jvd3NfY2kuZ28="
+     },
+     "RawFormat": "msgpack",
+     "ReceivedAt": "2026-10-01T15:21:18.996127527Z",
+     "SessionID": 123456789,
+     "SpanID": null,
+     "SuiteID": 999,
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_ci_coverage",
+   "type": "storage.WriteCICoverage"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCITestCovFindsCoveragePartByContentType/dd-trace-py_coverage1_msgpack",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/0/8/$b64",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/Raw/$b64",
+  "/sends/0/rows/0/ReceivedAt",
+  "/sends/0/rows/1/ReceivedAt"
+ ]
+}

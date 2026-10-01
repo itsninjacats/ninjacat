@@ -1,0 +1,136 @@
+{
+ "recorded_at": "2026-10-01T15:21:19.005093249Z",
+ "request": {
+  "body_b64": "eyJob3N0IjoiZGIxIiwiZGF0YWJhc2VfaW5zdGFuY2UiOiJkYjEvb3JjbCIsImRibV90eXBlIjoiZnF0IiwiZGR0YWdzIjoiZW52OnByb2QiLCJkYiI6eyJpbnN0YW5jZSI6Im9yY2wiLCJxdWVyeV9zaWduYXR1cmUiOiJzaWcxIn19",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/databasequery"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeDBM"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "*time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*float64",
+     "map[string][]string",
+     "[]string",
+     "[]string",
+     "string",
+     "*string",
+     "*string",
+     "*string",
+     "*string",
+     "*uint32"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:19.005090223Z",
+     "databasequery",
+     null,
+     "db1",
+     "db1/orcl",
+     "",
+     "",
+     "",
+     "fqt",
+     "",
+     "",
+     "",
+     null,
+     {
+      "env": [
+       "prod"
+      ]
+     },
+     [
+      "db"
+     ],
+     [],
+     "{\"host\":\"db1\",\"database_instance\":\"db1/orcl\",\"dbm_type\":\"fqt\",\"ddtags\":\"env:prod\",\"db\":{\"instance\":\"orcl\",\"query_signature\":\"sig1\"}}",
+     "orcl",
+     "sig1",
+     null,
+     null,
+     null
+    ]
+   ],
+   "insert": "INSERT INTO dbm_events\n\t\t\t(tenant_id, received_at, track, timestamp,\n\t\t\t host, database_instance, agent_hostname, agent_version,\n\t\t\t source, dbm_type, kind, dbms, dbms_version,\n\t\t\t collection_interval, tags,\n\t\t\t extra_keys, undecoded_keys,\n\t\t\t event,\n\t\t\t db_instance, query_signature, statement, plan_signature, plan_definition_steps)",
+   "rows": [
+    {
+     "AgentHostname": "",
+     "AgentVersion": "",
+     "CollectionInterval": null,
+     "DBInstance": "orcl",
+     "DBMS": "",
+     "DBMSVersion": "",
+     "DBMType": "fqt",
+     "DatabaseInstance": "db1/orcl",
+     "Event": "{\"host\":\"db1\",\"database_instance\":\"db1/orcl\",\"dbm_type\":\"fqt\",\"ddtags\":\"env:prod\",\"db\":{\"instance\":\"orcl\",\"query_signature\":\"sig1\"}}",
+     "ExtraKeys": [
+      "db"
+     ],
+     "Host": "db1",
+     "Kind": "",
+     "PlanDefinitionSteps": null,
+     "PlanSignature": null,
+     "QuerySignature": "sig1",
+     "ReceivedAt": "2026-10-01T15:21:19.005090223Z",
+     "Source": "",
+     "Statement": null,
+     "Tags": {
+      "env": [
+       "prod"
+      ]
+     },
+     "TenantID": "test",
+     "Timestamp": null,
+     "Track": "databasequery",
+     "UndecodedKeys": []
+    }
+   ],
+   "to": "storage_dbm_events",
+   "type": "storage.WriteDBMEvents"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleDBMStoresEventsPerTrack/databasequery",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

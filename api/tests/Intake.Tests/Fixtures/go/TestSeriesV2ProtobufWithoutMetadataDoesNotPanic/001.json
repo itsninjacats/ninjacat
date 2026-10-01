@@ -1,0 +1,99 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.0299784Z",
+ "request": {
+  "body_b64": "Ci4KCgoEaG9zdBICaDESD3N5c3RlbS5jcHUuaWRsZSIPCQAAAAAAAOA/EKKVztUG",
+  "headers": {
+   "Content-Type": [
+    "application/x-protobuf"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/series"
+ },
+ "response": {
+  "body_b64": "eyJlcnJvcnMiOltdfQ==",
+  "body_json": {
+   "errors": []
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint32",
+     "float64",
+     "map[string][]string",
+     "uint32",
+     "uint32",
+     "uint32",
+     "map[string]string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-09-23T08:15:30Z",
+     "system.cpu.idle",
+     "h1",
+     "UNSPECIFIED",
+     "",
+     "",
+     0,
+     0.5,
+     {},
+     0,
+     0,
+     0,
+     {},
+     {}
+    ]
+   ],
+   "insert": "INSERT INTO metrics\n\t\t\t(tenant_id, timestamp, metric, host, metric_type, source_type, unit, interval, value, tags,\n\t\t\t origin_product, origin_category, origin_service, resources, extra)",
+   "rows": [
+    {
+     "Extra": {},
+     "Host": "h1",
+     "Interval": 0,
+     "Metric": "system.cpu.idle",
+     "MetricType": "UNSPECIFIED",
+     "OriginCategory": 0,
+     "OriginProduct": 0,
+     "OriginService": 0,
+     "Resources": {},
+     "SourceType": "",
+     "Tags": {},
+     "TenantID": "test",
+     "Timestamp": "2026-09-23T08:15:30Z",
+     "Unit": "",
+     "Value": 0.5
+    }
+   ],
+   "to": "storage_metrics",
+   "type": "storage.WriteMetrics"
+  }
+ ],
+ "seq": 1,
+ "test": "TestSeriesV2ProtobufWithoutMetadataDoesNotPanic",
+ "volatile": []
+}

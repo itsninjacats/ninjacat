@@ -1,0 +1,153 @@
+{
+ "recorded_at": "2026-10-01T15:21:35.28728328Z",
+ "request": {
+  "body_b64": "LS1hMjU5MjEzNzY0YmM3ZWQ4Yjk2NjVmZjlhNWMzM2Q0NDQzMWYyZTBhMzcwNzRkNmY4Njc2Mzc1YzlhMDENCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZXZlbnQiDQoNCnRoaXMgaXMgbm90IGpzb24NCi0tYTI1OTIxMzc2NGJjN2VkOGI5NjY1ZmY5YTVjMzNkNDQ0MzFmMmUwYTM3MDc0ZDZmODY3NjM3NWM5YTAxDQpDb250ZW50LURpc3Bvc2l0aW9uOiBmb3JtLWRhdGE7IG5hbWU9ImR1bXAiOyBmaWxlbmFtZT0iZHVtcCINCkNvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vb2N0ZXQtc3RyZWFtDQoNCgoCaDEiCAoGNy41OC4yDQotLWEyNTkyMTM3NjRiYzdlZDhiOTY2NWZmOWE1YzMzZDQ0NDMxZjJlMGEzNzA3NGQ2Zjg2NzYzNzVjOWEwMS0tDQo=",
+  "headers": {
+   "Content-Type": [
+    "multipart/form-data; boundary=a259213764bc7ed8b9665ff9a5c33d44431f2e0a37074d6f8676375c9a01"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/secdump"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeCWS"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "uuid.UUID",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "map[string]string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint8",
+     "string",
+     "string",
+     "*uint64",
+     "*uint64",
+     "*uint64",
+     "string",
+     "string",
+     "string",
+     "uint32",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:35.287280505Z",
+     "db7008d0-4447-4b03-a188-a7c9ef6e2232",
+     "",
+     "",
+     "",
+     {},
+     "",
+     {},
+     "this is not json",
+     "h1",
+     "",
+     "",
+     {},
+     "7.58.2",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     0,
+     "",
+     "",
+     0,
+     0,
+     0,
+     "",
+     "",
+     "",
+     0,
+     "\n\u0002h1\"\b\n\u00067.58.2"
+    ]
+   ],
+   "insert": "INSERT INTO cws_activity_dumps\n\t\t\t(tenant_id, received_at, dump_id,\n\t\t\t header_host, header_service, header_source, header_tags, dns_names, header_extra, header_raw,\n\t\t\t dump_host, dump_service, dump_source, dump_tags,\n\t\t\t agent_version, agent_commit, kernel_version, linux_distribution,\n\t\t\t arch, metadata_name, protobuf_version, differentiate_args,\n\t\t\t comm, container_id, start_raw, end_raw, size_raw,\n\t\t\t serialization, cgroup_id, cgroup_manager,\n\t\t\t tree_node_count, dump)",
+   "rows": [
+    {
+     "AgentCommit": "",
+     "AgentVersion": "7.58.2",
+     "Arch": "",
+     "CgroupID": "",
+     "CgroupManager": "",
+     "Comm": "",
+     "ContainerID": "",
+     "DNSNames": "",
+     "DifferentiateArgs": 0,
+     "Dump": "\n\u0002h1\"\b\n\u00067.58.2",
+     "DumpHost": "h1",
+     "DumpID": "db7008d0-4447-4b03-a188-a7c9ef6e2232",
+     "DumpService": "",
+     "DumpSource": "",
+     "DumpTags": {},
+     "End": 0,
+     "HeaderExtra": {},
+     "HeaderHost": "",
+     "HeaderRaw": "this is not json",
+     "HeaderService": "",
+     "HeaderSource": "",
+     "HeaderTags": {},
+     "KernelVersion": "",
+     "LinuxDistribution": "",
+     "MetadataName": "",
+     "ProtobufVersion": "",
+     "ReceivedAt": "2026-10-01T15:21:35.287280505Z",
+     "Serialization": "",
+     "Size": 0,
+     "Start": 0,
+     "TenantID": "test",
+     "TreeNodeCount": 0
+    }
+   ],
+   "to": "storage_cws_activity_dumps",
+   "type": "storage.WriteCWSActivityDumps"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleSecDumpMalformedEventPartKeepsRawBytes",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/0/2",
+  "/sends/0/rows/0/DumpID",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

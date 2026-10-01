@@ -48,6 +48,9 @@ type captureNode struct {
 
 	mu   sync.Mutex
 	sent []capturedSend
+
+	// test is the name of the test that owns this node, for fixtures_test.go.
+	test string
 }
 
 // capturedSend is one Send: the writer it was addressed to, and the message.
@@ -139,7 +142,7 @@ func newTestServer(t *testing.T) (*Server, *captureNode) {
 		[]string{apikeys.Hash(testAPIKey)},
 	)
 
-	node := &captureNode{}
+	node := &captureNode{test: t.Name()}
 	return &Server{Node: node, Store: store}, node
 }
 

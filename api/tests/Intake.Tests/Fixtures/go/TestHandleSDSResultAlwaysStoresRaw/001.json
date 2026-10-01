@@ -1,0 +1,97 @@
+{
+ "recorded_at": "2026-10-01T15:21:35.288906991Z",
+ "request": {
+  "body_b64": "CAE=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/sdsresult"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeSDS"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:35.288903825Z",
+     "sds",
+     "no_schema",
+     "POST",
+     "example.com",
+     "/api/v2/sdsresult",
+     {},
+     "application/json",
+     "",
+     {},
+     "\b\u0001",
+     2,
+     "1:varint"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "\b\u0001",
+     "BodyBytes": 2,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "sds",
+     "Method": "POST",
+     "Note": "1:varint",
+     "Path": "/api/v2/sdsresult",
+     "Query": {},
+     "Reason": "no_schema",
+     "ReceivedAt": "2026-10-01T15:21:35.288903825Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleSDSResultAlwaysStoresRaw",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

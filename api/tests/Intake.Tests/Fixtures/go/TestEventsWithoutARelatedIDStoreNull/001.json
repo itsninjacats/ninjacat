@@ -1,0 +1,132 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.033962174Z",
+ "request": {
+  "body_b64": "eyJ0aXRsZSI6InQiLCJ0ZXh0IjoieCJ9",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v1/events"
+ },
+ "response": {
+  "body_b64": "eyJldmVudCI6eyJhbGVydF90eXBlIjoiaW5mbyIsImRhdGVfaGFwcGVuZWQiOjE3OTA4NjgwNzQsImRldmljZV9uYW1lIjoiIiwiaG9zdCI6IiIsImlkIjo0Mjg5OTY5MjU2MDM3Mjk0ODIxLCJpZF9zdHIiOiI0Mjg5OTY5MjU2MDM3Mjk0ODIxIiwicHJpb3JpdHkiOiJub3JtYWwiLCJzb3VyY2VfdHlwZV9uYW1lIjoiIiwidGFncyI6bnVsbCwidGV4dCI6IngiLCJ0aXRsZSI6InQiLCJ1cmwiOiIifSwic3RhdHVzIjoib2sifQ==",
+  "body_json": {
+   "event": {
+    "alert_type": "info",
+    "date_happened": 1790868074,
+    "device_name": "",
+    "host": "",
+    "id": 4289969256037294821,
+    "id_str": "4289969256037294821",
+    "priority": "normal",
+    "source_type_name": "",
+    "tags": null,
+    "text": "x",
+    "title": "t",
+    "url": ""
+   },
+   "status": "ok"
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "uuid.UUID",
+     "uint64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "*int64",
+     "string",
+     "string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.033941587Z",
+     "7712109e-46e6-45ca-963a-5ef2c1f25d45",
+     4289969256037294821,
+     "t",
+     "x",
+     "",
+     "info",
+     "normal",
+     "",
+     "",
+     "",
+     {},
+     "",
+     null,
+     "",
+     "",
+     {}
+    ]
+   ],
+   "insert": "INSERT INTO events\n\t\t\t(tenant_id, timestamp, event_id, event_id_num, title, text, host,\n\t\t\t alert_type, priority, aggregation_key, source_type_name, device_name, tags,\n\t\t\t event_type, related_event_id, alert_type_raw, priority_raw, extra)",
+   "rows": [
+    {
+     "AggregationKey": "",
+     "AlertType": "info",
+     "AlertTypeRaw": "",
+     "DeviceName": "",
+     "EventID": "7712109e-46e6-45ca-963a-5ef2c1f25d45",
+     "EventIDNum": 4289969256037294821,
+     "EventType": "",
+     "Extra": {},
+     "Host": "",
+     "Priority": "normal",
+     "PriorityRaw": "",
+     "RelatedEventID": null,
+     "SourceTypeName": "",
+     "Tags": {},
+     "TenantID": "test",
+     "Text": "x",
+     "Timestamp": "2026-10-01T15:21:14.033941587Z",
+     "Title": "t"
+    }
+   ],
+   "to": "storage_events",
+   "type": "storage.WriteEvents"
+  }
+ ],
+ "seq": 1,
+ "test": "TestEventsWithoutARelatedIDStoreNull",
+ "volatile": [
+  "/response/body_json/event/date_happened",
+  "/response/body_json/event/id",
+  "/response/body_json/event/id_str",
+  "/sends/0/args/0/1",
+  "/sends/0/args/0/2",
+  "/sends/0/args/0/3",
+  "/sends/0/rows/0/EventID",
+  "/sends/0/rows/0/EventIDNum",
+  "/sends/0/rows/0/Timestamp"
+ ]
+}

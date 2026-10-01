@@ -1,0 +1,361 @@
+{
+ "recorded_at": "2026-10-01T15:21:16.875331724Z",
+ "request": {
+  "body_b64": "EiIKC2VudjpzdGFnaW5nEgRob3N0Eg1mYWxsYmFjay1ob3N0Gq4CCjIPc3lzdGVtLmNwdS51c2VyFWh0dHAucmVxdWVzdC5kdXJhdGlvbgtxdWV1ZS5kZXB0aBIwCGVudjpwcm9kDmt1YmVfc2VydmljZTphDmt1YmVfc2VydmljZTpiCHJvbGU6d2ViGgcGAgICBAEKIh8EaG9zdAZ3ZWItMDEGZGV2aWNlBGV0aDAGd2ViLTAyKgIBAjIDAgIEOgMECgFCBwZzeXN0ZW1KAwoLKlIEEbMENFoDAgICYgMCAgFqAwICAXIDDwoAegMCAQGCAQiAxJ/VDB4KFIoBAw4SDJoBIAAAAAAAAPg/AAAAAAAAKEAAAAAAAADwPwAAAAAAACJAogEBA6oBAwgCCLIBAwECA7oBAwIBAMIBAwIAAMoBDAttaWxsaXNlY29uZNIBAQI=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/intake/metrics/v3/series"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeApp"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint32",
+     "float64",
+     "map[string][]string",
+     "uint32",
+     "uint32",
+     "uint32",
+     "map[string]string",
+     "map[string]string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint32",
+     "float64",
+     "map[string][]string",
+     "uint32",
+     "uint32",
+     "uint32",
+     "map[string]string",
+     "map[string]string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint32",
+     "float64",
+     "map[string][]string",
+     "uint32",
+     "uint32",
+     "uint32",
+     "map[string]string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2023-11-14T22:13:20Z",
+     "system.cpu.user",
+     "web-01",
+     "COUNT",
+     "system",
+     "",
+     15,
+     7,
+     {
+      "env": [
+       "prod",
+       "staging"
+      ],
+      "kube_service": [
+       "a",
+       "b"
+      ]
+     },
+     0,
+     0,
+     0,
+     {},
+     {}
+    ],
+    [
+     "test",
+     "2023-11-14T22:13:35Z",
+     "system.cpu.user",
+     "web-01",
+     "COUNT",
+     "system",
+     "",
+     15,
+     9,
+     {
+      "env": [
+       "prod",
+       "staging"
+      ],
+      "kube_service": [
+       "a",
+       "b"
+      ]
+     },
+     0,
+     0,
+     0,
+     {},
+     {}
+    ],
+    [
+     "test",
+     "2023-11-14T22:13:40Z",
+     "http.request.duration",
+     "web-02",
+     "GAUGE",
+     "",
+     "millisecond",
+     10,
+     1.5,
+     {
+      "env": [
+       "prod",
+       "staging"
+      ],
+      "kube_service": [
+       "a",
+       "b"
+      ],
+      "role": [
+       "web"
+      ]
+     },
+     0,
+     0,
+     0,
+     {},
+     {}
+    ]
+   ],
+   "insert": "INSERT INTO metrics\n\t\t\t(tenant_id, timestamp, metric, host, metric_type, source_type, unit, interval, value, tags,\n\t\t\t origin_product, origin_category, origin_service, resources, extra)",
+   "rows": [
+    {
+     "Extra": {},
+     "Host": "web-01",
+     "Interval": 15,
+     "Metric": "system.cpu.user",
+     "MetricType": "COUNT",
+     "OriginCategory": 0,
+     "OriginProduct": 0,
+     "OriginService": 0,
+     "Resources": {},
+     "SourceType": "system",
+     "Tags": {
+      "env": [
+       "prod",
+       "staging"
+      ],
+      "kube_service": [
+       "a",
+       "b"
+      ]
+     },
+     "TenantID": "test",
+     "Timestamp": "2023-11-14T22:13:20Z",
+     "Unit": "",
+     "Value": 7
+    },
+    {
+     "Extra": {},
+     "Host": "web-01",
+     "Interval": 15,
+     "Metric": "system.cpu.user",
+     "MetricType": "COUNT",
+     "OriginCategory": 0,
+     "OriginProduct": 0,
+     "OriginService": 0,
+     "Resources": {},
+     "SourceType": "system",
+     "Tags": {
+      "env": [
+       "prod",
+       "staging"
+      ],
+      "kube_service": [
+       "a",
+       "b"
+      ]
+     },
+     "TenantID": "test",
+     "Timestamp": "2023-11-14T22:13:35Z",
+     "Unit": "",
+     "Value": 9
+    },
+    {
+     "Extra": {},
+     "Host": "web-02",
+     "Interval": 10,
+     "Metric": "http.request.duration",
+     "MetricType": "GAUGE",
+     "OriginCategory": 0,
+     "OriginProduct": 0,
+     "OriginService": 0,
+     "Resources": {},
+     "SourceType": "",
+     "Tags": {
+      "env": [
+       "prod",
+       "staging"
+      ],
+      "kube_service": [
+       "a",
+       "b"
+      ],
+      "role": [
+       "web"
+      ]
+     },
+     "TenantID": "test",
+     "Timestamp": "2023-11-14T22:13:40Z",
+     "Unit": "millisecond",
+     "Value": 1.5
+    }
+   ],
+   "to": "storage_metrics",
+   "type": "storage.WriteMetrics"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "map[string][]string",
+     "uint64",
+     "float64",
+     "float64",
+     "float64",
+     "float64",
+     "[]int32",
+     "[]uint32",
+     "uint32",
+     "uint32",
+     "uint32",
+     "map[string]string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2023-11-14T22:13:50Z",
+     "queue.depth",
+     "web-01",
+     {
+      "env": [
+       "prod",
+       "staging"
+      ],
+      "kube_service": [
+       "a",
+       "b"
+      ]
+     },
+     6,
+     1,
+     9,
+     2,
+     12,
+     [
+      4,
+      5,
+      9
+     ],
+     [
+      1,
+      2,
+      3
+     ],
+     0,
+     0,
+     0,
+     {},
+     {}
+    ]
+   ],
+   "insert": "INSERT INTO sketches\n\t\t\t(tenant_id, timestamp, metric, host, tags, count, min, max, avg, sum, bucket_keys, bucket_counts,\n\t\t\t origin_product, origin_category, origin_service, resources, extra)",
+   "rows": [
+    {
+     "Avg": 2,
+     "BucketCounts": [
+      1,
+      2,
+      3
+     ],
+     "BucketKeys": [
+      4,
+      5,
+      9
+     ],
+     "Count": 6,
+     "Extra": {},
+     "Host": "web-01",
+     "Max": 9,
+     "Metric": "queue.depth",
+     "Min": 1,
+     "OriginCategory": 0,
+     "OriginProduct": 0,
+     "OriginService": 0,
+     "Resources": {},
+     "Sum": 12,
+     "Tags": {
+      "env": [
+       "prod",
+       "staging"
+      ],
+      "kube_service": [
+       "a",
+       "b"
+      ]
+     },
+     "TenantID": "test",
+     "Timestamp": "2023-11-14T22:13:50Z"
+    }
+   ],
+   "to": "storage_sketches",
+   "type": "storage.WriteSketches"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleAppV3StoresSeriesAndSketches",
+ "volatile": []
+}

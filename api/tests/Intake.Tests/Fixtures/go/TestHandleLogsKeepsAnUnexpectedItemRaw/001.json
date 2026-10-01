@@ -1,0 +1,146 @@
+{
+ "recorded_at": "2026-10-01T15:21:21.402050154Z",
+ "request": {
+  "body_b64": "W3sibWVzc2FnZSI6Imdvb2QifSx7Im1lc3NhZ2UiOnsibmVzdGVkIjoib2JqZWN0In19XQ==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/logs"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeLogs"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:21.402047499Z",
+     "logs",
+     "unexpected_shape",
+     "POST",
+     "example.com",
+     "/api/v2/logs",
+     {},
+     "application/json",
+     "",
+     {},
+     "{\"message\":{\"nested\":\"object\"}}",
+     31,
+     "item #1 did not fit datadogV2.HTTPLogItem"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "{\"message\":{\"nested\":\"object\"}}",
+     "BodyBytes": 31,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "logs",
+     "Method": "POST",
+     "Note": "item #1 did not fit datadogV2.HTTPLogItem",
+     "Path": "/api/v2/logs",
+     "Query": {},
+     "Reason": "unexpected_shape",
+     "ReceivedAt": "2026-10-01T15:21:21.402047499Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:21.402012555Z",
+     "",
+     "",
+     "",
+     "",
+     "good",
+     {},
+     "{}",
+     "arrival"
+    ]
+   ],
+   "insert": "INSERT INTO logs\n\t\t\t(tenant_id, timestamp, host, service, source, status, message, tags,\n\t\t\t attributes, timestamp_source)",
+   "rows": [
+    {
+     "Attributes": "",
+     "Host": "",
+     "Message": "good",
+     "Service": "",
+     "Source": "",
+     "Status": "",
+     "Tags": {},
+     "TenantID": "test",
+     "Timestamp": "2026-10-01T15:21:21.402012555Z",
+     "TimestampSource": "arrival"
+    }
+   ],
+   "to": "storage_logs",
+   "type": "storage.WriteLogs"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleLogsKeepsAnUnexpectedItemRaw",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt",
+  "/sends/1/args/0/1",
+  "/sends/1/rows/0/Timestamp"
+ ]
+}

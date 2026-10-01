@@ -1,0 +1,160 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.035249448Z",
+ "request": {
+  "body_b64": "WwoJICAiY29udGFpbmVyZC5oZWFsdGgiLAoJICB7ImNoZWNrIjoib2RkIiwiaG9zdF9uYW1lIjoiaDEiLCJzdGF0dXMiOjQyLCJ0YWdzIjpbXSwicnVuX2lkIjoxMjM0NTY3ODkwMTIzNDU2Nzg5MX0KCV0=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v1/check_run"
+ },
+ "response": {
+  "body_b64": "eyJlcnJvcnMiOltdfQ==",
+  "body_json": {
+   "errors": []
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.035235232Z",
+     "check_run",
+     "unexpected_shape",
+     "POST",
+     "example.com",
+     "/api/v1/check_run",
+     {},
+     "application/json",
+     "",
+     {},
+     "\"containerd.health\"",
+     19,
+     "check #0 is not a datadogV1.ServiceCheck"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "\"containerd.health\"",
+     "BodyBytes": 19,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "check_run",
+     "Method": "POST",
+     "Note": "check #0 is not a datadogV1.ServiceCheck",
+     "Path": "/api/v1/check_run",
+     "Query": {},
+     "Reason": "unexpected_shape",
+     "ReceivedAt": "2026-10-01T15:21:14.035235232Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.035241724Z",
+     "check_run",
+     "unexpected_shape",
+     "POST",
+     "example.com",
+     "/api/v1/check_run",
+     {},
+     "application/json",
+     "",
+     {},
+     "{\"check\":\"odd\",\"host_name\":\"h1\",\"status\":42,\"tags\":[],\"run_id\":12345678901234567891}",
+     84,
+     "check #0 did not fit datadogV1.ServiceCheck"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "{\"check\":\"odd\",\"host_name\":\"h1\",\"status\":42,\"tags\":[],\"run_id\":12345678901234567891}",
+     "BodyBytes": 84,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "check_run",
+     "Method": "POST",
+     "Note": "check #0 did not fit datadogV1.ServiceCheck",
+     "Path": "/api/v1/check_run",
+     "Query": {},
+     "Reason": "unexpected_shape",
+     "ReceivedAt": "2026-10-01T15:21:14.035241724Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCheckRunKeepsTheBytesOfTheCheckItCouldNotFit",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt",
+  "/sends/1/args/0/1",
+  "/sends/1/rows/0/ReceivedAt"
+ ]
+}

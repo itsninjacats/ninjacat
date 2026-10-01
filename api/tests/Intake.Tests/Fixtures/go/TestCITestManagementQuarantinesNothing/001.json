@@ -1,0 +1,114 @@
+{
+ "recorded_at": "2026-10-01T15:21:18.997751489Z",
+ "request": {
+  "body_b64": "eyJkYXRhIjp7ImlkIjoidG0tMSIsInR5cGUiOiJjaV9hcHBfbGlicmFyaWVzX3Rlc3RzX3JlcXVlc3QiLAoJCSJhdHRyaWJ1dGVzIjp7InJlcG9zaXRvcnlfdXJsIjoiaHR0cHM6Ly9naXQveCIsInNoYSI6ImFiYyIsIm1vZHVsZSI6ImludGFrZSIsCgkJImNvbW1pdF9tZXNzYWdlIjoiZml4IHRoaW5ncyIsImJyYW5jaCI6Im1haW4ifX19",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/test/libraries/test-management/tests"
+ },
+ "response": {
+  "body_b64": "eyJkYXRhIjp7ImlkIjoidG0tMSIsInR5cGUiOiJjaV9hcHBfbGlicmFyaWVzX3Rlc3RzIiwiYXR0cmlidXRlcyI6eyJtb2R1bGVzIjp7fX19fQ==",
+  "body_json": {
+   "data": {
+    "attributes": {
+     "modules": {}
+    },
+    "id": "tm-1",
+    "type": "ci_app_libraries_tests"
+   }
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeCIVisibilityAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:18.997736381Z",
+     "test_management",
+     "tm-1",
+     "ci_app_libraries_tests_request",
+     "",
+     "",
+     "https://git/x",
+     "main",
+     "abc",
+     "",
+     "intake",
+     "fix things",
+     "",
+     "",
+     "{\"data\":{\"id\":\"tm-1\",\"type\":\"ci_app_libraries_tests_request\",\n\t\t\"attributes\":{\"repository_url\":\"https://git/x\",\"sha\":\"abc\",\"module\":\"intake\",\n\t\t\"commit_message\":\"fix things\",\"branch\":\"main\"}}}",
+     "{\"data\":{\"id\":\"tm-1\",\"type\":\"ci_app_libraries_tests\",\"attributes\":{\"modules\":{}}}}"
+    ]
+   ],
+   "insert": "INSERT INTO ci_settings_requests\n\t\t\t(tenant_id, received_at, endpoint, request_id, request_type,\n\t\t\t service, env, repository_url, branch, sha, test_level,\n\t\t\t module, commit_message, page_state, configurations,\n\t\t\t request_body, response_body)",
+   "rows": [
+    {
+     "Branch": "main",
+     "CommitMessage": "fix things",
+     "Configurations": "",
+     "Endpoint": "test_management",
+     "Env": "",
+     "Module": "intake",
+     "PageState": "",
+     "ReceivedAt": "2026-10-01T15:21:18.997736381Z",
+     "RepositoryURL": "https://git/x",
+     "RequestBody": "{\"data\":{\"id\":\"tm-1\",\"type\":\"ci_app_libraries_tests_request\",\n\t\t\"attributes\":{\"repository_url\":\"https://git/x\",\"sha\":\"abc\",\"module\":\"intake\",\n\t\t\"commit_message\":\"fix things\",\"branch\":\"main\"}}}",
+     "RequestID": "tm-1",
+     "RequestType": "ci_app_libraries_tests_request",
+     "ResponseBody": "{\"data\":{\"id\":\"tm-1\",\"type\":\"ci_app_libraries_tests\",\"attributes\":{\"modules\":{}}}}",
+     "SHA": "abc",
+     "Service": "",
+     "TenantID": "test",
+     "TestLevel": ""
+    }
+   ],
+   "to": "storage_ci_settings_requests",
+   "type": "storage.WriteCISettingsRequests"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCITestManagementQuarantinesNothing",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

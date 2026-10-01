@@ -1,0 +1,97 @@
+{
+ "recorded_at": "2026-10-01T15:21:18.999449486Z",
+ "request": {
+  "body_b64": "eyJkYXRhIjo=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/ci/pipeline/tags"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeCIVisibilityAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:18.999446421Z",
+     "cipipeline",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/api/v2/ci/pipeline/tags",
+     {},
+     "application/json",
+     "",
+     {},
+     "{\"data\":",
+     8,
+     "tag envelope: unexpected end of JSON input"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "{\"data\":",
+     "BodyBytes": 8,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "cipipeline",
+     "Method": "POST",
+     "Note": "tag envelope: unexpected end of JSON input",
+     "Path": "/api/v2/ci/pipeline/tags",
+     "Query": {},
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T15:21:18.999446421Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCIPipelineEventsStoreUndecodableBodiesRaw",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

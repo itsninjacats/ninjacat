@@ -1,0 +1,41 @@
+{
+ "recorded_at": "2026-10-01T15:21:30.832562456Z",
+ "request": {
+  "body_b64": "",
+  "headers": {},
+  "host": "example.com",
+  "method": "GET",
+  "url": "/_health"
+ },
+ "response": {
+  "body_b64": "eyJzdGF0dXMiOiJvayJ9",
+  "body_json": {
+   "status": "ok"
+  },
+  "headers": {
+   "Access-Control-Allow-Headers": [
+    "Content-Type, Content-Encoding, DD-API-KEY, DD-CLIENT-TOKEN, DD-EVP-ORIGIN, DD-EVP-ORIGIN-VERSION, DD-REQUEST-ID, DD-IDEMPOTENCY-KEY"
+   ],
+   "Access-Control-Allow-Methods": [
+    "POST, GET, OPTIONS"
+   ],
+   "Access-Control-Allow-Origin": [
+    "*"
+   ],
+   "Access-Control-Max-Age": [
+    "86400"
+   ],
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeRUM"
+ ],
+ "sends": [],
+ "seq": 2,
+ "test": "TestRUMEngineKeepsProbes",
+ "volatile": []
+}

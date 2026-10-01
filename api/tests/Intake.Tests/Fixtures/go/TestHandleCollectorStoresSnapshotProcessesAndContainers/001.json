@@ -1,0 +1,1060 @@
+{
+ "recorded_at": "2026-10-01T15:21:28.45886583Z",
+ "request": {
+  "body_b64": "AwAMAAcAAAAAAAAAAAAAABIGaG9zdC1hGrYFCJIhENIJIkcKDC91c3IvYmluL2FwcAoMLS1maWx0ZXI9YSBiCgItdhoIL3Nydi9hcHAiAS8oATABOLAJQgwvdXNyL2Jpbi9hcHBKA2FwcCoRCgNzdmMQ6AcY6QcoAjADOAQ6FwhkEMgBGKwCIJADKPQDMNgEOLwFQKAGQkEKBGNwdTMVAABIQR0AAAhBJQAAgEAoCTILCgRjcHUwFQAAgD8yCwoEY3B1MRUAAABAOPv//////////wFAb0jeAUiA0JX/vDFS9wEKCmNvbnRhaW5lcmQSBWNpZC0xGgNhcHAiCnJlcG8vYXBwOjEtAAAAQDCAgICABEADSAJQgOLPqgZdAACAP2UAAABAaE11AABAQH0AAIBAhQEAAKBAjQEAAMBAlQEAAOBAnQEAAABBpQEAAHBBqAEJsAEKwAG84s+qBsoBAarSAQhlbnY6cHJvZNIBDmt1YmVfc2VydmljZTph0gEOa3ViZV9zZXJ2aWNlOmLaAQ0KCDEwLjAuMC4xEJA/2gEPCggxMC4wLjAuMRCQPxgB4AEM6AFk8AEN/QEAAGBBgAIPjQIAAAA/kAKAgECaAgpzaGEyNTY6YWJjWEBgAmoUDQAAgD8VAAAAQB0AAEBAJQAAgEByBWNpZC0xeGOAAQuIARaSAQIBApoBAQOgAQeqAQoNAACgQBUAAMBAsgEFY3R4LWGyAQVjdHgtYroBCGVudjpwcm9kugEOa3ViZV9zZXJ2aWNlOmG6AQ5rdWJlX3NlcnZpY2U6YsABBsoBCQoEkD/7QRIBNdIBUwoLCgdndWVzc2VkEAISDAoIZGVjbGFyZWQQARoJCgVleHRyYRAIIhMKCXJ1bnRpbWUtMRIGdHJhY2VkKAEyFAoSChAvdmFyL2xvZy9hcHAubG9n2AEB4AED6QEAAAAAAAD4P/ABASJECAUQBxoGaG9zdC1hMghlbnY6cHJvZDIOa3ViZV9zZXJ2aWNlOmEyDmt1YmVfc2VydmljZTpiOAhAgICAgEBQgOLPqgYqhAEKBnV1aWQtMRImCgVsaW51eBIGdWJ1bnR1GgZkZWJpYW4iBTIyLjA0KgY1LjE1LjAaJBIMR2VudWluZUludGVsGgE2IgI4NSoBMDIBMDgEQMQTSICIAhomCAESDEdlbnVpbmVJbnRlbBoBNiICODUqATAyATE4BEDEE0iAiAIogICAgEAwCzgCUvcBCgpjb250YWluZXJkEgVjaWQtMRoDYXBwIgpyZXBvL2FwcDoxLQAAAEAwgICAgARAA0gCUIDiz6oGXQAAgD9lAAAAQGhNdQAAQEB9AACAQIUBAACgQI0BAADAQJUBAADgQJ0BAAAAQaUBAABwQagBCbABCsABvOLPqgbKAQGq0gEIZW52OnByb2TSAQ5rdWJlX3NlcnZpY2U6YdIBDmt1YmVfc2VydmljZTpi2gENCggxMC4wLjAuMRCQP9oBDwoIMTAuMC4wLjEQkD8YAeABDOgBZPABDf0BAABgQYACD40CAAAAP5ACgIBAmgIKc2hhMjU2OmFiY1oHdnBjLTEyM2ACcAM=",
+  "headers": {
+   "Content-Type": [
+    "application/x-protobuf"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ],
+   "X-Dd-Containercount": [
+    "31"
+   ],
+   "X-Dd-Hostname": [
+    "ip-10-0-1-7"
+   ],
+   "X-Dd-Processagentversion": [
+    "7.58.2"
+   ],
+   "X-Dd-Request-Id": [
+    "b0a1f2c3-0000-4000-8000-000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v1/collector"
+ },
+ "response": {
+  "body_b64": "AwAXAAAAAAAAAAAAAAAAAAoCIBcaAhAK",
+  "headers": {
+   "Content-Length": [
+    "24"
+   ],
+   "Content-Type": [
+    "application/x-protobuf"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeProcess"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "uuid.UUID",
+     "uint8",
+     "string",
+     "string",
+     "uint8",
+     "uint8",
+     "uint8",
+     "int32",
+     "int64",
+     "uint64",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "int64",
+     "int32",
+     "string",
+     "map[string][]string",
+     "int32",
+     "int64",
+     "int32",
+     "*time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int64",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]int32",
+     "[]int64",
+     "[]int32",
+     "*int32",
+     "int64",
+     "int32",
+     "int32",
+     "int64",
+     "uint32",
+     "uint32",
+     "uint32",
+     "uint32",
+     "uint32",
+     "uint32",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:28.458841184Z",
+     "0ea22187-9ca9-46c4-8657-b71b470d1406",
+     12,
+     "CollectorProc",
+     "/api/v1/collector",
+     3,
+     0,
+     0,
+     7,
+     0,
+     1193,
+     "host-a",
+     "vpc-123",
+     11,
+     2,
+     "fargateEKS",
+     5,
+     7,
+     "host-a",
+     {
+      "env": [
+       "prod"
+      ],
+      "kube_service": [
+       "a",
+       "b"
+      ]
+     },
+     8,
+     17179869184,
+     0,
+     "2023-11-14T22:13:20Z",
+     "uuid-1",
+     "linux",
+     "ubuntu",
+     "debian",
+     "22.04",
+     "5.15.0",
+     17179869184,
+     [
+      0,
+      1
+     ],
+     [
+      "GenuineIntel",
+      "GenuineIntel"
+     ],
+     [
+      "6",
+      "6"
+     ],
+     [
+      "85",
+      "85"
+     ],
+     [
+      "0",
+      "0"
+     ],
+     [
+      "0",
+      "1"
+     ],
+     [
+      4,
+      4
+     ],
+     [
+      2500,
+      2500
+     ],
+     [
+      33792,
+      33792
+     ],
+     3,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     1,
+     0,
+     0,
+     0,
+     "ip-10-0-1-7",
+     "7.58.2",
+     "31",
+     "b0a1f2c3-0000-4000-8000-000000000001"
+    ]
+   ],
+   "insert": "INSERT INTO process_snapshots\n\t\t\t(tenant_id, received_at, snapshot_id,\n\t\t\t message_type, message_type_name, path,\n\t\t\t header_version, header_encoding, header_subscription_id,\n\t\t\t header_org_id, header_timestamp, frame_bytes,\n\t\t\t host_name, network_id, group_id, group_size, container_host_type,\n\t\t\t host_id, host_org_id, host_display_name, host_all_tags,\n\t\t\t host_num_cpus, host_total_memory, host_tag_index, host_tags_modified,\n\t\t\t sys_uuid, os_name, os_platform, os_family, os_version,\n\t\t\t kernel_version, sys_total_memory,\n\t\t\t cpu_numbers, cpu_vendors, cpu_families, cpu_models,\n\t\t\t cpu_physical_ids, cpu_core_ids, cpu_cores, cpu_mhz, cpu_cache_sizes,\n\t\t\t hint_mask,\n\t\t\t rt_host_id, rt_org_id, rt_num_cpus, rt_total_memory,\n\t\t\t process_count, process_stat_count, container_count,\n\t\t\t container_stat_count, discovery_count, connection_count,\n\t\t\t agent_hostname, agent_version, agent_container_count, request_id)",
+   "rows": [
+    {
+     "AgentContainerCount": "31",
+     "AgentHostname": "ip-10-0-1-7",
+     "AgentVersion": "7.58.2",
+     "CPUCacheSizes": [
+      33792,
+      33792
+     ],
+     "CPUCoreIDs": [
+      "0",
+      "1"
+     ],
+     "CPUCores": [
+      4,
+      4
+     ],
+     "CPUFamilies": [
+      "6",
+      "6"
+     ],
+     "CPUMhz": [
+      2500,
+      2500
+     ],
+     "CPUModels": [
+      "85",
+      "85"
+     ],
+     "CPUNumbers": [
+      0,
+      1
+     ],
+     "CPUPhysicalIDs": [
+      "0",
+      "0"
+     ],
+     "CPUVendors": [
+      "GenuineIntel",
+      "GenuineIntel"
+     ],
+     "ConnectionCount": 0,
+     "ContainerCount": 1,
+     "ContainerHostType": "fargateEKS",
+     "ContainerStatCount": 0,
+     "DiscoveryCount": 0,
+     "FrameBytes": 1193,
+     "GroupID": 11,
+     "GroupSize": 2,
+     "HeaderEncoding": 0,
+     "HeaderOrgID": 7,
+     "HeaderSubscriptionID": 0,
+     "HeaderTimestamp": 0,
+     "HeaderVersion": 3,
+     "HintMask": 3,
+     "HostAllTags": {
+      "env": [
+       "prod"
+      ],
+      "kube_service": [
+       "a",
+       "b"
+      ]
+     },
+     "HostDisplayName": "host-a",
+     "HostID": 5,
+     "HostName": "host-a",
+     "HostNumCPUs": 8,
+     "HostOrgID": 7,
+     "HostTagIndex": 0,
+     "HostTagsModified": "2023-11-14T22:13:20Z",
+     "HostTotalMemory": 17179869184,
+     "KernelVersion": "5.15.0",
+     "MessageType": 12,
+     "MessageTypeName": "CollectorProc",
+     "NetworkID": "vpc-123",
+     "OSFamily": "debian",
+     "OSName": "linux",
+     "OSPlatform": "ubuntu",
+     "OSVersion": "22.04",
+     "Path": "/api/v1/collector",
+     "ProcessCount": 1,
+     "ProcessStatCount": 0,
+     "RTHostID": 0,
+     "RTNumCPUs": 0,
+     "RTOrgID": 0,
+     "RTTotalMemory": 0,
+     "ReceivedAt": "2026-10-01T15:21:28.458841184Z",
+     "RequestID": "b0a1f2c3-0000-4000-8000-000000000001",
+     "SnapshotID": "0ea22187-9ca9-46c4-8657-b71b470d1406",
+     "SysTotalMemory": 17179869184,
+     "SysUUID": "uuid-1",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_process_snapshots",
+   "type": "storage.WriteProcessSnapshots"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint64",
+     "uint64",
+     "float32",
+     "int32",
+     "int32",
+     "string",
+     "time.Time",
+     "string",
+     "map[string][]string",
+     "uuid.UUID",
+     "int32",
+     "uint32",
+     "string",
+     "string",
+     "uint8",
+     "int32",
+     "[]string",
+     "int32",
+     "int32",
+     "int32",
+     "int32",
+     "int32",
+     "int32",
+     "uint64",
+     "uint64",
+     "uint64",
+     "uint64",
+     "uint64",
+     "uint64",
+     "string",
+     "float32",
+     "float32",
+     "int32",
+     "int64",
+     "int64",
+     "[]string",
+     "[]float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "uint64",
+     "uint64",
+     "float32",
+     "float32",
+     "[]string",
+     "string",
+     "[]int32",
+     "[]int32",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "uint32",
+     "float64",
+     "uint8",
+     "uint32",
+     "string",
+     "string",
+     "uint8",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:28.458841184Z",
+     "host-a",
+     1234,
+     1,
+     "svc",
+     "app",
+     "/usr/bin/app",
+     "/usr/bin/app --filter=a b -v",
+     100,
+     200,
+     12.5,
+     9,
+     64,
+     "R",
+     "2023-11-14T22:13:20Z",
+     "cid-1",
+     {
+      "env": [
+       "prod"
+      ],
+      "kube_service": [
+       "a",
+       "b"
+      ]
+     },
+     "0ea22187-9ca9-46c4-8657-b71b470d1406",
+     7,
+     4242,
+     "/srv/app",
+     "/",
+     1,
+     1200,
+     [
+      "/usr/bin/app",
+      "--filter=a b",
+      "-v"
+     ],
+     1000,
+     1001,
+     0,
+     2,
+     3,
+     4,
+     300,
+     400,
+     500,
+     600,
+     700,
+     800,
+     "cpu3",
+     8.5,
+     4,
+     -5,
+     111,
+     222,
+     [
+      "cpu0",
+      "cpu1"
+     ],
+     [
+      1,
+      2
+     ],
+     1,
+     2,
+     3,
+     4,
+     11,
+     22,
+     5,
+     6,
+     [
+      "ctx-a",
+      "ctx-b"
+     ],
+     "LANGUAGE_GO",
+     [
+      8080,
+      8443
+     ],
+     [
+      53
+     ],
+     "guessed",
+     "SERVICE_NAME_SOURCE_COMMAND_LINE",
+     "declared",
+     "SERVICE_NAME_SOURCE_DD_SERVICE",
+     [
+      "extra"
+     ],
+     [
+      "SERVICE_NAME_SOURCE_SPRING"
+     ],
+     [
+      "runtime-1"
+     ],
+     [
+      "traced"
+     ],
+     1,
+     "[{\"Resource\":{\"logs\":{\"path\":\"/var/log/app.log\"}}}]",
+     "INJECTION_INJECTED",
+     3,
+     1.5,
+     1,
+     99,
+     "\u0001\u0002",
+     "\u0003",
+     1,
+     "",
+     "vpc-123",
+     11,
+     2,
+     "fargateEKS",
+     "7.58.2",
+     "b0a1f2c3-0000-4000-8000-000000000001",
+     "uuid-1",
+     "linux",
+     "ubuntu",
+     "debian",
+     "22.04",
+     "5.15.0"
+    ]
+   ],
+   "insert": "INSERT INTO processes\n\t\t\t(tenant_id, timestamp, host, pid, ppid, user, comm, exe, cmdline,\n\t\t\t rss, vms, cpu_pct, threads, open_fds, state, create_time, container_id, tags,\n\t\t\t snapshot_id, ns_pid, key,\n\t\t\t cwd, root, on_disk, pgroup, args,\n\t\t\t uid, gid, euid, egid, suid, sgid,\n\t\t\t mem_swap, mem_shared, mem_text, mem_lib, mem_data, mem_dirty,\n\t\t\t cpu_last_cpu, cpu_user_pct, cpu_system_pct, cpu_nice,\n\t\t\t cpu_user_time, cpu_system_time, cpu_core_names, cpu_core_pcts,\n\t\t\t io_read_rate, io_write_rate, io_read_bytes_rate, io_write_bytes_rate,\n\t\t\t voluntary_ctx_switches, involuntary_ctx_switches,\n\t\t\t net_connection_rate, net_bytes_rate,\n\t\t\t process_context, language, port_tcp, port_udp,\n\t\t\t generated_service_name, generated_service_name_source,\n\t\t\t dd_service_name, dd_service_name_source,\n\t\t\t additional_generated_names, additional_generated_name_sources,\n\t\t\t tracer_runtime_ids, tracer_service_names,\n\t\t\t apm_instrumentation, service_resources, injection_state,\n\t\t\t zombie_children_count, zombie_net_rate, has_zombie_aggregation,\n\t\t\t container_key, byte_key, container_byte_key,\n\t\t\t has_create_time, process_host,\n\t\t\t network_id, group_id, group_size, container_host_type,\n\t\t\t agent_version, request_id,\n\t\t\t host_uuid, os_name, os_platform, os_family, os_version, kernel_version)",
+   "rows": [
+    {
+     "APMInstrumentation": 1,
+     "AdditionalGeneratedNameSources": [
+      "SERVICE_NAME_SOURCE_SPRING"
+     ],
+     "AdditionalGeneratedNames": [
+      "extra"
+     ],
+     "AgentVersion": "7.58.2",
+     "Args": [
+      "/usr/bin/app",
+      "--filter=a b",
+      "-v"
+     ],
+     "ByteKey": "\u0001\u0002",
+     "CPUCoreNames": [
+      "cpu0",
+      "cpu1"
+     ],
+     "CPUCorePcts": [
+      1,
+      2
+     ],
+     "CPULastCPU": "cpu3",
+     "CPUNice": -5,
+     "CPUPct": 12.5,
+     "CPUSystemPct": 4,
+     "CPUSystemTime": 222,
+     "CPUUserPct": 8.5,
+     "CPUUserTime": 111,
+     "Cmdline": "/usr/bin/app --filter=a b -v",
+     "Comm": "app",
+     "ContainerByteKey": "\u0003",
+     "ContainerHostType": "fargateEKS",
+     "ContainerID": "cid-1",
+     "ContainerKey": 99,
+     "CreateTime": "2023-11-14T22:13:20Z",
+     "Cwd": "/srv/app",
+     "DDServiceName": "declared",
+     "DDServiceNameSource": "SERVICE_NAME_SOURCE_DD_SERVICE",
+     "EGID": 2,
+     "EUID": 0,
+     "Exe": "/usr/bin/app",
+     "GID": 1001,
+     "GeneratedServiceName": "guessed",
+     "GeneratedServiceNameSource": "SERVICE_NAME_SOURCE_COMMAND_LINE",
+     "GroupID": 11,
+     "GroupSize": 2,
+     "HasCreateTime": 1,
+     "HasZombieAggregation": 1,
+     "Host": "host-a",
+     "HostUUID": "uuid-1",
+     "IOReadBytesRate": 3,
+     "IOReadRate": 1,
+     "IOWriteBytesRate": 4,
+     "IOWriteRate": 2,
+     "InjectionState": "INJECTION_INJECTED",
+     "InvoluntaryCtxSwitches": 22,
+     "KernelVersion": "5.15.0",
+     "Key": 4242,
+     "Language": "LANGUAGE_GO",
+     "MemData": 700,
+     "MemDirty": 800,
+     "MemLib": 600,
+     "MemShared": 400,
+     "MemSwap": 300,
+     "MemText": 500,
+     "NetBytesRate": 6,
+     "NetConnectionRate": 5,
+     "NetworkID": "vpc-123",
+     "NsPID": 7,
+     "OSFamily": "debian",
+     "OSName": "linux",
+     "OSPlatform": "ubuntu",
+     "OSVersion": "22.04",
+     "OnDisk": 1,
+     "OpenFDs": 64,
+     "PID": 1234,
+     "PPID": 1,
+     "Pgroup": 1200,
+     "PortTCP": [
+      8080,
+      8443
+     ],
+     "PortUDP": [
+      53
+     ],
+     "ProcessContext": [
+      "ctx-a",
+      "ctx-b"
+     ],
+     "ProcessHost": "",
+     "RSS": 100,
+     "RequestID": "b0a1f2c3-0000-4000-8000-000000000001",
+     "Root": "/",
+     "SGID": 4,
+     "SUID": 3,
+     "ServiceResources": "[{\"Resource\":{\"logs\":{\"path\":\"/var/log/app.log\"}}}]",
+     "SnapshotID": "0ea22187-9ca9-46c4-8657-b71b470d1406",
+     "State": "R",
+     "Tags": {
+      "env": [
+       "prod"
+      ],
+      "kube_service": [
+       "a",
+       "b"
+      ]
+     },
+     "TenantID": "test",
+     "Threads": 9,
+     "Timestamp": "2026-10-01T15:21:28.458841184Z",
+     "TracerRuntimeIDs": [
+      "runtime-1"
+     ],
+     "TracerServiceNames": [
+      "traced"
+     ],
+     "UID": 1000,
+     "User": "svc",
+     "VMS": 200,
+     "VoluntaryCtxSwitches": 11,
+     "ZombieChildrenCount": 3,
+     "ZombieNetRate": 1.5
+    }
+   ],
+   "to": "storage_processes",
+   "type": "storage.WriteProcesses"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "uuid.UUID",
+     "string",
+     "int32",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "float32",
+     "uint64",
+     "float32",
+     "uint64",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "uint64",
+     "uint64",
+     "uint64",
+     "uint64",
+     "uint64",
+     "uint64",
+     "uint32",
+     "string",
+     "[]string",
+     "[]int32",
+     "[]string",
+     "map[string][]string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "uuid.UUID",
+     "string",
+     "int32",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "float32",
+     "uint64",
+     "float32",
+     "uint64",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "uint64",
+     "uint64",
+     "uint64",
+     "uint64",
+     "uint64",
+     "uint64",
+     "uint32",
+     "string",
+     "[]string",
+     "[]int32",
+     "[]string",
+     "map[string][]string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:28.458841184Z",
+     "host-a",
+     "0ea22187-9ca9-46c4-8657-b71b470d1406",
+     "collector_proc",
+     0,
+     "containerd",
+     "cid-1",
+     "app",
+     "repo/app:1",
+     "sha256:abc",
+     2,
+     1073741824,
+     0.5,
+     1048576,
+     "running",
+     "healthy",
+     "2023-11-14T22:13:20Z",
+     "2023-11-14T22:14:20Z",
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     15,
+     14,
+     9,
+     10,
+     13,
+     15,
+     12,
+     100,
+     77,
+     {
+      "$b64": "qg=="
+     },
+     [
+      "10.0.0.1",
+      "10.0.0.1"
+     ],
+     [
+      8080,
+      8080
+     ],
+     [
+      "tcp",
+      "udp"
+     ],
+     {
+      "env": [
+       "prod"
+      ],
+      "kube_service": [
+       "a",
+       "b"
+      ]
+     },
+     "",
+     "vpc-123",
+     11,
+     2,
+     "fargateEKS",
+     "7.58.2",
+     "b0a1f2c3-0000-4000-8000-000000000001"
+    ],
+    [
+     "test",
+     "2026-10-01T15:21:28.458841184Z",
+     "host-a",
+     "0ea22187-9ca9-46c4-8657-b71b470d1406",
+     "process",
+     1234,
+     "containerd",
+     "cid-1",
+     "app",
+     "repo/app:1",
+     "sha256:abc",
+     2,
+     1073741824,
+     0.5,
+     1048576,
+     "running",
+     "healthy",
+     "2023-11-14T22:13:20Z",
+     "2023-11-14T22:14:20Z",
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     15,
+     14,
+     9,
+     10,
+     13,
+     15,
+     12,
+     100,
+     77,
+     {
+      "$b64": "qg=="
+     },
+     [
+      "10.0.0.1",
+      "10.0.0.1"
+     ],
+     [
+      8080,
+      8080
+     ],
+     [
+      "tcp",
+      "udp"
+     ],
+     {
+      "env": [
+       "prod"
+      ],
+      "kube_service": [
+       "a",
+       "b"
+      ]
+     },
+     "",
+     "vpc-123",
+     11,
+     2,
+     "fargateEKS",
+     "7.58.2",
+     "b0a1f2c3-0000-4000-8000-000000000001"
+    ]
+   ],
+   "insert": "INSERT INTO containers\n\t\t\t(tenant_id, timestamp, host, snapshot_id, source, pid,\n\t\t\t type, id, name, image, repo_digest,\n\t\t\t cpu_limit, memory_limit, cpu_request, memory_request,\n\t\t\t state, health, created, started,\n\t\t\t rbps, wbps, net_rcvd_ps, net_sent_ps, net_rcvd_bps, net_sent_bps,\n\t\t\t user_pct, system_pct, total_pct, cpu_usage_ns,\n\t\t\t mem_rss, mem_cache, mem_usage, mem_accounted,\n\t\t\t thread_count, thread_limit, key, byte_key,\n\t\t\t addr_ips, addr_ports, addr_protocols, tags, host_info,\n\t\t\t network_id, group_id, group_size, container_host_type,\n\t\t\t agent_version, request_id)",
+   "rows": [
+    {
+     "AddrIPs": [
+      "10.0.0.1",
+      "10.0.0.1"
+     ],
+     "AddrPorts": [
+      8080,
+      8080
+     ],
+     "AddrProtocols": [
+      "tcp",
+      "udp"
+     ],
+     "AgentVersion": "7.58.2",
+     "ByteKey": {
+      "$b64": "qg=="
+     },
+     "CPULimit": 2,
+     "CPURequest": 0.5,
+     "CPUUsageNs": 14,
+     "ContainerHostType": "fargateEKS",
+     "Created": "2023-11-14T22:13:20Z",
+     "GroupID": 11,
+     "GroupSize": 2,
+     "Health": "healthy",
+     "Host": "host-a",
+     "HostInfo": "",
+     "ID": "cid-1",
+     "Image": "repo/app:1",
+     "Key": 77,
+     "MemAccounted": 15,
+     "MemCache": 10,
+     "MemRSS": 9,
+     "MemUsage": 13,
+     "MemoryLimit": 1073741824,
+     "MemoryRequest": 1048576,
+     "Name": "app",
+     "NetRcvdBps": 5,
+     "NetRcvdPs": 3,
+     "NetSentBps": 6,
+     "NetSentPs": 4,
+     "NetworkID": "vpc-123",
+     "PID": 0,
+     "Rbps": 1,
+     "RepoDigest": "sha256:abc",
+     "RequestID": "b0a1f2c3-0000-4000-8000-000000000001",
+     "SnapshotID": "0ea22187-9ca9-46c4-8657-b71b470d1406",
+     "Source": "collector_proc",
+     "Started": "2023-11-14T22:14:20Z",
+     "State": "running",
+     "SystemPct": 8,
+     "Tags": {
+      "env": [
+       "prod"
+      ],
+      "kube_service": [
+       "a",
+       "b"
+      ]
+     },
+     "TenantID": "test",
+     "ThreadCount": 12,
+     "ThreadLimit": 100,
+     "Timestamp": "2026-10-01T15:21:28.458841184Z",
+     "TotalPct": 15,
+     "Type": "containerd",
+     "UserPct": 7,
+     "Wbps": 2
+    },
+    {
+     "AddrIPs": [
+      "10.0.0.1",
+      "10.0.0.1"
+     ],
+     "AddrPorts": [
+      8080,
+      8080
+     ],
+     "AddrProtocols": [
+      "tcp",
+      "udp"
+     ],
+     "AgentVersion": "7.58.2",
+     "ByteKey": {
+      "$b64": "qg=="
+     },
+     "CPULimit": 2,
+     "CPURequest": 0.5,
+     "CPUUsageNs": 14,
+     "ContainerHostType": "fargateEKS",
+     "Created": "2023-11-14T22:13:20Z",
+     "GroupID": 11,
+     "GroupSize": 2,
+     "Health": "healthy",
+     "Host": "host-a",
+     "HostInfo": "",
+     "ID": "cid-1",
+     "Image": "repo/app:1",
+     "Key": 77,
+     "MemAccounted": 15,
+     "MemCache": 10,
+     "MemRSS": 9,
+     "MemUsage": 13,
+     "MemoryLimit": 1073741824,
+     "MemoryRequest": 1048576,
+     "Name": "app",
+     "NetRcvdBps": 5,
+     "NetRcvdPs": 3,
+     "NetSentBps": 6,
+     "NetSentPs": 4,
+     "NetworkID": "vpc-123",
+     "PID": 1234,
+     "Rbps": 1,
+     "RepoDigest": "sha256:abc",
+     "RequestID": "b0a1f2c3-0000-4000-8000-000000000001",
+     "SnapshotID": "0ea22187-9ca9-46c4-8657-b71b470d1406",
+     "Source": "process",
+     "Started": "2023-11-14T22:14:20Z",
+     "State": "running",
+     "SystemPct": 8,
+     "Tags": {
+      "env": [
+       "prod"
+      ],
+      "kube_service": [
+       "a",
+       "b"
+      ]
+     },
+     "TenantID": "test",
+     "ThreadCount": 12,
+     "ThreadLimit": 100,
+     "Timestamp": "2026-10-01T15:21:28.458841184Z",
+     "TotalPct": 15,
+     "Type": "containerd",
+     "UserPct": 7,
+     "Wbps": 2
+    }
+   ],
+   "to": "storage_containers",
+   "type": "storage.WriteContainers"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleCollectorStoresSnapshotProcessesAndContainers",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/0/2",
+  "/sends/0/rows/0/ReceivedAt",
+  "/sends/0/rows/0/SnapshotID",
+  "/sends/1/args/0/1",
+  "/sends/1/args/0/18",
+  "/sends/1/rows/0/SnapshotID",
+  "/sends/1/rows/0/Timestamp",
+  "/sends/2/args/0/1",
+  "/sends/2/args/0/3",
+  "/sends/2/args/1/1",
+  "/sends/2/args/1/3",
+  "/sends/2/rows/0/SnapshotID",
+  "/sends/2/rows/0/Timestamp",
+  "/sends/2/rows/1/SnapshotID",
+  "/sends/2/rows/1/Timestamp"
+ ]
+}

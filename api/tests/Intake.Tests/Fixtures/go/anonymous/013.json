@@ -1,0 +1,31 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.665655521Z",
+ "request": {
+  "body_b64": "",
+  "headers": {
+   "Dd-Api-Key": [
+    "routes-test-key"
+   ]
+  },
+  "host": "intake.profile.example.test",
+  "method": "POST",
+  "url": "/v1/input"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeProfile"
+ ],
+ "sends": null,
+ "seq": 13,
+ "test": "anonymous",
+ "volatile": []
+}

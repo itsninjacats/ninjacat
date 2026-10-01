@@ -1,0 +1,183 @@
+{
+ "recorded_at": "2026-10-01T15:21:35.287637149Z",
+ "request": {
+  "body_b64": "WwoJCXsiaG9zdG5hbWUiOiJoMSIsInNlcnZpY2UiOiJjd3MtYWdlbnQiLCJkZHNvdXJjZSI6InNlY3VyaXR5LWFnZW50Iiwic3RhdHVzIjoiaW5mbyIsCgkJICJtZXNzYWdlIjoie1wiYWdlbnRcIjp7XCJydWxlX2lkXCI6XCJyMVwifX0ifSwKCQl7Imhvc3RuYW1lIjoiaDIiLCJzZXJ2aWNlIjoiY3dzLWFnZW50IiwiZGRzb3VyY2UiOiJzZWN1cml0eS1hZ2VudCIsInN0YXR1cyI6ImluZm8iLCJtZXNzYWdlIjoibm90IGpzb24ifQoJXQ==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/secruntime"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeRuntimeSecurity"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "uint32",
+     "*time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "map[string]string",
+     "string",
+     "string",
+     "uint8",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "uint32",
+     "*time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "map[string]string",
+     "string",
+     "string",
+     "uint8",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:35.287618976Z",
+     "secruntime",
+     0,
+     null,
+     "h1",
+     "cws-agent",
+     "security-agent",
+     "info",
+     {},
+     {},
+     "\"{\\\"agent\\\":{\\\"rule_id\\\":\\\"r1\\\"}}\"",
+     "{\"agent\":{\"rule_id\":\"r1\"}}",
+     1,
+     "r1",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "test",
+     "2026-10-01T15:21:35.287618976Z",
+     "secruntime",
+     1,
+     null,
+     "h2",
+     "cws-agent",
+     "security-agent",
+     "info",
+     {},
+     {},
+     "\"not json\"",
+     "",
+     0,
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ]
+   ],
+   "insert": "INSERT INTO security_events\n\t\t\t(tenant_id, received_at, track, seq_in_batch, timestamp,\n\t\t\t hostname, service, ddsource, status, ddtags, extra,\n\t\t\t message_raw, message, message_decoded,\n\t\t\t rule_id, policy_name, evt_name, evt_category, title, event_kind)",
+   "rows": [
+    {
+     "DDSource": "security-agent",
+     "DDTags": {},
+     "EventKind": "",
+     "EvtCategory": "",
+     "EvtName": "",
+     "Extra": {},
+     "Hostname": "h1",
+     "Message": "{\"agent\":{\"rule_id\":\"r1\"}}",
+     "MessageDecoded": 1,
+     "MessageRaw": "\"{\\\"agent\\\":{\\\"rule_id\\\":\\\"r1\\\"}}\"",
+     "PolicyName": "",
+     "ReceivedAt": "2026-10-01T15:21:35.287618976Z",
+     "RuleID": "r1",
+     "SeqInBatch": 0,
+     "Service": "cws-agent",
+     "Status": "info",
+     "TenantID": "test",
+     "Timestamp": null,
+     "Title": "",
+     "Track": "secruntime"
+    },
+    {
+     "DDSource": "security-agent",
+     "DDTags": {},
+     "EventKind": "",
+     "EvtCategory": "",
+     "EvtName": "",
+     "Extra": {},
+     "Hostname": "h2",
+     "Message": "",
+     "MessageDecoded": 0,
+     "MessageRaw": "\"not json\"",
+     "PolicyName": "",
+     "ReceivedAt": "2026-10-01T15:21:35.287618976Z",
+     "RuleID": "",
+     "SeqInBatch": 1,
+     "Service": "cws-agent",
+     "Status": "info",
+     "TenantID": "test",
+     "Timestamp": null,
+     "Title": "",
+     "Track": "secruntime"
+    }
+   ],
+   "to": "storage_security_events",
+   "type": "storage.WriteSecurityEvents"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleSecLogsTrackStoresRows",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/ReceivedAt",
+  "/sends/0/rows/1/ReceivedAt"
+ ]
+}

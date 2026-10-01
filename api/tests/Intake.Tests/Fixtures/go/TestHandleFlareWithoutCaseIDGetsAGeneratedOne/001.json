@@ -1,0 +1,92 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.028091535Z",
+ "request": {
+  "body_b64": "LS03ZDVmOWZjZjA4ZjY0OGYzZTY2NmI3ZDcwZmVkYTFjY2U0ODM4OTM0M2EzMWFmZDk3YTgwMzBmNDExYWUNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0ic291cmNlIg0KDQpsb2NhbA0KLS03ZDVmOWZjZjA4ZjY0OGYzZTY2NmI3ZDcwZmVkYTFjY2U0ODM4OTM0M2EzMWFmZDk3YTgwMzBmNDExYWUNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmxhcmVfZmlsZSI7IGZpbGVuYW1lPSJkYXRhZG9nLWFnZW50LTIwMjYtMDktMjMuemlwIg0KQ29udGVudC1UeXBlOiBhcHBsaWNhdGlvbi9vY3RldC1zdHJlYW0NCg0KemlwLWJ5dGVzDQotLTdkNWY5ZmNmMDhmNjQ4ZjNlNjY2YjdkNzBmZWRhMWNjZTQ4Mzg5MzQzYTMxYWZkOTdhODAzMGY0MTFhZQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJhZ2VudF92ZXJzaW9uIg0KDQo3LjYwLjANCi0tN2Q1ZjlmY2YwOGY2NDhmM2U2NjZiN2Q3MGZlZGExY2NlNDgzODkzNDNhMzFhZmQ5N2E4MDMwZjQxMWFlDQpDb250ZW50LURpc3Bvc2l0aW9uOiBmb3JtLWRhdGE7IG5hbWU9Imhvc3RuYW1lIg0KDQpob3N0LTENCi0tN2Q1ZjlmY2YwOGY2NDhmM2U2NjZiN2Q3MGZlZGExY2NlNDgzODkzNDNhMzFhZmQ5N2E4MDMwZjQxMWFlLS0NCg==",
+  "headers": {
+   "Content-Type": [
+    "multipart/form-data; boundary=7d5f9fcf08f648f3e666b7d70feda1cce48389343a31afd97a8030f411ae"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/support/flare"
+ },
+ "response": {
+  "body_b64": "eyJjYXNlX2lkIjozODMyMzE0OTkwNzU1MDMwNzI0LCJlcnJvciI6IiIsInJlcXVlc3RfdXVpZCI6ImQ4ZDA5ZDllLTdkMjUtNDc4Yi1iMGEzLTU2MTZlYmFlYTIyZSJ9",
+  "body_json": {
+   "case_id": 3832314990755030724,
+   "error": "",
+   "request_uuid": "d8d09d9e-7d25-478b-b0a3-5616ebaea22e"
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint64",
+     "map[string]string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.028076628Z",
+     "host-1",
+     "",
+     "",
+     "local",
+     "7.60.0",
+     "datadog-agent-2026-09-23.zip",
+     9,
+     {},
+     "zip-bytes"
+    ]
+   ],
+   "insert": "INSERT INTO agent_flares\n\t\t\t(tenant_id, received_at, hostname, case_id, email, source, agent_version,\n\t\t\t filename, size_bytes, fields, archive)",
+   "rows": [
+    {
+     "AgentVersion": "7.60.0",
+     "Archive": "zip-bytes",
+     "CaseID": "",
+     "Email": "",
+     "Fields": {},
+     "Filename": "datadog-agent-2026-09-23.zip",
+     "Hostname": "host-1",
+     "ReceivedAt": "2026-10-01T15:21:14.028076628Z",
+     "SizeBytes": 9,
+     "Source": "local",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_agent_flares",
+   "type": "storage.WriteAgentFlares"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleFlareWithoutCaseIDGetsAGeneratedOne",
+ "volatile": [
+  "/response/body_json/case_id",
+  "/response/body_json/request_uuid",
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

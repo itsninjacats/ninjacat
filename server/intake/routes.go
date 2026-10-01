@@ -253,7 +253,7 @@ func (a *Server) Handler() http.Handler {
 //
 // Only install.<site> uses it. Everything else must present a key.
 func (a *Server) publicEngine(routes ...func(*gin.RouterGroup)) *gin.Engine {
-	r := a.baseEngine()
+	r := a.baseEngine(routes...)
 	g := r.Group("")
 	for _, add := range routes {
 		add(g)
@@ -264,9 +264,15 @@ func (a *Server) publicEngine(routes ...func(*gin.RouterGroup)) *gin.Engine {
 
 // baseEngine is the part every engine shares: middleware and the two probes
 // that never need a key.
-func (a *Server) baseEngine() *gin.Engine {
+func (a *Server) baseEngine(routes ...func(*gin.RouterGroup)) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
+	// Tests only: records every request, its response and what it sent to
+	// storage, as golden fixtures for the F# port. Before Decompress, so the
+	// body is kept as it arrived.
+	if fixtureHook != nil {
+		r.Use(fixtureHook(a, routes))
+	}
 	r.Use(Decompress())
 	if os.Getenv("DEBUG") == "true" {
 		r.Use(gin.Logger())
@@ -290,7 +296,7 @@ func (a *Server) engine(routes ...func(*gin.RouterGroup)) *gin.Engine {
 // keeps the exception at the one call site that needs it, instead of widening
 // what every other engine accepts.
 func (a *Server) engineAuth(auth gin.HandlerFunc, routes ...func(*gin.RouterGroup)) *gin.Engine {
-	r := a.baseEngine()
+	r := a.baseEngine(routes...)
 
 	// Everything else needs a valid key — see apikey_mw.go.
 	g := r.Group("", auth)
@@ -315,6 +321,9 @@ func (a *Server) engineAuth(auth gin.HandlerFunc, routes ...func(*gin.RouterGrou
 	r.NoRoute(a.HandleUnknown)
 	return r
 }
+
+// fixtureHook is nil outside tests; see fixtures_test.go.
+var fixtureHook func(a *Server, routes []func(*gin.RouterGroup)) gin.HandlerFunc
 
 // unknownHost answers a request whose Host matches no intake.
 //

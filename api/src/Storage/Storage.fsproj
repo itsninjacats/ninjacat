@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>NinjaCat.Api.Storage</RootNamespace>
+    <AssemblyName>NinjaCat.Api.Storage</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Table.fs" />
+    <Compile Include="Rows/Raw.fs" />
+    <Compile Include="Rows/Logs.fs" />
+    <Compile Include="Rows/Metrics.fs" />
+    <Compile Include="Rows/Flares.fs" />
+    <Compile Include="Rows/Checks.fs" />
+    <Compile Include="Rows/Events.fs" />
+    <Compile Include="Rows/Hosts.fs" />
+    <Compile Include="Rows/ApiExtra.fs" />
+    <Compile Include="Rows/Containers.fs" />
+    <Compile Include="Rows/Ecs.fs" />
+    <Compile Include="Rows/K8s.fs" />
+    <Compile Include="Rows/Dbm.fs" />
+    <Compile Include="Rows/Ndm.fs" />
+    <Compile Include="Rows/ApmTelemetry.fs" />
+    <Compile Include="Rows/Profiling.fs" />
+    <Compile Include="Rows/Security.fs" />
+    <Compile Include="Rows/Evp.fs" />
+    <Compile Include="Rows/Ci.fs" />
+    <Compile Include="Rows/Traces.fs" />
+    <Compile Include="Rows/Process.fs" />
+    <Compile Include="Rows/ProcessExtra.fs" />
+    <Compile Include="Rows/Rum.fs" />
+    <Compile Include="Writer.fs" />
+    <Compile Include="ClickHouseSink.fs" />
+    <Compile Include="Migrations.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The ClickHouse schema, applied by Migrations.fs. Embedded so the
+         binary needs no files beside it. -->
+    <EmbeddedResource Include="../../../server/schema/migrations/*.sql" LogicalName="migrations/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ClickHouse.Driver" />
+  </ItemGroup>
+
+</Project>

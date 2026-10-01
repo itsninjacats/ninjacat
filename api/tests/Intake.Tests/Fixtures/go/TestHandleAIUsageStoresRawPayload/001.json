@@ -1,0 +1,104 @@
+{
+ "recorded_at": "2026-10-01T15:21:21.397817082Z",
+ "request": {
+  "body_b64": "eyJwcm9tcHQiOiJzdW1tYXJpc2UgdGhpcyIsIm1vZGVsIjoiY2xhdWRlIn0=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ],
+   "Dd-Evp-Origin": [
+    "ai_prompt_logger"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/aiusage"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeAIUsage"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:21.397801192Z",
+     "aiusage",
+     "no_schema",
+     "POST",
+     "example.com",
+     "/api/v2/aiusage",
+     {},
+     "application/json",
+     "",
+     {
+      "Dd-Evp-Origin": "ai_prompt_logger"
+     },
+     "{\"prompt\":\"summarise this\",\"model\":\"claude\"}",
+     44,
+     "DD-EVP-ORIGIN=\"ai_prompt_logger\" DD-EVP-ORIGIN-VERSION=\"\" Content-Type=\"application/json\""
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "{\"prompt\":\"summarise this\",\"model\":\"claude\"}",
+     "BodyBytes": 44,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {
+      "Dd-Evp-Origin": "ai_prompt_logger"
+     },
+     "Host": "example.com",
+     "Intake": "aiusage",
+     "Method": "POST",
+     "Note": "DD-EVP-ORIGIN=\"ai_prompt_logger\" DD-EVP-ORIGIN-VERSION=\"\" Content-Type=\"application/json\"",
+     "Path": "/api/v2/aiusage",
+     "Query": {},
+     "Reason": "no_schema",
+     "ReceivedAt": "2026-10-01T15:21:21.397801192Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleAIUsageStoresRawPayload",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

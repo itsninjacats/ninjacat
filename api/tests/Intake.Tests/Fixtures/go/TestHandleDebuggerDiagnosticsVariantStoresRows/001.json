@@ -1,0 +1,108 @@
+{
+ "recorded_at": "2026-10-01T15:21:28.465996372Z",
+ "request": {
+  "body_b64": "LS1jZjVkYWRjNTMwY2U0YjhkNzNiMDU0NGE4ZDUxMDdlMzUyOWU3YjUwYzA4MDc0YzU1NTNlZDNmZjA2YzMNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZXZlbnQiDQoNClt7CgkJInNlcnZpY2UiOiAic3ZjIiwgImRkc291cmNlIjogImRkX2RlYnVnZ2VyIiwgInRpbWVzdGFtcCI6IDE3NTg2MjM0MDAsCgkJImRlYnVnZ2VyIjogeyJkaWFnbm9zdGljcyI6IHsKCQkJInJ1bnRpbWVJZCI6ICJydC0xIiwgInByb2JlSWQiOiAicHJvYmUtMSIsICJzdGF0dXMiOiAiSU5TVEFMTEVEIiwgInByb2JlVmVyc2lvbiI6ICIzIiwKCQkJImV4Y2VwdGlvbiI6IHsidHlwZSI6ICJOUEUiLCAibWVzc2FnZSI6ICJib29tIn0KCQl9fQoJfV0NCi0tY2Y1ZGFkYzUzMGNlNGI4ZDczYjA1NDRhOGQ1MTA3ZTM1MjllN2I1MGMwODA3NGM1NTUzZWQzZmYwNmMzLS0NCg==",
+  "headers": {
+   "Content-Type": [
+    "multipart/form-data; boundary=cf5dadc530ce4b8d73b0544a8d5107e3529e7b50c08074c5553ed3ff06c3"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/debugger?ddtags=env:prod,team:x"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeDebugger"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "*time.Time",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*string",
+     "*string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:28.465991052Z",
+     "2025-09-23T10:30:00Z",
+     "svc",
+     "dd_debugger",
+     {
+      "env": [
+       "prod"
+      ],
+      "team": [
+       "x"
+      ]
+     },
+     "rt-1",
+     "probe-1",
+     "INSTALLED",
+     "3",
+     "NPE",
+     "boom",
+     "{\n\t\t\"service\": \"svc\", \"ddsource\": \"dd_debugger\", \"timestamp\": 1758623400,\n\t\t\"debugger\": {\"diagnostics\": {\n\t\t\t\"runtimeId\": \"rt-1\", \"probeId\": \"probe-1\", \"status\": \"INSTALLED\", \"probeVersion\": \"3\",\n\t\t\t\"exception\": {\"type\": \"NPE\", \"message\": \"boom\"}\n\t\t}}\n\t}"
+    ]
+   ],
+   "insert": "INSERT INTO debugger_diagnostics\n\t\t\t(tenant_id, received_at, timestamp, service, ddsource, ddtags, runtime_id,\n\t\t\t probe_id, status, probe_version, exception_type, exception_message, message)",
+   "rows": [
+    {
+     "DDSource": "dd_debugger",
+     "DDTags": {
+      "env": [
+       "prod"
+      ],
+      "team": [
+       "x"
+      ]
+     },
+     "ExceptionMessage": "boom",
+     "ExceptionType": "NPE",
+     "Message": "{\n\t\t\"service\": \"svc\", \"ddsource\": \"dd_debugger\", \"timestamp\": 1758623400,\n\t\t\"debugger\": {\"diagnostics\": {\n\t\t\t\"runtimeId\": \"rt-1\", \"probeId\": \"probe-1\", \"status\": \"INSTALLED\", \"probeVersion\": \"3\",\n\t\t\t\"exception\": {\"type\": \"NPE\", \"message\": \"boom\"}\n\t\t}}\n\t}",
+     "ProbeID": "probe-1",
+     "ProbeVersion": "3",
+     "ReceivedAt": "2026-10-01T15:21:28.465991052Z",
+     "RuntimeID": "rt-1",
+     "Service": "svc",
+     "Status": "INSTALLED",
+     "TenantID": "test",
+     "Timestamp": "2025-09-23T10:30:00Z"
+    }
+   ],
+   "to": "storage_debugger_diagnostics",
+   "type": "storage.WriteDebuggerDiagnostics"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleDebuggerDiagnosticsVariantStoresRows",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

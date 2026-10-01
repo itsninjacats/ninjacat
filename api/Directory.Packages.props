@@ -12,5 +12,8 @@
     <PackageVersion Include="ClickHouse.Driver" Version="1.4.0" />
     <PackageVersion Include="Npgsql.DependencyInjection" Version="10.0.3" />
     <PackageVersion Include="xunit.v3" Version="4.0.1" />
+    <PackageVersion Include="Google.Protobuf" Version="3.33.2" />
+    <PackageVersion Include="Grpc.Tools" Version="2.76.0" />
+    <PackageVersion Include="ZstdSharp.Port" Version="0.8.6" />
   </ItemGroup>
 </Project>
