@@ -60,3 +60,12 @@ when a new agent version changes a shape.
   from rows already stored.
 - **A Sentry-compatible intake** is in `TODO.md` (Error Tracking); listed here only because
   it is the cheapest way to get application errors in before any tracer work.
+
+## Two executables instead of one program with two commands
+
+`ninjacat-api intake` and `ninjacat-api query` are one binary. Two projects (an intake
+server that references `Intake` and `Storage`, a query server that references `Engine`)
+would make the separation a fact of the build: the intake image would hold no query code and
+the reverse, and the dev stack would stop compiling everything twice. The cost is a sixth
+and seventh project and a shared library for `Config`, the ClickHouse clients and the
+Postgres connection string.

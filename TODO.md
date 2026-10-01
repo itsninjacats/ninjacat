@@ -10,10 +10,9 @@ tracers.
 
 ## 1. Finish the move to one server
 
-The F# server (`api/`) took over from the Go one; compose already runs only it. What is left
-before `server/` can go:
+The F# server (`api/`) took over from the Go one; compose already runs only it, as two
+processes (`intake`, `query`). What is left before `server/` can go:
 
-- [ ] Commit the cutover and everything since (nothing after `17c20b8` is committed).
 - [ ] `lab/k8s/`: build and deploy `api/` instead of `server/` (image, `CLICKHOUSE_HTTP_ADDR`,
       `ninjacat-api migrate`), then run it. Also the first live check of the Kubernetes
       intake on F#.
@@ -82,12 +81,12 @@ routers that needed them, which is how the copies came about.
       aggregates in one pass, which `Compile.fs` itself calls wrong for multi-host series.
 - [ ] **Dead code**: `Text.joinOrDash`, `Route.put`, `ProcessFrame.typeName`,
       `Json.tryInt64`; used only by tests: `Json.tryParseList`, `Rum.wrap`. Unused
-      endpoints: `/internal/metrics/hosts`, `/internal/apikeys/status` (check for other
-      callers first).
+      endpoint: `/internal/metrics/hosts` (check for other callers first).
 - [ ] **Parity machinery with nothing left to match**: `TraceSketch.GoMath` (125 lines
       re-implementing Go's `math` to the last bit), `ApiPayloads.wrongWireType` and
       `hasUnknownFields`, notes that name Go types (`cannot unmarshal … into Go value of type
-      gogen.MetricPayload`), route sets still called `routeAPI` under `byGoNames`.
+      gogen.MetricPayload`). The Go route set names (`routeAPI`…) are out of the server:
+      `Routes.fs` is a plain chain of hosts, and only `Golden/Replay.fs` knows the names.
 - [ ] 141 comment lines in `src` cite Go. Half describe Go's libraries as a format spec and
       stay; fix the ones that are false or present tense: `Server/Config.fs:60`,
       `Intake/Routes.fs:14`, `Engine/Query/Compile.fs:102,123`, `Routers/Lenient.fs:104`,
@@ -126,23 +125,28 @@ far found something, so expect findings. How to record: `lab/README.md`.
 - [ ] **Tracers** — one small app with `dd-trace` covers: profiles, the debugger and symbol
       uploads, Data Streams Monitoring, tracer telemetry, CI Visibility (test cycle,
       coverage, git endpoints).
-- [ ] **NinjaCat sending to NinjaCat**: instrument our own two applications with Datadog's
-      SDKs and point them at this intake. It is the cheapest standing source of real
-      application traffic, which is exactly what this section lacks:
-  - the panel: `@datadog/browser-rum` and `@datadog/browser-logs` through `proxy`, and
-    `dd-trace` in the SvelteKit server;
-  - the F# server: `dd-trace-dotnet` (traces, runtime metrics, the continuous profiler,
-    which exercises the pprof path) through an agent in the compose stack;
-  - off by default and never sent anywhere but the installation itself: RUM in the panel
-    observes the operator's own users;
-  - the server tracing its own intake is a loop (each flush is a request that is traced):
-    leave the intake port out, or sample it;
-  - both SDKs are Apache-2.0.
+- [x] **NinjaCat sending to NinjaCat** (`compose.self.yaml`, off unless named): the panel
+      through `@datadog/browser-rum` and `@datadog/browser-logs` with `proxy`, both server
+      processes through `dd-trace-dotnet` 3.54.0 (traces, runtime metrics, the continuous
+      profiler, logs by direct submission, tracer telemetry) and an agent on a network with
+      no route out. Checked on 2026-10-01: the browser talks to the panel and the intake
+      only; a traced process asks DNS for `agent`, `clickhouse`, `postgres` and its own
+      intake alias and nothing else. First finding: the tracer's logs have no `message`
+      (Serilog's compact form), which the logs intake refused. Left:
+  - [ ] `dd-trace` in the SvelteKit server, and `allowedTracingUrls` so a RUM resource
+        links to the server span that answered it;
+  - [ ] the agent there sees only its own container: no container logs, no host metrics
+        (both need mounts from the host, which is the operator's call);
+  - [ ] `ninjacat.node.*` self-metrics come from `intake` only; `query` holds no writer;
+  - [ ] the tracer's telemetry and profiles arrive, but nothing reads them yet (sections 3
+        and 4).
 - [ ] **Agent and tracer telemetry** (`instrumentation-telemetry-intake`,
       `/api/v2/apmtelemetry`). Useful on its own: it says which agents and tracers run, in
       which versions, with which configuration, and what went wrong inside them. Five
       producers share the path and are told apart by `request_type`; they do not follow
       `dd_url`, which is why the labs never saw them:
+  - `compose.self.yaml` already sets `apm_config.telemetry.dd_url`; the .NET tracer's
+    telemetry arrives through it as `apm_telemetry` rows. The labs do not yet:
   - [ ] redirect them in `compose.lab.yaml` and `lab/`: `agent_telemetry.dd_url` (the agent's
         own metrics, logs and message batches, zstd) and `apm_config.telemetry.dd_url` (the
         tracers' proxy, trace-agent onboarding, the cluster agent's patch events), and add
@@ -241,6 +245,22 @@ data is here; the product is not.
 
 ## 6. Known rough edges
 
+- [ ] **The query process (:8081) asks for nothing.** No key, no session, and `?tenant=`
+      lets the caller name any tenant. All that protects it is the network: its own
+      container, a port compose does not publish (loopback only in the dev stack). It needs
+      a credential the panel presents — a shared secret at least, the user's session and
+      tenant at best — before a second tenant exists.
+- [ ] **Logs over TCP (:10516) are plain unless a certificate is given**, so the API key
+      travels in clear text, and the agent's default (TLS) does not even connect. Proposed,
+      not decided: without `NINJACAT_TLS_CERT`/`NINJACAT_TLS_KEY` the listener does not
+      start; plain TCP only when asked for by name, for labs and closed networks.
+- [ ] **Log status is stored as the sender spelled it**, except for the compact form of
+      Datadog's .NET tracer (`@l`), which is mapped to `info`/`warn`/`error`…. Datadog
+      normalises every status (its status remapper: by first letters, syslog numbers);
+      until we do, `Warning`, `warn` and `WARN` are three facet values.
+- [ ] The dev stack builds the server twice on every save, once per process, each into its
+      own volume. Two executables that share only what they need would halve that
+      (`TODO_POSSIBLY.md`).
 - [ ] `/api/v2/validate`: the org id is derived from the tenant, so two installations that
       both use `default` share an Org Propagation Marker. Needs an installation id.
 - [ ] A `null` in a v2 series' tag list is stored as an empty tag.
