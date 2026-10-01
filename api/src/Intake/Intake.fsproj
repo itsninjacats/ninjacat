@@ -15,6 +15,7 @@
     <Compile Include="Routers/Flare.fs" />
     <Compile Include="Engine.fs" />
     <Compile Include="Routers/Logs.fs" />
+    <Compile Include="Routers/ApiPayloads.fs" />
     <Compile Include="Routers/Api.fs" />
     <Compile Include="Routers/App.fs" />
     <Compile Include="Routers/Config.fs" />
