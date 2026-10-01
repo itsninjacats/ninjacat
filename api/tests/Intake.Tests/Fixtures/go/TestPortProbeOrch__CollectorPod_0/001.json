@@ -1,0 +1,1013 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.426128065Z",
+ "request": {
+  "body_b64": "AwApCZIQAAAAAAAAAAAAAAoCczISDHM0IDwmPiAiw6kiChoCczYg+P//////////ASgKMtERCvIBCgNzMTQSDXMxNiA8Jj4gIsOpIgoaA3MxOCDs//////////8BKJbiz6oGMgdrMjQ6djI0MhVrMjQ6b3RoZXI6d2l0aDpjb2xvbnMyBmJhcmUyNDIIejI0Omxhc3Q6B2syNjp2MjY6FWsyNjpvdGhlcjp3aXRoOmNvbG9uczoGYmFyZTI2Ogh6MjY6bGFzdEIPCgNzMjkSA3MzMRoDczMzQg8KA3MzNRIDczM3GgNzMzlKA3M0MVIHazQzOnY0M1IVazQzOm90aGVyOndpdGg6Y29sb25zUgZiYXJlNDNSCHo0MzpsYXN0WNP//////////wESA3M0NxoDczQ5IgNzNTEqA3M1MzA3OiwKA3M1OBINczYwIDwmPiAiw6kiChgBID8qA3M2NTIDczY3OgNzNjlCA3M3MTo2CgNzNzMSA3M3NRgBIE4qDXM4MCA8Jj4gIsOpIgoyA3M4MjoNczg0IDwmPiAiw6kiCkIDczg2QgRzMTE5SgRzMTIxUg9raW5kOiBUaGluZzEyMwpaCWsxMjU6djEyNVoWazEyNTpvdGhlcjp3aXRoOmNvbG9uc1oHYmFyZTEyNVoJejEyNTpsYXN0YngIgYGAgICAgBAQggEaDnMxMzIgPCY+ICLDqSIKMglrMTM0OnYxMzQyFmsxMzQ6b3RoZXI6d2l0aDpjb2xvbnMyB2JhcmUxMzQyCXoxMzQ6bGFzdDj4/v////////8BQIuBgICAgIAQSPT+/////////wFQjuPPqgZqSAoOCgZrZXkxNDcQlOPPqgYKDgoGa2V5MTQ1EJKvmaQPEg4KBmtleTE1MhCZ48+qBhIOCgZrZXkxNTAQl6+ZpA8aBHMxNTUgAmpSCg4KBmtleTE2MRCi48+qBgoTCgZrZXkxNTkQ4P7/////////ARITCgZrZXkxNjQQ2/7/////////ARIOCgZrZXkxNjYQp+PPqgYaBHMxNjkgAnI4CgNzODkSA3M5MRgBIF4qDXM5NiA8Jj4gIsOpIgoyA3M5ODoOczEwMCA8Jj4gIsOpIgpCBHMxMDJyMgoOczEwNCA8Jj4gIsOpIgoSBHMxMDYYASBtKgRzMTExMgRzMTEzOgRzMTE1QgRzMTE3egRzMTczggEEczE3NYoBJgoRCgZrZXkxODARLOemW/OjZkAKEQoGa2V5MTc4ESznplvzY2ZAkAG348+qBpgBx/7/////////AaIBOAoOczE4OCA8Jj4gIsOpIgoSBHMxOTAYwOPPqgYgwuPPqgYqDnMxOTYgPCY+ICLDqSIKMgRzMTk4ogE4Cg5zMjAwIDwmPiAiw6kiChIEczIwMhjM48+qBiDOr5mkDyoOczIwOCA8Jj4gIsOpIgoyBHMyMTCqAcMJCtYECqgCCk0KDnMyMTYgPCY+ICLDqSIKEgRzMjE4GglrMjIwOnYyMjAaFmsyMjA6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmUyMjAaCXoyMjA6bGFzdApNCgRzMjIyEg5zMjI0IDwmPiAiw6kiChoJazIyNjp2MjI2GhZrMjI2Om90aGVyOndpdGg6Y29sb25zGgdiYXJlMjI2Ggl6MjI2Omxhc3QSQwoEczIyORIEczIzMRoJazIzMzp2MjMzGhZrMjMzOm90aGVyOndpdGg6Y29sb25zGgdiYXJlMjMzGgl6MjMzOmxhc3QSQwoEczIzNRIEczIzNxoJazIzOTp2MjM5GhZrMjM5Om90aGVyOndpdGg6Y29sb25zGgdiYXJlMjM5Ggl6MjM5Omxhc3QKqAIKTQoEczI0MhIOczI0NCA8Jj4gIsOpIgoaCWsyNDY6djI0NhoWazI0NjpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTI0NhoJejI0NjpsYXN0Ck0KDnMyNDggPCY+ICLDqSIKEgRzMjUwGglrMjUyOnYyNTIaFmsyNTI6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmUyNTIaCXoyNTI6bGFzdBJDCgRzMjU1EgRzMjU3GglrMjU5OnYyNTkaFmsyNTk6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmUyNTkaCXoyNTk6bGFzdBJDCgRzMjYxEgRzMjYzGglrMjY1OnYyNjUaFmsyNjU6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmUyNjUaCXoyNjU6bGFzdBK2Agj0/f////////8BEqgCCk0KDnMyNzIgPCY+ICLDqSIKEgRzMjc0GglrMjc2OnYyNzYaFmsyNzY6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmUyNzYaCXoyNzY6bGFzdApNCgRzMjc4Eg5zMjgwIDwmPiAiw6kiChoJazI4Mjp2MjgyGhZrMjgyOm90aGVyOndpdGg6Y29sb25zGgdiYXJlMjgyGgl6MjgyOmxhc3QSQwoEczI4NRIEczI4NxoJazI4OTp2Mjg5GhZrMjg5Om90aGVyOndpdGg6Y29sb25zGgdiYXJlMjg5Ggl6Mjg5Omxhc3QSQwoEczI5MRIEczI5MxoJazI5NTp2Mjk1GhZrMjk1Om90aGVyOndpdGg6Y29sb25zGgdiYXJlMjk1Ggl6Mjk1Omxhc3QSrgIIqQISqAIKQwoEczMwMRIEczMwMxoJazMwNTp2MzA1GhZrMzA1Om90aGVyOndpdGg6Y29sb25zGgdiYXJlMzA1Ggl6MzA1Omxhc3QKQwoEczMwNxIEczMwORoJazMxMTp2MzExGhZrMzExOm90aGVyOndpdGg6Y29sb25zGgdiYXJlMzExGgl6MzExOmxhc3QSTQoEczMxNBIOczMxNiA8Jj4gIsOpIgoaCWszMTg6djMxOBoWazMxODpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTMxOBoJejMxODpsYXN0Ek0KDnMzMjAgPCY+ICLDqSIKEgRzMzIyGglrMzI0OnYzMjQaFmszMjQ6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmUzMjQaCXozMjQ6bGFzdDKDEgqaAgoEczMyNxIEczMyORoEczMzMSDN5M+qBiix/f////////8BMglrMzM3OnYzMzcyFmszMzc6b3RoZXI6d2l0aDpjb2xvbnMyB2JhcmUzMzcyCXozMzc6bGFzdDoJazMzOTp2MzM5OhZrMzM5Om90aGVyOndpdGg6Y29sb25zOgdiYXJlMzM5Ogl6MzM5Omxhc3RCHAoEczM0MhIOczM0NCA8Jj4gIsOpIgoaBHMzNDZCJgoOczM0OCA8Jj4gIsOpIgoSBHMzNTAaDnMzNTIgPCY+ICLDqSIKSgRzMzU0UglrMzU2OnYzNTZSFmszNTY6b3RoZXI6d2l0aDpjb2xvbnNSB2JhcmUzNTZSCXozNTY6bGFzdFjm5M+qBhIOczM2MCA8Jj4gIsOpIgoaBHMzNjIiDnMzNjQgPCY+ICLDqSIKKgRzMzY2MJD9/////////wE6RQoEczM3MRIEczM3MxgBIIj9/////////wEqBHMzNzgyDnMzODAgPCY+ICLDqSIKOgRzMzgyQg5zMzg0IDwmPiAiw6kiCjozCgRzMzg2Eg5zMzg4IDwmPiAiw6kiChgBIIcDKgRzMzkzMgRzMzk1OgRzMzk3QgRzMzk5Qg5zNDMyIDwmPiAiw6kiCkoEczQzNFID/wC0WglrNDM4OnY0MzhaFms0Mzg6b3RoZXI6d2l0aDpjb2xvbnNaB2JhcmU0MzhaCXo0Mzg6bGFzdGJjCLqDgICAgIAQELsDGgRzNDQ1MglrNDQ3OnY0NDcyFms0NDc6b3RoZXI6d2l0aDpjb2xvbnMyB2JhcmU0NDcyCXo0NDc6bGFzdDjBA0DEg4CAgICAEEjFA1C5/P////////8BalIKDgoGa2V5NDYwEM2xmaQPCg4KBmtleTQ1OBDL5c+qBhIOCgZrZXk0NjMQ0OXPqgYSDgoGa2V5NDY1ENKxmaQPGg5zNDY4IDwmPiAiw6kiCiABalIKEwoGa2V5NDc0EKX8/////////wEKDgoGa2V5NDcyENnlz6oGEg4KBmtleTQ3NxDe5c+qBhITCgZrZXk0NzkQoPz/////////ARoEczQ4MiABcjMKBHM0MDISDnM0MDQgPCY+ICLDqSIKGAEglwMqBHM0MDkyBHM0MTE6BHM0MTNCBHM0MTVyPQoEczQxNxIEczQxORgBIKYDKg5zNDI0IDwmPiAiw6kiCjIEczQyNjoOczQyOCA8Jj4gIsOpIgpCBHM0MzB6BHM0ODaCAQ5zNDg4IDwmPiAiw6kiCooBJgoRCgZrZXk0OTMRlnPTrfnhfkAKEQoGa2V5NDkxEZZz0635wX5AkAHwsZmkD5gB8uXPqgaiASkKBHM1MDESBHM1MDMYh/z/////////ASD75c+qBioEczUwOTIEczUxMaIBJAoEczUxMxIEczUxNRiF5s+qBiCH5s+qBioEczUyMTIEczUyM6oBuwkK1gQKqAIKQwoEczUyORIEczUzMRoJazUzMzp2NTMzGhZrNTMzOm90aGVyOndpdGg6Y29sb25zGgdiYXJlNTMzGgl6NTMzOmxhc3QKQwoEczUzNRIEczUzNxoJazUzOTp2NTM5GhZrNTM5Om90aGVyOndpdGg6Y29sb25zGgdiYXJlNTM5Ggl6NTM5Omxhc3QSTQoEczU0MhIOczU0NCA8Jj4gIsOpIgoaCWs1NDY6djU0NhoWazU0NjpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTU0NhoJejU0NjpsYXN0Ek0KDnM1NDggPCY+ICLDqSIKEgRzNTUwGglrNTUyOnY1NTIaFms1NTI6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmU1NTIaCXo1NTI6bGFzdAqoAgpDCgRzNTU1EgRzNTU3GglrNTU5OnY1NTkaFms1NTk6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmU1NTkaCXo1NTk6bGFzdApDCgRzNTYxEgRzNTYzGglrNTY1OnY1NjUaFms1NjU6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmU1NjUaCXo1NjU6bGFzdBJNCg5zNTY4IDwmPiAiw6kiChIEczU3MBoJazU3Mjp2NTcyGhZrNTcyOm90aGVyOndpdGg6Y29sb25zGgdiYXJlNTcyGgl6NTcyOmxhc3QSTQoEczU3NBIOczU3NiA8Jj4gIsOpIgoaCWs1Nzg6djU3OBoWazU3ODpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTU3OBoJejU3ODpsYXN0Eq4CCMUEEqgCCkMKBHM1ODUSBHM1ODcaCWs1ODk6djU4ORoWazU4OTpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTU4ORoJejU4OTpsYXN0CkMKBHM1OTESBHM1OTMaCWs1OTU6djU5NRoWazU5NTpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTU5NRoJejU5NTpsYXN0Ek0KBHM1OTgSDnM2MDAgPCY+ICLDqSIKGglrNjAyOnY2MDIaFms2MDI6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmU2MDIaCXo2MDI6bGFzdBJNCg5zNjA0IDwmPiAiw6kiChIEczYwNhoJazYwODp2NjA4GhZrNjA4Om90aGVyOndpdGg6Y29sb25zGgdiYXJlNjA4Ggl6NjA4Omxhc3QSrgII4gQSqAIKTQoEczYxNBIOczYxNiA8Jj4gIsOpIgoaCWs2MTg6djYxOBoWazYxODpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTYxOBoJejYxODpsYXN0Ck0KDnM2MjAgPCY+ICLDqSIKEgRzNjIyGglrNjI0OnY2MjQaFms2MjQ6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmU2MjQaCXo2MjQ6bGFzdBJDCgRzNjI3EgRzNjI5GglrNjMxOnY2MzEaFms2MzE6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmU2MzEaCXo2MzE6bGFzdBJDCgRzNjMzEgRzNjM1GglrNjM3OnY2MzcaFms2Mzc6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmU2MzcaCXo2Mzc6bGFzdDp4CIGFgICAgIAQEIIFGg5zNjQ0IDwmPiAiw6kiCjIJazY0Njp2NjQ2MhZrNjQ2Om90aGVyOndpdGg6Y29sb25zMgdiYXJlNjQ2Mgl6NjQ2Omxhc3Q4+Pr/////////AUCLhYCAgICAEEj0+v////////8BUI7nz6oGQglrNjU2OnY2NTZCFms2NTY6b3RoZXI6d2l0aDpjb2xvbnNCB2JhcmU2NTZCCXo2NTY6bGFzdEqmAQoEczY1ORIyCgRzNjYyEg5zNjY0IDwmPiAiw6kiChoEczY2NiIOczY2OCA8Jj4gIsOpIgoqBHM2NzAaLQihBRIEczY3NRoEczY3NyIEczY3OSoEczY4MTIEczY4MzitBUCv58+qBkixBRoyCLMFEgRzNjkzGgRzNjk1IgRzNjk3KgRzNjk5MgRzNzAxOL8FQL/6/////////wFIwwUoxoWAgICAgBBQAVopCMnnz6oGELX6/////////wEYzefPqgYiBHM3MTkqBHM3MjEyBHM3MjM=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.425764976Z",
+     "s6",
+     "s4 <&> \"é\"\n",
+     "Pod",
+     "s16 <&> \"é\"\n",
+     "s14",
+     "s18",
+     "s41",
+     "s33",
+     "s29",
+     "s51",
+     "s53",
+     "s121",
+     2,
+     2,
+     0,
+     {
+      "init_restarts": 203,
+      "pod_restart_count": 55,
+      "ready_containers": 2,
+      "ready_init_containers": 2,
+      "restarts": 141,
+      "total_containers": 2,
+      "total_init_containers": 2
+     },
+     {
+      "bare24": "",
+      "k24": "other:with:colons",
+      "z24": "last"
+     },
+     {
+      "bare26": "",
+      "k26": "other:with:colons",
+      "z26": "last"
+     },
+     {
+      "bare125": [
+       ""
+      ],
+      "bare656": [
+       ""
+      ],
+      "k125": [
+       "v125",
+       "other:with:colons"
+      ],
+      "k656": [
+       "v656",
+       "other:with:colons"
+      ],
+      "z125": [
+       "last"
+      ],
+      "z656": [
+       "last"
+      ]
+     },
+     "1700000713.-715.1700000717-s719",
+     -8,
+     10,
+     4242,
+     9,
+     null,
+     "protobuf",
+     null,
+     "2023-11-14T22:13:42Z",
+     -45,
+     [
+      "k43:v43",
+      "k43:other:with:colons",
+      "bare43",
+      "z43:last"
+     ],
+     [
+      "s33",
+      "s39"
+     ],
+     [
+      "s29",
+      "s35"
+     ],
+     [
+      "s31",
+      "s37"
+     ],
+     [
+      "s188 <&> \"é\"\n",
+      "s200 <&> \"é\"\n"
+     ],
+     [
+      "s190",
+      "s202"
+     ],
+     [
+      "s196 <&> \"é\"\n",
+      "s208 <&> \"é\"\n"
+     ],
+     [
+      "s198",
+      "s210"
+     ],
+     [
+      "2023-11-14T22:16:34Z",
+      "2100-01-01T00:03:26Z"
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      "2023-11-14T22:16:32Z",
+      "2023-11-14T22:16:44Z"
+     ],
+     "s119",
+     "[{\"limits\":{\"key145\":4102444946,\"key147\":1700000148},\"requests\":{\"key150\":4102444951,\"key152\":1700000153},\"name\":\"s155\",\"type\":2},{\"limits\":{\"key159\":-160,\"key161\":1700000162},\"requests\":{\"key164\":-165,\"key166\":1700000167},\"name\":\"s169\",\"type\":2}]",
+     {
+      "key178": 179.123456789,
+      "key180": 181.123456789
+     },
+     "{\"metadata\":{\"name\":\"s14\",\"namespace\":\"s16 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s18\",\"creationTimestamp\":-20,\"deletionTimestamp\":1700000022,\"labels\":[\"k24:v24\",\"k24:other:with:colons\",\"bare24\",\"z24:last\"],\"annotations\":[\"k26:v26\",\"k26:other:with:colons\",\"bare26\",\"z26:last\"],\"ownerReferences\":[{\"name\":\"s29\",\"uid\":\"s31\",\"kind\":\"s33\"},{\"name\":\"s35\",\"uid\":\"s37\",\"kind\":\"s39\"}],\"resourceVersion\":\"s41\",\"finalizers\":[\"k43:v43\",\"k43:other:with:colons\",\"bare43\",\"z43:last\"],\"deletionGracePeriodSeconds\":-45},\"IP\":\"s47\",\"nominatedNodeName\":\"s49\",\"nodeName\":\"s51\",\"phase\":\"s53\",\"restartCount\":55,\"containerStatuses\":[{\"name\":\"s58\",\"containerID\":\"s60 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ready\":true,\"restartCount\":63,\"state\":\"s65\",\"message\":\"s67\",\"image\":\"s69\",\"imageID\":\"s71\"},{\"name\":\"s73\",\"containerID\":\"s75\",\"ready\":true,\"restartCount\":78,\"state\":\"s80 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"message\":\"s82\",\"image\":\"s84 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"imageID\":\"s86\"}],\"initContainerStatuses\":[{\"name\":\"s89\",\"containerID\":\"s91\",\"ready\":true,\"restartCount\":94,\"state\":\"s96 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"message\":\"s98\",\"image\":\"s100 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"imageID\":\"s102\"},{\"name\":\"s104 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"containerID\":\"s106\",\"ready\":true,\"restartCount\":109,\"state\":\"s111\",\"message\":\"s113\",\"image\":\"s115\",\"imageID\":\"s117\"}],\"conditionMessage\":\"s119\",\"status\":\"s121\",\"yaml\":\"a2luZDogVGhpbmcxMjMK\",\"tags\":[\"k125:v125\",\"k125:other:with:colons\",\"bare125\",\"z125:last\"],\"host\":{\"id\":9007199254741121,\"orgId\":130,\"name\":\"s132 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"allTags\":[\"k134:v134\",\"k134:other:with:colons\",\"bare134\",\"z134:last\"],\"numCpus\":-136,\"totalMemory\":9007199254741131,\"tagIndex\":-140,\"tagsModified\":1700000142},\"resourceRequirements\":[{\"limits\":{\"key145\":4102444946,\"key147\":1700000148},\"requests\":{\"key150\":4102444951,\"key152\":1700000153},\"name\":\"s155\",\"type\":2},{\"limits\":{\"key159\":-160,\"key161\":1700000162},\"requests\":{\"key164\":-165,\"key166\":1700000167},\"name\":\"s169\",\"type\":2}],\"QOSClass\":\"s173\",\"priorityClass\":\"s175\",\"metrics\":{\"metricValues\":{\"key178\":179.123456789,\"key180\":181.123456789}},\"startTime\":1700000183,\"scheduledTime\":-185,\"conditions\":[{\"type\":\"s188 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"status\":\"s190\",\"lastProbeTime\":1700000192,\"lastTransitionTime\":1700000194,\"reason\":\"s196 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"message\":\"s198\"},{\"type\":\"s200 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"status\":\"s202\",\"lastProbeTime\":1700000204,\"lastTransitionTime\":4102445006,\"reason\":\"s208 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"message\":\"s210\"}],\"nodeAffinity\":{\"requiredDuringSchedulingIgnoredDuringExecution\":{\"nodeSelectorTerms\":[{\"matchExpressions\":[{\"key\":\"s216 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s218\",\"values\":[\"k220:v220\",\"k220:other:with:colons\",\"bare220\",\"z220:last\"]},{\"key\":\"s222\",\"operator\":\"s224 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k226:v226\",\"k226:other:with:colons\",\"bare226\",\"z226:last\"]}],\"matchFields\":[{\"key\":\"s229\",\"operator\":\"s231\",\"values\":[\"k233:v233\",\"k233:other:with:colons\",\"bare233\",\"z233:last\"]},{\"key\":\"s235\",\"operator\":\"s237\",\"values\":[\"k239:v239\",\"k239:other:with:colons\",\"bare239\",\"z239:last\"]}]},{\"matchExpressions\":[{\"key\":\"s242\",\"operator\":\"s244 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k246:v246\",\"k246:other:with:colons\",\"bare246\",\"z246:last\"]},{\"key\":\"s248 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s250\",\"values\":[\"k252:v252\",\"k252:other:with:colons\",\"bare252\",\"z252:last\"]}],\"matchFields\":[{\"key\":\"s255\",\"operator\":\"s257\",\"values\":[\"k259:v259\",\"k259:other:with:colons\",\"bare259\",\"z259:last\"]},{\"key\":\"s261\",\"operator\":\"s263\",\"values\":[\"k265:v265\",\"k265:other:with:colons\",\"bare265\",\"z265:last\"]}]}]},\"preferredDuringSchedulingIgnoredDuringExecution\":[{\"weight\":-268,\"preference\":{\"matchExpressions\":[{\"key\":\"s272 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s274\",\"values\":[\"k276:v276\",\"k276:other:with:colons\",\"bare276\",\"z276:last\"]},{\"key\":\"s278\",\"operator\":\"s280 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k282:v282\",\"k282:other:with:colons\",\"bare282\",\"z282:last\"]}],\"matchFields\":[{\"key\":\"s285\",\"operator\":\"s287\",\"values\":[\"k289:v289\",\"k289:other:with:colons\",\"bare289\",\"z289:last\"]},{\"key\":\"s291\",\"operator\":\"s293\",\"values\":[\"k295:v295\",\"k295:other:with:colons\",\"bare295\",\"z295:last\"]}]}},{\"weight\":297,\"preference\":{\"matchExpressions\":[{\"key\":\"s301\",\"operator\":\"s303\",\"values\":[\"k305:v305\",\"k305:other:with:colons\",\"bare305\",\"z305:last\"]},{\"key\":\"s307\",\"operator\":\"s309\",\"values\":[\"k311:v311\",\"k311:other:with:colons\",\"bare311\",\"z311:last\"]}],\"matchFields\":[{\"key\":\"s314\",\"operator\":\"s316 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k318:v318\",\"k318:other:with:colons\",\"bare318\",\"z318:last\"]},{\"key\":\"s320 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s322\",\"values\":[\"k324:v324\",\"k324:other:with:colons\",\"bare324\",\"z324:last\"]}]}}]}}",
+     "s47",
+     "s49",
+     "s173",
+     "s175",
+     "2023-11-14T22:16:23Z",
+     null,
+     "s132 <&> \"é\"\n",
+     [
+      "s58",
+      "s73",
+      "s89",
+      "s104 <&> \"é\"\n"
+     ],
+     [
+      "s60 <&> \"é\"\n",
+      "s75",
+      "s91",
+      "s106"
+     ],
+     "\u0001\u0001\u0001\u0001",
+     [
+      63,
+      78,
+      94,
+      109
+     ],
+     [
+      "s65",
+      "s80 <&> \"é\"\n",
+      "s96 <&> \"é\"\n",
+      "s111"
+     ],
+     [
+      "s67",
+      "s82",
+      "s98",
+      "s113"
+     ],
+     [
+      "s69",
+      "s84 <&> \"é\"\n",
+      "s100 <&> \"é\"\n",
+      "s115"
+     ],
+     [
+      "s71",
+      "s86",
+      "s102",
+      "s117"
+     ],
+     "\u0000\u0000\u0001\u0001",
+     "",
+     [],
+     0,
+     "",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "{\"hostName\":\"s2\",\"clusterName\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"clusterId\":\"s6\",\"groupId\":-8,\"groupSize\":10,\"host\":{\"id\":9007199254741633,\"orgId\":642,\"name\":\"s644 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"allTags\":[\"k646:v646\",\"k646:other:with:colons\",\"bare646\",\"z646:last\"],\"numCpus\":-648,\"totalMemory\":9007199254741643,\"tagIndex\":-652,\"tagsModified\":1700000654},\"tags\":[\"k656:v656\",\"k656:other:with:colons\",\"bare656\",\"z656:last\"],\"info\":{\"uuid\":\"s659\",\"os\":{\"name\":\"s662\",\"platform\":\"s664 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"family\":\"s666\",\"version\":\"s668 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"kernelVersion\":\"s670\"},\"cpus\":[{\"number\":673,\"vendor\":\"s675\",\"family\":\"s677\",\"model\":\"s679\",\"physicalId\":\"s681\",\"coreId\":\"s683\",\"cores\":685,\"mhz\":1700000687,\"cacheSize\":689},{\"number\":691,\"vendor\":\"s693\",\"family\":\"s695\",\"model\":\"s697\",\"physicalId\":\"s699\",\"coreId\":\"s701\",\"cores\":703,\"mhz\":-705,\"cacheSize\":707}],\"totalMemory\":9007199254741702},\"isTerminated\":true,\"agentVersion\":{\"Major\":1700000713,\"Minor\":-715,\"Patch\":1700000717,\"Pre\":\"s719\",\"Meta\":\"s721\",\"Commit\":\"s723\"}}"
+    ],
+    [
+     "test",
+     "2026-10-01T16:08:42.425764976Z",
+     "s6",
+     "s4 <&> \"é\"\n",
+     "Pod",
+     "s329",
+     "s327",
+     "s331",
+     "s354",
+     "s346",
+     "s342",
+     "s364 <&> \"é\"\n",
+     "s366",
+     "s434",
+     2,
+     2,
+     0,
+     {
+      "init_restarts": 829,
+      "pod_restart_count": -368,
+      "ready_containers": 2,
+      "ready_init_containers": 2,
+      "restarts": 15,
+      "total_containers": 2,
+      "total_init_containers": 2
+     },
+     {
+      "bare337": "",
+      "k337": "other:with:colons",
+      "z337": "last"
+     },
+     {
+      "bare339": "",
+      "k339": "other:with:colons",
+      "z339": "last"
+     },
+     {
+      "bare438": [
+       ""
+      ],
+      "bare656": [
+       ""
+      ],
+      "k438": [
+       "v438",
+       "other:with:colons"
+      ],
+      "k656": [
+       "v656",
+       "other:with:colons"
+      ],
+      "z438": [
+       "last"
+      ],
+      "z656": [
+       "last"
+      ]
+     },
+     "1700000713.-715.1700000717-s719",
+     -8,
+     10,
+     4242,
+     9,
+     null,
+     "protobuf",
+     "2023-11-14T22:18:53Z",
+     null,
+     1700000358,
+     [
+      "k356:v356",
+      "k356:other:with:colons",
+      "bare356",
+      "z356:last"
+     ],
+     [
+      "s346",
+      "s352 <&> \"é\"\n"
+     ],
+     [
+      "s342",
+      "s348 <&> \"é\"\n"
+     ],
+     [
+      "s344 <&> \"é\"\n",
+      "s350"
+     ],
+     [
+      "s501",
+      "s513"
+     ],
+     [
+      "s503",
+      "s515"
+     ],
+     [
+      "s509",
+      "s521"
+     ],
+     [
+      "s511",
+      "s523"
+     ],
+     [
+      "2023-11-14T22:21:47Z",
+      "2023-11-14T22:21:59Z"
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      "2023-11-14T22:21:57Z"
+     ],
+     "s432 <&> \"é\"\n",
+     "[{\"limits\":{\"key458\":1700000459,\"key460\":4102445261},\"requests\":{\"key463\":1700000464,\"key465\":4102445266},\"name\":\"s468 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"type\":1},{\"limits\":{\"key472\":1700000473,\"key474\":-475},\"requests\":{\"key477\":1700000478,\"key479\":-480},\"name\":\"s482\",\"type\":1}]",
+     {
+      "key491": 492.123456789,
+      "key493": 494.123456789
+     },
+     "{\"metadata\":{\"name\":\"s327\",\"namespace\":\"s329\",\"uid\":\"s331\",\"creationTimestamp\":1700000333,\"deletionTimestamp\":-335,\"labels\":[\"k337:v337\",\"k337:other:with:colons\",\"bare337\",\"z337:last\"],\"annotations\":[\"k339:v339\",\"k339:other:with:colons\",\"bare339\",\"z339:last\"],\"ownerReferences\":[{\"name\":\"s342\",\"uid\":\"s344 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"kind\":\"s346\"},{\"name\":\"s348 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s350\",\"kind\":\"s352 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"resourceVersion\":\"s354\",\"finalizers\":[\"k356:v356\",\"k356:other:with:colons\",\"bare356\",\"z356:last\"],\"deletionGracePeriodSeconds\":1700000358},\"IP\":\"s360 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"nominatedNodeName\":\"s362\",\"nodeName\":\"s364 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"phase\":\"s366\",\"restartCount\":-368,\"containerStatuses\":[{\"name\":\"s371\",\"containerID\":\"s373\",\"ready\":true,\"restartCount\":-376,\"state\":\"s378\",\"message\":\"s380 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"image\":\"s382\",\"imageID\":\"s384 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"name\":\"s386\",\"containerID\":\"s388 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ready\":true,\"restartCount\":391,\"state\":\"s393\",\"message\":\"s395\",\"image\":\"s397\",\"imageID\":\"s399\"}],\"initContainerStatuses\":[{\"name\":\"s402\",\"containerID\":\"s404 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ready\":true,\"restartCount\":407,\"state\":\"s409\",\"message\":\"s411\",\"image\":\"s413\",\"imageID\":\"s415\"},{\"name\":\"s417\",\"containerID\":\"s419\",\"ready\":true,\"restartCount\":422,\"state\":\"s424 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"message\":\"s426\",\"image\":\"s428 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"imageID\":\"s430\"}],\"conditionMessage\":\"s432 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"status\":\"s434\",\"yaml\":\"/wC0\",\"tags\":[\"k438:v438\",\"k438:other:with:colons\",\"bare438\",\"z438:last\"],\"host\":{\"id\":9007199254741434,\"orgId\":443,\"name\":\"s445\",\"allTags\":[\"k447:v447\",\"k447:other:with:colons\",\"bare447\",\"z447:last\"],\"numCpus\":449,\"totalMemory\":9007199254741444,\"tagIndex\":453,\"tagsModified\":-455},\"resourceRequirements\":[{\"limits\":{\"key458\":1700000459,\"key460\":4102445261},\"requests\":{\"key463\":1700000464,\"key465\":4102445266},\"name\":\"s468 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"type\":1},{\"limits\":{\"key472\":1700000473,\"key474\":-475},\"requests\":{\"key477\":1700000478,\"key479\":-480},\"name\":\"s482\",\"type\":1}],\"QOSClass\":\"s486\",\"priorityClass\":\"s488 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"metrics\":{\"metricValues\":{\"key491\":492.123456789,\"key493\":494.123456789}},\"startTime\":4102445296,\"scheduledTime\":1700000498,\"conditions\":[{\"type\":\"s501\",\"status\":\"s503\",\"lastProbeTime\":-505,\"lastTransitionTime\":1700000507,\"reason\":\"s509\",\"message\":\"s511\"},{\"type\":\"s513\",\"status\":\"s515\",\"lastProbeTime\":1700000517,\"lastTransitionTime\":1700000519,\"reason\":\"s521\",\"message\":\"s523\"}],\"nodeAffinity\":{\"requiredDuringSchedulingIgnoredDuringExecution\":{\"nodeSelectorTerms\":[{\"matchExpressions\":[{\"key\":\"s529\",\"operator\":\"s531\",\"values\":[\"k533:v533\",\"k533:other:with:colons\",\"bare533\",\"z533:last\"]},{\"key\":\"s535\",\"operator\":\"s537\",\"values\":[\"k539:v539\",\"k539:other:with:colons\",\"bare539\",\"z539:last\"]}],\"matchFields\":[{\"key\":\"s542\",\"operator\":\"s544 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k546:v546\",\"k546:other:with:colons\",\"bare546\",\"z546:last\"]},{\"key\":\"s548 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s550\",\"values\":[\"k552:v552\",\"k552:other:with:colons\",\"bare552\",\"z552:last\"]}]},{\"matchExpressions\":[{\"key\":\"s555\",\"operator\":\"s557\",\"values\":[\"k559:v559\",\"k559:other:with:colons\",\"bare559\",\"z559:last\"]},{\"key\":\"s561\",\"operator\":\"s563\",\"values\":[\"k565:v565\",\"k565:other:with:colons\",\"bare565\",\"z565:last\"]}],\"matchFields\":[{\"key\":\"s568 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s570\",\"values\":[\"k572:v572\",\"k572:other:with:colons\",\"bare572\",\"z572:last\"]},{\"key\":\"s574\",\"operator\":\"s576 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k578:v578\",\"k578:other:with:colons\",\"bare578\",\"z578:last\"]}]}]},\"preferredDuringSchedulingIgnoredDuringExecution\":[{\"weight\":581,\"preference\":{\"matchExpressions\":[{\"key\":\"s585\",\"operator\":\"s587\",\"values\":[\"k589:v589\",\"k589:other:with:colons\",\"bare589\",\"z589:last\"]},{\"key\":\"s591\",\"operator\":\"s593\",\"values\":[\"k595:v595\",\"k595:other:with:colons\",\"bare595\",\"z595:last\"]}],\"matchFields\":[{\"key\":\"s598\",\"operator\":\"s600 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k602:v602\",\"k602:other:with:colons\",\"bare602\",\"z602:last\"]},{\"key\":\"s604 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s606\",\"values\":[\"k608:v608\",\"k608:other:with:colons\",\"bare608\",\"z608:last\"]}]}},{\"weight\":610,\"preference\":{\"matchExpressions\":[{\"key\":\"s614\",\"operator\":\"s616 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k618:v618\",\"k618:other:with:colons\",\"bare618\",\"z618:last\"]},{\"key\":\"s620 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s622\",\"values\":[\"k624:v624\",\"k624:other:with:colons\",\"bare624\",\"z624:last\"]}],\"matchFields\":[{\"key\":\"s627\",\"operator\":\"s629\",\"values\":[\"k631:v631\",\"k631:other:with:colons\",\"bare631\",\"z631:last\"]},{\"key\":\"s633\",\"operator\":\"s635\",\"values\":[\"k637:v637\",\"k637:other:with:colons\",\"bare637\",\"z637:last\"]}]}}]}}",
+     "s360 <&> \"é\"\n",
+     "s362",
+     "s486",
+     "s488 <&> \"é\"\n",
+     "2100-01-01T00:08:16Z",
+     "2023-11-14T22:21:38Z",
+     "s445",
+     [
+      "s371",
+      "s386",
+      "s402",
+      "s417"
+     ],
+     [
+      "s373",
+      "s388 <&> \"é\"\n",
+      "s404 <&> \"é\"\n",
+      "s419"
+     ],
+     "\u0001\u0001\u0001\u0001",
+     [
+      -376,
+      391,
+      407,
+      422
+     ],
+     [
+      "s378",
+      "s393",
+      "s409",
+      "s424 <&> \"é\"\n"
+     ],
+     [
+      "s380 <&> \"é\"\n",
+      "s395",
+      "s411",
+      "s426"
+     ],
+     [
+      "s382",
+      "s397",
+      "s413",
+      "s428 <&> \"é\"\n"
+     ],
+     [
+      "s384 <&> \"é\"\n",
+      "s399",
+      "s415",
+      "s430"
+     ],
+     "\u0000\u0000\u0001\u0001",
+     "",
+     [],
+     0,
+     "",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "{\"hostName\":\"s2\",\"clusterName\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"clusterId\":\"s6\",\"groupId\":-8,\"groupSize\":10,\"host\":{\"id\":9007199254741633,\"orgId\":642,\"name\":\"s644 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"allTags\":[\"k646:v646\",\"k646:other:with:colons\",\"bare646\",\"z646:last\"],\"numCpus\":-648,\"totalMemory\":9007199254741643,\"tagIndex\":-652,\"tagsModified\":1700000654},\"tags\":[\"k656:v656\",\"k656:other:with:colons\",\"bare656\",\"z656:last\"],\"info\":{\"uuid\":\"s659\",\"os\":{\"name\":\"s662\",\"platform\":\"s664 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"family\":\"s666\",\"version\":\"s668 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"kernelVersion\":\"s670\"},\"cpus\":[{\"number\":673,\"vendor\":\"s675\",\"family\":\"s677\",\"model\":\"s679\",\"physicalId\":\"s681\",\"coreId\":\"s683\",\"cores\":685,\"mhz\":1700000687,\"cacheSize\":689},{\"number\":691,\"vendor\":\"s693\",\"family\":\"s695\",\"model\":\"s697\",\"physicalId\":\"s699\",\"coreId\":\"s701\",\"cores\":703,\"mhz\":-705,\"cacheSize\":707}],\"totalMemory\":9007199254741702},\"isTerminated\":true,\"agentVersion\":{\"Major\":1700000713,\"Minor\":-715,\"Patch\":1700000717,\"Pre\":\"s719\",\"Meta\":\"s721\",\"Commit\":\"s723\"}}"
+    ]
+   ],
+   "insert": "INSERT INTO k8s_resources\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,\n\t\t\t uid, resource_version, owner_kind, owner_name, node_name, phase, status,\n\t\t\t ready, desired, available, counts, labels, annotations, tags,\n\t\t\t agent_version, group_id, group_size,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t creation_timestamp, deletion_timestamp, deletion_grace_period_seconds,\n\t\t\t finalizers, owner_kinds, owner_names, owner_uids,\n\t\t\t condition_types, condition_statuses, condition_reasons, condition_messages,\n\t\t\t condition_last_transition, condition_last_update, condition_last_probe,\n\t\t\t condition_message, resource_requirements, metrics, object,\n\t\t\t pod_ip, nominated_node_name, qos_class, priority_class,\n\t\t\t start_time, scheduled_time, host_name,\n\t\t\t container_names, container_ids, container_ready, container_restarts,\n\t\t\t container_states, container_messages, container_images,\n\t\t\t container_image_ids, container_is_init,\n\t\t\t pod_cidr, pod_cidrs, unschedulable, taints, provider_id, node_roles,\n\t\t\t capacity, allocatable, node_addresses,\n\t\t\t kubelet_version, kube_proxy_version, operating_system, architecture,\n\t\t\t kernel_version, os_image, container_runtime_version,\n\t\t\t service_type, cluster_ip, service_ports,\n\t\t\t rbac_rules, rbac_subjects, rbac_role_ref, envelope)",
+   "rows": [
+    {
+     "AgentVersion": "1700000713.-715.1700000717-s719",
+     "Allocatable": {},
+     "Annotations": {
+      "bare26": "",
+      "k26": "other:with:colons",
+      "z26": "last"
+     },
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s6",
+     "ClusterIP": "",
+     "ClusterName": "s4 <&> \"é\"\n",
+     "CollectedAt": "2026-10-01T16:08:42.425764976Z",
+     "ConditionLastProbe": [
+      "2023-11-14T22:16:32Z",
+      "2023-11-14T22:16:44Z"
+     ],
+     "ConditionLastTransition": [
+      "2023-11-14T22:16:34Z",
+      "2100-01-01T00:03:26Z"
+     ],
+     "ConditionLastUpdate": [
+      null,
+      null
+     ],
+     "ConditionMessage": "s119",
+     "ConditionMessages": [
+      "s198",
+      "s210"
+     ],
+     "ConditionReasons": [
+      "s196 <&> \"é\"\n",
+      "s208 <&> \"é\"\n"
+     ],
+     "ConditionStatuses": [
+      "s190",
+      "s202"
+     ],
+     "ConditionTypes": [
+      "s188 <&> \"é\"\n",
+      "s200 <&> \"é\"\n"
+     ],
+     "ContainerIDs": [
+      "s60 <&> \"é\"\n",
+      "s75",
+      "s91",
+      "s106"
+     ],
+     "ContainerImageIDs": [
+      "s71",
+      "s86",
+      "s102",
+      "s117"
+     ],
+     "ContainerImages": [
+      "s69",
+      "s84 <&> \"é\"\n",
+      "s100 <&> \"é\"\n",
+      "s115"
+     ],
+     "ContainerIsInit": "\u0000\u0000\u0001\u0001",
+     "ContainerMessages": [
+      "s67",
+      "s82",
+      "s98",
+      "s113"
+     ],
+     "ContainerNames": [
+      "s58",
+      "s73",
+      "s89",
+      "s104 <&> \"é\"\n"
+     ],
+     "ContainerReady": "\u0001\u0001\u0001\u0001",
+     "ContainerRestarts": [
+      63,
+      78,
+      94,
+      109
+     ],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [
+      "s65",
+      "s80 <&> \"é\"\n",
+      "s96 <&> \"é\"\n",
+      "s111"
+     ],
+     "Counts": {
+      "init_restarts": 203,
+      "pod_restart_count": 55,
+      "ready_containers": 2,
+      "ready_init_containers": 2,
+      "restarts": 141,
+      "total_containers": 2,
+      "total_init_containers": 2
+     },
+     "CreationTimestamp": null,
+     "DeletionGracePeriodSeconds": -45,
+     "DeletionTimestamp": "2023-11-14T22:13:42Z",
+     "Desired": 2,
+     "Encoding": "protobuf",
+     "Envelope": "{\"hostName\":\"s2\",\"clusterName\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"clusterId\":\"s6\",\"groupId\":-8,\"groupSize\":10,\"host\":{\"id\":9007199254741633,\"orgId\":642,\"name\":\"s644 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"allTags\":[\"k646:v646\",\"k646:other:with:colons\",\"bare646\",\"z646:last\"],\"numCpus\":-648,\"totalMemory\":9007199254741643,\"tagIndex\":-652,\"tagsModified\":1700000654},\"tags\":[\"k656:v656\",\"k656:other:with:colons\",\"bare656\",\"z656:last\"],\"info\":{\"uuid\":\"s659\",\"os\":{\"name\":\"s662\",\"platform\":\"s664 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"family\":\"s666\",\"version\":\"s668 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"kernelVersion\":\"s670\"},\"cpus\":[{\"number\":673,\"vendor\":\"s675\",\"family\":\"s677\",\"model\":\"s679\",\"physicalId\":\"s681\",\"coreId\":\"s683\",\"cores\":685,\"mhz\":1700000687,\"cacheSize\":689},{\"number\":691,\"vendor\":\"s693\",\"family\":\"s695\",\"model\":\"s697\",\"physicalId\":\"s699\",\"coreId\":\"s701\",\"cores\":703,\"mhz\":-705,\"cacheSize\":707}],\"totalMemory\":9007199254741702},\"isTerminated\":true,\"agentVersion\":{\"Major\":1700000713,\"Minor\":-715,\"Patch\":1700000717,\"Pre\":\"s719\",\"Meta\":\"s721\",\"Commit\":\"s723\"}}",
+     "Finalizers": [
+      "k43:v43",
+      "k43:other:with:colons",
+      "bare43",
+      "z43:last"
+     ],
+     "GroupID": -8,
+     "GroupSize": 10,
+     "HeaderTimestamp": null,
+     "HostName": "s132 <&> \"é\"\n",
+     "KernelVersion": "",
+     "Kind": "Pod",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare24": "",
+      "k24": "other:with:colons",
+      "z24": "last"
+     },
+     "Metrics": {
+      "key178": 179.123456789,
+      "key180": 181.123456789
+     },
+     "Name": "s14",
+     "Namespace": "s16 <&> \"é\"\n",
+     "NodeAddresses": "",
+     "NodeName": "s51",
+     "NodeRoles": [],
+     "NominatedNodeName": "s49",
+     "OSImage": "",
+     "Object": "{\"metadata\":{\"name\":\"s14\",\"namespace\":\"s16 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s18\",\"creationTimestamp\":-20,\"deletionTimestamp\":1700000022,\"labels\":[\"k24:v24\",\"k24:other:with:colons\",\"bare24\",\"z24:last\"],\"annotations\":[\"k26:v26\",\"k26:other:with:colons\",\"bare26\",\"z26:last\"],\"ownerReferences\":[{\"name\":\"s29\",\"uid\":\"s31\",\"kind\":\"s33\"},{\"name\":\"s35\",\"uid\":\"s37\",\"kind\":\"s39\"}],\"resourceVersion\":\"s41\",\"finalizers\":[\"k43:v43\",\"k43:other:with:colons\",\"bare43\",\"z43:last\"],\"deletionGracePeriodSeconds\":-45},\"IP\":\"s47\",\"nominatedNodeName\":\"s49\",\"nodeName\":\"s51\",\"phase\":\"s53\",\"restartCount\":55,\"containerStatuses\":[{\"name\":\"s58\",\"containerID\":\"s60 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ready\":true,\"restartCount\":63,\"state\":\"s65\",\"message\":\"s67\",\"image\":\"s69\",\"imageID\":\"s71\"},{\"name\":\"s73\",\"containerID\":\"s75\",\"ready\":true,\"restartCount\":78,\"state\":\"s80 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"message\":\"s82\",\"image\":\"s84 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"imageID\":\"s86\"}],\"initContainerStatuses\":[{\"name\":\"s89\",\"containerID\":\"s91\",\"ready\":true,\"restartCount\":94,\"state\":\"s96 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"message\":\"s98\",\"image\":\"s100 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"imageID\":\"s102\"},{\"name\":\"s104 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"containerID\":\"s106\",\"ready\":true,\"restartCount\":109,\"state\":\"s111\",\"message\":\"s113\",\"image\":\"s115\",\"imageID\":\"s117\"}],\"conditionMessage\":\"s119\",\"status\":\"s121\",\"yaml\":\"a2luZDogVGhpbmcxMjMK\",\"tags\":[\"k125:v125\",\"k125:other:with:colons\",\"bare125\",\"z125:last\"],\"host\":{\"id\":9007199254741121,\"orgId\":130,\"name\":\"s132 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"allTags\":[\"k134:v134\",\"k134:other:with:colons\",\"bare134\",\"z134:last\"],\"numCpus\":-136,\"totalMemory\":9007199254741131,\"tagIndex\":-140,\"tagsModified\":1700000142},\"resourceRequirements\":[{\"limits\":{\"key145\":4102444946,\"key147\":1700000148},\"requests\":{\"key150\":4102444951,\"key152\":1700000153},\"name\":\"s155\",\"type\":2},{\"limits\":{\"key159\":-160,\"key161\":1700000162},\"requests\":{\"key164\":-165,\"key166\":1700000167},\"name\":\"s169\",\"type\":2}],\"QOSClass\":\"s173\",\"priorityClass\":\"s175\",\"metrics\":{\"metricValues\":{\"key178\":179.123456789,\"key180\":181.123456789}},\"startTime\":1700000183,\"scheduledTime\":-185,\"conditions\":[{\"type\":\"s188 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"status\":\"s190\",\"lastProbeTime\":1700000192,\"lastTransitionTime\":1700000194,\"reason\":\"s196 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"message\":\"s198\"},{\"type\":\"s200 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"status\":\"s202\",\"lastProbeTime\":1700000204,\"lastTransitionTime\":4102445006,\"reason\":\"s208 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"message\":\"s210\"}],\"nodeAffinity\":{\"requiredDuringSchedulingIgnoredDuringExecution\":{\"nodeSelectorTerms\":[{\"matchExpressions\":[{\"key\":\"s216 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s218\",\"values\":[\"k220:v220\",\"k220:other:with:colons\",\"bare220\",\"z220:last\"]},{\"key\":\"s222\",\"operator\":\"s224 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k226:v226\",\"k226:other:with:colons\",\"bare226\",\"z226:last\"]}],\"matchFields\":[{\"key\":\"s229\",\"operator\":\"s231\",\"values\":[\"k233:v233\",\"k233:other:with:colons\",\"bare233\",\"z233:last\"]},{\"key\":\"s235\",\"operator\":\"s237\",\"values\":[\"k239:v239\",\"k239:other:with:colons\",\"bare239\",\"z239:last\"]}]},{\"matchExpressions\":[{\"key\":\"s242\",\"operator\":\"s244 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k246:v246\",\"k246:other:with:colons\",\"bare246\",\"z246:last\"]},{\"key\":\"s248 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s250\",\"values\":[\"k252:v252\",\"k252:other:with:colons\",\"bare252\",\"z252:last\"]}],\"matchFields\":[{\"key\":\"s255\",\"operator\":\"s257\",\"values\":[\"k259:v259\",\"k259:other:with:colons\",\"bare259\",\"z259:last\"]},{\"key\":\"s261\",\"operator\":\"s263\",\"values\":[\"k265:v265\",\"k265:other:with:colons\",\"bare265\",\"z265:last\"]}]}]},\"preferredDuringSchedulingIgnoredDuringExecution\":[{\"weight\":-268,\"preference\":{\"matchExpressions\":[{\"key\":\"s272 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s274\",\"values\":[\"k276:v276\",\"k276:other:with:colons\",\"bare276\",\"z276:last\"]},{\"key\":\"s278\",\"operator\":\"s280 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k282:v282\",\"k282:other:with:colons\",\"bare282\",\"z282:last\"]}],\"matchFields\":[{\"key\":\"s285\",\"operator\":\"s287\",\"values\":[\"k289:v289\",\"k289:other:with:colons\",\"bare289\",\"z289:last\"]},{\"key\":\"s291\",\"operator\":\"s293\",\"values\":[\"k295:v295\",\"k295:other:with:colons\",\"bare295\",\"z295:last\"]}]}},{\"weight\":297,\"preference\":{\"matchExpressions\":[{\"key\":\"s301\",\"operator\":\"s303\",\"values\":[\"k305:v305\",\"k305:other:with:colons\",\"bare305\",\"z305:last\"]},{\"key\":\"s307\",\"operator\":\"s309\",\"values\":[\"k311:v311\",\"k311:other:with:colons\",\"bare311\",\"z311:last\"]}],\"matchFields\":[{\"key\":\"s314\",\"operator\":\"s316 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k318:v318\",\"k318:other:with:colons\",\"bare318\",\"z318:last\"]},{\"key\":\"s320 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s322\",\"values\":[\"k324:v324\",\"k324:other:with:colons\",\"bare324\",\"z324:last\"]}]}}]}}",
+     "OperatingSystem": "",
+     "OrgID": 4242,
+     "OwnerKind": "s33",
+     "OwnerKinds": [
+      "s33",
+      "s39"
+     ],
+     "OwnerName": "s29",
+     "OwnerNames": [
+      "s29",
+      "s35"
+     ],
+     "OwnerUIDs": [
+      "s31",
+      "s37"
+     ],
+     "Phase": "s53",
+     "PodCIDR": "",
+     "PodCIDRs": [],
+     "PodIP": "s47",
+     "PriorityClass": "s175",
+     "ProviderID": "",
+     "QOSClass": "s173",
+     "RBACRoleRef": "",
+     "RBACRules": "",
+     "RBACSubjects": "",
+     "Ready": 2,
+     "ResourceRequirements": "[{\"limits\":{\"key145\":4102444946,\"key147\":1700000148},\"requests\":{\"key150\":4102444951,\"key152\":1700000153},\"name\":\"s155\",\"type\":2},{\"limits\":{\"key159\":-160,\"key161\":1700000162},\"requests\":{\"key164\":-165,\"key166\":1700000167},\"name\":\"s169\",\"type\":2}]",
+     "ResourceVersion": "s41",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": "2023-11-14T22:16:23Z",
+     "Status": "s121",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare125": [
+       ""
+      ],
+      "bare656": [
+       ""
+      ],
+      "k125": [
+       "v125",
+       "other:with:colons"
+      ],
+      "k656": [
+       "v656",
+       "other:with:colons"
+      ],
+      "z125": [
+       "last"
+      ],
+      "z656": [
+       "last"
+      ]
+     },
+     "Taints": "",
+     "TenantID": "test",
+     "UID": "s18",
+     "Unschedulable": 0
+    },
+    {
+     "AgentVersion": "1700000713.-715.1700000717-s719",
+     "Allocatable": {},
+     "Annotations": {
+      "bare339": "",
+      "k339": "other:with:colons",
+      "z339": "last"
+     },
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s6",
+     "ClusterIP": "",
+     "ClusterName": "s4 <&> \"é\"\n",
+     "CollectedAt": "2026-10-01T16:08:42.425764976Z",
+     "ConditionLastProbe": [
+      null,
+      "2023-11-14T22:21:57Z"
+     ],
+     "ConditionLastTransition": [
+      "2023-11-14T22:21:47Z",
+      "2023-11-14T22:21:59Z"
+     ],
+     "ConditionLastUpdate": [
+      null,
+      null
+     ],
+     "ConditionMessage": "s432 <&> \"é\"\n",
+     "ConditionMessages": [
+      "s511",
+      "s523"
+     ],
+     "ConditionReasons": [
+      "s509",
+      "s521"
+     ],
+     "ConditionStatuses": [
+      "s503",
+      "s515"
+     ],
+     "ConditionTypes": [
+      "s501",
+      "s513"
+     ],
+     "ContainerIDs": [
+      "s373",
+      "s388 <&> \"é\"\n",
+      "s404 <&> \"é\"\n",
+      "s419"
+     ],
+     "ContainerImageIDs": [
+      "s384 <&> \"é\"\n",
+      "s399",
+      "s415",
+      "s430"
+     ],
+     "ContainerImages": [
+      "s382",
+      "s397",
+      "s413",
+      "s428 <&> \"é\"\n"
+     ],
+     "ContainerIsInit": "\u0000\u0000\u0001\u0001",
+     "ContainerMessages": [
+      "s380 <&> \"é\"\n",
+      "s395",
+      "s411",
+      "s426"
+     ],
+     "ContainerNames": [
+      "s371",
+      "s386",
+      "s402",
+      "s417"
+     ],
+     "ContainerReady": "\u0001\u0001\u0001\u0001",
+     "ContainerRestarts": [
+      -376,
+      391,
+      407,
+      422
+     ],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [
+      "s378",
+      "s393",
+      "s409",
+      "s424 <&> \"é\"\n"
+     ],
+     "Counts": {
+      "init_restarts": 829,
+      "pod_restart_count": -368,
+      "ready_containers": 2,
+      "ready_init_containers": 2,
+      "restarts": 15,
+      "total_containers": 2,
+      "total_init_containers": 2
+     },
+     "CreationTimestamp": "2023-11-14T22:18:53Z",
+     "DeletionGracePeriodSeconds": 1700000358,
+     "DeletionTimestamp": null,
+     "Desired": 2,
+     "Encoding": "protobuf",
+     "Envelope": "{\"hostName\":\"s2\",\"clusterName\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"clusterId\":\"s6\",\"groupId\":-8,\"groupSize\":10,\"host\":{\"id\":9007199254741633,\"orgId\":642,\"name\":\"s644 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"allTags\":[\"k646:v646\",\"k646:other:with:colons\",\"bare646\",\"z646:last\"],\"numCpus\":-648,\"totalMemory\":9007199254741643,\"tagIndex\":-652,\"tagsModified\":1700000654},\"tags\":[\"k656:v656\",\"k656:other:with:colons\",\"bare656\",\"z656:last\"],\"info\":{\"uuid\":\"s659\",\"os\":{\"name\":\"s662\",\"platform\":\"s664 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"family\":\"s666\",\"version\":\"s668 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"kernelVersion\":\"s670\"},\"cpus\":[{\"number\":673,\"vendor\":\"s675\",\"family\":\"s677\",\"model\":\"s679\",\"physicalId\":\"s681\",\"coreId\":\"s683\",\"cores\":685,\"mhz\":1700000687,\"cacheSize\":689},{\"number\":691,\"vendor\":\"s693\",\"family\":\"s695\",\"model\":\"s697\",\"physicalId\":\"s699\",\"coreId\":\"s701\",\"cores\":703,\"mhz\":-705,\"cacheSize\":707}],\"totalMemory\":9007199254741702},\"isTerminated\":true,\"agentVersion\":{\"Major\":1700000713,\"Minor\":-715,\"Patch\":1700000717,\"Pre\":\"s719\",\"Meta\":\"s721\",\"Commit\":\"s723\"}}",
+     "Finalizers": [
+      "k356:v356",
+      "k356:other:with:colons",
+      "bare356",
+      "z356:last"
+     ],
+     "GroupID": -8,
+     "GroupSize": 10,
+     "HeaderTimestamp": null,
+     "HostName": "s445",
+     "KernelVersion": "",
+     "Kind": "Pod",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare337": "",
+      "k337": "other:with:colons",
+      "z337": "last"
+     },
+     "Metrics": {
+      "key491": 492.123456789,
+      "key493": 494.123456789
+     },
+     "Name": "s327",
+     "Namespace": "s329",
+     "NodeAddresses": "",
+     "NodeName": "s364 <&> \"é\"\n",
+     "NodeRoles": [],
+     "NominatedNodeName": "s362",
+     "OSImage": "",
+     "Object": "{\"metadata\":{\"name\":\"s327\",\"namespace\":\"s329\",\"uid\":\"s331\",\"creationTimestamp\":1700000333,\"deletionTimestamp\":-335,\"labels\":[\"k337:v337\",\"k337:other:with:colons\",\"bare337\",\"z337:last\"],\"annotations\":[\"k339:v339\",\"k339:other:with:colons\",\"bare339\",\"z339:last\"],\"ownerReferences\":[{\"name\":\"s342\",\"uid\":\"s344 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"kind\":\"s346\"},{\"name\":\"s348 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s350\",\"kind\":\"s352 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"resourceVersion\":\"s354\",\"finalizers\":[\"k356:v356\",\"k356:other:with:colons\",\"bare356\",\"z356:last\"],\"deletionGracePeriodSeconds\":1700000358},\"IP\":\"s360 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"nominatedNodeName\":\"s362\",\"nodeName\":\"s364 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"phase\":\"s366\",\"restartCount\":-368,\"containerStatuses\":[{\"name\":\"s371\",\"containerID\":\"s373\",\"ready\":true,\"restartCount\":-376,\"state\":\"s378\",\"message\":\"s380 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"image\":\"s382\",\"imageID\":\"s384 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"name\":\"s386\",\"containerID\":\"s388 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ready\":true,\"restartCount\":391,\"state\":\"s393\",\"message\":\"s395\",\"image\":\"s397\",\"imageID\":\"s399\"}],\"initContainerStatuses\":[{\"name\":\"s402\",\"containerID\":\"s404 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ready\":true,\"restartCount\":407,\"state\":\"s409\",\"message\":\"s411\",\"image\":\"s413\",\"imageID\":\"s415\"},{\"name\":\"s417\",\"containerID\":\"s419\",\"ready\":true,\"restartCount\":422,\"state\":\"s424 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"message\":\"s426\",\"image\":\"s428 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"imageID\":\"s430\"}],\"conditionMessage\":\"s432 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"status\":\"s434\",\"yaml\":\"/wC0\",\"tags\":[\"k438:v438\",\"k438:other:with:colons\",\"bare438\",\"z438:last\"],\"host\":{\"id\":9007199254741434,\"orgId\":443,\"name\":\"s445\",\"allTags\":[\"k447:v447\",\"k447:other:with:colons\",\"bare447\",\"z447:last\"],\"numCpus\":449,\"totalMemory\":9007199254741444,\"tagIndex\":453,\"tagsModified\":-455},\"resourceRequirements\":[{\"limits\":{\"key458\":1700000459,\"key460\":4102445261},\"requests\":{\"key463\":1700000464,\"key465\":4102445266},\"name\":\"s468 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"type\":1},{\"limits\":{\"key472\":1700000473,\"key474\":-475},\"requests\":{\"key477\":1700000478,\"key479\":-480},\"name\":\"s482\",\"type\":1}],\"QOSClass\":\"s486\",\"priorityClass\":\"s488 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"metrics\":{\"metricValues\":{\"key491\":492.123456789,\"key493\":494.123456789}},\"startTime\":4102445296,\"scheduledTime\":1700000498,\"conditions\":[{\"type\":\"s501\",\"status\":\"s503\",\"lastProbeTime\":-505,\"lastTransitionTime\":1700000507,\"reason\":\"s509\",\"message\":\"s511\"},{\"type\":\"s513\",\"status\":\"s515\",\"lastProbeTime\":1700000517,\"lastTransitionTime\":1700000519,\"reason\":\"s521\",\"message\":\"s523\"}],\"nodeAffinity\":{\"requiredDuringSchedulingIgnoredDuringExecution\":{\"nodeSelectorTerms\":[{\"matchExpressions\":[{\"key\":\"s529\",\"operator\":\"s531\",\"values\":[\"k533:v533\",\"k533:other:with:colons\",\"bare533\",\"z533:last\"]},{\"key\":\"s535\",\"operator\":\"s537\",\"values\":[\"k539:v539\",\"k539:other:with:colons\",\"bare539\",\"z539:last\"]}],\"matchFields\":[{\"key\":\"s542\",\"operator\":\"s544 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k546:v546\",\"k546:other:with:colons\",\"bare546\",\"z546:last\"]},{\"key\":\"s548 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s550\",\"values\":[\"k552:v552\",\"k552:other:with:colons\",\"bare552\",\"z552:last\"]}]},{\"matchExpressions\":[{\"key\":\"s555\",\"operator\":\"s557\",\"values\":[\"k559:v559\",\"k559:other:with:colons\",\"bare559\",\"z559:last\"]},{\"key\":\"s561\",\"operator\":\"s563\",\"values\":[\"k565:v565\",\"k565:other:with:colons\",\"bare565\",\"z565:last\"]}],\"matchFields\":[{\"key\":\"s568 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s570\",\"values\":[\"k572:v572\",\"k572:other:with:colons\",\"bare572\",\"z572:last\"]},{\"key\":\"s574\",\"operator\":\"s576 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k578:v578\",\"k578:other:with:colons\",\"bare578\",\"z578:last\"]}]}]},\"preferredDuringSchedulingIgnoredDuringExecution\":[{\"weight\":581,\"preference\":{\"matchExpressions\":[{\"key\":\"s585\",\"operator\":\"s587\",\"values\":[\"k589:v589\",\"k589:other:with:colons\",\"bare589\",\"z589:last\"]},{\"key\":\"s591\",\"operator\":\"s593\",\"values\":[\"k595:v595\",\"k595:other:with:colons\",\"bare595\",\"z595:last\"]}],\"matchFields\":[{\"key\":\"s598\",\"operator\":\"s600 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k602:v602\",\"k602:other:with:colons\",\"bare602\",\"z602:last\"]},{\"key\":\"s604 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s606\",\"values\":[\"k608:v608\",\"k608:other:with:colons\",\"bare608\",\"z608:last\"]}]}},{\"weight\":610,\"preference\":{\"matchExpressions\":[{\"key\":\"s614\",\"operator\":\"s616 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k618:v618\",\"k618:other:with:colons\",\"bare618\",\"z618:last\"]},{\"key\":\"s620 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s622\",\"values\":[\"k624:v624\",\"k624:other:with:colons\",\"bare624\",\"z624:last\"]}],\"matchFields\":[{\"key\":\"s627\",\"operator\":\"s629\",\"values\":[\"k631:v631\",\"k631:other:with:colons\",\"bare631\",\"z631:last\"]},{\"key\":\"s633\",\"operator\":\"s635\",\"values\":[\"k637:v637\",\"k637:other:with:colons\",\"bare637\",\"z637:last\"]}]}}]}}",
+     "OperatingSystem": "",
+     "OrgID": 4242,
+     "OwnerKind": "s346",
+     "OwnerKinds": [
+      "s346",
+      "s352 <&> \"é\"\n"
+     ],
+     "OwnerName": "s342",
+     "OwnerNames": [
+      "s342",
+      "s348 <&> \"é\"\n"
+     ],
+     "OwnerUIDs": [
+      "s344 <&> \"é\"\n",
+      "s350"
+     ],
+     "Phase": "s366",
+     "PodCIDR": "",
+     "PodCIDRs": [],
+     "PodIP": "s360 <&> \"é\"\n",
+     "PriorityClass": "s488 <&> \"é\"\n",
+     "ProviderID": "",
+     "QOSClass": "s486",
+     "RBACRoleRef": "",
+     "RBACRules": "",
+     "RBACSubjects": "",
+     "Ready": 2,
+     "ResourceRequirements": "[{\"limits\":{\"key458\":1700000459,\"key460\":4102445261},\"requests\":{\"key463\":1700000464,\"key465\":4102445266},\"name\":\"s468 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"type\":1},{\"limits\":{\"key472\":1700000473,\"key474\":-475},\"requests\":{\"key477\":1700000478,\"key479\":-480},\"name\":\"s482\",\"type\":1}]",
+     "ResourceVersion": "s354",
+     "ScheduledTime": "2023-11-14T22:21:38Z",
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": "2100-01-01T00:08:16Z",
+     "Status": "s434",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare438": [
+       ""
+      ],
+      "bare656": [
+       ""
+      ],
+      "k438": [
+       "v438",
+       "other:with:colons"
+      ],
+      "k656": [
+       "v656",
+       "other:with:colons"
+      ],
+      "z438": [
+       "last"
+      ],
+      "z656": [
+       "last"
+      ]
+     },
+     "Taints": "",
+     "TenantID": "test",
+     "UID": "s331",
+     "Unschedulable": 0
+    }
+   ],
+   "to": "storage_k8s_resources",
+   "type": "storage.WriteK8sResources"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorPod_0",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/CollectedAt",
+  "/sends/0/rows/1/CollectedAt"
+ ]
+}

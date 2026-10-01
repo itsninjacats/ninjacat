@@ -1,0 +1,157 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.507875361Z",
+ "request": {
+  "body_b64": "GgMKAWk=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/contimage"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeContainers"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "[]string",
+     "uint64",
+     "string",
+     "string",
+     "string",
+     "uint32",
+     "uint64",
+     "*time.Time",
+     "*time.Time",
+     "map[string][]string",
+     "string",
+     "*string",
+     "[]string",
+     "[]string",
+     "[]int64",
+     "[][]string",
+     "[]*time.Time",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "uint8",
+     "uint8"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.507872145Z",
+     "",
+     "i",
+     "image_id",
+     "i",
+     "",
+     "",
+     "",
+     "",
+     [],
+     [],
+     0,
+     "",
+     "",
+     "",
+     0,
+     0,
+     null,
+     null,
+     {},
+     "",
+     null,
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     0,
+     0
+    ]
+   ],
+   "insert": "INSERT INTO container_images\n\t\t\t(tenant_id, collected_at, host, image_key, identity_source,\n\t\t\t image_id, digest, name, short_name,\n\t\t\t registry, repo_tags, repo_digests, size_bytes, os_name, os_version,\n\t\t\t architecture, layer_count, layer_bytes, built_at, published_at, dd_tags,\n\t\t\t payload_version, source,\n\t\t\t layer_media_types, layer_digests, layer_sizes, layer_urls,\n\t\t\t layer_history_created, layer_history_created_by, layer_history_author,\n\t\t\t layer_history_comment, layer_history_empty_layer,\n\t\t\t size_negative, layer_size_negative)",
+   "rows": [
+    {
+     "Architecture": "",
+     "BuiltAt": null,
+     "CollectedAt": "2026-10-01T16:08:42.507872145Z",
+     "DDTags": {},
+     "Digest": "",
+     "Host": "",
+     "IdentitySource": "image_id",
+     "ImageID": "i",
+     "ImageKey": "i",
+     "LayerBytes": 0,
+     "LayerCount": 0,
+     "LayerDigests": [],
+     "LayerHistoryAuthor": [],
+     "LayerHistoryComment": [],
+     "LayerHistoryCreated": [],
+     "LayerHistoryCreatedBy": [],
+     "LayerHistoryEmptyLayer": "",
+     "LayerMediaTypes": [],
+     "LayerSizeNegative": 0,
+     "LayerSizes": [],
+     "LayerURLs": [],
+     "Name": "",
+     "OSName": "",
+     "OSVersion": "",
+     "PayloadVersion": "",
+     "PublishedAt": null,
+     "Registry": "",
+     "RepoDigests": [],
+     "RepoTags": [],
+     "ShortName": "",
+     "SizeBytes": 0,
+     "SizeNegative": 0,
+     "Source": null,
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_container_images",
+   "type": "storage.WriteContainerImages"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeContainers/images_no_source",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/CollectedAt"
+ ]
+}

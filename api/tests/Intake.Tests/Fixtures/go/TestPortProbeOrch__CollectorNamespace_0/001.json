@@ -1,0 +1,829 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.471670265Z",
+ "request": {
+  "body_b64": "AwA9CZIQAAAAAAAAAAAAAAoCczISDHM0IDwmPiAiw6kiChgGIPj//////////wEqpgMK9wEKDXMxMiA8Jj4gIsOpIgoSA3MxNBoNczE2IDwmPiAiw6kiCiCS4s+qBijs//////////8BMgdrMjI6djIyMhVrMjI6b3RoZXI6d2l0aDpjb2xvbnMyBmJhcmUyMjIIejIyOmxhc3Q6B2syNDp2MjQ6FWsyNDpvdGhlcjp3aXRoOmNvbG9uczoGYmFyZTI0Ogh6MjQ6bGFzdEIPCgNzMjcSA3MyORoDczMxQg8KA3MzMxIDczM1GgNzMzdKA3MzOVIHazQxOnY0MVIVazQxOm90aGVyOndpdGg6Y29sb25zUgZiYXJlNDFSCHo0MTpsYXN0WKviz6oGEgNzNDUaA3M0NyIOa2luZDogVGhpbmc0OQoqB2s1MTp2NTEqFWs1MTpvdGhlcjp3aXRoOmNvbG9ucyoGYmFyZTUxKgh6NTE6bGFzdDIuCgNzNTQSDXM1NiA8Jj4gIsOpIgoYuuLPqgYiDXM2MCA8Jj4gIsOpIgoqA3M2MjIuCg1zNjQgPCY+ICLDqSIKEgNzNjYYxOLPqgYiA3M3MCoNczcyIDwmPiAiw6kiCiqYAwqDAgoDczc1EgNzNzcaA3M3OSDRrpmkDyjT4s+qBjIHazg1OnY4NTIVazg1Om90aGVyOndpdGg6Y29sb25zMgZiYXJlODUyCHo4NTpsYXN0OgdrODc6djg3OhVrODc6b3RoZXI6d2l0aDpjb2xvbnM6BmJhcmU4NzoIejg3Omxhc3RCGQoDczkwEg1zOTIgPCY+ICLDqSIKGgNzOTRCJAoNczk2IDwmPiAiw6kiChIDczk4Gg5zMTAwIDwmPiAiw6kiCkoEczEwMlIJazEwNDp2MTA0UhZrMTA0Om90aGVyOndpdGg6Y29sb25zUgdiYXJlMTA0Ugl6MTA0Omxhc3RY6q6ZpA8SDnMxMDggPCY+ICLDqSIKGgRzMTEwIgP/AHAqCWsxMTQ6djExNCoWazExNDpvdGhlcjp3aXRoOmNvbG9ucyoHYmFyZTExNCoJejExNDpsYXN0Mh4KBHMxMTcSBHMxMTkY+a6ZpA8iBHMxMjMqBHMxMjUyHgoEczEyNxIEczEyORiDr5mkDyIEczEzMyoEczEzNTIJazEzNzp2MTM3MhZrMTM3Om90aGVyOndpdGg6Y29sb25zMgdiYXJlMTM3Mgl6MTM3Omxhc3Q6Mwj0/v////////8BEI7jz6oGGJDjz6oGIgRzMTQ2Kg5zMTQ4IDwmPiAiw6kiCjIEczE1MA==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.471586891Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     "Namespace",
+     "s14",
+     "s12 <&> \"é\"\n",
+     "s16 <&> \"é\"\n",
+     "s39",
+     "s31",
+     "s27",
+     "",
+     "",
+     "s45",
+     0,
+     0,
+     0,
+     {},
+     {
+      "bare22": "",
+      "k22": "other:with:colons",
+      "z22": "last"
+     },
+     {
+      "bare24": "",
+      "k24": "other:with:colons",
+      "z24": "last"
+     },
+     {
+      "bare137": [
+       ""
+      ],
+      "bare51": [
+       ""
+      ],
+      "k137": [
+       "v137",
+       "other:with:colons"
+      ],
+      "k51": [
+       "v51",
+       "other:with:colons"
+      ],
+      "z137": [
+       "last"
+      ],
+      "z51": [
+       "last"
+      ]
+     },
+     "-140.1700000142.1700000144-s146",
+     6,
+     -8,
+     4242,
+     9,
+     null,
+     "protobuf",
+     "2023-11-14T22:13:38Z",
+     null,
+     1700000043,
+     [
+      "k41:v41",
+      "k41:other:with:colons",
+      "bare41",
+      "z41:last"
+     ],
+     [
+      "s31",
+      "s37"
+     ],
+     [
+      "s27",
+      "s33"
+     ],
+     [
+      "s29",
+      "s35"
+     ],
+     [
+      "s54",
+      "s64 <&> \"é\"\n"
+     ],
+     [
+      "s56 <&> \"é\"\n",
+      "s66"
+     ],
+     [
+      "s60 <&> \"é\"\n",
+      "s70"
+     ],
+     [
+      "s62",
+      "s72 <&> \"é\"\n"
+     ],
+     [
+      "2023-11-14T22:14:18Z",
+      "2023-11-14T22:14:28Z"
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ],
+     "s47",
+     "",
+     {},
+     "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s14\",\"uid\":\"s16 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"creationTimestamp\":1700000018,\"deletionTimestamp\":-20,\"labels\":[\"k22:v22\",\"k22:other:with:colons\",\"bare22\",\"z22:last\"],\"annotations\":[\"k24:v24\",\"k24:other:with:colons\",\"bare24\",\"z24:last\"],\"ownerReferences\":[{\"name\":\"s27\",\"uid\":\"s29\",\"kind\":\"s31\"},{\"name\":\"s33\",\"uid\":\"s35\",\"kind\":\"s37\"}],\"resourceVersion\":\"s39\",\"finalizers\":[\"k41:v41\",\"k41:other:with:colons\",\"bare41\",\"z41:last\"],\"deletionGracePeriodSeconds\":1700000043},\"status\":\"s45\",\"conditionMessage\":\"s47\",\"yaml\":\"a2luZDogVGhpbmc0OQo=\",\"tags\":[\"k51:v51\",\"k51:other:with:colons\",\"bare51\",\"z51:last\"],\"conditions\":[{\"type\":\"s54\",\"status\":\"s56 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"lastTransitionTime\":1700000058,\"reason\":\"s60 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"message\":\"s62\"},{\"type\":\"s64 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"status\":\"s66\",\"lastTransitionTime\":1700000068,\"reason\":\"s70\",\"message\":\"s72 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}]}",
+     "",
+     "",
+     "",
+     "",
+     null,
+     null,
+     "",
+     [],
+     [],
+     "",
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     [],
+     0,
+     "",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k137:v137\",\"k137:other:with:colons\",\"bare137\",\"z137:last\"],\"agentVersion\":{\"Major\":-140,\"Minor\":1700000142,\"Patch\":1700000144,\"Pre\":\"s146\",\"Meta\":\"s148 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Commit\":\"s150\"}}"
+    ],
+    [
+     "test",
+     "2026-10-01T16:08:42.471586891Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     "Namespace",
+     "s77",
+     "s75",
+     "s79",
+     "s102",
+     "s94",
+     "s90",
+     "",
+     "",
+     "s108 <&> \"é\"\n",
+     0,
+     0,
+     0,
+     {},
+     {
+      "bare85": "",
+      "k85": "other:with:colons",
+      "z85": "last"
+     },
+     {
+      "bare87": "",
+      "k87": "other:with:colons",
+      "z87": "last"
+     },
+     {
+      "bare114": [
+       ""
+      ],
+      "bare137": [
+       ""
+      ],
+      "k114": [
+       "v114",
+       "other:with:colons"
+      ],
+      "k137": [
+       "v137",
+       "other:with:colons"
+      ],
+      "z114": [
+       "last"
+      ],
+      "z137": [
+       "last"
+      ]
+     },
+     "-140.1700000142.1700000144-s146",
+     6,
+     -8,
+     4242,
+     9,
+     null,
+     "protobuf",
+     "2100-01-01T00:01:21Z",
+     "2023-11-14T22:14:43Z",
+     4102444906,
+     [
+      "k104:v104",
+      "k104:other:with:colons",
+      "bare104",
+      "z104:last"
+     ],
+     [
+      "s94",
+      "s100 <&> \"é\"\n"
+     ],
+     [
+      "s90",
+      "s96 <&> \"é\"\n"
+     ],
+     [
+      "s92 <&> \"é\"\n",
+      "s98"
+     ],
+     [
+      "s117",
+      "s127"
+     ],
+     [
+      "s119",
+      "s129"
+     ],
+     [
+      "s123",
+      "s133"
+     ],
+     [
+      "s125",
+      "s135"
+     ],
+     [
+      "2100-01-01T00:02:01Z",
+      "2100-01-01T00:02:11Z"
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ],
+     "s110",
+     "",
+     {},
+     "{\"metadata\":{\"name\":\"s75\",\"namespace\":\"s77\",\"uid\":\"s79\",\"creationTimestamp\":4102444881,\"deletionTimestamp\":1700000083,\"labels\":[\"k85:v85\",\"k85:other:with:colons\",\"bare85\",\"z85:last\"],\"annotations\":[\"k87:v87\",\"k87:other:with:colons\",\"bare87\",\"z87:last\"],\"ownerReferences\":[{\"name\":\"s90\",\"uid\":\"s92 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"kind\":\"s94\"},{\"name\":\"s96 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s98\",\"kind\":\"s100 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"resourceVersion\":\"s102\",\"finalizers\":[\"k104:v104\",\"k104:other:with:colons\",\"bare104\",\"z104:last\"],\"deletionGracePeriodSeconds\":4102444906},\"status\":\"s108 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"conditionMessage\":\"s110\",\"yaml\":\"/wBw\",\"tags\":[\"k114:v114\",\"k114:other:with:colons\",\"bare114\",\"z114:last\"],\"conditions\":[{\"type\":\"s117\",\"status\":\"s119\",\"lastTransitionTime\":4102444921,\"reason\":\"s123\",\"message\":\"s125\"},{\"type\":\"s127\",\"status\":\"s129\",\"lastTransitionTime\":4102444931,\"reason\":\"s133\",\"message\":\"s135\"}]}",
+     "",
+     "",
+     "",
+     "",
+     null,
+     null,
+     "",
+     [],
+     [],
+     "",
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     [],
+     0,
+     "",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k137:v137\",\"k137:other:with:colons\",\"bare137\",\"z137:last\"],\"agentVersion\":{\"Major\":-140,\"Minor\":1700000142,\"Patch\":1700000144,\"Pre\":\"s146\",\"Meta\":\"s148 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Commit\":\"s150\"}}"
+    ]
+   ],
+   "insert": "INSERT INTO k8s_resources\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,\n\t\t\t uid, resource_version, owner_kind, owner_name, node_name, phase, status,\n\t\t\t ready, desired, available, counts, labels, annotations, tags,\n\t\t\t agent_version, group_id, group_size,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t creation_timestamp, deletion_timestamp, deletion_grace_period_seconds,\n\t\t\t finalizers, owner_kinds, owner_names, owner_uids,\n\t\t\t condition_types, condition_statuses, condition_reasons, condition_messages,\n\t\t\t condition_last_transition, condition_last_update, condition_last_probe,\n\t\t\t condition_message, resource_requirements, metrics, object,\n\t\t\t pod_ip, nominated_node_name, qos_class, priority_class,\n\t\t\t start_time, scheduled_time, host_name,\n\t\t\t container_names, container_ids, container_ready, container_restarts,\n\t\t\t container_states, container_messages, container_images,\n\t\t\t container_image_ids, container_is_init,\n\t\t\t pod_cidr, pod_cidrs, unschedulable, taints, provider_id, node_roles,\n\t\t\t capacity, allocatable, node_addresses,\n\t\t\t kubelet_version, kube_proxy_version, operating_system, architecture,\n\t\t\t kernel_version, os_image, container_runtime_version,\n\t\t\t service_type, cluster_ip, service_ports,\n\t\t\t rbac_rules, rbac_subjects, rbac_role_ref, envelope)",
+   "rows": [
+    {
+     "AgentVersion": "-140.1700000142.1700000144-s146",
+     "Allocatable": {},
+     "Annotations": {
+      "bare24": "",
+      "k24": "other:with:colons",
+      "z24": "last"
+     },
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterIP": "",
+     "ClusterName": "s2",
+     "CollectedAt": "2026-10-01T16:08:42.471586891Z",
+     "ConditionLastProbe": [
+      null,
+      null
+     ],
+     "ConditionLastTransition": [
+      "2023-11-14T22:14:18Z",
+      "2023-11-14T22:14:28Z"
+     ],
+     "ConditionLastUpdate": [
+      null,
+      null
+     ],
+     "ConditionMessage": "s47",
+     "ConditionMessages": [
+      "s62",
+      "s72 <&> \"é\"\n"
+     ],
+     "ConditionReasons": [
+      "s60 <&> \"é\"\n",
+      "s70"
+     ],
+     "ConditionStatuses": [
+      "s56 <&> \"é\"\n",
+      "s66"
+     ],
+     "ConditionTypes": [
+      "s54",
+      "s64 <&> \"é\"\n"
+     ],
+     "ContainerIDs": [],
+     "ContainerImageIDs": [],
+     "ContainerImages": [],
+     "ContainerIsInit": "",
+     "ContainerMessages": [],
+     "ContainerNames": [],
+     "ContainerReady": "",
+     "ContainerRestarts": [],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [],
+     "Counts": {},
+     "CreationTimestamp": "2023-11-14T22:13:38Z",
+     "DeletionGracePeriodSeconds": 1700000043,
+     "DeletionTimestamp": null,
+     "Desired": 0,
+     "Encoding": "protobuf",
+     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k137:v137\",\"k137:other:with:colons\",\"bare137\",\"z137:last\"],\"agentVersion\":{\"Major\":-140,\"Minor\":1700000142,\"Patch\":1700000144,\"Pre\":\"s146\",\"Meta\":\"s148 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Commit\":\"s150\"}}",
+     "Finalizers": [
+      "k41:v41",
+      "k41:other:with:colons",
+      "bare41",
+      "z41:last"
+     ],
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": null,
+     "HostName": "",
+     "KernelVersion": "",
+     "Kind": "Namespace",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare22": "",
+      "k22": "other:with:colons",
+      "z22": "last"
+     },
+     "Metrics": {},
+     "Name": "s12 <&> \"é\"\n",
+     "Namespace": "s14",
+     "NodeAddresses": "",
+     "NodeName": "",
+     "NodeRoles": [],
+     "NominatedNodeName": "",
+     "OSImage": "",
+     "Object": "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s14\",\"uid\":\"s16 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"creationTimestamp\":1700000018,\"deletionTimestamp\":-20,\"labels\":[\"k22:v22\",\"k22:other:with:colons\",\"bare22\",\"z22:last\"],\"annotations\":[\"k24:v24\",\"k24:other:with:colons\",\"bare24\",\"z24:last\"],\"ownerReferences\":[{\"name\":\"s27\",\"uid\":\"s29\",\"kind\":\"s31\"},{\"name\":\"s33\",\"uid\":\"s35\",\"kind\":\"s37\"}],\"resourceVersion\":\"s39\",\"finalizers\":[\"k41:v41\",\"k41:other:with:colons\",\"bare41\",\"z41:last\"],\"deletionGracePeriodSeconds\":1700000043},\"status\":\"s45\",\"conditionMessage\":\"s47\",\"yaml\":\"a2luZDogVGhpbmc0OQo=\",\"tags\":[\"k51:v51\",\"k51:other:with:colons\",\"bare51\",\"z51:last\"],\"conditions\":[{\"type\":\"s54\",\"status\":\"s56 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"lastTransitionTime\":1700000058,\"reason\":\"s60 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"message\":\"s62\"},{\"type\":\"s64 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"status\":\"s66\",\"lastTransitionTime\":1700000068,\"reason\":\"s70\",\"message\":\"s72 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}]}",
+     "OperatingSystem": "",
+     "OrgID": 4242,
+     "OwnerKind": "s31",
+     "OwnerKinds": [
+      "s31",
+      "s37"
+     ],
+     "OwnerName": "s27",
+     "OwnerNames": [
+      "s27",
+      "s33"
+     ],
+     "OwnerUIDs": [
+      "s29",
+      "s35"
+     ],
+     "Phase": "",
+     "PodCIDR": "",
+     "PodCIDRs": [],
+     "PodIP": "",
+     "PriorityClass": "",
+     "ProviderID": "",
+     "QOSClass": "",
+     "RBACRoleRef": "",
+     "RBACRules": "",
+     "RBACSubjects": "",
+     "Ready": 0,
+     "ResourceRequirements": "",
+     "ResourceVersion": "s39",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": null,
+     "Status": "s45",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare137": [
+       ""
+      ],
+      "bare51": [
+       ""
+      ],
+      "k137": [
+       "v137",
+       "other:with:colons"
+      ],
+      "k51": [
+       "v51",
+       "other:with:colons"
+      ],
+      "z137": [
+       "last"
+      ],
+      "z51": [
+       "last"
+      ]
+     },
+     "Taints": "",
+     "TenantID": "test",
+     "UID": "s16 <&> \"é\"\n",
+     "Unschedulable": 0
+    },
+    {
+     "AgentVersion": "-140.1700000142.1700000144-s146",
+     "Allocatable": {},
+     "Annotations": {
+      "bare87": "",
+      "k87": "other:with:colons",
+      "z87": "last"
+     },
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterIP": "",
+     "ClusterName": "s2",
+     "CollectedAt": "2026-10-01T16:08:42.471586891Z",
+     "ConditionLastProbe": [
+      null,
+      null
+     ],
+     "ConditionLastTransition": [
+      "2100-01-01T00:02:01Z",
+      "2100-01-01T00:02:11Z"
+     ],
+     "ConditionLastUpdate": [
+      null,
+      null
+     ],
+     "ConditionMessage": "s110",
+     "ConditionMessages": [
+      "s125",
+      "s135"
+     ],
+     "ConditionReasons": [
+      "s123",
+      "s133"
+     ],
+     "ConditionStatuses": [
+      "s119",
+      "s129"
+     ],
+     "ConditionTypes": [
+      "s117",
+      "s127"
+     ],
+     "ContainerIDs": [],
+     "ContainerImageIDs": [],
+     "ContainerImages": [],
+     "ContainerIsInit": "",
+     "ContainerMessages": [],
+     "ContainerNames": [],
+     "ContainerReady": "",
+     "ContainerRestarts": [],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [],
+     "Counts": {},
+     "CreationTimestamp": "2100-01-01T00:01:21Z",
+     "DeletionGracePeriodSeconds": 4102444906,
+     "DeletionTimestamp": "2023-11-14T22:14:43Z",
+     "Desired": 0,
+     "Encoding": "protobuf",
+     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k137:v137\",\"k137:other:with:colons\",\"bare137\",\"z137:last\"],\"agentVersion\":{\"Major\":-140,\"Minor\":1700000142,\"Patch\":1700000144,\"Pre\":\"s146\",\"Meta\":\"s148 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Commit\":\"s150\"}}",
+     "Finalizers": [
+      "k104:v104",
+      "k104:other:with:colons",
+      "bare104",
+      "z104:last"
+     ],
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": null,
+     "HostName": "",
+     "KernelVersion": "",
+     "Kind": "Namespace",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare85": "",
+      "k85": "other:with:colons",
+      "z85": "last"
+     },
+     "Metrics": {},
+     "Name": "s75",
+     "Namespace": "s77",
+     "NodeAddresses": "",
+     "NodeName": "",
+     "NodeRoles": [],
+     "NominatedNodeName": "",
+     "OSImage": "",
+     "Object": "{\"metadata\":{\"name\":\"s75\",\"namespace\":\"s77\",\"uid\":\"s79\",\"creationTimestamp\":4102444881,\"deletionTimestamp\":1700000083,\"labels\":[\"k85:v85\",\"k85:other:with:colons\",\"bare85\",\"z85:last\"],\"annotations\":[\"k87:v87\",\"k87:other:with:colons\",\"bare87\",\"z87:last\"],\"ownerReferences\":[{\"name\":\"s90\",\"uid\":\"s92 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"kind\":\"s94\"},{\"name\":\"s96 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s98\",\"kind\":\"s100 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"resourceVersion\":\"s102\",\"finalizers\":[\"k104:v104\",\"k104:other:with:colons\",\"bare104\",\"z104:last\"],\"deletionGracePeriodSeconds\":4102444906},\"status\":\"s108 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"conditionMessage\":\"s110\",\"yaml\":\"/wBw\",\"tags\":[\"k114:v114\",\"k114:other:with:colons\",\"bare114\",\"z114:last\"],\"conditions\":[{\"type\":\"s117\",\"status\":\"s119\",\"lastTransitionTime\":4102444921,\"reason\":\"s123\",\"message\":\"s125\"},{\"type\":\"s127\",\"status\":\"s129\",\"lastTransitionTime\":4102444931,\"reason\":\"s133\",\"message\":\"s135\"}]}",
+     "OperatingSystem": "",
+     "OrgID": 4242,
+     "OwnerKind": "s94",
+     "OwnerKinds": [
+      "s94",
+      "s100 <&> \"é\"\n"
+     ],
+     "OwnerName": "s90",
+     "OwnerNames": [
+      "s90",
+      "s96 <&> \"é\"\n"
+     ],
+     "OwnerUIDs": [
+      "s92 <&> \"é\"\n",
+      "s98"
+     ],
+     "Phase": "",
+     "PodCIDR": "",
+     "PodCIDRs": [],
+     "PodIP": "",
+     "PriorityClass": "",
+     "ProviderID": "",
+     "QOSClass": "",
+     "RBACRoleRef": "",
+     "RBACRules": "",
+     "RBACSubjects": "",
+     "Ready": 0,
+     "ResourceRequirements": "",
+     "ResourceVersion": "s102",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": null,
+     "Status": "s108 <&> \"é\"\n",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare114": [
+       ""
+      ],
+      "bare137": [
+       ""
+      ],
+      "k114": [
+       "v114",
+       "other:with:colons"
+      ],
+      "k137": [
+       "v137",
+       "other:with:colons"
+      ],
+      "z114": [
+       "last"
+      ],
+      "z137": [
+       "last"
+      ]
+     },
+     "Taints": "",
+     "TenantID": "test",
+     "UID": "s79",
+     "Unschedulable": 0
+    }
+   ],
+   "to": "storage_k8s_resources",
+   "type": "storage.WriteK8sResources"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorNamespace_0",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/CollectedAt",
+  "/sends/0/rows/1/CollectedAt"
+ ]
+}

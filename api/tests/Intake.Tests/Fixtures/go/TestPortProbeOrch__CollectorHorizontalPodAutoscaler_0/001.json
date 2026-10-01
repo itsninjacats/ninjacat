@@ -1,0 +1,849 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.481003882Z",
+ "request": {
+  "body_b64": "AwBUCZIQAAB78VNlAAAAAAoCczISDHM0IDwmPiAiw6kiChgGIPj//////////wEqgxgK9wEKDXMxMiA8Jj4gIsOpIgoSA3MxNBoNczE2IDwmPiAiw6kiCiCS4s+qBijs//////////8BMgdrMjI6djIyMhVrMjI6b3RoZXI6d2l0aDpjb2xvbnMyBmJhcmUyMjIIejIyOmxhc3Q6B2syNDp2MjQ6FWsyNDpvdGhlcjp3aXRoOmNvbG9uczoGYmFyZTI0Ogh6MjQ6bGFzdEIPCgNzMjcSA3MyORoDczMxQg8KA3MzMxIDczM1GgNzMzdKA3MzOVIHazQxOnY0MVIVazQxOm90aGVyOndpdGg6Y29sb25zUgZiYXJlNDFSCHo0MTpsYXN0WKviz6oGEosLCgoKA3M0NxIDczQ5EDMYNSKlBQoNczU2IDwmPiAiw6kiChLoAQpLCg1zNjAgPCY+ICLDqSIKEgNzNjIaDXM2NCA8Jj4gIsOpIgoiA3M2NioNczY4IDwmPiAiw6kiCjIDczcwOg1zNzIgPCY+ICLDqSIKEgsKA3M3NRDN4s+qBhqLAQoNczgwIDwmPiAiw6kiChI8CgNzODMSA3M4NRoHazg3OnY4NxoVazg3Om90aGVyOndpdGg6Y29sb25zGgZiYXJlODcaCHo4NzpsYXN0EjwKA3M4ORIDczkxGgdrOTM6djkzGhVrOTM6b3RoZXI6d2l0aDpjb2xvbnMaBmJhcmU5MxoIejkzOmxhc3QauQEKowEKA3M5NxJNCg5zMTAwIDwmPiAiw6kiChIEczEwMhoJazEwNDp2MTA0GhZrMTA0Om90aGVyOndpdGg6Y29sb25zGgdiYXJlMTA0Ggl6MTA0Omxhc3QSTQoEczEwNhIOczEwOCA8Jj4gIsOpIgoaCWsxMTA6djExMBoWazExMDpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTExMBoJejExMDpsYXN0EhEKBHMxMTMQjf//////////ASIUCgRzMTE4EgwKBHMxMjEQ++LPqgYqGgoEczEyNhIMCgRzMTI5EIOvmaQPGgRzMTMzMroBCqQBCgRzMTM3Ek0KDnMxNDAgPCY+ICLDqSIKEgRzMTQyGglrMTQ0OnYxNDQaFmsxNDQ6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmUxNDQaCXoxNDQ6bGFzdBJNCgRzMTQ2Eg5zMTQ4IDwmPiAiw6kiChoJazE1MDp2MTUwGhZrMTUwOm90aGVyOndpdGg6Y29sb25zGgdiYXJlMTUwGgl6MTUwOmxhc3QSEQoEczE1MxDl/v////////8BIu4ECgRzMTU3EusBCioKBHMxNjESBHMxNjMaBHMxNjUiBHMxNjcqBHMxNjkyBHMxNzE6BHMxNzMSFgoOczE3NiA8Jj4gIsOpIgoQsuPPqgYapAEKBHMxODESTQoOczE4NCA8Jj4gIsOpIgoSBHMxODYaCWsxODg6djE4OBoWazE4ODpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTE4OBoJejE4ODpsYXN0Ek0KBHMxOTASDnMxOTIgPCY+ICLDqSIKGglrMTk0OnYxOTQaFmsxOTQ6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmUxOTQaCXoxOTQ6bGFzdBqhAQqQAQoEczE5OBJDCgRzMjAxEgRzMjAzGglrMjA1OnYyMDUaFmsyMDU6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmUyMDUaCXoyMDU6bGFzdBJDCgRzMjA3EgRzMjA5GglrMjExOnYyMTEaFmsyMTE6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmUyMTEaCXoyMTE6bGFzdBIMCgRzMjE0ENivmaQPIhQKBHMyMTkSDAoEczIyMhDg48+qBioaCgRzMjI3EgwKBHMyMzAQ6OPPqgYaBHMyMzQyoQEKkAEKBHMyMzgSQwoEczI0MRIEczI0MxoJazI0NTp2MjQ1GhZrMjQ1Om90aGVyOndpdGg6Y29sb25zGgdiYXJlMjQ1Ggl6MjQ1Omxhc3QSQwoEczI0NxIEczI0ORoJazI1MTp2MjUxGhZrMjUxOm90aGVyOndpdGg6Y29sb25zGgdiYXJlMjUxGgl6MjUxOmxhc3QSDAoEczI1NBCAsJmkDypgCi0I/P3/////////ARIEczI2MhoMCgRzMjY1EIsCGI0CGgwKBHMyNzEQkQIYkwISLwiWAhIOczI4MCA8Jj4gIsOpIgoaDAoEczI4MxCdAhifAhoMCgRzMjg5EKMCGKUCGsgJCKmCgICAgIAQEKrkz6oGGNT9/////////wEgrgIqvAQKBHMzMDUSxQEKKgoEczMwORIEczMxMRoEczMxMyIEczMxNSoEczMxNzIEczMxOToEczMyMRDD5M+qBhqQAQoEczMyNhJDCgRzMzI5EgRzMzMxGglrMzMzOnYzMzMaFmszMzM6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmUzMzMaCXozMzM6bGFzdBJDCgRzMzM1EgRzMzM3GglrMzM5OnYzMzkaFmszMzk6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmUzMzkaCXozMzk6bGFzdBqtAQqkAQoEczM0MxJNCgRzMzQ2Eg5zMzQ4IDwmPiAiw6kiChoJazM1MDp2MzUwGhZrMzUwOm90aGVyOndpdGg6Y29sb25zGgdiYXJlMzUwGgl6MzUwOmxhc3QSTQoOczM1MiA8Jj4gIsOpIgoSBHMzNTQaCWszNTY6djM1NhoWazM1NjpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTM1NhoJejM1NjpsYXN0EObkz6oGIgwKBHMzNjEQ6+TPqgYqEgoEczM2NhDw5M+qBhoEczM3MDKZAQqQAQoEczM3NBJDCgRzMzc3EgRzMzc5GglrMzgxOnYzODEaFmszODE6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmUzODEaCXozODE6bGFzdBJDCgRzMzgzEgRzMzg1GglrMzg3OnYzODcaFmszODc6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmUzODcaCXozODc6bGFzdBCF5c+qBirpBAoEczM5MRLPAQoqCgRzMzk1EgRzMzk3GgRzMzk5IgRzNDAxKgRzNDAzMgRzNDA1OgRzNDA3EJnlz6oGGpoBCg5zNDEyIDwmPiAiw6kiChJDCgRzNDE1EgRzNDE3GglrNDE5OnY0MTkaFms0MTk6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmU0MTkaCXo0MTk6bGFzdBJDCgRzNDIxEgRzNDIzGglrNDI1OnY0MjUaFms0MjU6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmU0MjUaCXo0MjU6bGFzdBqtAQqkAQoEczQyORJNCg5zNDMyIDwmPiAiw6kiChIEczQzNBoJazQzNjp2NDM2GhZrNDM2Om90aGVyOndpdGg6Y29sb25zGgdiYXJlNDM2Ggl6NDM2Omxhc3QSTQoEczQzOBIOczQ0MCA8Jj4gIsOpIgoaCWs0NDI6djQ0MhoWazQ0MjpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTQ0MhoJejQ0MjpsYXN0ELzlz6oGIgwKBHM0NDcQweXPqgYqJgoOczQ1MiA8Jj4gIsOpIgoQxuXPqgYaDnM0NTYgPCY+ICLDqSIKMqgBCpoBCg5zNDYwIDwmPiAiw6kiChJDCgRzNDYzEgRzNDY1GglrNDY3OnY0NjcaFms0Njc6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmU0NjcaCXo0Njc6bGFzdBJDCgRzNDY5EgRzNDcxGglrNDczOnY0NzMaFms0NzM6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmU0NzMaCXo0NzM6bGFzdBCl/P////////8BIg9raW5kOiBUaGluZzQ3NwoqCWs0Nzk6djQ3OSoWazQ3OTpvdGhlcjp3aXRoOmNvbG9ucyoHYmFyZTQ3OSoJejQ3OTpsYXN0MjIKBHM0ODISDnM0ODQgPCY+ICLDqSIKGOaxmaQPIg5zNDg4IDwmPiAiw6kiCioEczQ5MDIyCg5zNDkyIDwmPiAiw6kiChIEczQ5NBjwsZmkDyIEczQ5OCoOczUwMCA8Jj4gIsOpIgoq5hkKlQIKBHM1MDMSBHM1MDUaBHM1MDcg/eXPqgYo/7GZpA8yCWs1MTM6djUxMzIWazUxMzpvdGhlcjp3aXRoOmNvbG9uczIHYmFyZTUxMzIJejUxMzpsYXN0OglrNTE1OnY1MTU6Fms1MTU6b3RoZXI6d2l0aDpjb2xvbnM6B2JhcmU1MTU6CXo1MTU6bGFzdEIcCgRzNTE4Eg5zNTIwIDwmPiAiw6kiChoEczUyMkImCg5zNTI0IDwmPiAiw6kiChIEczUyNhoOczUyOCA8Jj4gIsOpIgpKBHM1MzBSCWs1MzI6djUzMlIWazUzMjpvdGhlcjp3aXRoOmNvbG9uc1IHYmFyZTUzMlIJejUzMjpsYXN0WJbmz6oGEpQMChYKBHM1MzgSDnM1NDAgPCY+ICLDqSIKEJ4EGOD7/////////wEiqgUKBHM1NDcS4QEKKgoEczU1MRIEczU1MxoEczU1NSIEczU1NyoEczU1OTIEczU2MToEczU2MxIMCgRzNTY2ELjmz6oGGqQBCgRzNTcxEk0KBHM1NzQSDnM1NzYgPCY+ICLDqSIKGglrNTc4OnY1NzgaFms1Nzg6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmU1NzgaCXo1Nzg6bGFzdBJNCg5zNTgwIDwmPiAiw6kiChIEczU4MhoJazU4NDp2NTg0GhZrNTg0Om90aGVyOndpdGg6Y29sb25zGgdiYXJlNTg0Ggl6NTg0Omxhc3QatQEKmgEKDnM1ODggPCY+ICLDqSIKEkMKBHM1OTESBHM1OTMaCWs1OTU6djU5NRoWazU5NTpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTU5NRoJejU5NTpsYXN0EkMKBHM1OTcSBHM1OTkaCWs2MDE6djYwMRoWazYwMTpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTYwMRoJejYwMTpsYXN0EhYKDnM2MDQgPCY+ICLDqSIKEN6ymaQPIh4KBHM2MDkSFgoOczYxMiA8Jj4gIsOpIgoQ5ubPqgYqLgoEczYxNxIWCg5zNjIwIDwmPiAiw6kiChDu5s+qBhoOczYyNCA8Jj4gIsOpIgoytQEKmgEKDnM2MjggPCY+ICLDqSIKEkMKBHM2MzESBHM2MzMaCWs2MzU6djYzNRoWazYzNTpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTYzNRoJejYzNTpsYXN0EkMKBHM2MzcSBHM2MzkaCWs2NDE6djY0MRoWazY0MTpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTY0MRoJejY0MTpsYXN0EhYKDnM2NDQgPCY+ICLDqSIKEIazmaQPIrkFCg5zNjQ4IDwmPiAiw6kiChL/AQpSCg5zNjUyIDwmPiAiw6kiChIEczY1NBoOczY1NiA8Jj4gIsOpIgoiBHM2NTgqDnM2NjAgPCY+ICLDqSIKMgRzNjYyOg5zNjY0IDwmPiAiw6kiChIMCgRzNjY3EJ3nz6oGGpoBCg5zNjcyIDwmPiAiw6kiChJDCgRzNjc1EgRzNjc3GglrNjc5OnY2NzkaFms2Nzk6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmU2NzkaCXo2Nzk6bGFzdBJDCgRzNjgxEgRzNjgzGglrNjg1OnY2ODUaFms2ODU6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmU2ODUaCXo2ODU6bGFzdBq1AQqkAQoEczY4ORJNCg5zNjkyIDwmPiAiw6kiChIEczY5NBoJazY5Njp2Njk2GhZrNjk2Om90aGVyOndpdGg6Y29sb25zGgdiYXJlNjk2Ggl6Njk2Omxhc3QSTQoEczY5OBIOczcwMCA8Jj4gIsOpIgoaCWs3MDI6djcwMhoWazcwMjpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTcwMhoJejcwMjpsYXN0EgwKBHM3MDUQw+fPqgYiGQoEczcxMBIRCgRzNzEzELX6/////////wEqGgoEczcxOBIMCgRzNzIxENPnz6oGGgRzNzI1MrUBCqQBCgRzNzI5Ek0KDnM3MzIgPCY+ICLDqSIKEgRzNzM0GglrNzM2OnY3MzYaFms3MzY6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmU3MzYaCXo3MzY6bGFzdBJNCgRzNzM4Eg5zNzQwIDwmPiAiw6kiChoJazc0Mjp2NzQyGhZrNzQyOm90aGVyOndpdGg6Y29sb25zGgdiYXJlNzQyGgl6NzQyOmxhc3QSDAoEczc0NRDr58+qBiqCAQo/CO8FEgRzNzUzGh4KDnM3NTYgPCY+ICLDqSIKEPYFGIj6/////////wEaFAoEczc2MhCE+v////////8BGP4FEj8IgQYSBHM3NzEaFAoEczc3NBD4+f////////8BGIoGGh4KDnM3ODAgPCY+ICLDqSIKEI4GGPD5/////////wEauAoIlIaAgICAgBAQlejPqgYYlwYgmQYqkQUKDnM3OTYgPCY+ICLDqSIKEoECClIKDnM4MDAgPCY+ICLDqSIKEgRzODAyGg5zODA0IDwmPiAiw6kiCiIEczgwNioOczgwOCA8Jj4gIsOpIgoyBHM4MTA6DnM4MTIgPCY+ICLDqSIKEK7oz6oGGqQBCgRzODE3Ek0KDnM4MjAgPCY+ICLDqSIKEgRzODIyGglrODI0OnY4MjQaFms4MjQ6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmU4MjQaCXo4MjQ6bGFzdBJNCgRzODI2Eg5zODI4IDwmPiAiw6kiChoJazgzMDp2ODMwGhZrODMwOm90aGVyOndpdGg6Y29sb25zGgdiYXJlODMwGgl6ODMwOmxhc3QamQEKkAEKBHM4MzQSQwoEczgzNxIEczgzORoJazg0MTp2ODQxGhZrODQxOm90aGVyOndpdGg6Y29sb25zGgdiYXJlODQxGgl6ODQxOmxhc3QSQwoEczg0MxIEczg0NRoJazg0Nzp2ODQ3GhZrODQ3Om90aGVyOndpdGg6Y29sb25zGgdiYXJlODQ3Ggl6ODQ3Omxhc3QQ0ejPqgYiFgoOczg1MiA8Jj4gIsOpIgoQ1ujPqgYqEgoEczg1NxDb6M+qBhoEczg2MTKyAQqkAQoEczg2NRJNCg5zODY4IDwmPiAiw6kiChIEczg3MBoJazg3Mjp2ODcyGhZrODcyOm90aGVyOndpdGg6Y29sb25zGgdiYXJlODcyGgl6ODcyOmxhc3QSTQoEczg3NBIOczg3NiA8Jj4gIsOpIgoaCWs4Nzg6djg3OBoWazg3ODpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTg3OBoJejg3ODpsYXN0EJD5/////////wEqjAUKBHM4ODIS/AEKSAoEczg4NhIOczg4OCA8Jj4gIsOpIgoaBHM4OTAiDnM4OTIgPCY+ICLDqSIKKgRzODk0Mg5zODk2IDwmPiAiw6kiCjoEczg5OBD8+P////////8BGqQBCgRzOTAzEk0KBHM5MDYSDnM5MDggPCY+ICLDqSIKGglrOTEwOnY5MTAaFms5MTA6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmU5MTAaCXo5MTA6bGFzdBJNCg5zOTEyIDwmPiAiw6kiChIEczkxNBoJazkxNjp2OTE2GhZrOTE2Om90aGVyOndpdGg6Y29sb25zGgdiYXJlOTE2Ggl6OTE2Omxhc3QaqAEKmgEKDnM5MjAgPCY+ICLDqSIKEkMKBHM5MjMSBHM5MjUaCWs5Mjc6djkyNxoWazkyNzpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTkyNxoJejkyNzpsYXN0EkMKBHM5MjkSBHM5MzEaCWs5MzM6djkzMxoWazkzMzpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTkzMxoJejkzMzpsYXN0ENn4/////////wEiEQoEczkzOBDU+P////////8BKhcKBHM5NDMQz/j/////////ARoEczk0NzKtAQqkAQoEczk1MRJNCgRzOTU0Eg5zOTU2IDwmPiAiw6kiChoJazk1ODp2OTU4GhZrOTU4Om90aGVyOndpdGg6Y29sb25zGgdiYXJlOTU4Ggl6OTU4Omxhc3QSTQoOczk2MCA8Jj4gIsOpIgoSBHM5NjIaCWs5NjQ6djk2NBoWazk2NDpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTk2NBoJejk2NDpsYXN0EMa1maQPIgP/AMgqCWs5NzA6djk3MCoWazk3MDpvdGhlcjp3aXRoOmNvbG9ucyoHYmFyZTk3MCoJejk3MDpsYXN0Mh4KBHM5NzMSBHM5NzUY0enPqgYiBHM5NzkqBHM5ODEyHgoEczk4MxIEczk4NRjb6c+qBiIEczk4OSoEczk5MTIJazk5Mzp2OTkzMhZrOTkzOm90aGVyOndpdGg6Y29sb25zMgdiYXJlOTkzMgl6OTkzOmxhc3Q6NgjktZmkDxDm6c+qBhiY+P////////8BIgVzMTAwMioPczEwMDQgPCY+ICLDqSIKMgVzMTAwNg==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.480579359Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     "HorizontalPodAutoscaler",
+     "s14",
+     "s12 <&> \"é\"\n",
+     "s16 <&> \"é\"\n",
+     "s39",
+     "s31",
+     "s27",
+     "",
+     "",
+     "",
+     -300,
+     302,
+     0,
+     {
+      "current_replicas": -300,
+      "desired_replicas": 302,
+      "max_replicas": 53,
+      "min_replicas": 51
+     },
+     {
+      "bare22": "",
+      "k22": "other:with:colons",
+      "z22": "last"
+     },
+     {
+      "bare24": "",
+      "k24": "other:with:colons",
+      "z24": "last"
+     },
+     {
+      "bare479": [
+       ""
+      ],
+      "bare993": [
+       ""
+      ],
+      "k479": [
+       "v479",
+       "other:with:colons"
+      ],
+      "k993": [
+       "v993",
+       "other:with:colons"
+      ],
+      "z479": [
+       "last"
+      ],
+      "z993": [
+       "last"
+      ]
+     },
+     "4102445796.1700000998.-1000-s1002",
+     6,
+     -8,
+     4242,
+     9,
+     1700000123,
+     "protobuf",
+     "2023-11-14T22:13:38Z",
+     null,
+     1700000043,
+     [
+      "k41:v41",
+      "k41:other:with:colons",
+      "bare41",
+      "z41:last"
+     ],
+     [
+      "s31",
+      "s37"
+     ],
+     [
+      "s27",
+      "s33"
+     ],
+     [
+      "s29",
+      "s35"
+     ],
+     [
+      "s482",
+      "s492 <&> \"é\"\n"
+     ],
+     [
+      "s484 <&> \"é\"\n",
+      "s494"
+     ],
+     [
+      "s488 <&> \"é\"\n",
+      "s498"
+     ],
+     [
+      "s490",
+      "s500 <&> \"é\"\n"
+     ],
+     [
+      "2100-01-01T00:08:06Z",
+      "2100-01-01T00:08:16Z"
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ],
+     "",
+     "",
+     {},
+     "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s14\",\"uid\":\"s16 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"creationTimestamp\":1700000018,\"deletionTimestamp\":-20,\"labels\":[\"k22:v22\",\"k22:other:with:colons\",\"bare22\",\"z22:last\"],\"annotations\":[\"k24:v24\",\"k24:other:with:colons\",\"bare24\",\"z24:last\"],\"ownerReferences\":[{\"name\":\"s27\",\"uid\":\"s29\",\"kind\":\"s31\"},{\"name\":\"s33\",\"uid\":\"s35\",\"kind\":\"s37\"}],\"resourceVersion\":\"s39\",\"finalizers\":[\"k41:v41\",\"k41:other:with:colons\",\"bare41\",\"z41:last\"],\"deletionGracePeriodSeconds\":1700000043},\"spec\":{\"target\":{\"kind\":\"s47\",\"name\":\"s49\"},\"minReplicas\":51,\"maxReplicas\":53,\"metrics\":[{\"type\":\"s56 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"object\":{\"describedObject\":{\"kind\":\"s60 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s62\",\"name\":\"s64 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s66\",\"apiVersion\":\"s68 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"resourceVersion\":\"s70\",\"fieldPath\":\"s72 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"target\":{\"type\":\"s75\",\"value\":1700000077},\"metric\":{\"name\":\"s80 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"labelSelector\":[{\"key\":\"s83\",\"operator\":\"s85\",\"values\":[\"k87:v87\",\"k87:other:with:colons\",\"bare87\",\"z87:last\"]},{\"key\":\"s89\",\"operator\":\"s91\",\"values\":[\"k93:v93\",\"k93:other:with:colons\",\"bare93\",\"z93:last\"]}]}},\"pods\":{\"metric\":{\"name\":\"s97\",\"labelSelector\":[{\"key\":\"s100 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s102\",\"values\":[\"k104:v104\",\"k104:other:with:colons\",\"bare104\",\"z104:last\"]},{\"key\":\"s106\",\"operator\":\"s108 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k110:v110\",\"k110:other:with:colons\",\"bare110\",\"z110:last\"]}]},\"target\":{\"type\":\"s113\",\"value\":-115}},\"resource\":{\"resourceName\":\"s118\",\"target\":{\"type\":\"s121\",\"value\":1700000123}},\"containerResource\":{\"resourceName\":\"s126\",\"target\":{\"type\":\"s129\",\"value\":4102444931},\"container\":\"s133\"},\"external\":{\"metric\":{\"name\":\"s137\",\"labelSelector\":[{\"key\":\"s140 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s142\",\"values\":[\"k144:v144\",\"k144:other:with:colons\",\"bare144\",\"z144:last\"]},{\"key\":\"s146\",\"operator\":\"s148 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k150:v150\",\"k150:other:with:colons\",\"bare150\",\"z150:last\"]}]},\"target\":{\"type\":\"s153\",\"value\":-155}}},{\"type\":\"s157\",\"object\":{\"describedObject\":{\"kind\":\"s161\",\"namespace\":\"s163\",\"name\":\"s165\",\"uid\":\"s167\",\"apiVersion\":\"s169\",\"resourceVersion\":\"s171\",\"fieldPath\":\"s173\"},\"target\":{\"type\":\"s176 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"value\":1700000178},\"metric\":{\"name\":\"s181\",\"labelSelector\":[{\"key\":\"s184 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s186\",\"values\":[\"k188:v188\",\"k188:other:with:colons\",\"bare188\",\"z188:last\"]},{\"key\":\"s190\",\"operator\":\"s192 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k194:v194\",\"k194:other:with:colons\",\"bare194\",\"z194:last\"]}]}},\"pods\":{\"metric\":{\"name\":\"s198\",\"labelSelector\":[{\"key\":\"s201\",\"operator\":\"s203\",\"values\":[\"k205:v205\",\"k205:other:with:colons\",\"bare205\",\"z205:last\"]},{\"key\":\"s207\",\"operator\":\"s209\",\"values\":[\"k211:v211\",\"k211:other:with:colons\",\"bare211\",\"z211:last\"]}]},\"target\":{\"type\":\"s214\",\"value\":4102445016}},\"resource\":{\"resourceName\":\"s219\",\"target\":{\"type\":\"s222\",\"value\":1700000224}},\"containerResource\":{\"resourceName\":\"s227\",\"target\":{\"type\":\"s230\",\"value\":1700000232},\"container\":\"s234\"},\"external\":{\"metric\":{\"name\":\"s238\",\"labelSelector\":[{\"key\":\"s241\",\"operator\":\"s243\",\"values\":[\"k245:v245\",\"k245:other:with:colons\",\"bare245\",\"z245:last\"]},{\"key\":\"s247\",\"operator\":\"s249\",\"values\":[\"k251:v251\",\"k251:other:with:colons\",\"bare251\",\"z251:last\"]}]},\"target\":{\"type\":\"s254\",\"value\":4102445056}}}],\"behavior\":{\"scaleUp\":{\"stabilizationWindowSeconds\":-260,\"selectPolicy\":\"s262\",\"policies\":[{\"type\":\"s265\",\"value\":267,\"periodSeconds\":269},{\"type\":\"s271\",\"value\":273,\"periodSeconds\":275}]},\"scaleDown\":{\"stabilizationWindowSeconds\":278,\"selectPolicy\":\"s280 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"policies\":[{\"type\":\"s283\",\"value\":285,\"periodSeconds\":287},{\"type\":\"s289\",\"value\":291,\"periodSeconds\":293}]}}},\"status\":{\"observedGeneration\":9007199254741289,\"lastScaleTime\":1700000298,\"currentReplicas\":-300,\"desiredReplicas\":302,\"currentMetrics\":[{\"type\":\"s305\",\"object\":{\"describedObject\":{\"kind\":\"s309\",\"namespace\":\"s311\",\"name\":\"s313\",\"uid\":\"s315\",\"apiVersion\":\"s317\",\"resourceVersion\":\"s319\",\"fieldPath\":\"s321\"},\"current\":1700000323,\"metric\":{\"name\":\"s326\",\"labelSelector\":[{\"key\":\"s329\",\"operator\":\"s331\",\"values\":[\"k333:v333\",\"k333:other:with:colons\",\"bare333\",\"z333:last\"]},{\"key\":\"s335\",\"operator\":\"s337\",\"values\":[\"k339:v339\",\"k339:other:with:colons\",\"bare339\",\"z339:last\"]}]}},\"pods\":{\"metric\":{\"name\":\"s343\",\"labelSelector\":[{\"key\":\"s346\",\"operator\":\"s348 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k350:v350\",\"k350:other:with:colons\",\"bare350\",\"z350:last\"]},{\"key\":\"s352 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s354\",\"values\":[\"k356:v356\",\"k356:other:with:colons\",\"bare356\",\"z356:last\"]}]},\"current\":1700000358},\"resource\":{\"resourceName\":\"s361\",\"current\":1700000363},\"containerResource\":{\"resourceName\":\"s366\",\"current\":1700000368,\"container\":\"s370\"},\"external\":{\"metric\":{\"name\":\"s374\",\"labelSelector\":[{\"key\":\"s377\",\"operator\":\"s379\",\"values\":[\"k381:v381\",\"k381:other:with:colons\",\"bare381\",\"z381:last\"]},{\"key\":\"s383\",\"operator\":\"s385\",\"values\":[\"k387:v387\",\"k387:other:with:colons\",\"bare387\",\"z387:last\"]}]},\"current\":1700000389}},{\"type\":\"s391\",\"object\":{\"describedObject\":{\"kind\":\"s395\",\"namespace\":\"s397\",\"name\":\"s399\",\"uid\":\"s401\",\"apiVersion\":\"s403\",\"resourceVersion\":\"s405\",\"fieldPath\":\"s407\"},\"current\":1700000409,\"metric\":{\"name\":\"s412 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"labelSelector\":[{\"key\":\"s415\",\"operator\":\"s417\",\"values\":[\"k419:v419\",\"k419:other:with:colons\",\"bare419\",\"z419:last\"]},{\"key\":\"s421\",\"operator\":\"s423\",\"values\":[\"k425:v425\",\"k425:other:with:colons\",\"bare425\",\"z425:last\"]}]}},\"pods\":{\"metric\":{\"name\":\"s429\",\"labelSelector\":[{\"key\":\"s432 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s434\",\"values\":[\"k436:v436\",\"k436:other:with:colons\",\"bare436\",\"z436:last\"]},{\"key\":\"s438\",\"operator\":\"s440 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k442:v442\",\"k442:other:with:colons\",\"bare442\",\"z442:last\"]}]},\"current\":1700000444},\"resource\":{\"resourceName\":\"s447\",\"current\":1700000449},\"containerResource\":{\"resourceName\":\"s452 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"current\":1700000454,\"container\":\"s456 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"external\":{\"metric\":{\"name\":\"s460 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"labelSelector\":[{\"key\":\"s463\",\"operator\":\"s465\",\"values\":[\"k467:v467\",\"k467:other:with:colons\",\"bare467\",\"z467:last\"]},{\"key\":\"s469\",\"operator\":\"s471\",\"values\":[\"k473:v473\",\"k473:other:with:colons\",\"bare473\",\"z473:last\"]}]},\"current\":-475}}]},\"yaml\":\"a2luZDogVGhpbmc0NzcK\",\"tags\":[\"k479:v479\",\"k479:other:with:colons\",\"bare479\",\"z479:last\"],\"conditions\":[{\"conditionType\":\"s482\",\"conditionStatus\":\"s484 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"lastTransitionTime\":4102445286,\"reason\":\"s488 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"message\":\"s490\"},{\"conditionType\":\"s492 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"conditionStatus\":\"s494\",\"lastTransitionTime\":4102445296,\"reason\":\"s498\",\"message\":\"s500 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}]}",
+     "",
+     "",
+     "",
+     "",
+     null,
+     null,
+     "",
+     [],
+     [],
+     "",
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     [],
+     0,
+     "",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k993:v993\",\"k993:other:with:colons\",\"bare993\",\"z993:last\"],\"agentVersion\":{\"Major\":4102445796,\"Minor\":1700000998,\"Patch\":-1000,\"Pre\":\"s1002\",\"Meta\":\"s1004 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Commit\":\"s1006\"}}"
+    ],
+    [
+     "test",
+     "2026-10-01T16:08:42.480579359Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     "HorizontalPodAutoscaler",
+     "s505",
+     "s503",
+     "s507",
+     "s530",
+     "s522",
+     "s518",
+     "",
+     "",
+     "",
+     791,
+     793,
+     0,
+     {
+      "current_replicas": 791,
+      "desired_replicas": 793,
+      "max_replicas": -544,
+      "min_replicas": 542
+     },
+     {
+      "bare513": "",
+      "k513": "other:with:colons",
+      "z513": "last"
+     },
+     {
+      "bare515": "",
+      "k515": "other:with:colons",
+      "z515": "last"
+     },
+     {
+      "bare970": [
+       ""
+      ],
+      "bare993": [
+       ""
+      ],
+      "k970": [
+       "v970",
+       "other:with:colons"
+      ],
+      "k993": [
+       "v993",
+       "other:with:colons"
+      ],
+      "z970": [
+       "last"
+      ],
+      "z993": [
+       "last"
+      ]
+     },
+     "4102445796.1700000998.-1000-s1002",
+     6,
+     -8,
+     4242,
+     9,
+     1700000123,
+     "protobuf",
+     "2023-11-14T22:21:49Z",
+     "2100-01-01T00:08:31Z",
+     1700000534,
+     [
+      "k532:v532",
+      "k532:other:with:colons",
+      "bare532",
+      "z532:last"
+     ],
+     [
+      "s522",
+      "s528 <&> \"é\"\n"
+     ],
+     [
+      "s518",
+      "s524 <&> \"é\"\n"
+     ],
+     [
+      "s520 <&> \"é\"\n",
+      "s526"
+     ],
+     [
+      "s973",
+      "s983"
+     ],
+     [
+      "s975",
+      "s985"
+     ],
+     [
+      "s979",
+      "s989"
+     ],
+     [
+      "s981",
+      "s991"
+     ],
+     [
+      "2023-11-14T22:29:37Z",
+      "2023-11-14T22:29:47Z"
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ],
+     "",
+     "",
+     {},
+     "{\"metadata\":{\"name\":\"s503\",\"namespace\":\"s505\",\"uid\":\"s507\",\"creationTimestamp\":1700000509,\"deletionTimestamp\":4102445311,\"labels\":[\"k513:v513\",\"k513:other:with:colons\",\"bare513\",\"z513:last\"],\"annotations\":[\"k515:v515\",\"k515:other:with:colons\",\"bare515\",\"z515:last\"],\"ownerReferences\":[{\"name\":\"s518\",\"uid\":\"s520 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"kind\":\"s522\"},{\"name\":\"s524 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s526\",\"kind\":\"s528 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"resourceVersion\":\"s530\",\"finalizers\":[\"k532:v532\",\"k532:other:with:colons\",\"bare532\",\"z532:last\"],\"deletionGracePeriodSeconds\":1700000534},\"spec\":{\"target\":{\"kind\":\"s538\",\"name\":\"s540 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"minReplicas\":542,\"maxReplicas\":-544,\"metrics\":[{\"type\":\"s547\",\"object\":{\"describedObject\":{\"kind\":\"s551\",\"namespace\":\"s553\",\"name\":\"s555\",\"uid\":\"s557\",\"apiVersion\":\"s559\",\"resourceVersion\":\"s561\",\"fieldPath\":\"s563\"},\"target\":{\"type\":\"s566\",\"value\":1700000568},\"metric\":{\"name\":\"s571\",\"labelSelector\":[{\"key\":\"s574\",\"operator\":\"s576 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k578:v578\",\"k578:other:with:colons\",\"bare578\",\"z578:last\"]},{\"key\":\"s580 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s582\",\"values\":[\"k584:v584\",\"k584:other:with:colons\",\"bare584\",\"z584:last\"]}]}},\"pods\":{\"metric\":{\"name\":\"s588 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"labelSelector\":[{\"key\":\"s591\",\"operator\":\"s593\",\"values\":[\"k595:v595\",\"k595:other:with:colons\",\"bare595\",\"z595:last\"]},{\"key\":\"s597\",\"operator\":\"s599\",\"values\":[\"k601:v601\",\"k601:other:with:colons\",\"bare601\",\"z601:last\"]}]},\"target\":{\"type\":\"s604 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"value\":4102445406}},\"resource\":{\"resourceName\":\"s609\",\"target\":{\"type\":\"s612 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"value\":1700000614}},\"containerResource\":{\"resourceName\":\"s617\",\"target\":{\"type\":\"s620 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"value\":1700000622},\"container\":\"s624 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"external\":{\"metric\":{\"name\":\"s628 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"labelSelector\":[{\"key\":\"s631\",\"operator\":\"s633\",\"values\":[\"k635:v635\",\"k635:other:with:colons\",\"bare635\",\"z635:last\"]},{\"key\":\"s637\",\"operator\":\"s639\",\"values\":[\"k641:v641\",\"k641:other:with:colons\",\"bare641\",\"z641:last\"]}]},\"target\":{\"type\":\"s644 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"value\":4102445446}}},{\"type\":\"s648 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"object\":{\"describedObject\":{\"kind\":\"s652 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s654\",\"name\":\"s656 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s658\",\"apiVersion\":\"s660 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"resourceVersion\":\"s662\",\"fieldPath\":\"s664 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"target\":{\"type\":\"s667\",\"value\":1700000669},\"metric\":{\"name\":\"s672 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"labelSelector\":[{\"key\":\"s675\",\"operator\":\"s677\",\"values\":[\"k679:v679\",\"k679:other:with:colons\",\"bare679\",\"z679:last\"]},{\"key\":\"s681\",\"operator\":\"s683\",\"values\":[\"k685:v685\",\"k685:other:with:colons\",\"bare685\",\"z685:last\"]}]}},\"pods\":{\"metric\":{\"name\":\"s689\",\"labelSelector\":[{\"key\":\"s692 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s694\",\"values\":[\"k696:v696\",\"k696:other:with:colons\",\"bare696\",\"z696:last\"]},{\"key\":\"s698\",\"operator\":\"s700 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k702:v702\",\"k702:other:with:colons\",\"bare702\",\"z702:last\"]}]},\"target\":{\"type\":\"s705\",\"value\":1700000707}},\"resource\":{\"resourceName\":\"s710\",\"target\":{\"type\":\"s713\",\"value\":-715}},\"containerResource\":{\"resourceName\":\"s718\",\"target\":{\"type\":\"s721\",\"value\":1700000723},\"container\":\"s725\"},\"external\":{\"metric\":{\"name\":\"s729\",\"labelSelector\":[{\"key\":\"s732 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s734\",\"values\":[\"k736:v736\",\"k736:other:with:colons\",\"bare736\",\"z736:last\"]},{\"key\":\"s738\",\"operator\":\"s740 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k742:v742\",\"k742:other:with:colons\",\"bare742\",\"z742:last\"]}]},\"target\":{\"type\":\"s745\",\"value\":1700000747}}}],\"behavior\":{\"scaleUp\":{\"stabilizationWindowSeconds\":751,\"selectPolicy\":\"s753\",\"policies\":[{\"type\":\"s756 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"value\":758,\"periodSeconds\":-760},{\"type\":\"s762\",\"value\":-764,\"periodSeconds\":766}]},\"scaleDown\":{\"stabilizationWindowSeconds\":769,\"selectPolicy\":\"s771\",\"policies\":[{\"type\":\"s774\",\"value\":-776,\"periodSeconds\":778},{\"type\":\"s780 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"value\":782,\"periodSeconds\":-784}]}}},\"status\":{\"observedGeneration\":9007199254741780,\"lastScaleTime\":1700000789,\"currentReplicas\":791,\"desiredReplicas\":793,\"currentMetrics\":[{\"type\":\"s796 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"object\":{\"describedObject\":{\"kind\":\"s800 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s802\",\"name\":\"s804 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s806\",\"apiVersion\":\"s808 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"resourceVersion\":\"s810\",\"fieldPath\":\"s812 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"current\":1700000814,\"metric\":{\"name\":\"s817\",\"labelSelector\":[{\"key\":\"s820 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s822\",\"values\":[\"k824:v824\",\"k824:other:with:colons\",\"bare824\",\"z824:last\"]},{\"key\":\"s826\",\"operator\":\"s828 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k830:v830\",\"k830:other:with:colons\",\"bare830\",\"z830:last\"]}]}},\"pods\":{\"metric\":{\"name\":\"s834\",\"labelSelector\":[{\"key\":\"s837\",\"operator\":\"s839\",\"values\":[\"k841:v841\",\"k841:other:with:colons\",\"bare841\",\"z841:last\"]},{\"key\":\"s843\",\"operator\":\"s845\",\"values\":[\"k847:v847\",\"k847:other:with:colons\",\"bare847\",\"z847:last\"]}]},\"current\":1700000849},\"resource\":{\"resourceName\":\"s852 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"current\":1700000854},\"containerResource\":{\"resourceName\":\"s857\",\"current\":1700000859,\"container\":\"s861\"},\"external\":{\"metric\":{\"name\":\"s865\",\"labelSelector\":[{\"key\":\"s868 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s870\",\"values\":[\"k872:v872\",\"k872:other:with:colons\",\"bare872\",\"z872:last\"]},{\"key\":\"s874\",\"operator\":\"s876 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k878:v878\",\"k878:other:with:colons\",\"bare878\",\"z878:last\"]}]},\"current\":-880}},{\"type\":\"s882\",\"object\":{\"describedObject\":{\"kind\":\"s886\",\"namespace\":\"s888 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"name\":\"s890\",\"uid\":\"s892 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"apiVersion\":\"s894\",\"resourceVersion\":\"s896 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"fieldPath\":\"s898\"},\"current\":-900,\"metric\":{\"name\":\"s903\",\"labelSelector\":[{\"key\":\"s906\",\"operator\":\"s908 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k910:v910\",\"k910:other:with:colons\",\"bare910\",\"z910:last\"]},{\"key\":\"s912 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s914\",\"values\":[\"k916:v916\",\"k916:other:with:colons\",\"bare916\",\"z916:last\"]}]}},\"pods\":{\"metric\":{\"name\":\"s920 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"labelSelector\":[{\"key\":\"s923\",\"operator\":\"s925\",\"values\":[\"k927:v927\",\"k927:other:with:colons\",\"bare927\",\"z927:last\"]},{\"key\":\"s929\",\"operator\":\"s931\",\"values\":[\"k933:v933\",\"k933:other:with:colons\",\"bare933\",\"z933:last\"]}]},\"current\":-935},\"resource\":{\"resourceName\":\"s938\",\"current\":-940},\"containerResource\":{\"resourceName\":\"s943\",\"current\":-945,\"container\":\"s947\"},\"external\":{\"metric\":{\"name\":\"s951\",\"labelSelector\":[{\"key\":\"s954\",\"operator\":\"s956 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k958:v958\",\"k958:other:with:colons\",\"bare958\",\"z958:last\"]},{\"key\":\"s960 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s962\",\"values\":[\"k964:v964\",\"k964:other:with:colons\",\"bare964\",\"z964:last\"]}]},\"current\":4102445766}}]},\"yaml\":\"/wDI\",\"tags\":[\"k970:v970\",\"k970:other:with:colons\",\"bare970\",\"z970:last\"],\"conditions\":[{\"conditionType\":\"s973\",\"conditionStatus\":\"s975\",\"lastTransitionTime\":1700000977,\"reason\":\"s979\",\"message\":\"s981\"},{\"conditionType\":\"s983\",\"conditionStatus\":\"s985\",\"lastTransitionTime\":1700000987,\"reason\":\"s989\",\"message\":\"s991\"}]}",
+     "",
+     "",
+     "",
+     "",
+     null,
+     null,
+     "",
+     [],
+     [],
+     "",
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     [],
+     0,
+     "",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k993:v993\",\"k993:other:with:colons\",\"bare993\",\"z993:last\"],\"agentVersion\":{\"Major\":4102445796,\"Minor\":1700000998,\"Patch\":-1000,\"Pre\":\"s1002\",\"Meta\":\"s1004 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Commit\":\"s1006\"}}"
+    ]
+   ],
+   "insert": "INSERT INTO k8s_resources\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,\n\t\t\t uid, resource_version, owner_kind, owner_name, node_name, phase, status,\n\t\t\t ready, desired, available, counts, labels, annotations, tags,\n\t\t\t agent_version, group_id, group_size,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t creation_timestamp, deletion_timestamp, deletion_grace_period_seconds,\n\t\t\t finalizers, owner_kinds, owner_names, owner_uids,\n\t\t\t condition_types, condition_statuses, condition_reasons, condition_messages,\n\t\t\t condition_last_transition, condition_last_update, condition_last_probe,\n\t\t\t condition_message, resource_requirements, metrics, object,\n\t\t\t pod_ip, nominated_node_name, qos_class, priority_class,\n\t\t\t start_time, scheduled_time, host_name,\n\t\t\t container_names, container_ids, container_ready, container_restarts,\n\t\t\t container_states, container_messages, container_images,\n\t\t\t container_image_ids, container_is_init,\n\t\t\t pod_cidr, pod_cidrs, unschedulable, taints, provider_id, node_roles,\n\t\t\t capacity, allocatable, node_addresses,\n\t\t\t kubelet_version, kube_proxy_version, operating_system, architecture,\n\t\t\t kernel_version, os_image, container_runtime_version,\n\t\t\t service_type, cluster_ip, service_ports,\n\t\t\t rbac_rules, rbac_subjects, rbac_role_ref, envelope)",
+   "rows": [
+    {
+     "AgentVersion": "4102445796.1700000998.-1000-s1002",
+     "Allocatable": {},
+     "Annotations": {
+      "bare24": "",
+      "k24": "other:with:colons",
+      "z24": "last"
+     },
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterIP": "",
+     "ClusterName": "s2",
+     "CollectedAt": "2026-10-01T16:08:42.480579359Z",
+     "ConditionLastProbe": [
+      null,
+      null
+     ],
+     "ConditionLastTransition": [
+      "2100-01-01T00:08:06Z",
+      "2100-01-01T00:08:16Z"
+     ],
+     "ConditionLastUpdate": [
+      null,
+      null
+     ],
+     "ConditionMessage": "",
+     "ConditionMessages": [
+      "s490",
+      "s500 <&> \"é\"\n"
+     ],
+     "ConditionReasons": [
+      "s488 <&> \"é\"\n",
+      "s498"
+     ],
+     "ConditionStatuses": [
+      "s484 <&> \"é\"\n",
+      "s494"
+     ],
+     "ConditionTypes": [
+      "s482",
+      "s492 <&> \"é\"\n"
+     ],
+     "ContainerIDs": [],
+     "ContainerImageIDs": [],
+     "ContainerImages": [],
+     "ContainerIsInit": "",
+     "ContainerMessages": [],
+     "ContainerNames": [],
+     "ContainerReady": "",
+     "ContainerRestarts": [],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [],
+     "Counts": {
+      "current_replicas": -300,
+      "desired_replicas": 302,
+      "max_replicas": 53,
+      "min_replicas": 51
+     },
+     "CreationTimestamp": "2023-11-14T22:13:38Z",
+     "DeletionGracePeriodSeconds": 1700000043,
+     "DeletionTimestamp": null,
+     "Desired": 302,
+     "Encoding": "protobuf",
+     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k993:v993\",\"k993:other:with:colons\",\"bare993\",\"z993:last\"],\"agentVersion\":{\"Major\":4102445796,\"Minor\":1700000998,\"Patch\":-1000,\"Pre\":\"s1002\",\"Meta\":\"s1004 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Commit\":\"s1006\"}}",
+     "Finalizers": [
+      "k41:v41",
+      "k41:other:with:colons",
+      "bare41",
+      "z41:last"
+     ],
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": 1700000123,
+     "HostName": "",
+     "KernelVersion": "",
+     "Kind": "HorizontalPodAutoscaler",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare22": "",
+      "k22": "other:with:colons",
+      "z22": "last"
+     },
+     "Metrics": {},
+     "Name": "s12 <&> \"é\"\n",
+     "Namespace": "s14",
+     "NodeAddresses": "",
+     "NodeName": "",
+     "NodeRoles": [],
+     "NominatedNodeName": "",
+     "OSImage": "",
+     "Object": "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s14\",\"uid\":\"s16 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"creationTimestamp\":1700000018,\"deletionTimestamp\":-20,\"labels\":[\"k22:v22\",\"k22:other:with:colons\",\"bare22\",\"z22:last\"],\"annotations\":[\"k24:v24\",\"k24:other:with:colons\",\"bare24\",\"z24:last\"],\"ownerReferences\":[{\"name\":\"s27\",\"uid\":\"s29\",\"kind\":\"s31\"},{\"name\":\"s33\",\"uid\":\"s35\",\"kind\":\"s37\"}],\"resourceVersion\":\"s39\",\"finalizers\":[\"k41:v41\",\"k41:other:with:colons\",\"bare41\",\"z41:last\"],\"deletionGracePeriodSeconds\":1700000043},\"spec\":{\"target\":{\"kind\":\"s47\",\"name\":\"s49\"},\"minReplicas\":51,\"maxReplicas\":53,\"metrics\":[{\"type\":\"s56 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"object\":{\"describedObject\":{\"kind\":\"s60 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s62\",\"name\":\"s64 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s66\",\"apiVersion\":\"s68 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"resourceVersion\":\"s70\",\"fieldPath\":\"s72 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"target\":{\"type\":\"s75\",\"value\":1700000077},\"metric\":{\"name\":\"s80 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"labelSelector\":[{\"key\":\"s83\",\"operator\":\"s85\",\"values\":[\"k87:v87\",\"k87:other:with:colons\",\"bare87\",\"z87:last\"]},{\"key\":\"s89\",\"operator\":\"s91\",\"values\":[\"k93:v93\",\"k93:other:with:colons\",\"bare93\",\"z93:last\"]}]}},\"pods\":{\"metric\":{\"name\":\"s97\",\"labelSelector\":[{\"key\":\"s100 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s102\",\"values\":[\"k104:v104\",\"k104:other:with:colons\",\"bare104\",\"z104:last\"]},{\"key\":\"s106\",\"operator\":\"s108 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k110:v110\",\"k110:other:with:colons\",\"bare110\",\"z110:last\"]}]},\"target\":{\"type\":\"s113\",\"value\":-115}},\"resource\":{\"resourceName\":\"s118\",\"target\":{\"type\":\"s121\",\"value\":1700000123}},\"containerResource\":{\"resourceName\":\"s126\",\"target\":{\"type\":\"s129\",\"value\":4102444931},\"container\":\"s133\"},\"external\":{\"metric\":{\"name\":\"s137\",\"labelSelector\":[{\"key\":\"s140 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s142\",\"values\":[\"k144:v144\",\"k144:other:with:colons\",\"bare144\",\"z144:last\"]},{\"key\":\"s146\",\"operator\":\"s148 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k150:v150\",\"k150:other:with:colons\",\"bare150\",\"z150:last\"]}]},\"target\":{\"type\":\"s153\",\"value\":-155}}},{\"type\":\"s157\",\"object\":{\"describedObject\":{\"kind\":\"s161\",\"namespace\":\"s163\",\"name\":\"s165\",\"uid\":\"s167\",\"apiVersion\":\"s169\",\"resourceVersion\":\"s171\",\"fieldPath\":\"s173\"},\"target\":{\"type\":\"s176 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"value\":1700000178},\"metric\":{\"name\":\"s181\",\"labelSelector\":[{\"key\":\"s184 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s186\",\"values\":[\"k188:v188\",\"k188:other:with:colons\",\"bare188\",\"z188:last\"]},{\"key\":\"s190\",\"operator\":\"s192 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k194:v194\",\"k194:other:with:colons\",\"bare194\",\"z194:last\"]}]}},\"pods\":{\"metric\":{\"name\":\"s198\",\"labelSelector\":[{\"key\":\"s201\",\"operator\":\"s203\",\"values\":[\"k205:v205\",\"k205:other:with:colons\",\"bare205\",\"z205:last\"]},{\"key\":\"s207\",\"operator\":\"s209\",\"values\":[\"k211:v211\",\"k211:other:with:colons\",\"bare211\",\"z211:last\"]}]},\"target\":{\"type\":\"s214\",\"value\":4102445016}},\"resource\":{\"resourceName\":\"s219\",\"target\":{\"type\":\"s222\",\"value\":1700000224}},\"containerResource\":{\"resourceName\":\"s227\",\"target\":{\"type\":\"s230\",\"value\":1700000232},\"container\":\"s234\"},\"external\":{\"metric\":{\"name\":\"s238\",\"labelSelector\":[{\"key\":\"s241\",\"operator\":\"s243\",\"values\":[\"k245:v245\",\"k245:other:with:colons\",\"bare245\",\"z245:last\"]},{\"key\":\"s247\",\"operator\":\"s249\",\"values\":[\"k251:v251\",\"k251:other:with:colons\",\"bare251\",\"z251:last\"]}]},\"target\":{\"type\":\"s254\",\"value\":4102445056}}}],\"behavior\":{\"scaleUp\":{\"stabilizationWindowSeconds\":-260,\"selectPolicy\":\"s262\",\"policies\":[{\"type\":\"s265\",\"value\":267,\"periodSeconds\":269},{\"type\":\"s271\",\"value\":273,\"periodSeconds\":275}]},\"scaleDown\":{\"stabilizationWindowSeconds\":278,\"selectPolicy\":\"s280 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"policies\":[{\"type\":\"s283\",\"value\":285,\"periodSeconds\":287},{\"type\":\"s289\",\"value\":291,\"periodSeconds\":293}]}}},\"status\":{\"observedGeneration\":9007199254741289,\"lastScaleTime\":1700000298,\"currentReplicas\":-300,\"desiredReplicas\":302,\"currentMetrics\":[{\"type\":\"s305\",\"object\":{\"describedObject\":{\"kind\":\"s309\",\"namespace\":\"s311\",\"name\":\"s313\",\"uid\":\"s315\",\"apiVersion\":\"s317\",\"resourceVersion\":\"s319\",\"fieldPath\":\"s321\"},\"current\":1700000323,\"metric\":{\"name\":\"s326\",\"labelSelector\":[{\"key\":\"s329\",\"operator\":\"s331\",\"values\":[\"k333:v333\",\"k333:other:with:colons\",\"bare333\",\"z333:last\"]},{\"key\":\"s335\",\"operator\":\"s337\",\"values\":[\"k339:v339\",\"k339:other:with:colons\",\"bare339\",\"z339:last\"]}]}},\"pods\":{\"metric\":{\"name\":\"s343\",\"labelSelector\":[{\"key\":\"s346\",\"operator\":\"s348 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k350:v350\",\"k350:other:with:colons\",\"bare350\",\"z350:last\"]},{\"key\":\"s352 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s354\",\"values\":[\"k356:v356\",\"k356:other:with:colons\",\"bare356\",\"z356:last\"]}]},\"current\":1700000358},\"resource\":{\"resourceName\":\"s361\",\"current\":1700000363},\"containerResource\":{\"resourceName\":\"s366\",\"current\":1700000368,\"container\":\"s370\"},\"external\":{\"metric\":{\"name\":\"s374\",\"labelSelector\":[{\"key\":\"s377\",\"operator\":\"s379\",\"values\":[\"k381:v381\",\"k381:other:with:colons\",\"bare381\",\"z381:last\"]},{\"key\":\"s383\",\"operator\":\"s385\",\"values\":[\"k387:v387\",\"k387:other:with:colons\",\"bare387\",\"z387:last\"]}]},\"current\":1700000389}},{\"type\":\"s391\",\"object\":{\"describedObject\":{\"kind\":\"s395\",\"namespace\":\"s397\",\"name\":\"s399\",\"uid\":\"s401\",\"apiVersion\":\"s403\",\"resourceVersion\":\"s405\",\"fieldPath\":\"s407\"},\"current\":1700000409,\"metric\":{\"name\":\"s412 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"labelSelector\":[{\"key\":\"s415\",\"operator\":\"s417\",\"values\":[\"k419:v419\",\"k419:other:with:colons\",\"bare419\",\"z419:last\"]},{\"key\":\"s421\",\"operator\":\"s423\",\"values\":[\"k425:v425\",\"k425:other:with:colons\",\"bare425\",\"z425:last\"]}]}},\"pods\":{\"metric\":{\"name\":\"s429\",\"labelSelector\":[{\"key\":\"s432 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s434\",\"values\":[\"k436:v436\",\"k436:other:with:colons\",\"bare436\",\"z436:last\"]},{\"key\":\"s438\",\"operator\":\"s440 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k442:v442\",\"k442:other:with:colons\",\"bare442\",\"z442:last\"]}]},\"current\":1700000444},\"resource\":{\"resourceName\":\"s447\",\"current\":1700000449},\"containerResource\":{\"resourceName\":\"s452 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"current\":1700000454,\"container\":\"s456 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"external\":{\"metric\":{\"name\":\"s460 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"labelSelector\":[{\"key\":\"s463\",\"operator\":\"s465\",\"values\":[\"k467:v467\",\"k467:other:with:colons\",\"bare467\",\"z467:last\"]},{\"key\":\"s469\",\"operator\":\"s471\",\"values\":[\"k473:v473\",\"k473:other:with:colons\",\"bare473\",\"z473:last\"]}]},\"current\":-475}}]},\"yaml\":\"a2luZDogVGhpbmc0NzcK\",\"tags\":[\"k479:v479\",\"k479:other:with:colons\",\"bare479\",\"z479:last\"],\"conditions\":[{\"conditionType\":\"s482\",\"conditionStatus\":\"s484 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"lastTransitionTime\":4102445286,\"reason\":\"s488 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"message\":\"s490\"},{\"conditionType\":\"s492 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"conditionStatus\":\"s494\",\"lastTransitionTime\":4102445296,\"reason\":\"s498\",\"message\":\"s500 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}]}",
+     "OperatingSystem": "",
+     "OrgID": 4242,
+     "OwnerKind": "s31",
+     "OwnerKinds": [
+      "s31",
+      "s37"
+     ],
+     "OwnerName": "s27",
+     "OwnerNames": [
+      "s27",
+      "s33"
+     ],
+     "OwnerUIDs": [
+      "s29",
+      "s35"
+     ],
+     "Phase": "",
+     "PodCIDR": "",
+     "PodCIDRs": [],
+     "PodIP": "",
+     "PriorityClass": "",
+     "ProviderID": "",
+     "QOSClass": "",
+     "RBACRoleRef": "",
+     "RBACRules": "",
+     "RBACSubjects": "",
+     "Ready": -300,
+     "ResourceRequirements": "",
+     "ResourceVersion": "s39",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": null,
+     "Status": "",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare479": [
+       ""
+      ],
+      "bare993": [
+       ""
+      ],
+      "k479": [
+       "v479",
+       "other:with:colons"
+      ],
+      "k993": [
+       "v993",
+       "other:with:colons"
+      ],
+      "z479": [
+       "last"
+      ],
+      "z993": [
+       "last"
+      ]
+     },
+     "Taints": "",
+     "TenantID": "test",
+     "UID": "s16 <&> \"é\"\n",
+     "Unschedulable": 0
+    },
+    {
+     "AgentVersion": "4102445796.1700000998.-1000-s1002",
+     "Allocatable": {},
+     "Annotations": {
+      "bare515": "",
+      "k515": "other:with:colons",
+      "z515": "last"
+     },
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterIP": "",
+     "ClusterName": "s2",
+     "CollectedAt": "2026-10-01T16:08:42.480579359Z",
+     "ConditionLastProbe": [
+      null,
+      null
+     ],
+     "ConditionLastTransition": [
+      "2023-11-14T22:29:37Z",
+      "2023-11-14T22:29:47Z"
+     ],
+     "ConditionLastUpdate": [
+      null,
+      null
+     ],
+     "ConditionMessage": "",
+     "ConditionMessages": [
+      "s981",
+      "s991"
+     ],
+     "ConditionReasons": [
+      "s979",
+      "s989"
+     ],
+     "ConditionStatuses": [
+      "s975",
+      "s985"
+     ],
+     "ConditionTypes": [
+      "s973",
+      "s983"
+     ],
+     "ContainerIDs": [],
+     "ContainerImageIDs": [],
+     "ContainerImages": [],
+     "ContainerIsInit": "",
+     "ContainerMessages": [],
+     "ContainerNames": [],
+     "ContainerReady": "",
+     "ContainerRestarts": [],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [],
+     "Counts": {
+      "current_replicas": 791,
+      "desired_replicas": 793,
+      "max_replicas": -544,
+      "min_replicas": 542
+     },
+     "CreationTimestamp": "2023-11-14T22:21:49Z",
+     "DeletionGracePeriodSeconds": 1700000534,
+     "DeletionTimestamp": "2100-01-01T00:08:31Z",
+     "Desired": 793,
+     "Encoding": "protobuf",
+     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k993:v993\",\"k993:other:with:colons\",\"bare993\",\"z993:last\"],\"agentVersion\":{\"Major\":4102445796,\"Minor\":1700000998,\"Patch\":-1000,\"Pre\":\"s1002\",\"Meta\":\"s1004 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Commit\":\"s1006\"}}",
+     "Finalizers": [
+      "k532:v532",
+      "k532:other:with:colons",
+      "bare532",
+      "z532:last"
+     ],
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": 1700000123,
+     "HostName": "",
+     "KernelVersion": "",
+     "Kind": "HorizontalPodAutoscaler",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare513": "",
+      "k513": "other:with:colons",
+      "z513": "last"
+     },
+     "Metrics": {},
+     "Name": "s503",
+     "Namespace": "s505",
+     "NodeAddresses": "",
+     "NodeName": "",
+     "NodeRoles": [],
+     "NominatedNodeName": "",
+     "OSImage": "",
+     "Object": "{\"metadata\":{\"name\":\"s503\",\"namespace\":\"s505\",\"uid\":\"s507\",\"creationTimestamp\":1700000509,\"deletionTimestamp\":4102445311,\"labels\":[\"k513:v513\",\"k513:other:with:colons\",\"bare513\",\"z513:last\"],\"annotations\":[\"k515:v515\",\"k515:other:with:colons\",\"bare515\",\"z515:last\"],\"ownerReferences\":[{\"name\":\"s518\",\"uid\":\"s520 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"kind\":\"s522\"},{\"name\":\"s524 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s526\",\"kind\":\"s528 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"resourceVersion\":\"s530\",\"finalizers\":[\"k532:v532\",\"k532:other:with:colons\",\"bare532\",\"z532:last\"],\"deletionGracePeriodSeconds\":1700000534},\"spec\":{\"target\":{\"kind\":\"s538\",\"name\":\"s540 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"minReplicas\":542,\"maxReplicas\":-544,\"metrics\":[{\"type\":\"s547\",\"object\":{\"describedObject\":{\"kind\":\"s551\",\"namespace\":\"s553\",\"name\":\"s555\",\"uid\":\"s557\",\"apiVersion\":\"s559\",\"resourceVersion\":\"s561\",\"fieldPath\":\"s563\"},\"target\":{\"type\":\"s566\",\"value\":1700000568},\"metric\":{\"name\":\"s571\",\"labelSelector\":[{\"key\":\"s574\",\"operator\":\"s576 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k578:v578\",\"k578:other:with:colons\",\"bare578\",\"z578:last\"]},{\"key\":\"s580 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s582\",\"values\":[\"k584:v584\",\"k584:other:with:colons\",\"bare584\",\"z584:last\"]}]}},\"pods\":{\"metric\":{\"name\":\"s588 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"labelSelector\":[{\"key\":\"s591\",\"operator\":\"s593\",\"values\":[\"k595:v595\",\"k595:other:with:colons\",\"bare595\",\"z595:last\"]},{\"key\":\"s597\",\"operator\":\"s599\",\"values\":[\"k601:v601\",\"k601:other:with:colons\",\"bare601\",\"z601:last\"]}]},\"target\":{\"type\":\"s604 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"value\":4102445406}},\"resource\":{\"resourceName\":\"s609\",\"target\":{\"type\":\"s612 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"value\":1700000614}},\"containerResource\":{\"resourceName\":\"s617\",\"target\":{\"type\":\"s620 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"value\":1700000622},\"container\":\"s624 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"external\":{\"metric\":{\"name\":\"s628 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"labelSelector\":[{\"key\":\"s631\",\"operator\":\"s633\",\"values\":[\"k635:v635\",\"k635:other:with:colons\",\"bare635\",\"z635:last\"]},{\"key\":\"s637\",\"operator\":\"s639\",\"values\":[\"k641:v641\",\"k641:other:with:colons\",\"bare641\",\"z641:last\"]}]},\"target\":{\"type\":\"s644 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"value\":4102445446}}},{\"type\":\"s648 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"object\":{\"describedObject\":{\"kind\":\"s652 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s654\",\"name\":\"s656 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s658\",\"apiVersion\":\"s660 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"resourceVersion\":\"s662\",\"fieldPath\":\"s664 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"target\":{\"type\":\"s667\",\"value\":1700000669},\"metric\":{\"name\":\"s672 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"labelSelector\":[{\"key\":\"s675\",\"operator\":\"s677\",\"values\":[\"k679:v679\",\"k679:other:with:colons\",\"bare679\",\"z679:last\"]},{\"key\":\"s681\",\"operator\":\"s683\",\"values\":[\"k685:v685\",\"k685:other:with:colons\",\"bare685\",\"z685:last\"]}]}},\"pods\":{\"metric\":{\"name\":\"s689\",\"labelSelector\":[{\"key\":\"s692 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s694\",\"values\":[\"k696:v696\",\"k696:other:with:colons\",\"bare696\",\"z696:last\"]},{\"key\":\"s698\",\"operator\":\"s700 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k702:v702\",\"k702:other:with:colons\",\"bare702\",\"z702:last\"]}]},\"target\":{\"type\":\"s705\",\"value\":1700000707}},\"resource\":{\"resourceName\":\"s710\",\"target\":{\"type\":\"s713\",\"value\":-715}},\"containerResource\":{\"resourceName\":\"s718\",\"target\":{\"type\":\"s721\",\"value\":1700000723},\"container\":\"s725\"},\"external\":{\"metric\":{\"name\":\"s729\",\"labelSelector\":[{\"key\":\"s732 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s734\",\"values\":[\"k736:v736\",\"k736:other:with:colons\",\"bare736\",\"z736:last\"]},{\"key\":\"s738\",\"operator\":\"s740 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k742:v742\",\"k742:other:with:colons\",\"bare742\",\"z742:last\"]}]},\"target\":{\"type\":\"s745\",\"value\":1700000747}}}],\"behavior\":{\"scaleUp\":{\"stabilizationWindowSeconds\":751,\"selectPolicy\":\"s753\",\"policies\":[{\"type\":\"s756 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"value\":758,\"periodSeconds\":-760},{\"type\":\"s762\",\"value\":-764,\"periodSeconds\":766}]},\"scaleDown\":{\"stabilizationWindowSeconds\":769,\"selectPolicy\":\"s771\",\"policies\":[{\"type\":\"s774\",\"value\":-776,\"periodSeconds\":778},{\"type\":\"s780 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"value\":782,\"periodSeconds\":-784}]}}},\"status\":{\"observedGeneration\":9007199254741780,\"lastScaleTime\":1700000789,\"currentReplicas\":791,\"desiredReplicas\":793,\"currentMetrics\":[{\"type\":\"s796 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"object\":{\"describedObject\":{\"kind\":\"s800 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s802\",\"name\":\"s804 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s806\",\"apiVersion\":\"s808 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"resourceVersion\":\"s810\",\"fieldPath\":\"s812 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"current\":1700000814,\"metric\":{\"name\":\"s817\",\"labelSelector\":[{\"key\":\"s820 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s822\",\"values\":[\"k824:v824\",\"k824:other:with:colons\",\"bare824\",\"z824:last\"]},{\"key\":\"s826\",\"operator\":\"s828 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k830:v830\",\"k830:other:with:colons\",\"bare830\",\"z830:last\"]}]}},\"pods\":{\"metric\":{\"name\":\"s834\",\"labelSelector\":[{\"key\":\"s837\",\"operator\":\"s839\",\"values\":[\"k841:v841\",\"k841:other:with:colons\",\"bare841\",\"z841:last\"]},{\"key\":\"s843\",\"operator\":\"s845\",\"values\":[\"k847:v847\",\"k847:other:with:colons\",\"bare847\",\"z847:last\"]}]},\"current\":1700000849},\"resource\":{\"resourceName\":\"s852 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"current\":1700000854},\"containerResource\":{\"resourceName\":\"s857\",\"current\":1700000859,\"container\":\"s861\"},\"external\":{\"metric\":{\"name\":\"s865\",\"labelSelector\":[{\"key\":\"s868 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s870\",\"values\":[\"k872:v872\",\"k872:other:with:colons\",\"bare872\",\"z872:last\"]},{\"key\":\"s874\",\"operator\":\"s876 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k878:v878\",\"k878:other:with:colons\",\"bare878\",\"z878:last\"]}]},\"current\":-880}},{\"type\":\"s882\",\"object\":{\"describedObject\":{\"kind\":\"s886\",\"namespace\":\"s888 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"name\":\"s890\",\"uid\":\"s892 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"apiVersion\":\"s894\",\"resourceVersion\":\"s896 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"fieldPath\":\"s898\"},\"current\":-900,\"metric\":{\"name\":\"s903\",\"labelSelector\":[{\"key\":\"s906\",\"operator\":\"s908 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k910:v910\",\"k910:other:with:colons\",\"bare910\",\"z910:last\"]},{\"key\":\"s912 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s914\",\"values\":[\"k916:v916\",\"k916:other:with:colons\",\"bare916\",\"z916:last\"]}]}},\"pods\":{\"metric\":{\"name\":\"s920 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"labelSelector\":[{\"key\":\"s923\",\"operator\":\"s925\",\"values\":[\"k927:v927\",\"k927:other:with:colons\",\"bare927\",\"z927:last\"]},{\"key\":\"s929\",\"operator\":\"s931\",\"values\":[\"k933:v933\",\"k933:other:with:colons\",\"bare933\",\"z933:last\"]}]},\"current\":-935},\"resource\":{\"resourceName\":\"s938\",\"current\":-940},\"containerResource\":{\"resourceName\":\"s943\",\"current\":-945,\"container\":\"s947\"},\"external\":{\"metric\":{\"name\":\"s951\",\"labelSelector\":[{\"key\":\"s954\",\"operator\":\"s956 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"values\":[\"k958:v958\",\"k958:other:with:colons\",\"bare958\",\"z958:last\"]},{\"key\":\"s960 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"operator\":\"s962\",\"values\":[\"k964:v964\",\"k964:other:with:colons\",\"bare964\",\"z964:last\"]}]},\"current\":4102445766}}]},\"yaml\":\"/wDI\",\"tags\":[\"k970:v970\",\"k970:other:with:colons\",\"bare970\",\"z970:last\"],\"conditions\":[{\"conditionType\":\"s973\",\"conditionStatus\":\"s975\",\"lastTransitionTime\":1700000977,\"reason\":\"s979\",\"message\":\"s981\"},{\"conditionType\":\"s983\",\"conditionStatus\":\"s985\",\"lastTransitionTime\":1700000987,\"reason\":\"s989\",\"message\":\"s991\"}]}",
+     "OperatingSystem": "",
+     "OrgID": 4242,
+     "OwnerKind": "s522",
+     "OwnerKinds": [
+      "s522",
+      "s528 <&> \"é\"\n"
+     ],
+     "OwnerName": "s518",
+     "OwnerNames": [
+      "s518",
+      "s524 <&> \"é\"\n"
+     ],
+     "OwnerUIDs": [
+      "s520 <&> \"é\"\n",
+      "s526"
+     ],
+     "Phase": "",
+     "PodCIDR": "",
+     "PodCIDRs": [],
+     "PodIP": "",
+     "PriorityClass": "",
+     "ProviderID": "",
+     "QOSClass": "",
+     "RBACRoleRef": "",
+     "RBACRules": "",
+     "RBACSubjects": "",
+     "Ready": 791,
+     "ResourceRequirements": "",
+     "ResourceVersion": "s530",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": null,
+     "Status": "",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare970": [
+       ""
+      ],
+      "bare993": [
+       ""
+      ],
+      "k970": [
+       "v970",
+       "other:with:colons"
+      ],
+      "k993": [
+       "v993",
+       "other:with:colons"
+      ],
+      "z970": [
+       "last"
+      ],
+      "z993": [
+       "last"
+      ]
+     },
+     "Taints": "",
+     "TenantID": "test",
+     "UID": "s507",
+     "Unschedulable": 0
+    }
+   ],
+   "to": "storage_k8s_resources",
+   "type": "storage.WriteK8sResources"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorHorizontalPodAutoscaler_0",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/CollectedAt",
+  "/sends/0/rows/1/CollectedAt"
+ ]
+}

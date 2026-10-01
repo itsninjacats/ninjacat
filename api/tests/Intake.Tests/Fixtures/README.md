@@ -21,3 +21,8 @@ its reason:
 They were recorded by `server/intake/fixtures_test.go` (two runs, merged by
 `merge.py`, which is how `volatile` is found) and are frozen: they are what
 the Go server did at the time it was replaced.
+
+`go/TestPortProbe*` were recorded the same way from a probe written during the
+port (every Kubernetes object kind, sparse and full, bad frames, container
+lifecycle and image payloads, Kubernetes action batches), to cover what the Go
+server's own tests did not send.

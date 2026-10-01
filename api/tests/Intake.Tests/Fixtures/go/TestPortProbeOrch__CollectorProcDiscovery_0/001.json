@@ -1,0 +1,101 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.498815338Z",
+ "request": {
+  "body_b64": "AwA1CZIQAAAAAAAAAAAAAAoCczIQ/P//////////ARgGIu4BCAkQCxpeCI+AgICAgIAQEPD//////////wEaA3MxODIHazIwOnYyMDIVazIwOm90aGVyOndpdGg6Y29sb25zMgZiYXJlMjAyCHoyMDpsYXN0OBZAmYCAgICAgBBIGlCc4s+qBiJfCgdrMzE6djMxChVrMzE6b3RoZXI6d2l0aDpjb2xvbnMKBmJhcmUzMQoIejMxOmxhc3QaA3MzMyIDczM1KAEwJjjY//////////8BQgNzNDJKDXM0NCA8Jj4gIsOpIgoqEQoDczQ3EDEYMyA1KDcwOTg7ML2umaQPOg5raW5kOiBUaGluZzYzCiLxAQhBEEMaXgjHgICAgICAEBC4//////////8BGgNzNzQyB2s3Njp2NzYyFWs3NjpvdGhlcjp3aXRoOmNvbG9uczIGYmFyZTc2Mgh6NzY6bGFzdDhOQNGAgICAgIAQSFJQ1OLPqgYiYAoHazg3OnY4NwoVazg3Om90aGVyOndpdGg6Y29sb25zCgZiYXJlODcKCHo4NzpsYXN0GgNzODkiA3M5MSgBMF44oP//////////AUIDczk4Sg5zMTAwIDwmPiAiw6kiCioSCgRzMTAzEGkYayBtKG8wcThzMPXiz6oGOg9raW5kOiBUaGluZzExOQoqZgj7gICAgICAEBCE//////////8BGgRzMTI2MglrMTI4OnYxMjgyFmsxMjg6b3RoZXI6d2l0aDpjb2xvbnMyB2JhcmUxMjgyCXoxMjg6bGFzdDiCAUCFgYCAgICAEEiGAVCIr5mkDw==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.498810289Z",
+     "orchestrator",
+     "unexpected_shape",
+     "POST",
+     "example.com",
+     "/api/v2/orch",
+     {},
+     "application/json",
+     "",
+     {},
+     {
+      "$b64": "AwA1CZIQAAAAAAAAAAAAAAoCczIQ/P//////////ARgGIu4BCAkQCxpeCI+AgICAgIAQEPD//////////wEaA3MxODIHazIwOnYyMDIVazIwOm90aGVyOndpdGg6Y29sb25zMgZiYXJlMjAyCHoyMDpsYXN0OBZAmYCAgICAgBBIGlCc4s+qBiJfCgdrMzE6djMxChVrMzE6b3RoZXI6d2l0aDpjb2xvbnMKBmJhcmUzMQoIejMxOmxhc3QaA3MzMyIDczM1KAEwJjjY//////////8BQgNzNDJKDXM0NCA8Jj4gIsOpIgoqEQoDczQ3EDEYMyA1KDcwOTg7ML2umaQPOg5raW5kOiBUaGluZzYzCiLxAQhBEEMaXgjHgICAgICAEBC4//////////8BGgNzNzQyB2s3Njp2NzYyFWs3NjpvdGhlcjp3aXRoOmNvbG9uczIGYmFyZTc2Mgh6NzY6bGFzdDhOQNGAgICAgIAQSFJQ1OLPqgYiYAoHazg3OnY4NwoVazg3Om90aGVyOndpdGg6Y29sb25zCgZiYXJlODcKCHo4NzpsYXN0GgNzODkiA3M5MSgBMF44oP//////////AUIDczk4Sg5zMTAwIDwmPiAiw6kiCioSCgRzMTAzEGkYayBtKG8wcThzMPXiz6oGOg9raW5kOiBUaGluZzExOQoqZgj7gICAgICAEBCE//////////8BGgRzMTI2MglrMTI4OnYxMjgyFmsxMjg6b3RoZXI6d2l0aDpjb2xvbnMyB2JhcmUxMjgyCXoxMjg6bGFzdDiCAUCFgYCAgICAEEiGAVCIr5mkDw=="
+     },
+     622,
+     "orch: *process.CollectorProcDiscovery on an orchestrator intake"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": {
+      "$b64": "AwA1CZIQAAAAAAAAAAAAAAoCczIQ/P//////////ARgGIu4BCAkQCxpeCI+AgICAgIAQEPD//////////wEaA3MxODIHazIwOnYyMDIVazIwOm90aGVyOndpdGg6Y29sb25zMgZiYXJlMjAyCHoyMDpsYXN0OBZAmYCAgICAgBBIGlCc4s+qBiJfCgdrMzE6djMxChVrMzE6b3RoZXI6d2l0aDpjb2xvbnMKBmJhcmUzMQoIejMxOmxhc3QaA3MzMyIDczM1KAEwJjjY//////////8BQgNzNDJKDXM0NCA8Jj4gIsOpIgoqEQoDczQ3EDEYMyA1KDcwOTg7ML2umaQPOg5raW5kOiBUaGluZzYzCiLxAQhBEEMaXgjHgICAgICAEBC4//////////8BGgNzNzQyB2s3Njp2NzYyFWs3NjpvdGhlcjp3aXRoOmNvbG9uczIGYmFyZTc2Mgh6NzY6bGFzdDhOQNGAgICAgIAQSFJQ1OLPqgYiYAoHazg3OnY4NwoVazg3Om90aGVyOndpdGg6Y29sb25zCgZiYXJlODcKCHo4NzpsYXN0GgNzODkiA3M5MSgBMF44oP//////////AUIDczk4Sg5zMTAwIDwmPiAiw6kiCioSCgRzMTAzEGkYayBtKG8wcThzMPXiz6oGOg9raW5kOiBUaGluZzExOQoqZgj7gICAgICAEBCE//////////8BGgRzMTI2MglrMTI4OnYxMjgyFmsxMjg6b3RoZXI6d2l0aDpjb2xvbnMyB2JhcmUxMjgyCXoxMjg6bGFzdDiCAUCFgYCAgICAEEiGAVCIr5mkDw=="
+     },
+     "BodyBytes": 622,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "orchestrator",
+     "Method": "POST",
+     "Note": "orch: *process.CollectorProcDiscovery on an orchestrator intake",
+     "Path": "/api/v2/orch",
+     "Query": {},
+     "Reason": "unexpected_shape",
+     "ReceivedAt": "2026-10-01T16:08:42.498810289Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorProcDiscovery_0",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

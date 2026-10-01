@@ -1,0 +1,741 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.439740255Z",
+ "request": {
+  "body_b64": "AQAtCQoCczISDHM0IDwmPiAiw6kiChgGIPj//////////wEq3QIKqgEKDXMxMiA8Jj4gIsOpIgoSA3MxNCCR4s+qBjIHazIwOnYyMDIVazIwOm90aGVyOndpdGg6Y29sb25zMgZiYXJlMjAyCHoyMDpsYXN0QhQKDXMyNCA8Jj4gIsOpIgoSA3MyNkIUCgNzMjkaDXMzMiA8Jj4gIsOpIgpSB2szNTp2MzVSFWszNTpvdGhlcjp3aXRoOmNvbG9uc1IGYmFyZTM1Ugh6MzU6bGFzdBIDczM4IAEqFRINczQ0IDwmPiAiw6kiCiCv4s+qBioLEgNzNTAgteLPqgY6A/8AOEoHazU5OnY1OUoVazU5Om90aGVyOndpdGg6Y29sb25zSgZiYXJlNTlKCHo1OTpsYXN0WkwIwICAgICAgBAQQTIHazY4OnY2ODIVazY4Om90aGVyOndpdGg6Y29sb25zMgZiYXJlNjgyCHo2ODpsYXN0QMiAgICAgIAQUMriz6oGKvUCCqUBCgNzNzgSDXM4MCA8Jj4gIsOpIgog0+LPqgYyB2s4Njp2ODYyFWs4NjpvdGhlcjp3aXRoOmNvbG9uczIGYmFyZTg2Mgh6ODY6bGFzdEIUCgNzOTASDXM5MiA8Jj4gIsOpIgpCCgoDczk1GgNzOThSCWsxMDE6djEwMVIWazEwMTpvdGhlcjp3aXRoOmNvbG9uc1IHYmFyZTEwMVIJejEwMTpsYXN0Eg5zMTA0IDwmPiAiw6kiCiABKgwSBHMxMTAg8eLPqgYqFhIOczExNiA8Jj4gIsOpIgog9+LPqgY6A/8AekoJazEyNTp2MTI1ShZrMTI1Om90aGVyOndpdGg6Y29sb25zSgdiYXJlMTI1Sgl6MTI1Omxhc3RaVwiCgYCAgICAEBCDATIJazEzNDp2MTM0MhZrMTM0Om90aGVyOndpdGg6Y29sb25zMgdiYXJlMTM0Mgl6MTM0Omxhc3RAioGAgICAgBBQ9P7/////////ATIJazE0Mzp2MTQzMhZrMTQzOm90aGVyOndpdGg6Y29sb25zMgdiYXJlMTQzMgl6MTQzOmxhc3Q6KQoGa2V5MTU5Eh8IooGAgICAgBAaDnMxNjQgPCY+ICLDqSIKOKcBSKoBOlwKBmtleTE0NRJSCJSBgICAgIAQEJUBMglrMTUyOnYxNTIyFmsxNTI6b3RoZXI6d2l0aDpjb2xvbnMyB2JhcmUxNTIyCXoxNTI6bGFzdECcgYCAgICAEFCe48+qBkIYCK7jz6oGELCvmaQPIgRzMTc5MgRzMTgy",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.439700542Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     "Node",
+     "s14",
+     "s12 <&> \"é\"\n",
+     "",
+     "",
+     "",
+     "s24 <&> \"é\"\n",
+     "",
+     "",
+     "",
+     0,
+     0,
+     0,
+     {
+      "images": 0,
+      "taints": 2
+     },
+     {
+      "bare20": "",
+      "k20": "other:with:colons",
+      "z20": "last"
+     },
+     {},
+     {
+      "bare143": [
+       ""
+      ],
+      "bare59": [
+       ""
+      ],
+      "k143": [
+       "v143",
+       "other:with:colons"
+      ],
+      "k59": [
+       "v59",
+       "other:with:colons"
+      ],
+      "z143": [
+       "last"
+      ],
+      "z59": [
+       "last"
+      ]
+     },
+     "1700000174.4102444976.0-s179",
+     6,
+     -8,
+     0,
+     9,
+     null,
+     "protobuf",
+     "2023-11-14T22:13:37Z",
+     null,
+     null,
+     [
+      "k35:v35",
+      "k35:other:with:colons",
+      "bare35",
+      "z35:last"
+     ],
+     [
+      "",
+      "s32 <&> \"é\"\n"
+     ],
+     [
+      "s24 <&> \"é\"\n",
+      "s29"
+     ],
+     [
+      "s26",
+      ""
+     ],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     {},
+     "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s14\",\"creationTimestamp\":1700000017,\"labels\":[\"k20:v20\",\"k20:other:with:colons\",\"bare20\",\"z20:last\"],\"ownerReferences\":[{\"name\":\"s24 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s26\"},{\"name\":\"s29\",\"kind\":\"s32 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"finalizers\":[\"k35:v35\",\"k35:other:with:colons\",\"bare35\",\"z35:last\"]},\"podCIDR\":\"s38\",\"unschedulable\":true,\"taints\":[{\"value\":\"s44 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"timeAdded\":1700000047},{\"value\":\"s50\",\"timeAdded\":1700000053}],\"yaml\":\"/wA4\",\"tags\":[\"k59:v59\",\"k59:other:with:colons\",\"bare59\",\"z59:last\"],\"host\":{\"id\":9007199254741056,\"orgId\":65,\"allTags\":[\"k68:v68\",\"k68:other:with:colons\",\"bare68\",\"z68:last\"],\"totalMemory\":9007199254741064,\"tagsModified\":1700000074}}",
+     "",
+     "",
+     "",
+     "",
+     null,
+     null,
+     "",
+     [],
+     [],
+     "",
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "s38",
+     [],
+     1,
+     "[{\"value\":\"s44 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"timeAdded\":1700000047},{\"value\":\"s50\",\"timeAdded\":1700000053}]",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k143:v143\",\"k143:other:with:colons\",\"bare143\",\"z143:last\"],\"hostAliasMapping\":{\"key145\":{\"id\":9007199254741140,\"orgId\":149,\"allTags\":[\"k152:v152\",\"k152:other:with:colons\",\"bare152\",\"z152:last\"],\"totalMemory\":9007199254741148,\"tagsModified\":1700000158},\"key159\":{\"id\":9007199254741154,\"name\":\"s164 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"numCpus\":167,\"tagIndex\":170}},\"agentVersion\":{\"Major\":1700000174,\"Minor\":4102444976,\"Pre\":\"s179\",\"Commit\":\"s182\"}}"
+    ],
+    [
+     "test",
+     "2026-10-01T16:08:42.439700542Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     "Node",
+     "s80 <&> \"é\"\n",
+     "s78",
+     "",
+     "",
+     "",
+     "s90",
+     "",
+     "",
+     "",
+     0,
+     0,
+     0,
+     {
+      "images": 0,
+      "taints": 2
+     },
+     {
+      "bare86": "",
+      "k86": "other:with:colons",
+      "z86": "last"
+     },
+     {},
+     {
+      "bare125": [
+       ""
+      ],
+      "bare143": [
+       ""
+      ],
+      "k125": [
+       "v125",
+       "other:with:colons"
+      ],
+      "k143": [
+       "v143",
+       "other:with:colons"
+      ],
+      "z125": [
+       "last"
+      ],
+      "z143": [
+       "last"
+      ]
+     },
+     "1700000174.4102444976.0-s179",
+     6,
+     -8,
+     0,
+     9,
+     null,
+     "protobuf",
+     "2023-11-14T22:14:43Z",
+     null,
+     null,
+     [
+      "k101:v101",
+      "k101:other:with:colons",
+      "bare101",
+      "z101:last"
+     ],
+     [
+      "",
+      "s98"
+     ],
+     [
+      "s90",
+      "s95"
+     ],
+     [
+      "s92 <&> \"é\"\n",
+      ""
+     ],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     {},
+     "{\"metadata\":{\"name\":\"s78\",\"namespace\":\"s80 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"creationTimestamp\":1700000083,\"labels\":[\"k86:v86\",\"k86:other:with:colons\",\"bare86\",\"z86:last\"],\"ownerReferences\":[{\"name\":\"s90\",\"uid\":\"s92 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"name\":\"s95\",\"kind\":\"s98\"}],\"finalizers\":[\"k101:v101\",\"k101:other:with:colons\",\"bare101\",\"z101:last\"]},\"podCIDR\":\"s104 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"unschedulable\":true,\"taints\":[{\"value\":\"s110\",\"timeAdded\":1700000113},{\"value\":\"s116 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"timeAdded\":1700000119}],\"yaml\":\"/wB6\",\"tags\":[\"k125:v125\",\"k125:other:with:colons\",\"bare125\",\"z125:last\"],\"host\":{\"id\":9007199254741122,\"orgId\":131,\"allTags\":[\"k134:v134\",\"k134:other:with:colons\",\"bare134\",\"z134:last\"],\"totalMemory\":9007199254741130,\"tagsModified\":-140}}",
+     "",
+     "",
+     "",
+     "",
+     null,
+     null,
+     "",
+     [],
+     [],
+     "",
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "s104 <&> \"é\"\n",
+     [],
+     1,
+     "[{\"value\":\"s110\",\"timeAdded\":1700000113},{\"value\":\"s116 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"timeAdded\":1700000119}]",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k143:v143\",\"k143:other:with:colons\",\"bare143\",\"z143:last\"],\"hostAliasMapping\":{\"key145\":{\"id\":9007199254741140,\"orgId\":149,\"allTags\":[\"k152:v152\",\"k152:other:with:colons\",\"bare152\",\"z152:last\"],\"totalMemory\":9007199254741148,\"tagsModified\":1700000158},\"key159\":{\"id\":9007199254741154,\"name\":\"s164 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"numCpus\":167,\"tagIndex\":170}},\"agentVersion\":{\"Major\":1700000174,\"Minor\":4102444976,\"Pre\":\"s179\",\"Commit\":\"s182\"}}"
+    ]
+   ],
+   "insert": "INSERT INTO k8s_resources\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,\n\t\t\t uid, resource_version, owner_kind, owner_name, node_name, phase, status,\n\t\t\t ready, desired, available, counts, labels, annotations, tags,\n\t\t\t agent_version, group_id, group_size,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t creation_timestamp, deletion_timestamp, deletion_grace_period_seconds,\n\t\t\t finalizers, owner_kinds, owner_names, owner_uids,\n\t\t\t condition_types, condition_statuses, condition_reasons, condition_messages,\n\t\t\t condition_last_transition, condition_last_update, condition_last_probe,\n\t\t\t condition_message, resource_requirements, metrics, object,\n\t\t\t pod_ip, nominated_node_name, qos_class, priority_class,\n\t\t\t start_time, scheduled_time, host_name,\n\t\t\t container_names, container_ids, container_ready, container_restarts,\n\t\t\t container_states, container_messages, container_images,\n\t\t\t container_image_ids, container_is_init,\n\t\t\t pod_cidr, pod_cidrs, unschedulable, taints, provider_id, node_roles,\n\t\t\t capacity, allocatable, node_addresses,\n\t\t\t kubelet_version, kube_proxy_version, operating_system, architecture,\n\t\t\t kernel_version, os_image, container_runtime_version,\n\t\t\t service_type, cluster_ip, service_ports,\n\t\t\t rbac_rules, rbac_subjects, rbac_role_ref, envelope)",
+   "rows": [
+    {
+     "AgentVersion": "1700000174.4102444976.0-s179",
+     "Allocatable": {},
+     "Annotations": {},
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterIP": "",
+     "ClusterName": "s2",
+     "CollectedAt": "2026-10-01T16:08:42.439700542Z",
+     "ConditionLastProbe": [],
+     "ConditionLastTransition": [],
+     "ConditionLastUpdate": [],
+     "ConditionMessage": "",
+     "ConditionMessages": [],
+     "ConditionReasons": [],
+     "ConditionStatuses": [],
+     "ConditionTypes": [],
+     "ContainerIDs": [],
+     "ContainerImageIDs": [],
+     "ContainerImages": [],
+     "ContainerIsInit": "",
+     "ContainerMessages": [],
+     "ContainerNames": [],
+     "ContainerReady": "",
+     "ContainerRestarts": [],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [],
+     "Counts": {
+      "images": 0,
+      "taints": 2
+     },
+     "CreationTimestamp": "2023-11-14T22:13:37Z",
+     "DeletionGracePeriodSeconds": null,
+     "DeletionTimestamp": null,
+     "Desired": 0,
+     "Encoding": "protobuf",
+     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k143:v143\",\"k143:other:with:colons\",\"bare143\",\"z143:last\"],\"hostAliasMapping\":{\"key145\":{\"id\":9007199254741140,\"orgId\":149,\"allTags\":[\"k152:v152\",\"k152:other:with:colons\",\"bare152\",\"z152:last\"],\"totalMemory\":9007199254741148,\"tagsModified\":1700000158},\"key159\":{\"id\":9007199254741154,\"name\":\"s164 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"numCpus\":167,\"tagIndex\":170}},\"agentVersion\":{\"Major\":1700000174,\"Minor\":4102444976,\"Pre\":\"s179\",\"Commit\":\"s182\"}}",
+     "Finalizers": [
+      "k35:v35",
+      "k35:other:with:colons",
+      "bare35",
+      "z35:last"
+     ],
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": null,
+     "HostName": "",
+     "KernelVersion": "",
+     "Kind": "Node",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare20": "",
+      "k20": "other:with:colons",
+      "z20": "last"
+     },
+     "Metrics": {},
+     "Name": "s12 <&> \"é\"\n",
+     "Namespace": "s14",
+     "NodeAddresses": "",
+     "NodeName": "",
+     "NodeRoles": [],
+     "NominatedNodeName": "",
+     "OSImage": "",
+     "Object": "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s14\",\"creationTimestamp\":1700000017,\"labels\":[\"k20:v20\",\"k20:other:with:colons\",\"bare20\",\"z20:last\"],\"ownerReferences\":[{\"name\":\"s24 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s26\"},{\"name\":\"s29\",\"kind\":\"s32 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"finalizers\":[\"k35:v35\",\"k35:other:with:colons\",\"bare35\",\"z35:last\"]},\"podCIDR\":\"s38\",\"unschedulable\":true,\"taints\":[{\"value\":\"s44 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"timeAdded\":1700000047},{\"value\":\"s50\",\"timeAdded\":1700000053}],\"yaml\":\"/wA4\",\"tags\":[\"k59:v59\",\"k59:other:with:colons\",\"bare59\",\"z59:last\"],\"host\":{\"id\":9007199254741056,\"orgId\":65,\"allTags\":[\"k68:v68\",\"k68:other:with:colons\",\"bare68\",\"z68:last\"],\"totalMemory\":9007199254741064,\"tagsModified\":1700000074}}",
+     "OperatingSystem": "",
+     "OrgID": 0,
+     "OwnerKind": "",
+     "OwnerKinds": [
+      "",
+      "s32 <&> \"é\"\n"
+     ],
+     "OwnerName": "s24 <&> \"é\"\n",
+     "OwnerNames": [
+      "s24 <&> \"é\"\n",
+      "s29"
+     ],
+     "OwnerUIDs": [
+      "s26",
+      ""
+     ],
+     "Phase": "",
+     "PodCIDR": "s38",
+     "PodCIDRs": [],
+     "PodIP": "",
+     "PriorityClass": "",
+     "ProviderID": "",
+     "QOSClass": "",
+     "RBACRoleRef": "",
+     "RBACRules": "",
+     "RBACSubjects": "",
+     "Ready": 0,
+     "ResourceRequirements": "",
+     "ResourceVersion": "",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": null,
+     "Status": "",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare143": [
+       ""
+      ],
+      "bare59": [
+       ""
+      ],
+      "k143": [
+       "v143",
+       "other:with:colons"
+      ],
+      "k59": [
+       "v59",
+       "other:with:colons"
+      ],
+      "z143": [
+       "last"
+      ],
+      "z59": [
+       "last"
+      ]
+     },
+     "Taints": "[{\"value\":\"s44 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"timeAdded\":1700000047},{\"value\":\"s50\",\"timeAdded\":1700000053}]",
+     "TenantID": "test",
+     "UID": "",
+     "Unschedulable": 1
+    },
+    {
+     "AgentVersion": "1700000174.4102444976.0-s179",
+     "Allocatable": {},
+     "Annotations": {},
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterIP": "",
+     "ClusterName": "s2",
+     "CollectedAt": "2026-10-01T16:08:42.439700542Z",
+     "ConditionLastProbe": [],
+     "ConditionLastTransition": [],
+     "ConditionLastUpdate": [],
+     "ConditionMessage": "",
+     "ConditionMessages": [],
+     "ConditionReasons": [],
+     "ConditionStatuses": [],
+     "ConditionTypes": [],
+     "ContainerIDs": [],
+     "ContainerImageIDs": [],
+     "ContainerImages": [],
+     "ContainerIsInit": "",
+     "ContainerMessages": [],
+     "ContainerNames": [],
+     "ContainerReady": "",
+     "ContainerRestarts": [],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [],
+     "Counts": {
+      "images": 0,
+      "taints": 2
+     },
+     "CreationTimestamp": "2023-11-14T22:14:43Z",
+     "DeletionGracePeriodSeconds": null,
+     "DeletionTimestamp": null,
+     "Desired": 0,
+     "Encoding": "protobuf",
+     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k143:v143\",\"k143:other:with:colons\",\"bare143\",\"z143:last\"],\"hostAliasMapping\":{\"key145\":{\"id\":9007199254741140,\"orgId\":149,\"allTags\":[\"k152:v152\",\"k152:other:with:colons\",\"bare152\",\"z152:last\"],\"totalMemory\":9007199254741148,\"tagsModified\":1700000158},\"key159\":{\"id\":9007199254741154,\"name\":\"s164 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"numCpus\":167,\"tagIndex\":170}},\"agentVersion\":{\"Major\":1700000174,\"Minor\":4102444976,\"Pre\":\"s179\",\"Commit\":\"s182\"}}",
+     "Finalizers": [
+      "k101:v101",
+      "k101:other:with:colons",
+      "bare101",
+      "z101:last"
+     ],
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": null,
+     "HostName": "",
+     "KernelVersion": "",
+     "Kind": "Node",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare86": "",
+      "k86": "other:with:colons",
+      "z86": "last"
+     },
+     "Metrics": {},
+     "Name": "s78",
+     "Namespace": "s80 <&> \"é\"\n",
+     "NodeAddresses": "",
+     "NodeName": "",
+     "NodeRoles": [],
+     "NominatedNodeName": "",
+     "OSImage": "",
+     "Object": "{\"metadata\":{\"name\":\"s78\",\"namespace\":\"s80 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"creationTimestamp\":1700000083,\"labels\":[\"k86:v86\",\"k86:other:with:colons\",\"bare86\",\"z86:last\"],\"ownerReferences\":[{\"name\":\"s90\",\"uid\":\"s92 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"name\":\"s95\",\"kind\":\"s98\"}],\"finalizers\":[\"k101:v101\",\"k101:other:with:colons\",\"bare101\",\"z101:last\"]},\"podCIDR\":\"s104 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"unschedulable\":true,\"taints\":[{\"value\":\"s110\",\"timeAdded\":1700000113},{\"value\":\"s116 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"timeAdded\":1700000119}],\"yaml\":\"/wB6\",\"tags\":[\"k125:v125\",\"k125:other:with:colons\",\"bare125\",\"z125:last\"],\"host\":{\"id\":9007199254741122,\"orgId\":131,\"allTags\":[\"k134:v134\",\"k134:other:with:colons\",\"bare134\",\"z134:last\"],\"totalMemory\":9007199254741130,\"tagsModified\":-140}}",
+     "OperatingSystem": "",
+     "OrgID": 0,
+     "OwnerKind": "",
+     "OwnerKinds": [
+      "",
+      "s98"
+     ],
+     "OwnerName": "s90",
+     "OwnerNames": [
+      "s90",
+      "s95"
+     ],
+     "OwnerUIDs": [
+      "s92 <&> \"é\"\n",
+      ""
+     ],
+     "Phase": "",
+     "PodCIDR": "s104 <&> \"é\"\n",
+     "PodCIDRs": [],
+     "PodIP": "",
+     "PriorityClass": "",
+     "ProviderID": "",
+     "QOSClass": "",
+     "RBACRoleRef": "",
+     "RBACRules": "",
+     "RBACSubjects": "",
+     "Ready": 0,
+     "ResourceRequirements": "",
+     "ResourceVersion": "",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": null,
+     "Status": "",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare125": [
+       ""
+      ],
+      "bare143": [
+       ""
+      ],
+      "k125": [
+       "v125",
+       "other:with:colons"
+      ],
+      "k143": [
+       "v143",
+       "other:with:colons"
+      ],
+      "z125": [
+       "last"
+      ],
+      "z143": [
+       "last"
+      ]
+     },
+     "Taints": "[{\"value\":\"s110\",\"timeAdded\":1700000113},{\"value\":\"s116 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"timeAdded\":1700000119}]",
+     "TenantID": "test",
+     "UID": "",
+     "Unschedulable": 1
+    }
+   ],
+   "to": "storage_k8s_resources",
+   "type": "storage.WriteK8sResources"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorNode_3",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/CollectedAt",
+  "/sends/0/rows/1/CollectedAt"
+ ]
+}

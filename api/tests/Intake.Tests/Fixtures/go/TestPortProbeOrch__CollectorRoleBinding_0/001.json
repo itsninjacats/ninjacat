@@ -1,0 +1,753 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.458233208Z",
+ "request": {
+  "body_b64": "AwA3CZIQAAAAAAAAAAAAAAoCczISDHM0IDwmPiAiw6kiChgGIPj//////////wEqoQMK9wEKDXMxMiA8Jj4gIsOpIgoSA3MxNBoNczE2IDwmPiAiw6kiCiCS4s+qBijs//////////8BMgdrMjI6djIyMhVrMjI6b3RoZXI6d2l0aDpjb2xvbnMyBmJhcmUyMjIIejIyOmxhc3Q6B2syNDp2MjQ6FWsyNDpvdGhlcjp3aXRoOmNvbG9uczoGYmFyZTI0Ogh6MjQ6bGFzdEIPCgNzMjcSA3MyORoDczMxQg8KA3MzMxIDczM1GgNzMzdKA3MzOVIHazQxOnY0MVIVazQxOm90aGVyOndpdGg6Y29sb25zUgZiYXJlNDFSCHo0MTpsYXN0WKviz6oGEigKA3M0NhINczQ4IDwmPiAiw6kiChoDczUwIg1zNTIgPCY+ICLDqSIKEigKA3M1NBINczU2IDwmPiAiw6kiChoDczU4Ig1zNjAgPCY+ICLDqSIKGg8KA3M2MxIDczY1GgNzNjciDmtpbmQ6IFRoaW5nNjkKKgdrNzE6djcxKhVrNzE6b3RoZXI6d2l0aDpjb2xvbnMqBmJhcmU3MSoIejcxOmxhc3QqswMK+AEKA3M3NBINczc2IDwmPiAiw6kiChoDczc4ILD//////////wEo0uLPqgYyB2s4NDp2ODQyFWs4NDpvdGhlcjp3aXRoOmNvbG9uczIGYmFyZTg0Mgh6ODQ6bGFzdDoHazg2OnY4NjoVazg2Om90aGVyOndpdGg6Y29sb25zOgZiYXJlODY6CHo4NjpsYXN0Qg8KA3M4ORIDczkxGgNzOTNCDwoDczk1EgNzOTcaA3M5OUoEczEwMVIJazEwMzp2MTAzUhZrMTAzOm90aGVyOndpdGg6Y29sb25zUgdiYXJlMTAzUgl6MTAzOmxhc3RYl///////////ARIsCg5zMTA4IDwmPiAiw6kiChIEczExMBoOczExMiA8Jj4gIsOpIgoiBHMxMTQSLAoOczExNiA8Jj4gIsOpIgoSBHMxMTgaDnMxMjAgPCY+ICLDqSIKIgRzMTIyGhIKBHMxMjUSBHMxMjcaBHMxMjkiD2tpbmQ6IFRoaW5nMTMxCioJazEzMzp2MTMzKhZrMTMzOm90aGVyOndpdGg6Y29sb25zKgdiYXJlMTMzKgl6MTMzOmxhc3QyCWsxMzU6djEzNTIWazEzNTpvdGhlcjp3aXRoOmNvbG9uczIHYmFyZTEzNTIJejEzNTpsYXN0Oj0IiuPPqgYQ9P7/////////ARiO48+qBiIOczE0NCA8Jj4gIsOpIgoqBHMxNDYyDnMxNDggPCY+ICLDqSIK",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.458108498Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     "RoleBinding",
+     "s14",
+     "s12 <&> \"é\"\n",
+     "s16 <&> \"é\"\n",
+     "s39",
+     "s31",
+     "s27",
+     "",
+     "",
+     "",
+     0,
+     0,
+     0,
+     {
+      "subjects": 2
+     },
+     {
+      "bare22": "",
+      "k22": "other:with:colons",
+      "z22": "last"
+     },
+     {
+      "bare24": "",
+      "k24": "other:with:colons",
+      "z24": "last"
+     },
+     {
+      "bare135": [
+       ""
+      ],
+      "bare71": [
+       ""
+      ],
+      "k135": [
+       "v135",
+       "other:with:colons"
+      ],
+      "k71": [
+       "v71",
+       "other:with:colons"
+      ],
+      "z135": [
+       "last"
+      ],
+      "z71": [
+       "last"
+      ]
+     },
+     "1700000138.-140.1700000142-s144 <&> \"é\"\n",
+     6,
+     -8,
+     4242,
+     9,
+     null,
+     "protobuf",
+     "2023-11-14T22:13:38Z",
+     null,
+     1700000043,
+     [
+      "k41:v41",
+      "k41:other:with:colons",
+      "bare41",
+      "z41:last"
+     ],
+     [
+      "s31",
+      "s37"
+     ],
+     [
+      "s27",
+      "s33"
+     ],
+     [
+      "s29",
+      "s35"
+     ],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     {},
+     "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s14\",\"uid\":\"s16 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"creationTimestamp\":1700000018,\"deletionTimestamp\":-20,\"labels\":[\"k22:v22\",\"k22:other:with:colons\",\"bare22\",\"z22:last\"],\"annotations\":[\"k24:v24\",\"k24:other:with:colons\",\"bare24\",\"z24:last\"],\"ownerReferences\":[{\"name\":\"s27\",\"uid\":\"s29\",\"kind\":\"s31\"},{\"name\":\"s33\",\"uid\":\"s35\",\"kind\":\"s37\"}],\"resourceVersion\":\"s39\",\"finalizers\":[\"k41:v41\",\"k41:other:with:colons\",\"bare41\",\"z41:last\"],\"deletionGracePeriodSeconds\":1700000043},\"subjects\":[{\"kind\":\"s46\",\"apiGroup\":\"s48 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"name\":\"s50\",\"namespace\":\"s52 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"kind\":\"s54\",\"apiGroup\":\"s56 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"name\":\"s58\",\"namespace\":\"s60 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"roleRef\":{\"apiGroup\":\"s63\",\"kind\":\"s65\",\"name\":\"s67\"},\"yaml\":\"a2luZDogVGhpbmc2OQo=\",\"tags\":[\"k71:v71\",\"k71:other:with:colons\",\"bare71\",\"z71:last\"]}",
+     "",
+     "",
+     "",
+     "",
+     null,
+     null,
+     "",
+     [],
+     [],
+     "",
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     [],
+     0,
+     "",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "[{\"kind\":\"s46\",\"apiGroup\":\"s48 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"name\":\"s50\",\"namespace\":\"s52 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"kind\":\"s54\",\"apiGroup\":\"s56 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"name\":\"s58\",\"namespace\":\"s60 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}]",
+     "{\"apiGroup\":\"s63\",\"kind\":\"s65\",\"name\":\"s67\"}",
+     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k135:v135\",\"k135:other:with:colons\",\"bare135\",\"z135:last\"],\"agentVersion\":{\"Major\":1700000138,\"Minor\":-140,\"Patch\":1700000142,\"Pre\":\"s144 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Meta\":\"s146\",\"Commit\":\"s148 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}}"
+    ],
+    [
+     "test",
+     "2026-10-01T16:08:42.458108498Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     "RoleBinding",
+     "s76 <&> \"é\"\n",
+     "s74",
+     "s78",
+     "s101",
+     "s93",
+     "s89",
+     "",
+     "",
+     "",
+     0,
+     0,
+     0,
+     {
+      "subjects": 2
+     },
+     {
+      "bare84": "",
+      "k84": "other:with:colons",
+      "z84": "last"
+     },
+     {
+      "bare86": "",
+      "k86": "other:with:colons",
+      "z86": "last"
+     },
+     {
+      "bare133": [
+       ""
+      ],
+      "bare135": [
+       ""
+      ],
+      "k133": [
+       "v133",
+       "other:with:colons"
+      ],
+      "k135": [
+       "v135",
+       "other:with:colons"
+      ],
+      "z133": [
+       "last"
+      ],
+      "z135": [
+       "last"
+      ]
+     },
+     "1700000138.-140.1700000142-s144 <&> \"é\"\n",
+     6,
+     -8,
+     4242,
+     9,
+     null,
+     "protobuf",
+     null,
+     "2023-11-14T22:14:42Z",
+     -105,
+     [
+      "k103:v103",
+      "k103:other:with:colons",
+      "bare103",
+      "z103:last"
+     ],
+     [
+      "s93",
+      "s99"
+     ],
+     [
+      "s89",
+      "s95"
+     ],
+     [
+      "s91",
+      "s97"
+     ],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     {},
+     "{\"metadata\":{\"name\":\"s74\",\"namespace\":\"s76 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s78\",\"creationTimestamp\":-80,\"deletionTimestamp\":1700000082,\"labels\":[\"k84:v84\",\"k84:other:with:colons\",\"bare84\",\"z84:last\"],\"annotations\":[\"k86:v86\",\"k86:other:with:colons\",\"bare86\",\"z86:last\"],\"ownerReferences\":[{\"name\":\"s89\",\"uid\":\"s91\",\"kind\":\"s93\"},{\"name\":\"s95\",\"uid\":\"s97\",\"kind\":\"s99\"}],\"resourceVersion\":\"s101\",\"finalizers\":[\"k103:v103\",\"k103:other:with:colons\",\"bare103\",\"z103:last\"],\"deletionGracePeriodSeconds\":-105},\"subjects\":[{\"kind\":\"s108 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"apiGroup\":\"s110\",\"name\":\"s112 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s114\"},{\"kind\":\"s116 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"apiGroup\":\"s118\",\"name\":\"s120 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s122\"}],\"roleRef\":{\"apiGroup\":\"s125\",\"kind\":\"s127\",\"name\":\"s129\"},\"yaml\":\"a2luZDogVGhpbmcxMzEK\",\"tags\":[\"k133:v133\",\"k133:other:with:colons\",\"bare133\",\"z133:last\"]}",
+     "",
+     "",
+     "",
+     "",
+     null,
+     null,
+     "",
+     [],
+     [],
+     "",
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     [],
+     0,
+     "",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "[{\"kind\":\"s108 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"apiGroup\":\"s110\",\"name\":\"s112 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s114\"},{\"kind\":\"s116 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"apiGroup\":\"s118\",\"name\":\"s120 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s122\"}]",
+     "{\"apiGroup\":\"s125\",\"kind\":\"s127\",\"name\":\"s129\"}",
+     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k135:v135\",\"k135:other:with:colons\",\"bare135\",\"z135:last\"],\"agentVersion\":{\"Major\":1700000138,\"Minor\":-140,\"Patch\":1700000142,\"Pre\":\"s144 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Meta\":\"s146\",\"Commit\":\"s148 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}}"
+    ]
+   ],
+   "insert": "INSERT INTO k8s_resources\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,\n\t\t\t uid, resource_version, owner_kind, owner_name, node_name, phase, status,\n\t\t\t ready, desired, available, counts, labels, annotations, tags,\n\t\t\t agent_version, group_id, group_size,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t creation_timestamp, deletion_timestamp, deletion_grace_period_seconds,\n\t\t\t finalizers, owner_kinds, owner_names, owner_uids,\n\t\t\t condition_types, condition_statuses, condition_reasons, condition_messages,\n\t\t\t condition_last_transition, condition_last_update, condition_last_probe,\n\t\t\t condition_message, resource_requirements, metrics, object,\n\t\t\t pod_ip, nominated_node_name, qos_class, priority_class,\n\t\t\t start_time, scheduled_time, host_name,\n\t\t\t container_names, container_ids, container_ready, container_restarts,\n\t\t\t container_states, container_messages, container_images,\n\t\t\t container_image_ids, container_is_init,\n\t\t\t pod_cidr, pod_cidrs, unschedulable, taints, provider_id, node_roles,\n\t\t\t capacity, allocatable, node_addresses,\n\t\t\t kubelet_version, kube_proxy_version, operating_system, architecture,\n\t\t\t kernel_version, os_image, container_runtime_version,\n\t\t\t service_type, cluster_ip, service_ports,\n\t\t\t rbac_rules, rbac_subjects, rbac_role_ref, envelope)",
+   "rows": [
+    {
+     "AgentVersion": "1700000138.-140.1700000142-s144 <&> \"é\"\n",
+     "Allocatable": {},
+     "Annotations": {
+      "bare24": "",
+      "k24": "other:with:colons",
+      "z24": "last"
+     },
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterIP": "",
+     "ClusterName": "s2",
+     "CollectedAt": "2026-10-01T16:08:42.458108498Z",
+     "ConditionLastProbe": [],
+     "ConditionLastTransition": [],
+     "ConditionLastUpdate": [],
+     "ConditionMessage": "",
+     "ConditionMessages": [],
+     "ConditionReasons": [],
+     "ConditionStatuses": [],
+     "ConditionTypes": [],
+     "ContainerIDs": [],
+     "ContainerImageIDs": [],
+     "ContainerImages": [],
+     "ContainerIsInit": "",
+     "ContainerMessages": [],
+     "ContainerNames": [],
+     "ContainerReady": "",
+     "ContainerRestarts": [],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [],
+     "Counts": {
+      "subjects": 2
+     },
+     "CreationTimestamp": "2023-11-14T22:13:38Z",
+     "DeletionGracePeriodSeconds": 1700000043,
+     "DeletionTimestamp": null,
+     "Desired": 0,
+     "Encoding": "protobuf",
+     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k135:v135\",\"k135:other:with:colons\",\"bare135\",\"z135:last\"],\"agentVersion\":{\"Major\":1700000138,\"Minor\":-140,\"Patch\":1700000142,\"Pre\":\"s144 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Meta\":\"s146\",\"Commit\":\"s148 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}}",
+     "Finalizers": [
+      "k41:v41",
+      "k41:other:with:colons",
+      "bare41",
+      "z41:last"
+     ],
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": null,
+     "HostName": "",
+     "KernelVersion": "",
+     "Kind": "RoleBinding",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare22": "",
+      "k22": "other:with:colons",
+      "z22": "last"
+     },
+     "Metrics": {},
+     "Name": "s12 <&> \"é\"\n",
+     "Namespace": "s14",
+     "NodeAddresses": "",
+     "NodeName": "",
+     "NodeRoles": [],
+     "NominatedNodeName": "",
+     "OSImage": "",
+     "Object": "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s14\",\"uid\":\"s16 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"creationTimestamp\":1700000018,\"deletionTimestamp\":-20,\"labels\":[\"k22:v22\",\"k22:other:with:colons\",\"bare22\",\"z22:last\"],\"annotations\":[\"k24:v24\",\"k24:other:with:colons\",\"bare24\",\"z24:last\"],\"ownerReferences\":[{\"name\":\"s27\",\"uid\":\"s29\",\"kind\":\"s31\"},{\"name\":\"s33\",\"uid\":\"s35\",\"kind\":\"s37\"}],\"resourceVersion\":\"s39\",\"finalizers\":[\"k41:v41\",\"k41:other:with:colons\",\"bare41\",\"z41:last\"],\"deletionGracePeriodSeconds\":1700000043},\"subjects\":[{\"kind\":\"s46\",\"apiGroup\":\"s48 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"name\":\"s50\",\"namespace\":\"s52 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"kind\":\"s54\",\"apiGroup\":\"s56 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"name\":\"s58\",\"namespace\":\"s60 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}],\"roleRef\":{\"apiGroup\":\"s63\",\"kind\":\"s65\",\"name\":\"s67\"},\"yaml\":\"a2luZDogVGhpbmc2OQo=\",\"tags\":[\"k71:v71\",\"k71:other:with:colons\",\"bare71\",\"z71:last\"]}",
+     "OperatingSystem": "",
+     "OrgID": 4242,
+     "OwnerKind": "s31",
+     "OwnerKinds": [
+      "s31",
+      "s37"
+     ],
+     "OwnerName": "s27",
+     "OwnerNames": [
+      "s27",
+      "s33"
+     ],
+     "OwnerUIDs": [
+      "s29",
+      "s35"
+     ],
+     "Phase": "",
+     "PodCIDR": "",
+     "PodCIDRs": [],
+     "PodIP": "",
+     "PriorityClass": "",
+     "ProviderID": "",
+     "QOSClass": "",
+     "RBACRoleRef": "{\"apiGroup\":\"s63\",\"kind\":\"s65\",\"name\":\"s67\"}",
+     "RBACRules": "",
+     "RBACSubjects": "[{\"kind\":\"s46\",\"apiGroup\":\"s48 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"name\":\"s50\",\"namespace\":\"s52 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},{\"kind\":\"s54\",\"apiGroup\":\"s56 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"name\":\"s58\",\"namespace\":\"s60 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}]",
+     "Ready": 0,
+     "ResourceRequirements": "",
+     "ResourceVersion": "s39",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": null,
+     "Status": "",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare135": [
+       ""
+      ],
+      "bare71": [
+       ""
+      ],
+      "k135": [
+       "v135",
+       "other:with:colons"
+      ],
+      "k71": [
+       "v71",
+       "other:with:colons"
+      ],
+      "z135": [
+       "last"
+      ],
+      "z71": [
+       "last"
+      ]
+     },
+     "Taints": "",
+     "TenantID": "test",
+     "UID": "s16 <&> \"é\"\n",
+     "Unschedulable": 0
+    },
+    {
+     "AgentVersion": "1700000138.-140.1700000142-s144 <&> \"é\"\n",
+     "Allocatable": {},
+     "Annotations": {
+      "bare86": "",
+      "k86": "other:with:colons",
+      "z86": "last"
+     },
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterIP": "",
+     "ClusterName": "s2",
+     "CollectedAt": "2026-10-01T16:08:42.458108498Z",
+     "ConditionLastProbe": [],
+     "ConditionLastTransition": [],
+     "ConditionLastUpdate": [],
+     "ConditionMessage": "",
+     "ConditionMessages": [],
+     "ConditionReasons": [],
+     "ConditionStatuses": [],
+     "ConditionTypes": [],
+     "ContainerIDs": [],
+     "ContainerImageIDs": [],
+     "ContainerImages": [],
+     "ContainerIsInit": "",
+     "ContainerMessages": [],
+     "ContainerNames": [],
+     "ContainerReady": "",
+     "ContainerRestarts": [],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [],
+     "Counts": {
+      "subjects": 2
+     },
+     "CreationTimestamp": null,
+     "DeletionGracePeriodSeconds": -105,
+     "DeletionTimestamp": "2023-11-14T22:14:42Z",
+     "Desired": 0,
+     "Encoding": "protobuf",
+     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k135:v135\",\"k135:other:with:colons\",\"bare135\",\"z135:last\"],\"agentVersion\":{\"Major\":1700000138,\"Minor\":-140,\"Patch\":1700000142,\"Pre\":\"s144 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Meta\":\"s146\",\"Commit\":\"s148 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}}",
+     "Finalizers": [
+      "k103:v103",
+      "k103:other:with:colons",
+      "bare103",
+      "z103:last"
+     ],
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": null,
+     "HostName": "",
+     "KernelVersion": "",
+     "Kind": "RoleBinding",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare84": "",
+      "k84": "other:with:colons",
+      "z84": "last"
+     },
+     "Metrics": {},
+     "Name": "s74",
+     "Namespace": "s76 <&> \"é\"\n",
+     "NodeAddresses": "",
+     "NodeName": "",
+     "NodeRoles": [],
+     "NominatedNodeName": "",
+     "OSImage": "",
+     "Object": "{\"metadata\":{\"name\":\"s74\",\"namespace\":\"s76 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"uid\":\"s78\",\"creationTimestamp\":-80,\"deletionTimestamp\":1700000082,\"labels\":[\"k84:v84\",\"k84:other:with:colons\",\"bare84\",\"z84:last\"],\"annotations\":[\"k86:v86\",\"k86:other:with:colons\",\"bare86\",\"z86:last\"],\"ownerReferences\":[{\"name\":\"s89\",\"uid\":\"s91\",\"kind\":\"s93\"},{\"name\":\"s95\",\"uid\":\"s97\",\"kind\":\"s99\"}],\"resourceVersion\":\"s101\",\"finalizers\":[\"k103:v103\",\"k103:other:with:colons\",\"bare103\",\"z103:last\"],\"deletionGracePeriodSeconds\":-105},\"subjects\":[{\"kind\":\"s108 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"apiGroup\":\"s110\",\"name\":\"s112 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s114\"},{\"kind\":\"s116 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"apiGroup\":\"s118\",\"name\":\"s120 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s122\"}],\"roleRef\":{\"apiGroup\":\"s125\",\"kind\":\"s127\",\"name\":\"s129\"},\"yaml\":\"a2luZDogVGhpbmcxMzEK\",\"tags\":[\"k133:v133\",\"k133:other:with:colons\",\"bare133\",\"z133:last\"]}",
+     "OperatingSystem": "",
+     "OrgID": 4242,
+     "OwnerKind": "s93",
+     "OwnerKinds": [
+      "s93",
+      "s99"
+     ],
+     "OwnerName": "s89",
+     "OwnerNames": [
+      "s89",
+      "s95"
+     ],
+     "OwnerUIDs": [
+      "s91",
+      "s97"
+     ],
+     "Phase": "",
+     "PodCIDR": "",
+     "PodCIDRs": [],
+     "PodIP": "",
+     "PriorityClass": "",
+     "ProviderID": "",
+     "QOSClass": "",
+     "RBACRoleRef": "{\"apiGroup\":\"s125\",\"kind\":\"s127\",\"name\":\"s129\"}",
+     "RBACRules": "",
+     "RBACSubjects": "[{\"kind\":\"s108 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"apiGroup\":\"s110\",\"name\":\"s112 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s114\"},{\"kind\":\"s116 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"apiGroup\":\"s118\",\"name\":\"s120 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s122\"}]",
+     "Ready": 0,
+     "ResourceRequirements": "",
+     "ResourceVersion": "s101",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": null,
+     "Status": "",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare133": [
+       ""
+      ],
+      "bare135": [
+       ""
+      ],
+      "k133": [
+       "v133",
+       "other:with:colons"
+      ],
+      "k135": [
+       "v135",
+       "other:with:colons"
+      ],
+      "z133": [
+       "last"
+      ],
+      "z135": [
+       "last"
+      ]
+     },
+     "Taints": "",
+     "TenantID": "test",
+     "UID": "s78",
+     "Unschedulable": 0
+    }
+   ],
+   "to": "storage_k8s_resources",
+   "type": "storage.WriteK8sResources"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorRoleBinding_0",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/CollectedAt",
+  "/sends/0/rows/1/CollectedAt"
+ ]
+}

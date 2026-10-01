@@ -1,0 +1,861 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.4413093Z",
+ "request": {
+  "body_b64": "AwAvCZIQAAAAAAAAAAAAAAoCczISDHM0IDwmPiAiw6kiChgGIPj//////////wEq6gUK9wEKDXMxMiA8Jj4gIsOpIgoSA3MxNBoNczE2IDwmPiAiw6kiCiCS4s+qBijs//////////8BMgdrMjI6djIyMhVrMjI6b3RoZXI6d2l0aDpjb2xvbnMyBmJhcmUyMjIIejIyOmxhc3Q6B2syNDp2MjQ6FWsyNDpvdGhlcjp3aXRoOmNvbG9uczoGYmFyZTI0Ogh6MjQ6bGFzdEIPCgNzMjcSA3MyORoDczMxQg8KA3MzMxIDczM1GgNzMzdKA3MzOVIHazQxOnY0MVIVazQxOm90aGVyOndpdGg6Y29sb25zUgZiYXJlNDFSCHo0MTpsYXN0WKviz6oGErUCCC4Q0P//////////ARjO//////////8BIMz//////////wEqPAoDczU1EgNzNTcaB2s1OTp2NTkaFWs1OTpvdGhlcjp3aXRoOmNvbG9ucxoGYmFyZTU5Ggh6NTk6bGFzdCo8CgNzNjESA3M2MxoHazY1OnY2NRoVazY1Om90aGVyOndpdGg6Y29sb25zGgZiYXJlNjUaCHo2NTpsYXN0MAE6TQoNCgVrZXk3MRDI4s+qBgoSCgVrZXk2ORC6//////////8BEg0KBWtleTc2EM3iz6oGEhIKBWtleTc0ELX//////////wEaA3M3OSACOkMKDQoFa2V5ODUQ1q6ZpA8KDQoFa2V5ODMQ1OLPqgYSDQoFa2V5OTAQ266ZpA8SDQoFa2V5ODgQ2eLPqgYaA3M5MyACGi4KA3M5OBCc//////////8BGObiz6oGIJj//////////wEoajCU//////////8BIgP/AG4qCWsxMTI6djExMioWazExMjpvdGhlcjp3aXRoOmNvbG9ucyoHYmFyZTExMioJejExMjpsYXN0MiQKBHMxMTUSBHMxMTcY9+LPqgYg+a6ZpA8qBHMxMjMyBHMxMjUyJAoEczEyNxIEczEyORiDr5mkDyCF48+qBioEczEzNTIEczEzNyqUBgqLAgoOczE0MCA8Jj4gIsOpIgoSBHMxNDIaDnMxNDQgPCY+ICLDqSIKIJKvmaQPKJTjz6oGMglrMTUwOnYxNTAyFmsxNTA6b3RoZXI6d2l0aDpjb2xvbnMyB2JhcmUxNTAyCXoxNTA6bGFzdDoJazE1Mjp2MTUyOhZrMTUyOm90aGVyOndpdGg6Y29sb25zOgdiYXJlMTUyOgl6MTUyOmxhc3RCEgoEczE1NRIEczE1NxoEczE1OUISCgRzMTYxEgRzMTYzGgRzMTY1SgRzMTY3UglrMTY5OnYxNjlSFmsxNjk6b3RoZXI6d2l0aDpjb2xvbnNSB2JhcmUxNjlSCXoxNjk6bGFzdFirr5mkDxLJAgiuARDQ/v////////8BGLLjz6oGIMz+/////////wEqQwoEczE4MxIEczE4NRoJazE4Nzp2MTg3GhZrMTg3Om90aGVyOndpdGg6Y29sb25zGgdiYXJlMTg3Ggl6MTg3Omxhc3QqQwoEczE4ORIEczE5MRoJazE5Mzp2MTkzGhZrMTkzOm90aGVyOndpdGg6Y29sb25zGgdiYXJlMTkzGgl6MTkzOmxhc3QwATpSChMKBmtleTE5ORC4/v////////8BCg4KBmtleTE5NxDG48+qBhITCgZrZXkyMDQQs/7/////////ARIOCgZrZXkyMDIQy+PPqgYaBHMyMDcgAjpICg4KBmtleTIxMxDW48+qBgoOCgZrZXkyMTEQ1OPPqgYSDgoGa2V5MjE2ENnjz6oGEg4KBmtleTIxOBDb48+qBhoEczIyMSACGjAKBHMyMjYQ5OPPqgYYmv7/////////ASCY/v////////8BKOoBMJT+/////////wEiA/8A7ioJazI0MDp2MjQwKhZrMjQwOm90aGVyOndpdGg6Y29sb25zKgdiYXJlMjQwKgl6MjQwOmxhc3QyJAoEczI0MxIEczI0NRj348+qBiD548+qBioEczI1MTIEczI1MzIkCgRzMjU1EgRzMjU3GIPkz6oGIIWwmaQPKgRzMjYzMgRzMjY1MglrMjY3OnYyNjcyFmsyNjc6b3RoZXI6d2l0aDpjb2xvbnMyB2JhcmUyNjcyCXoyNjc6bGFzdDo9CPL9/////////wEQkOTPqgYYkuTPqgYiDnMyNzYgPCY+ICLDqSIKKgRzMjc4Mg5zMjgwIDwmPiAiw6kiCg==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.441131662Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     "Job",
+     "s14",
+     "s12 <&> \"é\"\n",
+     "s16 <&> \"é\"\n",
+     "s39",
+     "s31",
+     "s27",
+     "",
+     "",
+     "",
+     0,
+     0,
+     0,
+     {
+      "active": -104,
+      "active_deadline_seconds": -50,
+      "backoff_limit": -52,
+      "completions": -48,
+      "failed": -108,
+      "parallelism": 46,
+      "succeeded": 106
+     },
+     {
+      "bare22": "",
+      "k22": "other:with:colons",
+      "z22": "last"
+     },
+     {
+      "bare24": "",
+      "k24": "other:with:colons",
+      "z24": "last"
+     },
+     {
+      "bare112": [
+       ""
+      ],
+      "bare267": [
+       ""
+      ],
+      "k112": [
+       "v112",
+       "other:with:colons"
+      ],
+      "k267": [
+       "v267",
+       "other:with:colons"
+      ],
+      "z112": [
+       "last"
+      ],
+      "z267": [
+       "last"
+      ]
+     },
+     "-270.1700000272.1700000274-s276 <&> \"é\"\n",
+     6,
+     -8,
+     4242,
+     9,
+     null,
+     "protobuf",
+     "2023-11-14T22:13:38Z",
+     null,
+     1700000043,
+     [
+      "k41:v41",
+      "k41:other:with:colons",
+      "bare41",
+      "z41:last"
+     ],
+     [
+      "s31",
+      "s37"
+     ],
+     [
+      "s27",
+      "s33"
+     ],
+     [
+      "s29",
+      "s35"
+     ],
+     [
+      "s115",
+      "s127"
+     ],
+     [
+      "s117",
+      "s129"
+     ],
+     [
+      "s123",
+      "s135"
+     ],
+     [
+      "s125",
+      "s137"
+     ],
+     [
+      "2100-01-01T00:02:01Z",
+      "2023-11-14T22:15:33Z"
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      "2023-11-14T22:15:19Z",
+      "2100-01-01T00:02:11Z"
+     ],
+     "s98",
+     "[{\"limits\":{\"key69\":-70,\"key71\":1700000072},\"requests\":{\"key74\":-75,\"key76\":1700000077},\"name\":\"s79\",\"type\":2},{\"limits\":{\"key83\":1700000084,\"key85\":4102444886},\"requests\":{\"key88\":1700000089,\"key90\":4102444891},\"name\":\"s93\",\"type\":2}]",
+     {},
+     "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s14\",\"uid\":\"s16 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"creationTimestamp\":1700000018,\"deletionTimestamp\":-20,\"labels\":[\"k22:v22\",\"k22:other:with:colons\",\"bare22\",\"z22:last\"],\"annotations\":[\"k24:v24\",\"k24:other:with:colons\",\"bare24\",\"z24:last\"],\"ownerReferences\":[{\"name\":\"s27\",\"uid\":\"s29\",\"kind\":\"s31\"},{\"name\":\"s33\",\"uid\":\"s35\",\"kind\":\"s37\"}],\"resourceVersion\":\"s39\",\"finalizers\":[\"k41:v41\",\"k41:other:with:colons\",\"bare41\",\"z41:last\"],\"deletionGracePeriodSeconds\":1700000043},\"spec\":{\"parallelism\":46,\"completions\":-48,\"activeDeadlineSeconds\":-50,\"backoffLimit\":-52,\"selectors\":[{\"key\":\"s55\",\"operator\":\"s57\",\"values\":[\"k59:v59\",\"k59:other:with:colons\",\"bare59\",\"z59:last\"]},{\"key\":\"s61\",\"operator\":\"s63\",\"values\":[\"k65:v65\",\"k65:other:with:colons\",\"bare65\",\"z65:last\"]}],\"manualSelector\":true,\"resourceRequirements\":[{\"limits\":{\"key69\":-70,\"key71\":1700000072},\"requests\":{\"key74\":-75,\"key76\":1700000077},\"name\":\"s79\",\"type\":2},{\"limits\":{\"key83\":1700000084,\"key85\":4102444886},\"requests\":{\"key88\":1700000089,\"key90\":4102444891},\"name\":\"s93\",\"type\":2}]},\"status\":{\"conditionMessage\":\"s98\",\"startTime\":-100,\"completionTime\":1700000102,\"active\":-104,\"succeeded\":106,\"failed\":-108},\"yaml\":\"/wBu\",\"tags\":[\"k112:v112\",\"k112:other:with:colons\",\"bare112\",\"z112:last\"],\"conditions\":[{\"type\":\"s115\",\"status\":\"s117\",\"lastProbeTime\":1700000119,\"lastTransitionTime\":4102444921,\"reason\":\"s123\",\"message\":\"s125\"},{\"type\":\"s127\",\"status\":\"s129\",\"lastProbeTime\":4102444931,\"lastTransitionTime\":1700000133,\"reason\":\"s135\",\"message\":\"s137\"}]}",
+     "",
+     "",
+     "",
+     "",
+     null,
+     null,
+     "",
+     [],
+     [],
+     "",
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     [],
+     0,
+     "",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k267:v267\",\"k267:other:with:colons\",\"bare267\",\"z267:last\"],\"agentVersion\":{\"Major\":-270,\"Minor\":1700000272,\"Patch\":1700000274,\"Pre\":\"s276 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Meta\":\"s278\",\"Commit\":\"s280 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}}"
+    ],
+    [
+     "test",
+     "2026-10-01T16:08:42.441131662Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     "Job",
+     "s142",
+     "s140 <&> \"é\"\n",
+     "s144 <&> \"é\"\n",
+     "s167",
+     "s159",
+     "s155",
+     "",
+     "",
+     "",
+     0,
+     0,
+     0,
+     {
+      "active": -232,
+      "active_deadline_seconds": 1700000178,
+      "backoff_limit": -180,
+      "completions": -176,
+      "failed": -236,
+      "parallelism": 174,
+      "succeeded": 234
+     },
+     {
+      "bare150": "",
+      "k150": "other:with:colons",
+      "z150": "last"
+     },
+     {
+      "bare152": "",
+      "k152": "other:with:colons",
+      "z152": "last"
+     },
+     {
+      "bare240": [
+       ""
+      ],
+      "bare267": [
+       ""
+      ],
+      "k240": [
+       "v240",
+       "other:with:colons"
+      ],
+      "k267": [
+       "v267",
+       "other:with:colons"
+      ],
+      "z240": [
+       "last"
+      ],
+      "z267": [
+       "last"
+      ]
+     },
+     "-270.1700000272.1700000274-s276 <&> \"é\"\n",
+     6,
+     -8,
+     4242,
+     9,
+     null,
+     "protobuf",
+     "2100-01-01T00:02:26Z",
+     "2023-11-14T22:15:48Z",
+     4102444971,
+     [
+      "k169:v169",
+      "k169:other:with:colons",
+      "bare169",
+      "z169:last"
+     ],
+     [
+      "s159",
+      "s165"
+     ],
+     [
+      "s155",
+      "s161"
+     ],
+     [
+      "s157",
+      "s163"
+     ],
+     [
+      "s243",
+      "s255"
+     ],
+     [
+      "s245",
+      "s257"
+     ],
+     [
+      "s251",
+      "s263"
+     ],
+     [
+      "s253",
+      "s265"
+     ],
+     [
+      "2023-11-14T22:17:29Z",
+      "2100-01-01T00:04:21Z"
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      "2023-11-14T22:17:27Z",
+      "2023-11-14T22:17:39Z"
+     ],
+     "s226",
+     "[{\"limits\":{\"key197\":1700000198,\"key199\":-200},\"requests\":{\"key202\":1700000203,\"key204\":-205},\"name\":\"s207\",\"type\":2},{\"limits\":{\"key211\":1700000212,\"key213\":1700000214},\"requests\":{\"key216\":1700000217,\"key218\":1700000219},\"name\":\"s221\",\"type\":2}]",
+     {},
+     "{\"metadata\":{\"name\":\"s140 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s142\",\"uid\":\"s144 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"creationTimestamp\":4102444946,\"deletionTimestamp\":1700000148,\"labels\":[\"k150:v150\",\"k150:other:with:colons\",\"bare150\",\"z150:last\"],\"annotations\":[\"k152:v152\",\"k152:other:with:colons\",\"bare152\",\"z152:last\"],\"ownerReferences\":[{\"name\":\"s155\",\"uid\":\"s157\",\"kind\":\"s159\"},{\"name\":\"s161\",\"uid\":\"s163\",\"kind\":\"s165\"}],\"resourceVersion\":\"s167\",\"finalizers\":[\"k169:v169\",\"k169:other:with:colons\",\"bare169\",\"z169:last\"],\"deletionGracePeriodSeconds\":4102444971},\"spec\":{\"parallelism\":174,\"completions\":-176,\"activeDeadlineSeconds\":1700000178,\"backoffLimit\":-180,\"selectors\":[{\"key\":\"s183\",\"operator\":\"s185\",\"values\":[\"k187:v187\",\"k187:other:with:colons\",\"bare187\",\"z187:last\"]},{\"key\":\"s189\",\"operator\":\"s191\",\"values\":[\"k193:v193\",\"k193:other:with:colons\",\"bare193\",\"z193:last\"]}],\"manualSelector\":true,\"resourceRequirements\":[{\"limits\":{\"key197\":1700000198,\"key199\":-200},\"requests\":{\"key202\":1700000203,\"key204\":-205},\"name\":\"s207\",\"type\":2},{\"limits\":{\"key211\":1700000212,\"key213\":1700000214},\"requests\":{\"key216\":1700000217,\"key218\":1700000219},\"name\":\"s221\",\"type\":2}]},\"status\":{\"conditionMessage\":\"s226\",\"startTime\":1700000228,\"completionTime\":-230,\"active\":-232,\"succeeded\":234,\"failed\":-236},\"yaml\":\"/wDu\",\"tags\":[\"k240:v240\",\"k240:other:with:colons\",\"bare240\",\"z240:last\"],\"conditions\":[{\"type\":\"s243\",\"status\":\"s245\",\"lastProbeTime\":1700000247,\"lastTransitionTime\":1700000249,\"reason\":\"s251\",\"message\":\"s253\"},{\"type\":\"s255\",\"status\":\"s257\",\"lastProbeTime\":1700000259,\"lastTransitionTime\":4102445061,\"reason\":\"s263\",\"message\":\"s265\"}]}",
+     "",
+     "",
+     "",
+     "",
+     "2023-11-14T22:17:08Z",
+     null,
+     "",
+     [],
+     [],
+     "",
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     [],
+     0,
+     "",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k267:v267\",\"k267:other:with:colons\",\"bare267\",\"z267:last\"],\"agentVersion\":{\"Major\":-270,\"Minor\":1700000272,\"Patch\":1700000274,\"Pre\":\"s276 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Meta\":\"s278\",\"Commit\":\"s280 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}}"
+    ]
+   ],
+   "insert": "INSERT INTO k8s_resources\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,\n\t\t\t uid, resource_version, owner_kind, owner_name, node_name, phase, status,\n\t\t\t ready, desired, available, counts, labels, annotations, tags,\n\t\t\t agent_version, group_id, group_size,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t creation_timestamp, deletion_timestamp, deletion_grace_period_seconds,\n\t\t\t finalizers, owner_kinds, owner_names, owner_uids,\n\t\t\t condition_types, condition_statuses, condition_reasons, condition_messages,\n\t\t\t condition_last_transition, condition_last_update, condition_last_probe,\n\t\t\t condition_message, resource_requirements, metrics, object,\n\t\t\t pod_ip, nominated_node_name, qos_class, priority_class,\n\t\t\t start_time, scheduled_time, host_name,\n\t\t\t container_names, container_ids, container_ready, container_restarts,\n\t\t\t container_states, container_messages, container_images,\n\t\t\t container_image_ids, container_is_init,\n\t\t\t pod_cidr, pod_cidrs, unschedulable, taints, provider_id, node_roles,\n\t\t\t capacity, allocatable, node_addresses,\n\t\t\t kubelet_version, kube_proxy_version, operating_system, architecture,\n\t\t\t kernel_version, os_image, container_runtime_version,\n\t\t\t service_type, cluster_ip, service_ports,\n\t\t\t rbac_rules, rbac_subjects, rbac_role_ref, envelope)",
+   "rows": [
+    {
+     "AgentVersion": "-270.1700000272.1700000274-s276 <&> \"é\"\n",
+     "Allocatable": {},
+     "Annotations": {
+      "bare24": "",
+      "k24": "other:with:colons",
+      "z24": "last"
+     },
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterIP": "",
+     "ClusterName": "s2",
+     "CollectedAt": "2026-10-01T16:08:42.441131662Z",
+     "ConditionLastProbe": [
+      "2023-11-14T22:15:19Z",
+      "2100-01-01T00:02:11Z"
+     ],
+     "ConditionLastTransition": [
+      "2100-01-01T00:02:01Z",
+      "2023-11-14T22:15:33Z"
+     ],
+     "ConditionLastUpdate": [
+      null,
+      null
+     ],
+     "ConditionMessage": "s98",
+     "ConditionMessages": [
+      "s125",
+      "s137"
+     ],
+     "ConditionReasons": [
+      "s123",
+      "s135"
+     ],
+     "ConditionStatuses": [
+      "s117",
+      "s129"
+     ],
+     "ConditionTypes": [
+      "s115",
+      "s127"
+     ],
+     "ContainerIDs": [],
+     "ContainerImageIDs": [],
+     "ContainerImages": [],
+     "ContainerIsInit": "",
+     "ContainerMessages": [],
+     "ContainerNames": [],
+     "ContainerReady": "",
+     "ContainerRestarts": [],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [],
+     "Counts": {
+      "active": -104,
+      "active_deadline_seconds": -50,
+      "backoff_limit": -52,
+      "completions": -48,
+      "failed": -108,
+      "parallelism": 46,
+      "succeeded": 106
+     },
+     "CreationTimestamp": "2023-11-14T22:13:38Z",
+     "DeletionGracePeriodSeconds": 1700000043,
+     "DeletionTimestamp": null,
+     "Desired": 0,
+     "Encoding": "protobuf",
+     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k267:v267\",\"k267:other:with:colons\",\"bare267\",\"z267:last\"],\"agentVersion\":{\"Major\":-270,\"Minor\":1700000272,\"Patch\":1700000274,\"Pre\":\"s276 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Meta\":\"s278\",\"Commit\":\"s280 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}}",
+     "Finalizers": [
+      "k41:v41",
+      "k41:other:with:colons",
+      "bare41",
+      "z41:last"
+     ],
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": null,
+     "HostName": "",
+     "KernelVersion": "",
+     "Kind": "Job",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare22": "",
+      "k22": "other:with:colons",
+      "z22": "last"
+     },
+     "Metrics": {},
+     "Name": "s12 <&> \"é\"\n",
+     "Namespace": "s14",
+     "NodeAddresses": "",
+     "NodeName": "",
+     "NodeRoles": [],
+     "NominatedNodeName": "",
+     "OSImage": "",
+     "Object": "{\"metadata\":{\"name\":\"s12 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s14\",\"uid\":\"s16 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"creationTimestamp\":1700000018,\"deletionTimestamp\":-20,\"labels\":[\"k22:v22\",\"k22:other:with:colons\",\"bare22\",\"z22:last\"],\"annotations\":[\"k24:v24\",\"k24:other:with:colons\",\"bare24\",\"z24:last\"],\"ownerReferences\":[{\"name\":\"s27\",\"uid\":\"s29\",\"kind\":\"s31\"},{\"name\":\"s33\",\"uid\":\"s35\",\"kind\":\"s37\"}],\"resourceVersion\":\"s39\",\"finalizers\":[\"k41:v41\",\"k41:other:with:colons\",\"bare41\",\"z41:last\"],\"deletionGracePeriodSeconds\":1700000043},\"spec\":{\"parallelism\":46,\"completions\":-48,\"activeDeadlineSeconds\":-50,\"backoffLimit\":-52,\"selectors\":[{\"key\":\"s55\",\"operator\":\"s57\",\"values\":[\"k59:v59\",\"k59:other:with:colons\",\"bare59\",\"z59:last\"]},{\"key\":\"s61\",\"operator\":\"s63\",\"values\":[\"k65:v65\",\"k65:other:with:colons\",\"bare65\",\"z65:last\"]}],\"manualSelector\":true,\"resourceRequirements\":[{\"limits\":{\"key69\":-70,\"key71\":1700000072},\"requests\":{\"key74\":-75,\"key76\":1700000077},\"name\":\"s79\",\"type\":2},{\"limits\":{\"key83\":1700000084,\"key85\":4102444886},\"requests\":{\"key88\":1700000089,\"key90\":4102444891},\"name\":\"s93\",\"type\":2}]},\"status\":{\"conditionMessage\":\"s98\",\"startTime\":-100,\"completionTime\":1700000102,\"active\":-104,\"succeeded\":106,\"failed\":-108},\"yaml\":\"/wBu\",\"tags\":[\"k112:v112\",\"k112:other:with:colons\",\"bare112\",\"z112:last\"],\"conditions\":[{\"type\":\"s115\",\"status\":\"s117\",\"lastProbeTime\":1700000119,\"lastTransitionTime\":4102444921,\"reason\":\"s123\",\"message\":\"s125\"},{\"type\":\"s127\",\"status\":\"s129\",\"lastProbeTime\":4102444931,\"lastTransitionTime\":1700000133,\"reason\":\"s135\",\"message\":\"s137\"}]}",
+     "OperatingSystem": "",
+     "OrgID": 4242,
+     "OwnerKind": "s31",
+     "OwnerKinds": [
+      "s31",
+      "s37"
+     ],
+     "OwnerName": "s27",
+     "OwnerNames": [
+      "s27",
+      "s33"
+     ],
+     "OwnerUIDs": [
+      "s29",
+      "s35"
+     ],
+     "Phase": "",
+     "PodCIDR": "",
+     "PodCIDRs": [],
+     "PodIP": "",
+     "PriorityClass": "",
+     "ProviderID": "",
+     "QOSClass": "",
+     "RBACRoleRef": "",
+     "RBACRules": "",
+     "RBACSubjects": "",
+     "Ready": 0,
+     "ResourceRequirements": "[{\"limits\":{\"key69\":-70,\"key71\":1700000072},\"requests\":{\"key74\":-75,\"key76\":1700000077},\"name\":\"s79\",\"type\":2},{\"limits\":{\"key83\":1700000084,\"key85\":4102444886},\"requests\":{\"key88\":1700000089,\"key90\":4102444891},\"name\":\"s93\",\"type\":2}]",
+     "ResourceVersion": "s39",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": null,
+     "Status": "",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare112": [
+       ""
+      ],
+      "bare267": [
+       ""
+      ],
+      "k112": [
+       "v112",
+       "other:with:colons"
+      ],
+      "k267": [
+       "v267",
+       "other:with:colons"
+      ],
+      "z112": [
+       "last"
+      ],
+      "z267": [
+       "last"
+      ]
+     },
+     "Taints": "",
+     "TenantID": "test",
+     "UID": "s16 <&> \"é\"\n",
+     "Unschedulable": 0
+    },
+    {
+     "AgentVersion": "-270.1700000272.1700000274-s276 <&> \"é\"\n",
+     "Allocatable": {},
+     "Annotations": {
+      "bare152": "",
+      "k152": "other:with:colons",
+      "z152": "last"
+     },
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterIP": "",
+     "ClusterName": "s2",
+     "CollectedAt": "2026-10-01T16:08:42.441131662Z",
+     "ConditionLastProbe": [
+      "2023-11-14T22:17:27Z",
+      "2023-11-14T22:17:39Z"
+     ],
+     "ConditionLastTransition": [
+      "2023-11-14T22:17:29Z",
+      "2100-01-01T00:04:21Z"
+     ],
+     "ConditionLastUpdate": [
+      null,
+      null
+     ],
+     "ConditionMessage": "s226",
+     "ConditionMessages": [
+      "s253",
+      "s265"
+     ],
+     "ConditionReasons": [
+      "s251",
+      "s263"
+     ],
+     "ConditionStatuses": [
+      "s245",
+      "s257"
+     ],
+     "ConditionTypes": [
+      "s243",
+      "s255"
+     ],
+     "ContainerIDs": [],
+     "ContainerImageIDs": [],
+     "ContainerImages": [],
+     "ContainerIsInit": "",
+     "ContainerMessages": [],
+     "ContainerNames": [],
+     "ContainerReady": "",
+     "ContainerRestarts": [],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [],
+     "Counts": {
+      "active": -232,
+      "active_deadline_seconds": 1700000178,
+      "backoff_limit": -180,
+      "completions": -176,
+      "failed": -236,
+      "parallelism": 174,
+      "succeeded": 234
+     },
+     "CreationTimestamp": "2100-01-01T00:02:26Z",
+     "DeletionGracePeriodSeconds": 4102444971,
+     "DeletionTimestamp": "2023-11-14T22:15:48Z",
+     "Desired": 0,
+     "Encoding": "protobuf",
+     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k267:v267\",\"k267:other:with:colons\",\"bare267\",\"z267:last\"],\"agentVersion\":{\"Major\":-270,\"Minor\":1700000272,\"Patch\":1700000274,\"Pre\":\"s276 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Meta\":\"s278\",\"Commit\":\"s280 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}}",
+     "Finalizers": [
+      "k169:v169",
+      "k169:other:with:colons",
+      "bare169",
+      "z169:last"
+     ],
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": null,
+     "HostName": "",
+     "KernelVersion": "",
+     "Kind": "Job",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare150": "",
+      "k150": "other:with:colons",
+      "z150": "last"
+     },
+     "Metrics": {},
+     "Name": "s140 <&> \"é\"\n",
+     "Namespace": "s142",
+     "NodeAddresses": "",
+     "NodeName": "",
+     "NodeRoles": [],
+     "NominatedNodeName": "",
+     "OSImage": "",
+     "Object": "{\"metadata\":{\"name\":\"s140 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"namespace\":\"s142\",\"uid\":\"s144 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"creationTimestamp\":4102444946,\"deletionTimestamp\":1700000148,\"labels\":[\"k150:v150\",\"k150:other:with:colons\",\"bare150\",\"z150:last\"],\"annotations\":[\"k152:v152\",\"k152:other:with:colons\",\"bare152\",\"z152:last\"],\"ownerReferences\":[{\"name\":\"s155\",\"uid\":\"s157\",\"kind\":\"s159\"},{\"name\":\"s161\",\"uid\":\"s163\",\"kind\":\"s165\"}],\"resourceVersion\":\"s167\",\"finalizers\":[\"k169:v169\",\"k169:other:with:colons\",\"bare169\",\"z169:last\"],\"deletionGracePeriodSeconds\":4102444971},\"spec\":{\"parallelism\":174,\"completions\":-176,\"activeDeadlineSeconds\":1700000178,\"backoffLimit\":-180,\"selectors\":[{\"key\":\"s183\",\"operator\":\"s185\",\"values\":[\"k187:v187\",\"k187:other:with:colons\",\"bare187\",\"z187:last\"]},{\"key\":\"s189\",\"operator\":\"s191\",\"values\":[\"k193:v193\",\"k193:other:with:colons\",\"bare193\",\"z193:last\"]}],\"manualSelector\":true,\"resourceRequirements\":[{\"limits\":{\"key197\":1700000198,\"key199\":-200},\"requests\":{\"key202\":1700000203,\"key204\":-205},\"name\":\"s207\",\"type\":2},{\"limits\":{\"key211\":1700000212,\"key213\":1700000214},\"requests\":{\"key216\":1700000217,\"key218\":1700000219},\"name\":\"s221\",\"type\":2}]},\"status\":{\"conditionMessage\":\"s226\",\"startTime\":1700000228,\"completionTime\":-230,\"active\":-232,\"succeeded\":234,\"failed\":-236},\"yaml\":\"/wDu\",\"tags\":[\"k240:v240\",\"k240:other:with:colons\",\"bare240\",\"z240:last\"],\"conditions\":[{\"type\":\"s243\",\"status\":\"s245\",\"lastProbeTime\":1700000247,\"lastTransitionTime\":1700000249,\"reason\":\"s251\",\"message\":\"s253\"},{\"type\":\"s255\",\"status\":\"s257\",\"lastProbeTime\":1700000259,\"lastTransitionTime\":4102445061,\"reason\":\"s263\",\"message\":\"s265\"}]}",
+     "OperatingSystem": "",
+     "OrgID": 4242,
+     "OwnerKind": "s159",
+     "OwnerKinds": [
+      "s159",
+      "s165"
+     ],
+     "OwnerName": "s155",
+     "OwnerNames": [
+      "s155",
+      "s161"
+     ],
+     "OwnerUIDs": [
+      "s157",
+      "s163"
+     ],
+     "Phase": "",
+     "PodCIDR": "",
+     "PodCIDRs": [],
+     "PodIP": "",
+     "PriorityClass": "",
+     "ProviderID": "",
+     "QOSClass": "",
+     "RBACRoleRef": "",
+     "RBACRules": "",
+     "RBACSubjects": "",
+     "Ready": 0,
+     "ResourceRequirements": "[{\"limits\":{\"key197\":1700000198,\"key199\":-200},\"requests\":{\"key202\":1700000203,\"key204\":-205},\"name\":\"s207\",\"type\":2},{\"limits\":{\"key211\":1700000212,\"key213\":1700000214},\"requests\":{\"key216\":1700000217,\"key218\":1700000219},\"name\":\"s221\",\"type\":2}]",
+     "ResourceVersion": "s167",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": "2023-11-14T22:17:08Z",
+     "Status": "",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare240": [
+       ""
+      ],
+      "bare267": [
+       ""
+      ],
+      "k240": [
+       "v240",
+       "other:with:colons"
+      ],
+      "k267": [
+       "v267",
+       "other:with:colons"
+      ],
+      "z240": [
+       "last"
+      ],
+      "z267": [
+       "last"
+      ]
+     },
+     "Taints": "",
+     "TenantID": "test",
+     "UID": "s144 <&> \"é\"\n",
+     "Unschedulable": 0
+    }
+   ],
+   "to": "storage_k8s_resources",
+   "type": "storage.WriteK8sResources"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorJob_0",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/CollectedAt",
+  "/sends/0/rows/1/CollectedAt"
+ ]
+}

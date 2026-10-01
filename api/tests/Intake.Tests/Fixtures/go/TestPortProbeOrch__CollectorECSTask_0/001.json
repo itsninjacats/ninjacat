@@ -1,0 +1,503 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.494516519Z",
+ "request": {
+  "body_b64": "AwDICZIQAAB78VNlAAAAAAiDgICAgICAEBIMczQgPCY+ICLDqSIKGgJzNiIMczggPCY+ICLDqSIKKAow9P//////////ATqkDQoDczE1EgNzMTcaA3MxOSIDczIxKgNzMjMyA3MyNToDczI3QgNzMjlKEAoFa2V5MzERspybbs0PQEBKEAoFa2V5MzMRspybbs0PQUBSDQoFa2V5MzgQp+LPqgZSDQoFa2V5MzYQpeLPqgZaA3M0MWIDczQzaNP//////////wFwr+LPqgZ4seLPqgaCAegECg1zNTIgPCY+ICLDqSIKEgNzNTQaDXM1NiA8Jj4gIsOpIgoiA3M1OCoNczYwIDwmPiAiw6kiCjC+4s+qBjjA4s+qBkDCrpmkD0oNczY4IDwmPiAiw6kiClIDczcwWgIYSWIDczc1agNzNzdyDAoFa2V5ODESA3M4MnIWCgVrZXk3ORINczgwIDwmPiAiw6kiCnoNczg0IDwmPiAiw6kiCoIBDghXEgNzODkaA3M5MSBdggEOCF8SA3M5NxoDczk5IGWKAX4KDnMxMDQgPCY+ICLDqSIKEglrMTA2OnYxMDYSFmsxMDY6b3RoZXI6d2l0aDpjb2xvbnMSB2JhcmUxMDYSCXoxMDY6bGFzdBoJazEwODp2MTA4GhZrMTA4Om90aGVyOndpdGg6Y29sb25zGgdiYXJlMTA4Ggl6MTA4Omxhc3SKAXQKBHMxMTASCWsxMTI6djExMhIWazExMjpvdGhlcjp3aXRoOmNvbG9ucxIHYmFyZTExMhIJejExMjpsYXN0GglrMTE0OnYxMTQaFmsxMTQ6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmUxMTQaCXoxMTQ6bGFzdJIBEgoEczExNxIEczExORoEczEyMZIBEgoEczEyMxIEczEyNRoEczEyN5oBFwoEczEzMBCE48+qBhoDGIcBIgRzMTM3ogEJazEzOTp2MTM5ogEWazEzOTpvdGhlcjp3aXRoOmNvbG9uc6IBB2JhcmUxMzmiAQl6MTM5Omxhc3SqAREKBmtleTE0MxEs56Zb8wNiQKoBEQoGa2V5MTQxESznplvzw2FAsgEEczE0NoIBhAUKDnMxNDggPCY+ICLDqSIKEgRzMTUwGg5zMTUyIDwmPiAiw6kiCiIEczE1NCoOczE1NiA8Jj4gIsOpIgownuPPqgY44P7/////////AUCi48+qBkoOczE2NCA8Jj4gIsOpIgpSBHMxNjZaAxipAWIEczE3MWoEczE3M3IOCgZrZXkxNzcSBHMxNzhyGAoGa2V5MTc1Eg5zMTc2IDwmPiAiw6kiCnoOczE4MCA8Jj4gIsOpIgqCARIItwESBHMxODUaBHMxODcgvQGCARIIvwESBHMxOTMaBHMxOTUgxQGKAX4KDnMyMDAgPCY+ICLDqSIKEglrMjAyOnYyMDISFmsyMDI6b3RoZXI6d2l0aDpjb2xvbnMSB2JhcmUyMDISCXoyMDI6bGFzdBoJazIwNDp2MjA0GhZrMjA0Om90aGVyOndpdGg6Y29sb25zGgdiYXJlMjA0Ggl6MjA0Omxhc3SKAXQKBHMyMDYSCWsyMDg6djIwOBIWazIwODpvdGhlcjp3aXRoOmNvbG9ucxIHYmFyZTIwOBIJejIwODpsYXN0GglrMjEwOnYyMTAaFmsyMTA6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmUyMTAaCXoyMTA6bGFzdJIBEgoEczIxMxIEczIxNRoEczIxN5IBEgoEczIxORIEczIyMRoEczIyM5oBFwoEczIyNhDk48+qBhoDGOcBIgRzMjMzogEJazIzNTp2MjM1ogEWazIzNTpvdGhlcjp3aXRoOmNvbG9uc6IBB2JhcmUyMzWiAQl6MjM1Omxhc3SqAREKBmtleTIzNxEs56Zb88NtQKoBEQoGa2V5MjM5ESznplvzA25AsgEEczI0MooBCWsyNDQ6djI0NIoBFmsyNDQ6b3RoZXI6d2l0aDpjb2xvbnOKAQdiYXJlMjQ0igEJejI0NDpsYXN0kgEJazI0Njp2MjQ2kgEWazI0NjpvdGhlcjp3aXRoOmNvbG9uc5IBB2JhcmUyNDaSAQl6MjQ2Omxhc3SaAQlrMjQ4OnYyNDiaARZrMjQ4Om90aGVyOndpdGg6Y29sb25zmgEHYmFyZTI0OJoBCXoyNDg6bGFzdKIBYwj8gYCAgICAEBD9ARoEczI1NTIJazI1Nzp2MjU3MhZrMjU3Om90aGVyOndpdGg6Y29sb25zMgdiYXJlMjU3Mgl6MjU3Omxhc3Q4gwJAhoKAgICAgBBIhwJQ9/3/////////AaoBBHMyNjeyAQRzMjY5OskNCgRzMjcxEgRzMjczGgRzMjc1IgRzMjc3KgRzMjc5MgRzMjgxOgRzMjgzQgRzMjg1ShEKBmtleTI4ORGWc9Ot+SFyQEoRCgZrZXkyODcRlnPTrfkBckBSDgoGa2V5MjkyEKXkz6oGUhMKBmtleTI5NBDZ/f////////8BWgRzMjk3YgRzMjk5aK2wmaQPcK/kz6oGeM/9/////////wGCAYQFCg5zMzA4IDwmPiAiw6kiChIEczMxMBoOczMxMiA8Jj4gIsOpIgoiBHMzMTQqDnMzMTYgPCY+ICLDqSIKML7kz6oGOMD9/////////wFAwuTPqgZKDnMzMjQgPCY+ICLDqSIKUgRzMzI2WgMYyQJiBHMzMzFqBHMzMzNyDgoGa2V5MzM3EgRzMzM4chgKBmtleTMzNRIOczMzNiA8Jj4gIsOpIgp6DnMzNDAgPCY+ICLDqSIKggESCNcCEgRzMzQ1GgRzMzQ3IN0CggESCN8CEgRzMzUzGgRzMzU1IOUCigF+Cg5zMzYwIDwmPiAiw6kiChIJazM2Mjp2MzYyEhZrMzYyOm90aGVyOndpdGg6Y29sb25zEgdiYXJlMzYyEgl6MzYyOmxhc3QaCWszNjQ6djM2NBoWazM2NDpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTM2NBoJejM2NDpsYXN0igF0CgRzMzY2EglrMzY4OnYzNjgSFmszNjg6b3RoZXI6d2l0aDpjb2xvbnMSB2JhcmUzNjgSCXozNjg6bGFzdBoJazM3MDp2MzcwGhZrMzcwOm90aGVyOndpdGg6Y29sb25zGgdiYXJlMzcwGgl6MzcwOmxhc3SSARIKBHMzNzMSBHMzNzUaBHMzNzeSARIKBHMzNzkSBHMzODEaBHMzODOaARcKBHMzODYQhOXPqgYaAxiHAyIEczM5M6IBCWszOTU6djM5NaIBFmszOTU6b3RoZXI6d2l0aDpjb2xvbnOiAQdiYXJlMzk1ogEJejM5NTpsYXN0qgERCgZrZXkzOTkRlnPTrfkBeUCqAREKBmtleTM5NxGWc9Ot+eF4QLIBBHM0MDKCAf8ECg5zNDA0IDwmPiAiw6kiChIEczQwNhoOczQwOCA8Jj4gIsOpIgoiBHM0MTAqDnM0MTIgPCY+ICLDqSIKMJ7lz6oGOKCxmaQPQKLlz6oGSg5zNDIwIDwmPiAiw6kiClIEczQyMloDGKkDYgRzNDI3agRzNDI5cg4KBmtleTQzMxIEczQzNHIYCgZrZXk0MzESDnM0MzIgPCY+ICLDqSIKeg5zNDM2IDwmPiAiw6kiCoIBEgi3AxIEczQ0MRoEczQ0MyC9A4IBEgi/AxIEczQ0ORoEczQ1MSDFA4oBfgoOczQ1NiA8Jj4gIsOpIgoSCWs0NTg6djQ1OBIWazQ1ODpvdGhlcjp3aXRoOmNvbG9ucxIHYmFyZTQ1OBIJejQ1ODpsYXN0GglrNDYwOnY0NjAaFms0NjA6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmU0NjAaCXo0NjA6bGFzdIoBdAoEczQ2MhIJazQ2NDp2NDY0EhZrNDY0Om90aGVyOndpdGg6Y29sb25zEgdiYXJlNDY0Egl6NDY0Omxhc3QaCWs0NjY6djQ2NhoWazQ2NjpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTQ2NhoJejQ2NjpsYXN0kgESCgRzNDY5EgRzNDcxGgRzNDczkgESCgRzNDc1EgRzNDc3GgRzNDc5mgEXCgRzNDgyEOTlz6oGGgMY5wMiBHM0ODmiAQlrNDkxOnY0OTGiARZrNDkxOm90aGVyOndpdGg6Y29sb25zogEHYmFyZTQ5MaIBCXo0OTE6bGFzdKoBEQoGa2V5NDk1EZZz0635AX9AqgERCgZrZXk0OTMRlnPTrfnhfkCyAQRzNDk4igEJazUwMDp2NTAwigEWazUwMDpvdGhlcjp3aXRoOmNvbG9uc4oBB2JhcmU1MDCKAQl6NTAwOmxhc3SSAQlrNTAyOnY1MDKSARZrNTAyOm90aGVyOndpdGg6Y29sb25zkgEHYmFyZTUwMpIBCXo1MDI6bGFzdJoBCWs1MDQ6djUwNJoBFms1MDQ6b3RoZXI6d2l0aDpjb2xvbnOaAQdiYXJlNTA0mgEJejUwNDpsYXN0ogFeCPyDgICAgIAQEP0DGgRzNTExMglrNTEzOnY1MTMyFms1MTM6b3RoZXI6d2l0aDpjb2xvbnMyB2JhcmU1MTMyCXo1MTM6bGFzdDiDBECGhICAgICAEEiHBFCJspmkD6oBBHM1MjOyAQRzNTI1QglrNTI3OnY1MjdCFms1Mjc6b3RoZXI6d2l0aDpjb2xvbnNCB2JhcmU1MjdCCXo1Mjc6bGFzdEpmCJOEgICAgIAQEOz7/////////wEaBHM1MzQyCWs1MzY6djUzNjIWazUzNjpvdGhlcjp3aXRoOmNvbG9uczIHYmFyZTUzNjIJejUzNjpsYXN0OJoEQJ2EgICAgIAQSJ4EUKDmz6oGUgRzNTQ2WrABCgRzNTQ5EjwKDnM1NTIgPCY+ICLDqSIKEgRzNTU0Gg5zNTU2IDwmPiAiw6kiCiIEczU1OCoOczU2MCA8Jj4gIsOpIgoaLQizBBIEczU2NRoEczU2NyIEczU2OSoEczU3MTIEczU3Mzi/BEDB5s+qBkjDBBoyCMUEEgRzNTgzGgRzNTg1IgRzNTg3KgRzNTg5MgRzNTkxONEEQK37/////////wFI1QQo2ISAgICAgBBiOAja5s+qBhDc5s+qBhjespmkDyIOczYwOCA8Jj4gIsOpIgoqBHM2MTAyDnM2MTIgPCY+ICLDqSIK",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "int64",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string]float64",
+     "map[string]int64",
+     "*time.Time",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "uint32",
+     "map[string][]string",
+     "map[string][]string",
+     "map[string][]string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "int64",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string]float64",
+     "map[string]int64",
+     "*time.Time",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "uint32",
+     "map[string][]string",
+     "map[string][]string",
+     "map[string][]string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.494334673Z",
+     4242,
+     9,
+     1700000123,
+     "protobuf",
+     9007199254740995,
+     "s6",
+     "s4 <&> \"é\"\n",
+     "s8 <&> \"é\"\n",
+     10,
+     -12,
+     "s546",
+     "1700000602.1700000604.4102445406-s608 <&> \"é\"\n",
+     {
+      "bare527": [
+       ""
+      ],
+      "k527": [
+       "v527",
+       "other:with:colons"
+      ],
+      "z527": [
+       "last"
+      ]
+     },
+     "s15",
+     "s17",
+     "s19",
+     "s21",
+     "s23",
+     "s25",
+     "s27",
+     "s29",
+     "s41",
+     "s43",
+     "s267",
+     "s269",
+     "s255",
+     {
+      "key31": 32.123456789,
+      "key33": 34.123456789
+     },
+     {
+      "key36": 1700000037,
+      "key38": 1700000039
+     },
+     null,
+     "2023-11-14T22:14:07Z",
+     "2023-11-14T22:14:09Z",
+     "[{\"dockerID\":\"s52 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"dockerName\":\"s54\",\"name\":\"s56 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"image\":\"s58\",\"imageID\":\"s60 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"createdAt\":1700000062,\"startedAt\":1700000064,\"finishedAt\":4102444866,\"desiredStatus\":\"s68 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"knownStatus\":\"s70\",\"exitCode\":{\"exitCode\":73},\"type\":\"s75\",\"logDriver\":\"s77\",\"logOptions\":{\"key79\":\"s80 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"key81\":\"s82\"},\"containerArn\":\"s84 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ports\":[{\"containerPort\":87,\"protocol\":\"s89\",\"hostIp\":\"s91\",\"hostPort\":93},{\"containerPort\":95,\"protocol\":\"s97\",\"hostIp\":\"s99\",\"hostPort\":101}],\"networks\":[{\"networkMode\":\"s104 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ipv4Addresses\":[\"k106:v106\",\"k106:other:with:colons\",\"bare106\",\"z106:last\"],\"ipv6Addresses\":[\"k108:v108\",\"k108:other:with:colons\",\"bare108\",\"z108:last\"]},{\"networkMode\":\"s110\",\"ipv4Addresses\":[\"k112:v112\",\"k112:other:with:colons\",\"bare112\",\"z112:last\"],\"ipv6Addresses\":[\"k114:v114\",\"k114:other:with:colons\",\"bare114\",\"z114:last\"]}],\"volumes\":[{\"dockerName\":\"s117\",\"source\":\"s119\",\"destination\":\"s121\"},{\"dockerName\":\"s123\",\"source\":\"s125\",\"destination\":\"s127\"}],\"health\":{\"status\":\"s130\",\"since\":1700000132,\"exitCode\":{\"exitCode\":135},\"output\":\"s137\"},\"labels\":[\"k139:v139\",\"k139:other:with:colons\",\"bare139\",\"z139:last\"],\"limits\":{\"key141\":142.123456789,\"key143\":144.123456789},\"snapshotter\":\"s146\"},{\"dockerID\":\"s148 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"dockerName\":\"s150\",\"name\":\"s152 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"image\":\"s154\",\"imageID\":\"s156 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"createdAt\":1700000158,\"startedAt\":-160,\"finishedAt\":1700000162,\"desiredStatus\":\"s164 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"knownStatus\":\"s166\",\"exitCode\":{\"exitCode\":169},\"type\":\"s171\",\"logDriver\":\"s173\",\"logOptions\":{\"key175\":\"s176 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"key177\":\"s178\"},\"containerArn\":\"s180 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ports\":[{\"containerPort\":183,\"protocol\":\"s185\",\"hostIp\":\"s187\",\"hostPort\":189},{\"containerPort\":191,\"protocol\":\"s193\",\"hostIp\":\"s195\",\"hostPort\":197}],\"networks\":[{\"networkMode\":\"s200 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ipv4Addresses\":[\"k202:v202\",\"k202:other:with:colons\",\"bare202\",\"z202:last\"],\"ipv6Addresses\":[\"k204:v204\",\"k204:other:with:colons\",\"bare204\",\"z204:last\"]},{\"networkMode\":\"s206\",\"ipv4Addresses\":[\"k208:v208\",\"k208:other:with:colons\",\"bare208\",\"z208:last\"],\"ipv6Addresses\":[\"k210:v210\",\"k210:other:with:colons\",\"bare210\",\"z210:last\"]}],\"volumes\":[{\"dockerName\":\"s213\",\"source\":\"s215\",\"destination\":\"s217\"},{\"dockerName\":\"s219\",\"source\":\"s221\",\"destination\":\"s223\"}],\"health\":{\"status\":\"s226\",\"since\":1700000228,\"exitCode\":{\"exitCode\":231},\"output\":\"s233\"},\"labels\":[\"k235:v235\",\"k235:other:with:colons\",\"bare235\",\"z235:last\"],\"limits\":{\"key237\":238.123456789,\"key239\":240.123456789},\"snapshotter\":\"s242\"}]",
+     2,
+     {
+      "bare244": [
+       ""
+      ],
+      "k244": [
+       "v244",
+       "other:with:colons"
+      ],
+      "z244": [
+       "last"
+      ]
+     },
+     {
+      "bare246": [
+       ""
+      ],
+      "k246": [
+       "v246",
+       "other:with:colons"
+      ],
+      "z246": [
+       "last"
+      ]
+     },
+     {
+      "bare248": [
+       ""
+      ],
+      "k248": [
+       "v248",
+       "other:with:colons"
+      ],
+      "z248": [
+       "last"
+      ]
+     },
+     "{\"awsAccountID\":9007199254740995,\"clusterName\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"clusterId\":\"s6\",\"region\":\"s8 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":10,\"groupSize\":-12,\"tags\":[\"k527:v527\",\"k527:other:with:colons\",\"bare527\",\"z527:last\"],\"host\":{\"id\":9007199254741523,\"orgId\":-532,\"name\":\"s534\",\"allTags\":[\"k536:v536\",\"k536:other:with:colons\",\"bare536\",\"z536:last\"],\"numCpus\":538,\"totalMemory\":9007199254741533,\"tagIndex\":542,\"tagsModified\":1700000544},\"hostName\":\"s546\",\"info\":{\"uuid\":\"s549\",\"os\":{\"name\":\"s552 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"platform\":\"s554\",\"family\":\"s556 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"version\":\"s558\",\"kernelVersion\":\"s560 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"cpus\":[{\"number\":563,\"vendor\":\"s565\",\"family\":\"s567\",\"model\":\"s569\",\"physicalId\":\"s571\",\"coreId\":\"s573\",\"cores\":575,\"mhz\":1700000577,\"cacheSize\":579},{\"number\":581,\"vendor\":\"s583\",\"family\":\"s585\",\"model\":\"s587\",\"physicalId\":\"s589\",\"coreId\":\"s591\",\"cores\":593,\"mhz\":-595,\"cacheSize\":597}],\"totalMemory\":9007199254741592},\"agentVersion\":{\"Major\":1700000602,\"Minor\":1700000604,\"Patch\":4102445406,\"Pre\":\"s608 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Meta\":\"s610\",\"Commit\":\"s612 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}}",
+     "{\"id\":9007199254741244,\"orgId\":253,\"name\":\"s255\",\"allTags\":[\"k257:v257\",\"k257:other:with:colons\",\"bare257\",\"z257:last\"],\"numCpus\":259,\"totalMemory\":9007199254741254,\"tagIndex\":263,\"tagsModified\":-265}"
+    ],
+    [
+     "test",
+     "2026-10-01T16:08:42.494334673Z",
+     4242,
+     9,
+     1700000123,
+     "protobuf",
+     9007199254740995,
+     "s6",
+     "s4 <&> \"é\"\n",
+     "s8 <&> \"é\"\n",
+     10,
+     -12,
+     "s546",
+     "1700000602.1700000604.4102445406-s608 <&> \"é\"\n",
+     {
+      "bare527": [
+       ""
+      ],
+      "k527": [
+       "v527",
+       "other:with:colons"
+      ],
+      "z527": [
+       "last"
+      ]
+     },
+     "s271",
+     "s273",
+     "s275",
+     "s277",
+     "s279",
+     "s281",
+     "s283",
+     "s285",
+     "s297",
+     "s299",
+     "s523",
+     "s525",
+     "s511",
+     {
+      "key287": 288.123456789,
+      "key289": 290.123456789
+     },
+     {
+      "key292": 1700000293,
+      "key294": -295
+     },
+     "2100-01-01T00:05:01Z",
+     "2023-11-14T22:18:23Z",
+     null,
+     "[{\"dockerID\":\"s308 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"dockerName\":\"s310\",\"name\":\"s312 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"image\":\"s314\",\"imageID\":\"s316 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"createdAt\":1700000318,\"startedAt\":-320,\"finishedAt\":1700000322,\"desiredStatus\":\"s324 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"knownStatus\":\"s326\",\"exitCode\":{\"exitCode\":329},\"type\":\"s331\",\"logDriver\":\"s333\",\"logOptions\":{\"key335\":\"s336 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"key337\":\"s338\"},\"containerArn\":\"s340 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ports\":[{\"containerPort\":343,\"protocol\":\"s345\",\"hostIp\":\"s347\",\"hostPort\":349},{\"containerPort\":351,\"protocol\":\"s353\",\"hostIp\":\"s355\",\"hostPort\":357}],\"networks\":[{\"networkMode\":\"s360 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ipv4Addresses\":[\"k362:v362\",\"k362:other:with:colons\",\"bare362\",\"z362:last\"],\"ipv6Addresses\":[\"k364:v364\",\"k364:other:with:colons\",\"bare364\",\"z364:last\"]},{\"networkMode\":\"s366\",\"ipv4Addresses\":[\"k368:v368\",\"k368:other:with:colons\",\"bare368\",\"z368:last\"],\"ipv6Addresses\":[\"k370:v370\",\"k370:other:with:colons\",\"bare370\",\"z370:last\"]}],\"volumes\":[{\"dockerName\":\"s373\",\"source\":\"s375\",\"destination\":\"s377\"},{\"dockerName\":\"s379\",\"source\":\"s381\",\"destination\":\"s383\"}],\"health\":{\"status\":\"s386\",\"since\":1700000388,\"exitCode\":{\"exitCode\":391},\"output\":\"s393\"},\"labels\":[\"k395:v395\",\"k395:other:with:colons\",\"bare395\",\"z395:last\"],\"limits\":{\"key397\":398.123456789,\"key399\":400.123456789},\"snapshotter\":\"s402\"},{\"dockerID\":\"s404 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"dockerName\":\"s406\",\"name\":\"s408 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"image\":\"s410\",\"imageID\":\"s412 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"createdAt\":1700000414,\"startedAt\":4102445216,\"finishedAt\":1700000418,\"desiredStatus\":\"s420 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"knownStatus\":\"s422\",\"exitCode\":{\"exitCode\":425},\"type\":\"s427\",\"logDriver\":\"s429\",\"logOptions\":{\"key431\":\"s432 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"key433\":\"s434\"},\"containerArn\":\"s436 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ports\":[{\"containerPort\":439,\"protocol\":\"s441\",\"hostIp\":\"s443\",\"hostPort\":445},{\"containerPort\":447,\"protocol\":\"s449\",\"hostIp\":\"s451\",\"hostPort\":453}],\"networks\":[{\"networkMode\":\"s456 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ipv4Addresses\":[\"k458:v458\",\"k458:other:with:colons\",\"bare458\",\"z458:last\"],\"ipv6Addresses\":[\"k460:v460\",\"k460:other:with:colons\",\"bare460\",\"z460:last\"]},{\"networkMode\":\"s462\",\"ipv4Addresses\":[\"k464:v464\",\"k464:other:with:colons\",\"bare464\",\"z464:last\"],\"ipv6Addresses\":[\"k466:v466\",\"k466:other:with:colons\",\"bare466\",\"z466:last\"]}],\"volumes\":[{\"dockerName\":\"s469\",\"source\":\"s471\",\"destination\":\"s473\"},{\"dockerName\":\"s475\",\"source\":\"s477\",\"destination\":\"s479\"}],\"health\":{\"status\":\"s482\",\"since\":1700000484,\"exitCode\":{\"exitCode\":487},\"output\":\"s489\"},\"labels\":[\"k491:v491\",\"k491:other:with:colons\",\"bare491\",\"z491:last\"],\"limits\":{\"key493\":494.123456789,\"key495\":496.123456789},\"snapshotter\":\"s498\"}]",
+     2,
+     {
+      "bare500": [
+       ""
+      ],
+      "k500": [
+       "v500",
+       "other:with:colons"
+      ],
+      "z500": [
+       "last"
+      ]
+     },
+     {
+      "bare502": [
+       ""
+      ],
+      "k502": [
+       "v502",
+       "other:with:colons"
+      ],
+      "z502": [
+       "last"
+      ]
+     },
+     {
+      "bare504": [
+       ""
+      ],
+      "k504": [
+       "v504",
+       "other:with:colons"
+      ],
+      "z504": [
+       "last"
+      ]
+     },
+     "{\"awsAccountID\":9007199254740995,\"clusterName\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"clusterId\":\"s6\",\"region\":\"s8 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":10,\"groupSize\":-12,\"tags\":[\"k527:v527\",\"k527:other:with:colons\",\"bare527\",\"z527:last\"],\"host\":{\"id\":9007199254741523,\"orgId\":-532,\"name\":\"s534\",\"allTags\":[\"k536:v536\",\"k536:other:with:colons\",\"bare536\",\"z536:last\"],\"numCpus\":538,\"totalMemory\":9007199254741533,\"tagIndex\":542,\"tagsModified\":1700000544},\"hostName\":\"s546\",\"info\":{\"uuid\":\"s549\",\"os\":{\"name\":\"s552 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"platform\":\"s554\",\"family\":\"s556 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"version\":\"s558\",\"kernelVersion\":\"s560 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"cpus\":[{\"number\":563,\"vendor\":\"s565\",\"family\":\"s567\",\"model\":\"s569\",\"physicalId\":\"s571\",\"coreId\":\"s573\",\"cores\":575,\"mhz\":1700000577,\"cacheSize\":579},{\"number\":581,\"vendor\":\"s583\",\"family\":\"s585\",\"model\":\"s587\",\"physicalId\":\"s589\",\"coreId\":\"s591\",\"cores\":593,\"mhz\":-595,\"cacheSize\":597}],\"totalMemory\":9007199254741592},\"agentVersion\":{\"Major\":1700000602,\"Minor\":1700000604,\"Patch\":4102445406,\"Pre\":\"s608 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Meta\":\"s610\",\"Commit\":\"s612 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}}",
+     "{\"id\":9007199254741500,\"orgId\":509,\"name\":\"s511\",\"allTags\":[\"k513:v513\",\"k513:other:with:colons\",\"bare513\",\"z513:last\"],\"numCpus\":515,\"totalMemory\":9007199254741510,\"tagIndex\":519,\"tagsModified\":4102445321}"
+    ]
+   ],
+   "insert": "INSERT INTO ecs_tasks\n\t\t\t(tenant_id, collected_at, org_id, subscription_id, header_timestamp, encoding,\n\t\t\t aws_account_id, cluster_id, cluster_name, region, group_id, group_size,\n\t\t\t host_name, agent_version, envelope_tags,\n\t\t\t arn, resource_version, launch_type, desired_status, known_status,\n\t\t\t family, version, availability_zone, service_name, vpc_id,\n\t\t\t container_instance_arn, daemon_name, task_host_name,\n\t\t\t limits, ephemeral_storage_metrics,\n\t\t\t pull_started_at, pull_stopped_at, execution_stopped_at,\n\t\t\t containers, container_count,\n\t\t\t tags, ecs_tags, container_instance_tags,\n\t\t\t envelope, task_host)",
+   "rows": [
+    {
+     "ARN": "s15",
+     "AWSAccountID": 9007199254740995,
+     "AgentVersion": "1700000602.1700000604.4102445406-s608 <&> \"é\"\n",
+     "AvailabilityZone": "s29",
+     "ClusterID": "s6",
+     "ClusterName": "s4 <&> \"é\"\n",
+     "CollectedAt": "2026-10-01T16:08:42.494334673Z",
+     "ContainerCount": 2,
+     "ContainerInstanceARN": "s267",
+     "ContainerInstanceTags": {
+      "bare248": [
+       ""
+      ],
+      "k248": [
+       "v248",
+       "other:with:colons"
+      ],
+      "z248": [
+       "last"
+      ]
+     },
+     "Containers": "[{\"dockerID\":\"s52 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"dockerName\":\"s54\",\"name\":\"s56 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"image\":\"s58\",\"imageID\":\"s60 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"createdAt\":1700000062,\"startedAt\":1700000064,\"finishedAt\":4102444866,\"desiredStatus\":\"s68 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"knownStatus\":\"s70\",\"exitCode\":{\"exitCode\":73},\"type\":\"s75\",\"logDriver\":\"s77\",\"logOptions\":{\"key79\":\"s80 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"key81\":\"s82\"},\"containerArn\":\"s84 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ports\":[{\"containerPort\":87,\"protocol\":\"s89\",\"hostIp\":\"s91\",\"hostPort\":93},{\"containerPort\":95,\"protocol\":\"s97\",\"hostIp\":\"s99\",\"hostPort\":101}],\"networks\":[{\"networkMode\":\"s104 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ipv4Addresses\":[\"k106:v106\",\"k106:other:with:colons\",\"bare106\",\"z106:last\"],\"ipv6Addresses\":[\"k108:v108\",\"k108:other:with:colons\",\"bare108\",\"z108:last\"]},{\"networkMode\":\"s110\",\"ipv4Addresses\":[\"k112:v112\",\"k112:other:with:colons\",\"bare112\",\"z112:last\"],\"ipv6Addresses\":[\"k114:v114\",\"k114:other:with:colons\",\"bare114\",\"z114:last\"]}],\"volumes\":[{\"dockerName\":\"s117\",\"source\":\"s119\",\"destination\":\"s121\"},{\"dockerName\":\"s123\",\"source\":\"s125\",\"destination\":\"s127\"}],\"health\":{\"status\":\"s130\",\"since\":1700000132,\"exitCode\":{\"exitCode\":135},\"output\":\"s137\"},\"labels\":[\"k139:v139\",\"k139:other:with:colons\",\"bare139\",\"z139:last\"],\"limits\":{\"key141\":142.123456789,\"key143\":144.123456789},\"snapshotter\":\"s146\"},{\"dockerID\":\"s148 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"dockerName\":\"s150\",\"name\":\"s152 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"image\":\"s154\",\"imageID\":\"s156 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"createdAt\":1700000158,\"startedAt\":-160,\"finishedAt\":1700000162,\"desiredStatus\":\"s164 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"knownStatus\":\"s166\",\"exitCode\":{\"exitCode\":169},\"type\":\"s171\",\"logDriver\":\"s173\",\"logOptions\":{\"key175\":\"s176 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"key177\":\"s178\"},\"containerArn\":\"s180 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ports\":[{\"containerPort\":183,\"protocol\":\"s185\",\"hostIp\":\"s187\",\"hostPort\":189},{\"containerPort\":191,\"protocol\":\"s193\",\"hostIp\":\"s195\",\"hostPort\":197}],\"networks\":[{\"networkMode\":\"s200 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ipv4Addresses\":[\"k202:v202\",\"k202:other:with:colons\",\"bare202\",\"z202:last\"],\"ipv6Addresses\":[\"k204:v204\",\"k204:other:with:colons\",\"bare204\",\"z204:last\"]},{\"networkMode\":\"s206\",\"ipv4Addresses\":[\"k208:v208\",\"k208:other:with:colons\",\"bare208\",\"z208:last\"],\"ipv6Addresses\":[\"k210:v210\",\"k210:other:with:colons\",\"bare210\",\"z210:last\"]}],\"volumes\":[{\"dockerName\":\"s213\",\"source\":\"s215\",\"destination\":\"s217\"},{\"dockerName\":\"s219\",\"source\":\"s221\",\"destination\":\"s223\"}],\"health\":{\"status\":\"s226\",\"since\":1700000228,\"exitCode\":{\"exitCode\":231},\"output\":\"s233\"},\"labels\":[\"k235:v235\",\"k235:other:with:colons\",\"bare235\",\"z235:last\"],\"limits\":{\"key237\":238.123456789,\"key239\":240.123456789},\"snapshotter\":\"s242\"}]",
+     "DaemonName": "s269",
+     "DesiredStatus": "s21",
+     "ECSTags": {
+      "bare246": [
+       ""
+      ],
+      "k246": [
+       "v246",
+       "other:with:colons"
+      ],
+      "z246": [
+       "last"
+      ]
+     },
+     "Encoding": "protobuf",
+     "Envelope": "{\"awsAccountID\":9007199254740995,\"clusterName\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"clusterId\":\"s6\",\"region\":\"s8 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":10,\"groupSize\":-12,\"tags\":[\"k527:v527\",\"k527:other:with:colons\",\"bare527\",\"z527:last\"],\"host\":{\"id\":9007199254741523,\"orgId\":-532,\"name\":\"s534\",\"allTags\":[\"k536:v536\",\"k536:other:with:colons\",\"bare536\",\"z536:last\"],\"numCpus\":538,\"totalMemory\":9007199254741533,\"tagIndex\":542,\"tagsModified\":1700000544},\"hostName\":\"s546\",\"info\":{\"uuid\":\"s549\",\"os\":{\"name\":\"s552 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"platform\":\"s554\",\"family\":\"s556 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"version\":\"s558\",\"kernelVersion\":\"s560 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"cpus\":[{\"number\":563,\"vendor\":\"s565\",\"family\":\"s567\",\"model\":\"s569\",\"physicalId\":\"s571\",\"coreId\":\"s573\",\"cores\":575,\"mhz\":1700000577,\"cacheSize\":579},{\"number\":581,\"vendor\":\"s583\",\"family\":\"s585\",\"model\":\"s587\",\"physicalId\":\"s589\",\"coreId\":\"s591\",\"cores\":593,\"mhz\":-595,\"cacheSize\":597}],\"totalMemory\":9007199254741592},\"agentVersion\":{\"Major\":1700000602,\"Minor\":1700000604,\"Patch\":4102445406,\"Pre\":\"s608 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Meta\":\"s610\",\"Commit\":\"s612 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}}",
+     "EnvelopeTags": {
+      "bare527": [
+       ""
+      ],
+      "k527": [
+       "v527",
+       "other:with:colons"
+      ],
+      "z527": [
+       "last"
+      ]
+     },
+     "EphemeralStorageMetrics": {
+      "key36": 1700000037,
+      "key38": 1700000039
+     },
+     "ExecutionStoppedAt": "2023-11-14T22:14:09Z",
+     "Family": "s25",
+     "GroupID": 10,
+     "GroupSize": -12,
+     "HeaderTimestamp": 1700000123,
+     "HostName": "s546",
+     "KnownStatus": "s23",
+     "LaunchType": "s19",
+     "Limits": {
+      "key31": 32.123456789,
+      "key33": 34.123456789
+     },
+     "OrgID": 4242,
+     "PullStartedAt": null,
+     "PullStoppedAt": "2023-11-14T22:14:07Z",
+     "Region": "s8 <&> \"é\"\n",
+     "ResourceVersion": "s17",
+     "ServiceName": "s41",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare244": [
+       ""
+      ],
+      "k244": [
+       "v244",
+       "other:with:colons"
+      ],
+      "z244": [
+       "last"
+      ]
+     },
+     "TaskHost": "{\"id\":9007199254741244,\"orgId\":253,\"name\":\"s255\",\"allTags\":[\"k257:v257\",\"k257:other:with:colons\",\"bare257\",\"z257:last\"],\"numCpus\":259,\"totalMemory\":9007199254741254,\"tagIndex\":263,\"tagsModified\":-265}",
+     "TaskHostName": "s255",
+     "TenantID": "test",
+     "Version": "s27",
+     "VpcID": "s43"
+    },
+    {
+     "ARN": "s271",
+     "AWSAccountID": 9007199254740995,
+     "AgentVersion": "1700000602.1700000604.4102445406-s608 <&> \"é\"\n",
+     "AvailabilityZone": "s285",
+     "ClusterID": "s6",
+     "ClusterName": "s4 <&> \"é\"\n",
+     "CollectedAt": "2026-10-01T16:08:42.494334673Z",
+     "ContainerCount": 2,
+     "ContainerInstanceARN": "s523",
+     "ContainerInstanceTags": {
+      "bare504": [
+       ""
+      ],
+      "k504": [
+       "v504",
+       "other:with:colons"
+      ],
+      "z504": [
+       "last"
+      ]
+     },
+     "Containers": "[{\"dockerID\":\"s308 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"dockerName\":\"s310\",\"name\":\"s312 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"image\":\"s314\",\"imageID\":\"s316 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"createdAt\":1700000318,\"startedAt\":-320,\"finishedAt\":1700000322,\"desiredStatus\":\"s324 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"knownStatus\":\"s326\",\"exitCode\":{\"exitCode\":329},\"type\":\"s331\",\"logDriver\":\"s333\",\"logOptions\":{\"key335\":\"s336 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"key337\":\"s338\"},\"containerArn\":\"s340 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ports\":[{\"containerPort\":343,\"protocol\":\"s345\",\"hostIp\":\"s347\",\"hostPort\":349},{\"containerPort\":351,\"protocol\":\"s353\",\"hostIp\":\"s355\",\"hostPort\":357}],\"networks\":[{\"networkMode\":\"s360 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ipv4Addresses\":[\"k362:v362\",\"k362:other:with:colons\",\"bare362\",\"z362:last\"],\"ipv6Addresses\":[\"k364:v364\",\"k364:other:with:colons\",\"bare364\",\"z364:last\"]},{\"networkMode\":\"s366\",\"ipv4Addresses\":[\"k368:v368\",\"k368:other:with:colons\",\"bare368\",\"z368:last\"],\"ipv6Addresses\":[\"k370:v370\",\"k370:other:with:colons\",\"bare370\",\"z370:last\"]}],\"volumes\":[{\"dockerName\":\"s373\",\"source\":\"s375\",\"destination\":\"s377\"},{\"dockerName\":\"s379\",\"source\":\"s381\",\"destination\":\"s383\"}],\"health\":{\"status\":\"s386\",\"since\":1700000388,\"exitCode\":{\"exitCode\":391},\"output\":\"s393\"},\"labels\":[\"k395:v395\",\"k395:other:with:colons\",\"bare395\",\"z395:last\"],\"limits\":{\"key397\":398.123456789,\"key399\":400.123456789},\"snapshotter\":\"s402\"},{\"dockerID\":\"s404 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"dockerName\":\"s406\",\"name\":\"s408 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"image\":\"s410\",\"imageID\":\"s412 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"createdAt\":1700000414,\"startedAt\":4102445216,\"finishedAt\":1700000418,\"desiredStatus\":\"s420 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"knownStatus\":\"s422\",\"exitCode\":{\"exitCode\":425},\"type\":\"s427\",\"logDriver\":\"s429\",\"logOptions\":{\"key431\":\"s432 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"key433\":\"s434\"},\"containerArn\":\"s436 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ports\":[{\"containerPort\":439,\"protocol\":\"s441\",\"hostIp\":\"s443\",\"hostPort\":445},{\"containerPort\":447,\"protocol\":\"s449\",\"hostIp\":\"s451\",\"hostPort\":453}],\"networks\":[{\"networkMode\":\"s456 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ipv4Addresses\":[\"k458:v458\",\"k458:other:with:colons\",\"bare458\",\"z458:last\"],\"ipv6Addresses\":[\"k460:v460\",\"k460:other:with:colons\",\"bare460\",\"z460:last\"]},{\"networkMode\":\"s462\",\"ipv4Addresses\":[\"k464:v464\",\"k464:other:with:colons\",\"bare464\",\"z464:last\"],\"ipv6Addresses\":[\"k466:v466\",\"k466:other:with:colons\",\"bare466\",\"z466:last\"]}],\"volumes\":[{\"dockerName\":\"s469\",\"source\":\"s471\",\"destination\":\"s473\"},{\"dockerName\":\"s475\",\"source\":\"s477\",\"destination\":\"s479\"}],\"health\":{\"status\":\"s482\",\"since\":1700000484,\"exitCode\":{\"exitCode\":487},\"output\":\"s489\"},\"labels\":[\"k491:v491\",\"k491:other:with:colons\",\"bare491\",\"z491:last\"],\"limits\":{\"key493\":494.123456789,\"key495\":496.123456789},\"snapshotter\":\"s498\"}]",
+     "DaemonName": "s525",
+     "DesiredStatus": "s277",
+     "ECSTags": {
+      "bare502": [
+       ""
+      ],
+      "k502": [
+       "v502",
+       "other:with:colons"
+      ],
+      "z502": [
+       "last"
+      ]
+     },
+     "Encoding": "protobuf",
+     "Envelope": "{\"awsAccountID\":9007199254740995,\"clusterName\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"clusterId\":\"s6\",\"region\":\"s8 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":10,\"groupSize\":-12,\"tags\":[\"k527:v527\",\"k527:other:with:colons\",\"bare527\",\"z527:last\"],\"host\":{\"id\":9007199254741523,\"orgId\":-532,\"name\":\"s534\",\"allTags\":[\"k536:v536\",\"k536:other:with:colons\",\"bare536\",\"z536:last\"],\"numCpus\":538,\"totalMemory\":9007199254741533,\"tagIndex\":542,\"tagsModified\":1700000544},\"hostName\":\"s546\",\"info\":{\"uuid\":\"s549\",\"os\":{\"name\":\"s552 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"platform\":\"s554\",\"family\":\"s556 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"version\":\"s558\",\"kernelVersion\":\"s560 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"cpus\":[{\"number\":563,\"vendor\":\"s565\",\"family\":\"s567\",\"model\":\"s569\",\"physicalId\":\"s571\",\"coreId\":\"s573\",\"cores\":575,\"mhz\":1700000577,\"cacheSize\":579},{\"number\":581,\"vendor\":\"s583\",\"family\":\"s585\",\"model\":\"s587\",\"physicalId\":\"s589\",\"coreId\":\"s591\",\"cores\":593,\"mhz\":-595,\"cacheSize\":597}],\"totalMemory\":9007199254741592},\"agentVersion\":{\"Major\":1700000602,\"Minor\":1700000604,\"Patch\":4102445406,\"Pre\":\"s608 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Meta\":\"s610\",\"Commit\":\"s612 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}}",
+     "EnvelopeTags": {
+      "bare527": [
+       ""
+      ],
+      "k527": [
+       "v527",
+       "other:with:colons"
+      ],
+      "z527": [
+       "last"
+      ]
+     },
+     "EphemeralStorageMetrics": {
+      "key292": 1700000293,
+      "key294": -295
+     },
+     "ExecutionStoppedAt": null,
+     "Family": "s281",
+     "GroupID": 10,
+     "GroupSize": -12,
+     "HeaderTimestamp": 1700000123,
+     "HostName": "s546",
+     "KnownStatus": "s279",
+     "LaunchType": "s275",
+     "Limits": {
+      "key287": 288.123456789,
+      "key289": 290.123456789
+     },
+     "OrgID": 4242,
+     "PullStartedAt": "2100-01-01T00:05:01Z",
+     "PullStoppedAt": "2023-11-14T22:18:23Z",
+     "Region": "s8 <&> \"é\"\n",
+     "ResourceVersion": "s273",
+     "ServiceName": "s297",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare500": [
+       ""
+      ],
+      "k500": [
+       "v500",
+       "other:with:colons"
+      ],
+      "z500": [
+       "last"
+      ]
+     },
+     "TaskHost": "{\"id\":9007199254741500,\"orgId\":509,\"name\":\"s511\",\"allTags\":[\"k513:v513\",\"k513:other:with:colons\",\"bare513\",\"z513:last\"],\"numCpus\":515,\"totalMemory\":9007199254741510,\"tagIndex\":519,\"tagsModified\":4102445321}",
+     "TaskHostName": "s511",
+     "TenantID": "test",
+     "Version": "s283",
+     "VpcID": "s299"
+    }
+   ],
+   "to": "storage_ecs_tasks",
+   "type": "storage.WriteECSTasks"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorECSTask_0",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/CollectedAt",
+  "/sends/0/rows/1/CollectedAt"
+ ]
+}

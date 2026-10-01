@@ -70,5 +70,74 @@
       "/sends/0/args/0/13"
     ],
     "why": "The note quotes encoding/json's type error, which names a Go type ([]jsontext.Value); the F# note says the same thing in its own words."
+  },
+  "TestPortProbeKubeActions__body_7/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the decoder's error message, and the .NET JSON and protobuf libraries word theirs differently from Go's."
+  },
+  "TestPortProbeKubeActions__body_4/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the decoder's error message, and the .NET JSON and protobuf libraries word theirs differently from Go's."
+  },
+  "TestPortProbeKubeActions__body_0/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13",
+      "/sends/1/rows/0/Note",
+      "/sends/1/args/0/13",
+      "/sends/2/rows/0/Note",
+      "/sends/2/args/0/13",
+      "/sends/3/rows/0/Note",
+      "/sends/3/args/0/13",
+      "/sends/4/rows/0/Note",
+      "/sends/4/args/0/13",
+      "/sends/5/rows/0/Note",
+      "/sends/5/args/0/13",
+      "/sends/6/rows/0/Note",
+      "/sends/6/args/0/13",
+      "/sends/7/rows/0/Note",
+      "/sends/7/args/0/13",
+      "/sends/8/rows/0/Note",
+      "/sends/8/args/0/13",
+      "/sends/9/rows/0/Note",
+      "/sends/9/args/0/13",
+      "/sends/10/rows/0/Note",
+      "/sends/10/args/0/13"
+    ],
+    "why": "The note quotes the decoder's error message, and the .NET JSON and protobuf libraries word theirs differently from Go's."
+  },
+  "TestPortProbeKubeActions__body_8/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the decoder's error message, and the .NET JSON and protobuf libraries word theirs differently from Go's."
+  },
+  "TestPortProbeOrch__bad_frames/005": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the decoder's error message, and the .NET JSON and protobuf libraries word theirs differently from Go's."
+  },
+  "TestPortProbeKubeActions__body_3/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the decoder's error message, and the .NET JSON and protobuf libraries word theirs differently from Go's."
+  },
+  "TestPortProbeContainers__lifecycle_on_images/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the decoder's error message, and the .NET JSON and protobuf libraries word theirs differently from Go's."
   }
 }

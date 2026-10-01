@@ -1,0 +1,609 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.507442903Z",
+ "request": {
+  "body_b64": "CgJ2ORIGbm9kZS0yGroCCgpzaGEyNTY6aWQxEghzaG9wL2FwcBoHZ2hjci5pbyIDYXBwKgpzaG9wL2FwcDoxKg9zaG9wL2FwcDpsYXRlc3QyC3NoYTI1NjpkaWcxOLW48P4tQhRzaG9wL2FwcEBzaGEyNTY6ZGlnMUoSCgVsaW51eBICMTIaBWFybTY0UkgKCWh0dHBzOi8vYQoJaHR0cHM6Ly9iEgNtdDEaCXNoYTI1NjpsMSBkKh4KDAiAoPj6BRD/k+vcAxIFUlVOIHgaAmNpIgFjKAFSFhoJc2hhMjU2OmwyIPv//////////wFSExoJc2hhMjU2OmwzIAcqBAoCEAVSFSoTChEIgKD4+gUQ////////////AVoLCIDiz6oGEJWa7zpiCGVudjpwcm9kYgdlbnY6ZGV2YgR0ZWFtagYIgeLPqgYaQgoOc2hhMjU2OmlkLW9ubHk49///////////AVILIPv//////////wFSAiADWgsI////////////AWoHCICD0f+vBxoNEgtubyBpZGVudGl0eRoUEhJubyBpZGVudGl0eSBlaXRoZXIaIDIPc2hhMjU2OmRpZy1vbmx5Wg0I/4LR/68HEP+T69wDIgA=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/contimage"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeContainers"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint32",
+     "float64",
+     "map[string][]string",
+     "uint32",
+     "uint32",
+     "uint32",
+     "map[string]string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.507439617Z",
+     "ninjacat.intake.images.skipped",
+     "node-2",
+     "COUNT",
+     "ninjacat",
+     "",
+     0,
+     2,
+     {
+      "reason": [
+       "no_identity"
+      ]
+     },
+     0,
+     0,
+     0,
+     {},
+     {}
+    ]
+   ],
+   "insert": "INSERT INTO metrics\n\t\t\t(tenant_id, timestamp, metric, host, metric_type, source_type, unit, interval, value, tags,\n\t\t\t origin_product, origin_category, origin_service, resources, extra)",
+   "rows": [
+    {
+     "Extra": {},
+     "Host": "node-2",
+     "Interval": 0,
+     "Metric": "ninjacat.intake.images.skipped",
+     "MetricType": "COUNT",
+     "OriginCategory": 0,
+     "OriginProduct": 0,
+     "OriginService": 0,
+     "Resources": {},
+     "SourceType": "ninjacat",
+     "Tags": {
+      "reason": [
+       "no_identity"
+      ]
+     },
+     "TenantID": "test",
+     "Timestamp": "2026-10-01T16:08:42.507439617Z",
+     "Unit": "",
+     "Value": 2
+    }
+   ],
+   "to": "storage_metrics",
+   "type": "storage.WriteMetrics"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "[]string",
+     "uint64",
+     "string",
+     "string",
+     "string",
+     "uint32",
+     "uint64",
+     "*time.Time",
+     "*time.Time",
+     "map[string][]string",
+     "string",
+     "*string",
+     "[]string",
+     "[]string",
+     "[]int64",
+     "[][]string",
+     "[]*time.Time",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "uint8",
+     "uint8"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "[]string",
+     "uint64",
+     "string",
+     "string",
+     "string",
+     "uint32",
+     "uint64",
+     "*time.Time",
+     "*time.Time",
+     "map[string][]string",
+     "string",
+     "*string",
+     "[]string",
+     "[]string",
+     "[]int64",
+     "[][]string",
+     "[]*time.Time",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "uint8",
+     "uint8"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "[]string",
+     "uint64",
+     "string",
+     "string",
+     "string",
+     "uint32",
+     "uint64",
+     "*time.Time",
+     "*time.Time",
+     "map[string][]string",
+     "string",
+     "*string",
+     "[]string",
+     "[]string",
+     "[]int64",
+     "[][]string",
+     "[]*time.Time",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "uint8",
+     "uint8"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.507434127Z",
+     "node-2",
+     "sha256:dig1",
+     "digest",
+     "sha256:id1",
+     "sha256:dig1",
+     "shop/app",
+     "app",
+     "ghcr.io",
+     [
+      "shop/app:1",
+      "shop/app:latest"
+     ],
+     [
+      "shop/app@sha256:dig1"
+     ],
+     12345678901,
+     "linux",
+     "12",
+     "arm64",
+     4,
+     102,
+     "2023-11-14T22:13:20.123456789Z",
+     "2023-11-14T22:13:21Z",
+     {
+      "env": [
+       "prod",
+       "dev"
+      ],
+      "team": [
+       ""
+      ]
+     },
+     "v9",
+     "",
+     [
+      "mt1",
+      "",
+      "",
+      ""
+     ],
+     [
+      "sha256:l1",
+      "sha256:l2",
+      "sha256:l3",
+      ""
+     ],
+     [
+      100,
+      -5,
+      7,
+      0
+     ],
+     [
+      [
+       "https://a",
+       "https://b"
+      ],
+      [],
+      [],
+      []
+     ],
+     [
+      "2020-09-13T12:26:40.999999999Z",
+      null,
+      null,
+      null
+     ],
+     [
+      "RUN x",
+      "",
+      "",
+      ""
+     ],
+     [
+      "ci",
+      "",
+      "",
+      ""
+     ],
+     [
+      "c",
+      "",
+      "",
+      ""
+     ],
+     "\u0001\u0000\u0000\u0000",
+     0,
+     1
+    ],
+    [
+     "test",
+     "2026-10-01T16:08:42.507434127Z",
+     "node-2",
+     "sha256:id-only",
+     "image_id",
+     "sha256:id-only",
+     "",
+     "",
+     "",
+     "",
+     [],
+     [],
+     0,
+     "",
+     "",
+     "",
+     2,
+     0,
+     null,
+     null,
+     {},
+     "v9",
+     "",
+     [
+      "",
+      ""
+     ],
+     [
+      "",
+      ""
+     ],
+     [
+      -5,
+      3
+     ],
+     [
+      [],
+      []
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      "",
+      ""
+     ],
+     [
+      "",
+      ""
+     ],
+     [
+      "",
+      ""
+     ],
+     "\u0000\u0000",
+     1,
+     1
+    ],
+    [
+     "test",
+     "2026-10-01T16:08:42.507434127Z",
+     "node-2",
+     "sha256:dig-only",
+     "digest",
+     "",
+     "sha256:dig-only",
+     "",
+     "",
+     "",
+     [],
+     [],
+     0,
+     "",
+     "",
+     "",
+     0,
+     0,
+     "9999-12-31T23:59:59.999999999Z",
+     null,
+     {},
+     "v9",
+     "",
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     0,
+     0
+    ]
+   ],
+   "insert": "INSERT INTO container_images\n\t\t\t(tenant_id, collected_at, host, image_key, identity_source,\n\t\t\t image_id, digest, name, short_name,\n\t\t\t registry, repo_tags, repo_digests, size_bytes, os_name, os_version,\n\t\t\t architecture, layer_count, layer_bytes, built_at, published_at, dd_tags,\n\t\t\t payload_version, source,\n\t\t\t layer_media_types, layer_digests, layer_sizes, layer_urls,\n\t\t\t layer_history_created, layer_history_created_by, layer_history_author,\n\t\t\t layer_history_comment, layer_history_empty_layer,\n\t\t\t size_negative, layer_size_negative)",
+   "rows": [
+    {
+     "Architecture": "arm64",
+     "BuiltAt": "2023-11-14T22:13:20.123456789Z",
+     "CollectedAt": "2026-10-01T16:08:42.507434127Z",
+     "DDTags": {
+      "env": [
+       "prod",
+       "dev"
+      ],
+      "team": [
+       ""
+      ]
+     },
+     "Digest": "sha256:dig1",
+     "Host": "node-2",
+     "IdentitySource": "digest",
+     "ImageID": "sha256:id1",
+     "ImageKey": "sha256:dig1",
+     "LayerBytes": 102,
+     "LayerCount": 4,
+     "LayerDigests": [
+      "sha256:l1",
+      "sha256:l2",
+      "sha256:l3",
+      ""
+     ],
+     "LayerHistoryAuthor": [
+      "ci",
+      "",
+      "",
+      ""
+     ],
+     "LayerHistoryComment": [
+      "c",
+      "",
+      "",
+      ""
+     ],
+     "LayerHistoryCreated": [
+      "2020-09-13T12:26:40.999999999Z",
+      null,
+      null,
+      null
+     ],
+     "LayerHistoryCreatedBy": [
+      "RUN x",
+      "",
+      "",
+      ""
+     ],
+     "LayerHistoryEmptyLayer": "\u0001\u0000\u0000\u0000",
+     "LayerMediaTypes": [
+      "mt1",
+      "",
+      "",
+      ""
+     ],
+     "LayerSizeNegative": 1,
+     "LayerSizes": [
+      100,
+      -5,
+      7,
+      0
+     ],
+     "LayerURLs": [
+      [
+       "https://a",
+       "https://b"
+      ],
+      [],
+      [],
+      []
+     ],
+     "Name": "shop/app",
+     "OSName": "linux",
+     "OSVersion": "12",
+     "PayloadVersion": "v9",
+     "PublishedAt": "2023-11-14T22:13:21Z",
+     "Registry": "ghcr.io",
+     "RepoDigests": [
+      "shop/app@sha256:dig1"
+     ],
+     "RepoTags": [
+      "shop/app:1",
+      "shop/app:latest"
+     ],
+     "ShortName": "app",
+     "SizeBytes": 12345678901,
+     "SizeNegative": 0,
+     "Source": "",
+     "TenantID": "test"
+    },
+    {
+     "Architecture": "",
+     "BuiltAt": null,
+     "CollectedAt": "2026-10-01T16:08:42.507434127Z",
+     "DDTags": {},
+     "Digest": "",
+     "Host": "node-2",
+     "IdentitySource": "image_id",
+     "ImageID": "sha256:id-only",
+     "ImageKey": "sha256:id-only",
+     "LayerBytes": 0,
+     "LayerCount": 2,
+     "LayerDigests": [
+      "",
+      ""
+     ],
+     "LayerHistoryAuthor": [
+      "",
+      ""
+     ],
+     "LayerHistoryComment": [
+      "",
+      ""
+     ],
+     "LayerHistoryCreated": [
+      null,
+      null
+     ],
+     "LayerHistoryCreatedBy": [
+      "",
+      ""
+     ],
+     "LayerHistoryEmptyLayer": "\u0000\u0000",
+     "LayerMediaTypes": [
+      "",
+      ""
+     ],
+     "LayerSizeNegative": 1,
+     "LayerSizes": [
+      -5,
+      3
+     ],
+     "LayerURLs": [
+      [],
+      []
+     ],
+     "Name": "",
+     "OSName": "",
+     "OSVersion": "",
+     "PayloadVersion": "v9",
+     "PublishedAt": null,
+     "Registry": "",
+     "RepoDigests": [],
+     "RepoTags": [],
+     "ShortName": "",
+     "SizeBytes": 0,
+     "SizeNegative": 1,
+     "Source": "",
+     "TenantID": "test"
+    },
+    {
+     "Architecture": "",
+     "BuiltAt": "9999-12-31T23:59:59.999999999Z",
+     "CollectedAt": "2026-10-01T16:08:42.507434127Z",
+     "DDTags": {},
+     "Digest": "sha256:dig-only",
+     "Host": "node-2",
+     "IdentitySource": "digest",
+     "ImageID": "",
+     "ImageKey": "sha256:dig-only",
+     "LayerBytes": 0,
+     "LayerCount": 0,
+     "LayerDigests": [],
+     "LayerHistoryAuthor": [],
+     "LayerHistoryComment": [],
+     "LayerHistoryCreated": [],
+     "LayerHistoryCreatedBy": [],
+     "LayerHistoryEmptyLayer": "",
+     "LayerMediaTypes": [],
+     "LayerSizeNegative": 0,
+     "LayerSizes": [],
+     "LayerURLs": [],
+     "Name": "",
+     "OSName": "",
+     "OSVersion": "",
+     "PayloadVersion": "v9",
+     "PublishedAt": null,
+     "Registry": "",
+     "RepoDigests": [],
+     "RepoTags": [],
+     "ShortName": "",
+     "SizeBytes": 0,
+     "SizeNegative": 0,
+     "Source": "",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_container_images",
+   "type": "storage.WriteContainerImages"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeContainers/images",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/Timestamp",
+  "/sends/1/args/0/1",
+  "/sends/1/args/1/1",
+  "/sends/1/args/2/1",
+  "/sends/1/rows/0/CollectedAt",
+  "/sends/1/rows/1/CollectedAt",
+  "/sends/1/rows/2/CollectedAt"
+ ]
+}

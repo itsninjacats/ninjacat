@@ -1,0 +1,813 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.478566216Z",
+ "request": {
+  "body_b64": "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",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.478496377Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     "VerticalPodAutoscaler",
+     "s13",
+     "",
+     "",
+     "",
+     "",
+     "s23",
+     "",
+     "",
+     "",
+     0,
+     0,
+     0,
+     {},
+     {
+      "bare19": "",
+      "k19": "other:with:colons",
+      "z19": "last"
+     },
+     {},
+     {
+      "bare145": [
+       ""
+      ],
+      "bare286": [
+       ""
+      ],
+      "k145": [
+       "v145",
+       "other:with:colons"
+      ],
+      "k286": [
+       "v286",
+       "other:with:colons"
+      ],
+      "z145": [
+       "last"
+      ],
+      "z286": [
+       "last"
+      ]
+     },
+     "1700000289.0.1700000292",
+     6,
+     -8,
+     4242,
+     9,
+     null,
+     "protobuf",
+     "2100-01-01T00:00:16Z",
+     null,
+     null,
+     [
+      "k34:v34",
+      "k34:other:with:colons",
+      "bare34",
+      "z34:last"
+     ],
+     [
+      "",
+      "s31"
+     ],
+     [
+      "s23",
+      "s28 <&> \"é\"\n"
+     ],
+     [
+      "s25",
+      ""
+     ],
+     [
+      "s128 <&> \"é\"\n",
+      "s136 <&> \"é\"\n"
+     ],
+     [
+      "s130",
+      ""
+     ],
+     [
+      "s133",
+      ""
+     ],
+     [
+      "",
+      "s142"
+     ],
+     [
+      null,
+      "2023-11-14T22:15:39Z"
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ],
+     "",
+     "",
+     {},
+     "{\"metadata\":{\"namespace\":\"s13\",\"creationTimestamp\":4102444816,\"labels\":[\"k19:v19\",\"k19:other:with:colons\",\"bare19\",\"z19:last\"],\"ownerReferences\":[{\"name\":\"s23\",\"uid\":\"s25\"},{\"name\":\"s28 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"kind\":\"s31\"}],\"finalizers\":[\"k34:v34\",\"k34:other:with:colons\",\"bare34\",\"z34:last\"]},\"spec\":{\"target\":{\"name\":\"s40 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"resourcePolicies\":[{\"containerName\":\"s44 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"mode\":\"s46\",\"maxAllowed\":{\"metricValues\":{\"key50\":51.123456789,\"key52\":53.123456789}},\"controlledResource\":[\"k55:v55\",\"k55:other:with:colons\",\"bare55\",\"z55:last\"]},{\"containerName\":\"s58\",\"minAllowed\":{\"metricValues\":{\"key62\":63.123456789,\"key64\":65.123456789}},\"maxAllowed\":{\"metricValues\":{\"key68\":69.123456789,\"key70\":71.123456789}},\"controlledResource\":[\"k73:v73\",\"k73:other:with:colons\",\"bare73\",\"z73:last\"]}]},\"status\":{\"LastRecommendedDate\":1700000077,\"recommendations\":[{\"containerName\":\"s80 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"target\":{\"metricValues\":{\"key83\":84.123456789,\"key85\":86.123456789}},\"lowerBound\":{\"metricValues\":{\"key89\":90.123456789,\"key91\":92.123456789}},\"upperBound\":{\"metricValues\":{\"key95\":96.123456789,\"key97\":98.123456789}},\"uncappedTarget\":{\"metricValues\":{\"key101\":102.123456789,\"key103\":104.123456789}}},{\"containerName\":\"s106\",\"lowerBound\":{\"metricValues\":{\"key110\":111.123456789,\"key112\":113.123456789}},\"upperBound\":{\"metricValues\":{\"key116\":117.123456789,\"key118\":119.123456789}},\"uncappedTarget\":{\"metricValues\":{\"key122\":123.123456789,\"key124\":125.123456789}}}],\"conditions\":[{\"ConditionType\":\"s128 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ConditionStatus\":\"s130\",\"Reason\":\"s133\"},{\"ConditionType\":\"s136 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"LastTransitionTime\":1700000139,\"Message\":\"s142\"}]},\"tags\":[\"k145:v145\",\"k145:other:with:colons\",\"bare145\",\"z145:last\"]}",
+     "",
+     "",
+     "",
+     "",
+     null,
+     null,
+     "",
+     [],
+     [],
+     "",
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     [],
+     0,
+     "",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k286:v286\",\"k286:other:with:colons\",\"bare286\",\"z286:last\"],\"agentVersion\":{\"Major\":1700000289,\"Patch\":1700000292,\"Meta\":\"s295\"}}"
+    ],
+    [
+     "test",
+     "2026-10-01T16:08:42.478496377Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     "VerticalPodAutoscaler",
+     "s151",
+     "s149",
+     "",
+     "",
+     "",
+     "s161",
+     "",
+     "",
+     "",
+     0,
+     0,
+     0,
+     {},
+     {
+      "bare157": "",
+      "k157": "other:with:colons",
+      "z157": "last"
+     },
+     {},
+     {
+      "bare283": [
+       ""
+      ],
+      "bare286": [
+       ""
+      ],
+      "k283": [
+       "v283",
+       "other:with:colons"
+      ],
+      "k286": [
+       "v286",
+       "other:with:colons"
+      ],
+      "z283": [
+       "last"
+      ],
+      "z286": [
+       "last"
+      ]
+     },
+     "1700000289.0.1700000292",
+     6,
+     -8,
+     4242,
+     9,
+     null,
+     "protobuf",
+     "2023-11-14T22:15:54Z",
+     null,
+     null,
+     [
+      "k172:v172",
+      "k172:other:with:colons",
+      "bare172",
+      "z172:last"
+     ],
+     [
+      "",
+      "s169"
+     ],
+     [
+      "s161",
+      "s166"
+     ],
+     [
+      "s163",
+      ""
+     ],
+     [
+      "s266",
+      "s274"
+     ],
+     [
+      "s268 <&> \"é\"\n",
+      ""
+     ],
+     [
+      "s271",
+      ""
+     ],
+     [
+      "",
+      "s280 <&> \"é\"\n"
+     ],
+     [
+      null,
+      "2023-11-14T22:17:57Z"
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ],
+     "",
+     "",
+     {},
+     "{\"metadata\":{\"name\":\"s149\",\"namespace\":\"s151\",\"creationTimestamp\":1700000154,\"labels\":[\"k157:v157\",\"k157:other:with:colons\",\"bare157\",\"z157:last\"],\"ownerReferences\":[{\"name\":\"s161\",\"uid\":\"s163\"},{\"name\":\"s166\",\"kind\":\"s169\"}],\"finalizers\":[\"k172:v172\",\"k172:other:with:colons\",\"bare172\",\"z172:last\"]},\"spec\":{\"target\":{\"name\":\"s178\"},\"resourcePolicies\":[{\"containerName\":\"s182\",\"mode\":\"s184 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"maxAllowed\":{\"metricValues\":{\"key188\":189.123456789,\"key190\":191.123456789}},\"controlledResource\":[\"k193:v193\",\"k193:other:with:colons\",\"bare193\",\"z193:last\"]},{\"containerName\":\"s196 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"minAllowed\":{\"metricValues\":{\"key200\":201.123456789,\"key202\":203.123456789}},\"maxAllowed\":{\"metricValues\":{\"key206\":207.123456789,\"key208\":209.123456789}},\"controlledResource\":[\"k211:v211\",\"k211:other:with:colons\",\"bare211\",\"z211:last\"]}]},\"status\":{\"LastRecommendedDate\":-215,\"recommendations\":[{\"containerName\":\"s218\",\"target\":{\"metricValues\":{\"key221\":222.123456789,\"key223\":224.123456789}},\"lowerBound\":{\"metricValues\":{\"key227\":228.123456789,\"key229\":230.123456789}},\"upperBound\":{\"metricValues\":{\"key233\":234.123456789,\"key235\":236.123456789}},\"uncappedTarget\":{\"metricValues\":{\"key239\":240.123456789,\"key241\":242.123456789}}},{\"containerName\":\"s244 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"lowerBound\":{\"metricValues\":{\"key248\":249.123456789,\"key250\":251.123456789}},\"upperBound\":{\"metricValues\":{\"key254\":255.123456789,\"key256\":257.123456789}},\"uncappedTarget\":{\"metricValues\":{\"key260\":261.123456789,\"key262\":263.123456789}}}],\"conditions\":[{\"ConditionType\":\"s266\",\"ConditionStatus\":\"s268 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Reason\":\"s271\"},{\"ConditionType\":\"s274\",\"LastTransitionTime\":1700000277,\"Message\":\"s280 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}]},\"tags\":[\"k283:v283\",\"k283:other:with:colons\",\"bare283\",\"z283:last\"]}",
+     "",
+     "",
+     "",
+     "",
+     null,
+     null,
+     "",
+     [],
+     [],
+     "",
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     [],
+     0,
+     "",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k286:v286\",\"k286:other:with:colons\",\"bare286\",\"z286:last\"],\"agentVersion\":{\"Major\":1700000289,\"Patch\":1700000292,\"Meta\":\"s295\"}}"
+    ]
+   ],
+   "insert": "INSERT INTO k8s_resources\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,\n\t\t\t uid, resource_version, owner_kind, owner_name, node_name, phase, status,\n\t\t\t ready, desired, available, counts, labels, annotations, tags,\n\t\t\t agent_version, group_id, group_size,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t creation_timestamp, deletion_timestamp, deletion_grace_period_seconds,\n\t\t\t finalizers, owner_kinds, owner_names, owner_uids,\n\t\t\t condition_types, condition_statuses, condition_reasons, condition_messages,\n\t\t\t condition_last_transition, condition_last_update, condition_last_probe,\n\t\t\t condition_message, resource_requirements, metrics, object,\n\t\t\t pod_ip, nominated_node_name, qos_class, priority_class,\n\t\t\t start_time, scheduled_time, host_name,\n\t\t\t container_names, container_ids, container_ready, container_restarts,\n\t\t\t container_states, container_messages, container_images,\n\t\t\t container_image_ids, container_is_init,\n\t\t\t pod_cidr, pod_cidrs, unschedulable, taints, provider_id, node_roles,\n\t\t\t capacity, allocatable, node_addresses,\n\t\t\t kubelet_version, kube_proxy_version, operating_system, architecture,\n\t\t\t kernel_version, os_image, container_runtime_version,\n\t\t\t service_type, cluster_ip, service_ports,\n\t\t\t rbac_rules, rbac_subjects, rbac_role_ref, envelope)",
+   "rows": [
+    {
+     "AgentVersion": "1700000289.0.1700000292",
+     "Allocatable": {},
+     "Annotations": {},
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterIP": "",
+     "ClusterName": "s2",
+     "CollectedAt": "2026-10-01T16:08:42.478496377Z",
+     "ConditionLastProbe": [
+      null,
+      null
+     ],
+     "ConditionLastTransition": [
+      null,
+      "2023-11-14T22:15:39Z"
+     ],
+     "ConditionLastUpdate": [
+      null,
+      null
+     ],
+     "ConditionMessage": "",
+     "ConditionMessages": [
+      "",
+      "s142"
+     ],
+     "ConditionReasons": [
+      "s133",
+      ""
+     ],
+     "ConditionStatuses": [
+      "s130",
+      ""
+     ],
+     "ConditionTypes": [
+      "s128 <&> \"é\"\n",
+      "s136 <&> \"é\"\n"
+     ],
+     "ContainerIDs": [],
+     "ContainerImageIDs": [],
+     "ContainerImages": [],
+     "ContainerIsInit": "",
+     "ContainerMessages": [],
+     "ContainerNames": [],
+     "ContainerReady": "",
+     "ContainerRestarts": [],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [],
+     "Counts": {},
+     "CreationTimestamp": "2100-01-01T00:00:16Z",
+     "DeletionGracePeriodSeconds": null,
+     "DeletionTimestamp": null,
+     "Desired": 0,
+     "Encoding": "protobuf",
+     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k286:v286\",\"k286:other:with:colons\",\"bare286\",\"z286:last\"],\"agentVersion\":{\"Major\":1700000289,\"Patch\":1700000292,\"Meta\":\"s295\"}}",
+     "Finalizers": [
+      "k34:v34",
+      "k34:other:with:colons",
+      "bare34",
+      "z34:last"
+     ],
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": null,
+     "HostName": "",
+     "KernelVersion": "",
+     "Kind": "VerticalPodAutoscaler",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare19": "",
+      "k19": "other:with:colons",
+      "z19": "last"
+     },
+     "Metrics": {},
+     "Name": "",
+     "Namespace": "s13",
+     "NodeAddresses": "",
+     "NodeName": "",
+     "NodeRoles": [],
+     "NominatedNodeName": "",
+     "OSImage": "",
+     "Object": "{\"metadata\":{\"namespace\":\"s13\",\"creationTimestamp\":4102444816,\"labels\":[\"k19:v19\",\"k19:other:with:colons\",\"bare19\",\"z19:last\"],\"ownerReferences\":[{\"name\":\"s23\",\"uid\":\"s25\"},{\"name\":\"s28 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"kind\":\"s31\"}],\"finalizers\":[\"k34:v34\",\"k34:other:with:colons\",\"bare34\",\"z34:last\"]},\"spec\":{\"target\":{\"name\":\"s40 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"},\"resourcePolicies\":[{\"containerName\":\"s44 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"mode\":\"s46\",\"maxAllowed\":{\"metricValues\":{\"key50\":51.123456789,\"key52\":53.123456789}},\"controlledResource\":[\"k55:v55\",\"k55:other:with:colons\",\"bare55\",\"z55:last\"]},{\"containerName\":\"s58\",\"minAllowed\":{\"metricValues\":{\"key62\":63.123456789,\"key64\":65.123456789}},\"maxAllowed\":{\"metricValues\":{\"key68\":69.123456789,\"key70\":71.123456789}},\"controlledResource\":[\"k73:v73\",\"k73:other:with:colons\",\"bare73\",\"z73:last\"]}]},\"status\":{\"LastRecommendedDate\":1700000077,\"recommendations\":[{\"containerName\":\"s80 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"target\":{\"metricValues\":{\"key83\":84.123456789,\"key85\":86.123456789}},\"lowerBound\":{\"metricValues\":{\"key89\":90.123456789,\"key91\":92.123456789}},\"upperBound\":{\"metricValues\":{\"key95\":96.123456789,\"key97\":98.123456789}},\"uncappedTarget\":{\"metricValues\":{\"key101\":102.123456789,\"key103\":104.123456789}}},{\"containerName\":\"s106\",\"lowerBound\":{\"metricValues\":{\"key110\":111.123456789,\"key112\":113.123456789}},\"upperBound\":{\"metricValues\":{\"key116\":117.123456789,\"key118\":119.123456789}},\"uncappedTarget\":{\"metricValues\":{\"key122\":123.123456789,\"key124\":125.123456789}}}],\"conditions\":[{\"ConditionType\":\"s128 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"ConditionStatus\":\"s130\",\"Reason\":\"s133\"},{\"ConditionType\":\"s136 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"LastTransitionTime\":1700000139,\"Message\":\"s142\"}]},\"tags\":[\"k145:v145\",\"k145:other:with:colons\",\"bare145\",\"z145:last\"]}",
+     "OperatingSystem": "",
+     "OrgID": 4242,
+     "OwnerKind": "",
+     "OwnerKinds": [
+      "",
+      "s31"
+     ],
+     "OwnerName": "s23",
+     "OwnerNames": [
+      "s23",
+      "s28 <&> \"é\"\n"
+     ],
+     "OwnerUIDs": [
+      "s25",
+      ""
+     ],
+     "Phase": "",
+     "PodCIDR": "",
+     "PodCIDRs": [],
+     "PodIP": "",
+     "PriorityClass": "",
+     "ProviderID": "",
+     "QOSClass": "",
+     "RBACRoleRef": "",
+     "RBACRules": "",
+     "RBACSubjects": "",
+     "Ready": 0,
+     "ResourceRequirements": "",
+     "ResourceVersion": "",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": null,
+     "Status": "",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare145": [
+       ""
+      ],
+      "bare286": [
+       ""
+      ],
+      "k145": [
+       "v145",
+       "other:with:colons"
+      ],
+      "k286": [
+       "v286",
+       "other:with:colons"
+      ],
+      "z145": [
+       "last"
+      ],
+      "z286": [
+       "last"
+      ]
+     },
+     "Taints": "",
+     "TenantID": "test",
+     "UID": "",
+     "Unschedulable": 0
+    },
+    {
+     "AgentVersion": "1700000289.0.1700000292",
+     "Allocatable": {},
+     "Annotations": {},
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterIP": "",
+     "ClusterName": "s2",
+     "CollectedAt": "2026-10-01T16:08:42.478496377Z",
+     "ConditionLastProbe": [
+      null,
+      null
+     ],
+     "ConditionLastTransition": [
+      null,
+      "2023-11-14T22:17:57Z"
+     ],
+     "ConditionLastUpdate": [
+      null,
+      null
+     ],
+     "ConditionMessage": "",
+     "ConditionMessages": [
+      "",
+      "s280 <&> \"é\"\n"
+     ],
+     "ConditionReasons": [
+      "s271",
+      ""
+     ],
+     "ConditionStatuses": [
+      "s268 <&> \"é\"\n",
+      ""
+     ],
+     "ConditionTypes": [
+      "s266",
+      "s274"
+     ],
+     "ContainerIDs": [],
+     "ContainerImageIDs": [],
+     "ContainerImages": [],
+     "ContainerIsInit": "",
+     "ContainerMessages": [],
+     "ContainerNames": [],
+     "ContainerReady": "",
+     "ContainerRestarts": [],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [],
+     "Counts": {},
+     "CreationTimestamp": "2023-11-14T22:15:54Z",
+     "DeletionGracePeriodSeconds": null,
+     "DeletionTimestamp": null,
+     "Desired": 0,
+     "Encoding": "protobuf",
+     "Envelope": "{\"clusterName\":\"s2\",\"clusterId\":\"s4 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"groupId\":6,\"groupSize\":-8,\"tags\":[\"k286:v286\",\"k286:other:with:colons\",\"bare286\",\"z286:last\"],\"agentVersion\":{\"Major\":1700000289,\"Patch\":1700000292,\"Meta\":\"s295\"}}",
+     "Finalizers": [
+      "k172:v172",
+      "k172:other:with:colons",
+      "bare172",
+      "z172:last"
+     ],
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": null,
+     "HostName": "",
+     "KernelVersion": "",
+     "Kind": "VerticalPodAutoscaler",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare157": "",
+      "k157": "other:with:colons",
+      "z157": "last"
+     },
+     "Metrics": {},
+     "Name": "s149",
+     "Namespace": "s151",
+     "NodeAddresses": "",
+     "NodeName": "",
+     "NodeRoles": [],
+     "NominatedNodeName": "",
+     "OSImage": "",
+     "Object": "{\"metadata\":{\"name\":\"s149\",\"namespace\":\"s151\",\"creationTimestamp\":1700000154,\"labels\":[\"k157:v157\",\"k157:other:with:colons\",\"bare157\",\"z157:last\"],\"ownerReferences\":[{\"name\":\"s161\",\"uid\":\"s163\"},{\"name\":\"s166\",\"kind\":\"s169\"}],\"finalizers\":[\"k172:v172\",\"k172:other:with:colons\",\"bare172\",\"z172:last\"]},\"spec\":{\"target\":{\"name\":\"s178\"},\"resourcePolicies\":[{\"containerName\":\"s182\",\"mode\":\"s184 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"maxAllowed\":{\"metricValues\":{\"key188\":189.123456789,\"key190\":191.123456789}},\"controlledResource\":[\"k193:v193\",\"k193:other:with:colons\",\"bare193\",\"z193:last\"]},{\"containerName\":\"s196 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"minAllowed\":{\"metricValues\":{\"key200\":201.123456789,\"key202\":203.123456789}},\"maxAllowed\":{\"metricValues\":{\"key206\":207.123456789,\"key208\":209.123456789}},\"controlledResource\":[\"k211:v211\",\"k211:other:with:colons\",\"bare211\",\"z211:last\"]}]},\"status\":{\"LastRecommendedDate\":-215,\"recommendations\":[{\"containerName\":\"s218\",\"target\":{\"metricValues\":{\"key221\":222.123456789,\"key223\":224.123456789}},\"lowerBound\":{\"metricValues\":{\"key227\":228.123456789,\"key229\":230.123456789}},\"upperBound\":{\"metricValues\":{\"key233\":234.123456789,\"key235\":236.123456789}},\"uncappedTarget\":{\"metricValues\":{\"key239\":240.123456789,\"key241\":242.123456789}}},{\"containerName\":\"s244 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"lowerBound\":{\"metricValues\":{\"key248\":249.123456789,\"key250\":251.123456789}},\"upperBound\":{\"metricValues\":{\"key254\":255.123456789,\"key256\":257.123456789}},\"uncappedTarget\":{\"metricValues\":{\"key260\":261.123456789,\"key262\":263.123456789}}}],\"conditions\":[{\"ConditionType\":\"s266\",\"ConditionStatus\":\"s268 \\u003c\\u0026\\u003e \\\"é\\\"\\n\",\"Reason\":\"s271\"},{\"ConditionType\":\"s274\",\"LastTransitionTime\":1700000277,\"Message\":\"s280 \\u003c\\u0026\\u003e \\\"é\\\"\\n\"}]},\"tags\":[\"k283:v283\",\"k283:other:with:colons\",\"bare283\",\"z283:last\"]}",
+     "OperatingSystem": "",
+     "OrgID": 4242,
+     "OwnerKind": "",
+     "OwnerKinds": [
+      "",
+      "s169"
+     ],
+     "OwnerName": "s161",
+     "OwnerNames": [
+      "s161",
+      "s166"
+     ],
+     "OwnerUIDs": [
+      "s163",
+      ""
+     ],
+     "Phase": "",
+     "PodCIDR": "",
+     "PodCIDRs": [],
+     "PodIP": "",
+     "PriorityClass": "",
+     "ProviderID": "",
+     "QOSClass": "",
+     "RBACRoleRef": "",
+     "RBACRules": "",
+     "RBACSubjects": "",
+     "Ready": 0,
+     "ResourceRequirements": "",
+     "ResourceVersion": "",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": null,
+     "Status": "",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare283": [
+       ""
+      ],
+      "bare286": [
+       ""
+      ],
+      "k283": [
+       "v283",
+       "other:with:colons"
+      ],
+      "k286": [
+       "v286",
+       "other:with:colons"
+      ],
+      "z283": [
+       "last"
+      ],
+      "z286": [
+       "last"
+      ]
+     },
+     "Taints": "",
+     "TenantID": "test",
+     "UID": "",
+     "Unschedulable": 0
+    }
+   ],
+   "to": "storage_k8s_resources",
+   "type": "storage.WriteK8sResources"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorVerticalPodAutoscaler_1",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/CollectedAt",
+  "/sends/0/rows/1/CollectedAt"
+ ]
+}

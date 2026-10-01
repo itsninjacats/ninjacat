@@ -1,0 +1,347 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.475485553Z",
+ "request": {
+  "body_b64": "AgBRCZIQAAAKigIKAnMzGAYqigEIChINczEyIDwmPiAiw6kiCiIOa2luZDogVGhpbmcxNQoyA3MxOEABSgNzMjJSDXMyNCA8Jj4gIsOpIgpiTAidgICAgICAEBAeMgdrMzM6djMzMhVrMzM6b3RoZXI6d2l0aDpjb2xvbnMyBmJhcmUzMzIIejMzOmxhc3RApYCAgICAgBBQp+LPqgYqbggqGgNzNDUqDXM0OCA8Jj4gIsOpIgo6B2s1MTp2NTE6FWs1MTpvdGhlcjp3aXRoOmNvbG9uczoGYmFyZTUxOgh6NTE6bGFzdEoDczU0WgNzNTdqDAoFa2V5NjISA3M2M2oMCgVrZXk2MBIDczYxOgNzNjZIAhIHazcyOnY3MhIVazcyOm90aGVyOndpdGg6Y29sb25zEgZiYXJlNzISCHo3MjpsYXN0",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orchmanif"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint8",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "string",
+     "map[string]string",
+     "uint8",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint8",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "string",
+     "map[string]string",
+     "uint8",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.475476136Z",
+     "",
+     "s3",
+     "",
+     "",
+     "s22",
+     "s12 <&> \"é\"\n",
+     "kind: Thing15\n",
+     "",
+     1,
+     4242,
+     9,
+     null,
+     "protobuf",
+     6,
+     0,
+     "s66",
+     "",
+     "datadogExporter",
+     {
+      "bare72": [
+       ""
+      ],
+      "k72": [
+       "v72",
+       "other:with:colons"
+      ],
+      "z72": [
+       "last"
+      ]
+     },
+     {
+      "wrapper": [
+       "k72:v72",
+       "k72:other:with:colons",
+       "bare72",
+       "z72:last"
+      ]
+     },
+     "s24 <&> \"é\"\n",
+     10,
+     "s18",
+     {},
+     1,
+     "{\"clusterName\":\"s3\",\"groupId\":6,\"hostName\":\"s66\",\"originCollector\":2}",
+     "{\"id\":9007199254741021,\"orgId\":30,\"allTags\":[\"k33:v33\",\"k33:other:with:colons\",\"bare33\",\"z33:last\"],\"totalMemory\":9007199254741029,\"tagsModified\":1700000039}"
+    ],
+    [
+     "test",
+     "2026-10-01T16:08:42.475476136Z",
+     "",
+     "s3",
+     "s45",
+     "s57",
+     "s54",
+     "",
+     "",
+     "s48 <&> \"é\"\n",
+     0,
+     4242,
+     9,
+     null,
+     "protobuf",
+     6,
+     0,
+     "s66",
+     "",
+     "datadogExporter",
+     {
+      "bare51": [
+       ""
+      ],
+      "bare72": [
+       ""
+      ],
+      "k51": [
+       "v51",
+       "other:with:colons"
+      ],
+      "k72": [
+       "v72",
+       "other:with:colons"
+      ],
+      "z51": [
+       "last"
+      ],
+      "z72": [
+       "last"
+      ]
+     },
+     {
+      "manifest": [
+       "k51:v51",
+       "k51:other:with:colons",
+       "bare51",
+       "z51:last"
+      ],
+      "wrapper": [
+       "k72:v72",
+       "k72:other:with:colons",
+       "bare72",
+       "z72:last"
+      ]
+     },
+     "",
+     42,
+     "",
+     {
+      "key60": "s61",
+      "key62": "s63"
+     },
+     1,
+     "{\"clusterName\":\"s3\",\"groupId\":6,\"hostName\":\"s66\",\"originCollector\":2}",
+     ""
+    ]
+   ],
+   "insert": "INSERT INTO k8s_manifests\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, uid, kind, api_version,\n\t\t\t resource_version, content, content_type, is_terminated,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t group_id, group_size, host_name, agent_version, origin_collector,\n\t\t\t tags, tag_sources, node_name, type, version, extra_attributes,\n\t\t\t content_is_utf8, envelope, manifest_host)",
+   "rows": [
+    {
+     "APIVersion": "s22",
+     "AgentVersion": "",
+     "ClusterID": "",
+     "ClusterName": "s3",
+     "CollectedAt": "2026-10-01T16:08:42.475476136Z",
+     "Content": "kind: Thing15\n",
+     "ContentIsUTF8": 1,
+     "ContentType": "",
+     "Encoding": "protobuf",
+     "Envelope": "{\"clusterName\":\"s3\",\"groupId\":6,\"hostName\":\"s66\",\"originCollector\":2}",
+     "ExtraAttributes": {},
+     "GroupID": 6,
+     "GroupSize": 0,
+     "HeaderTimestamp": null,
+     "HostName": "s66",
+     "IsTerminated": 1,
+     "Kind": "",
+     "ManifestHost": "{\"id\":9007199254741021,\"orgId\":30,\"allTags\":[\"k33:v33\",\"k33:other:with:colons\",\"bare33\",\"z33:last\"],\"totalMemory\":9007199254741029,\"tagsModified\":1700000039}",
+     "NodeName": "s24 <&> \"é\"\n",
+     "OrgID": 4242,
+     "OriginCollector": "datadogExporter",
+     "ResourceVersion": "s12 <&> \"é\"\n",
+     "SubscriptionID": 9,
+     "TagSources": {
+      "wrapper": [
+       "k72:v72",
+       "k72:other:with:colons",
+       "bare72",
+       "z72:last"
+      ]
+     },
+     "Tags": {
+      "bare72": [
+       ""
+      ],
+      "k72": [
+       "v72",
+       "other:with:colons"
+      ],
+      "z72": [
+       "last"
+      ]
+     },
+     "TenantID": "test",
+     "Type": 10,
+     "UID": "",
+     "Version": "s18"
+    },
+    {
+     "APIVersion": "s54",
+     "AgentVersion": "",
+     "ClusterID": "",
+     "ClusterName": "s3",
+     "CollectedAt": "2026-10-01T16:08:42.475476136Z",
+     "Content": "",
+     "ContentIsUTF8": 1,
+     "ContentType": "s48 <&> \"é\"\n",
+     "Encoding": "protobuf",
+     "Envelope": "{\"clusterName\":\"s3\",\"groupId\":6,\"hostName\":\"s66\",\"originCollector\":2}",
+     "ExtraAttributes": {
+      "key60": "s61",
+      "key62": "s63"
+     },
+     "GroupID": 6,
+     "GroupSize": 0,
+     "HeaderTimestamp": null,
+     "HostName": "s66",
+     "IsTerminated": 0,
+     "Kind": "s57",
+     "ManifestHost": "",
+     "NodeName": "",
+     "OrgID": 4242,
+     "OriginCollector": "datadogExporter",
+     "ResourceVersion": "",
+     "SubscriptionID": 9,
+     "TagSources": {
+      "manifest": [
+       "k51:v51",
+       "k51:other:with:colons",
+       "bare51",
+       "z51:last"
+      ],
+      "wrapper": [
+       "k72:v72",
+       "k72:other:with:colons",
+       "bare72",
+       "z72:last"
+      ]
+     },
+     "Tags": {
+      "bare51": [
+       ""
+      ],
+      "bare72": [
+       ""
+      ],
+      "k51": [
+       "v51",
+       "other:with:colons"
+      ],
+      "k72": [
+       "v72",
+       "other:with:colons"
+      ],
+      "z51": [
+       "last"
+      ],
+      "z72": [
+       "last"
+      ]
+     },
+     "TenantID": "test",
+     "Type": 42,
+     "UID": "s45",
+     "Version": ""
+    }
+   ],
+   "to": "storage_k8s_manifests",
+   "type": "storage.WriteK8sManifests"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorManifestCRD_2",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/CollectedAt",
+  "/sends/0/rows/1/CollectedAt"
+ ]
+}

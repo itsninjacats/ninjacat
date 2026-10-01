@@ -1,0 +1,303 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.440660022Z",
+ "request": {
+  "body_b64": "AgAuCZIQAAAKAnMyEgxzNCA8Jj4gIsOpIgoYBiD4//////////8BKqkCEgkKBWtleTE0EA8SCQoFa2V5MTIQDSCS0KzzDjDq//////////8BQOf//////////wFSA3MyN2IHazMwOnYzMGIVazMwOm90aGVyOndpdGg6Y29sb25zYgZiYXJlMzBiCHozMDpsYXN0cg0KBWtleTM1EKSumaQPcg0KBWtleTMzEKLiz6oGggFJCg1zNDAgPCY+ICLDqSIKEgNzNDIiA3M0NTINczQ4IDwmPiAiw6kiCkIDczUxUgwKBWtleTU2EgNzNTdSDAoFa2V5NTQSA3M1NYIBUwoNczYwIDwmPiAiw6kiChoDczYzKgNzNjY6A3M2OUoNczcyIDwmPiAiw6kiCloMCgVrZXk3NxIDczc4WhYKBWtleTc1Eg1zNzYgPCY+ICLDqSIKMgdrODA6djgwMhVrODA6b3RoZXI6d2l0aDpjb2xvbnMyBmJhcmU4MDIIejgwOmxhc3Q6EBDU4s+qBiIDczg3MgNzOTA=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "uint32",
+     "uint32",
+     "uint32",
+     "uint64",
+     "uint64",
+     "uint64",
+     "uint64",
+     "map[string]uint32",
+     "map[string]uint32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "map[string][]string",
+     "map[string][]string",
+     "string",
+     "*time.Time",
+     "map[string]float64",
+     "map[string]int64",
+     "map[string]int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]map[string]string",
+     "[]map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.440655453Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     0,
+     4000000018,
+     0,
+     0,
+     18446744073709551591,
+     0,
+     18446744073709551594,
+     {
+      "key12": 13,
+      "key14": 15
+     },
+     {},
+     4242,
+     9,
+     null,
+     "protobuf",
+     6,
+     -8,
+     "0.1700000084.0-s87",
+     {
+      "bare80": [
+       ""
+      ],
+      "k80": [
+       "v80",
+       "other:with:colons"
+      ],
+      "z80": [
+       "last"
+      ]
+     },
+     {
+      "bare30": [
+       ""
+      ],
+      "k30": [
+       "v30",
+       "other:with:colons"
+      ],
+      "z30": [
+       "last"
+      ]
+     },
+     "s27",
+     null,
+     {},
+     {},
+     {
+      "key33": 1700000034,
+      "key35": 4102444836
+     },
+     [
+      "s40 <&> \"é\"\n",
+      "s60 <&> \"é\"\n"
+     ],
+     [
+      "s42",
+      ""
+     ],
+     [
+      "",
+      "s63"
+     ],
+     [
+      "s45",
+      ""
+     ],
+     [
+      "",
+      "s66"
+     ],
+     [
+      "s48 <&> \"é\"\n",
+      ""
+     ],
+     [
+      "",
+      "s69"
+     ],
+     [
+      "s51",
+      ""
+     ],
+     [
+      "",
+      "s72 <&> \"é\"\n"
+     ],
+     [
+      {
+       "key54": "s55",
+       "key56": "s57"
+      },
+      {}
+     ],
+     [
+      {},
+      {
+       "key75": "s76 <&> \"é\"\n",
+       "key77": "s78"
+      }
+     ]
+    ]
+   ],
+   "insert": "INSERT INTO k8s_cluster\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, node_count,\n\t\t\t pod_capacity, pod_allocatable, cpu_capacity, cpu_allocatable,\n\t\t\t memory_capacity, memory_allocatable, kubelet_versions, apiserver_versions,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t group_id, group_size, agent_version, tags, cluster_tags,\n\t\t\t resource_version, creation_timestamp, metrics,\n\t\t\t extended_resources_capacity, extended_resources_allocatable,\n\t\t\t nodes_name, nodes_region, nodes_instance_type, nodes_os, nodes_os_image,\n\t\t\t nodes_architecture, nodes_kernel_version, nodes_container_runtime_version,\n\t\t\t nodes_kubelet_version, nodes_allocatable, nodes_capacity)",
+   "rows": [
+    {
+     "APIServerVersions": {},
+     "AgentVersion": "0.1700000084.0-s87",
+     "CPUAllocatable": 18446744073709551591,
+     "CPUCapacity": 0,
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterName": "s2",
+     "ClusterTags": {
+      "bare30": [
+       ""
+      ],
+      "k30": [
+       "v30",
+       "other:with:colons"
+      ],
+      "z30": [
+       "last"
+      ]
+     },
+     "CollectedAt": "2026-10-01T16:08:42.440655453Z",
+     "CreationTimestamp": null,
+     "Encoding": "protobuf",
+     "ExtendedResourcesAllocatable": {
+      "key33": 1700000034,
+      "key35": 4102444836
+     },
+     "ExtendedResourcesCapacity": {},
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": null,
+     "KubeletVersions": {
+      "key12": 13,
+      "key14": 15
+     },
+     "MemoryAllocatable": 18446744073709551594,
+     "MemoryCapacity": 0,
+     "Metrics": {},
+     "NodeCount": 0,
+     "NodesAllocatable": [
+      {
+       "key54": "s55",
+       "key56": "s57"
+      },
+      {}
+     ],
+     "NodesArchitecture": [
+      "s48 <&> \"é\"\n",
+      ""
+     ],
+     "NodesCapacity": [
+      {},
+      {
+       "key75": "s76 <&> \"é\"\n",
+       "key77": "s78"
+      }
+     ],
+     "NodesContainerRuntimeVersion": [
+      "s51",
+      ""
+     ],
+     "NodesInstanceType": [
+      "",
+      "s63"
+     ],
+     "NodesKernelVersion": [
+      "",
+      "s69"
+     ],
+     "NodesKubeletVersion": [
+      "",
+      "s72 <&> \"é\"\n"
+     ],
+     "NodesName": [
+      "s40 <&> \"é\"\n",
+      "s60 <&> \"é\"\n"
+     ],
+     "NodesOS": [
+      "s45",
+      ""
+     ],
+     "NodesOSImage": [
+      "",
+      "s66"
+     ],
+     "NodesRegion": [
+      "s42",
+      ""
+     ],
+     "OrgID": 4242,
+     "PodAllocatable": 0,
+     "PodCapacity": 4000000018,
+     "ResourceVersion": "s27",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare80": [
+       ""
+      ],
+      "k80": [
+       "v80",
+       "other:with:colons"
+      ],
+      "z80": [
+       "last"
+      ]
+     },
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_k8s_cluster",
+   "type": "storage.WriteK8sCluster"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorCluster_2",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/CollectedAt"
+ ]
+}

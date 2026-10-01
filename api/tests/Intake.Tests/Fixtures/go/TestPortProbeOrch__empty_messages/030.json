@@ -1,0 +1,101 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.501732109Z",
+ "request": {
+  "body_b64": "AgAnCZIQAAA=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v1/orchestrator"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.501729594Z",
+     "orchestrator",
+     "unexpected_shape",
+     "POST",
+     "example.com",
+     "/api/v1/orchestrator",
+     {},
+     "application/json",
+     "",
+     {},
+     {
+      "$b64": "AgAnCZIQAAA="
+     },
+     8,
+     "orch: *process.CollectorContainer on an orchestrator intake"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": {
+      "$b64": "AgAnCZIQAAA="
+     },
+     "BodyBytes": 8,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "orchestrator",
+     "Method": "POST",
+     "Note": "orch: *process.CollectorContainer on an orchestrator intake",
+     "Path": "/api/v1/orchestrator",
+     "Query": {},
+     "Reason": "unexpected_shape",
+     "ReceivedAt": "2026-10-01T16:08:42.501729594Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 30,
+ "test": "TestPortProbeOrch/empty_messages",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

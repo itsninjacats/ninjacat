@@ -1,0 +1,333 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.440233836Z",
+ "request": {
+  "body_b64": "AwAuCZIQAAB78VNlAAAAAAoCczISDHM0IDwmPiAiw6kiChgGIPj//////////wEq2AQICxISCgVrZXkxNRDw//////////8BEgkKBWtleTEzEA4aCQoFa2V5MjAQFRoJCgVrZXkxOBATIJfQrPMOKJnQrPMOMOT//////////wE44v//////////AUDg//////////8BSN7//////////wFSA3MzNVil4s+qBmIHazM5OnYzOWIVazM5Om90aGVyOndpdGg6Y29sb25zYgZiYXJlMzliCHozOTpsYXN0aiQKEAoFa2V5NDQRspybbs2PRkAKEAoFa2V5NDIRspybbs2PRUByEgoFa2V5NDkQzv//////////AXINCgVrZXk0NxCw4s+qBnoSCgVrZXk1NBDJ//////////8Beg0KBWtleTUyELXiz6oGggGXAQoDczU4Eg1zNjAgPCY+ICLDqSIKGgNzNjIiDXM2NCA8Jj4gIsOpIgoqA3M2NjINczY4IDwmPiAiw6kiCjoDczcwQg1zNzIgPCY+ICLDqSIKSgNzNzRSDAoFa2V5NzgSA3M3OVIMCgVrZXk3NhIDczc3WhYKBWtleTgzEg1zODQgPCY+ICLDqSIKWgwKBWtleTgxEgNzODKCAaEBCgNzODYSDXM4OCA8Jj4gIsOpIgoaA3M5MCINczkyIDwmPiAiw6kiCioDczk0Mg1zOTYgPCY+ICLDqSIKOgNzOThCDnMxMDAgPCY+ICLDqSIKSgRzMTAyUg4KBmtleTEwNhIEczEwN1IOCgZrZXkxMDQSBHMxMDVaDgoGa2V5MTA5EgRzMTEwWhgKBmtleTExMRIOczExMiA8Jj4gIsOpIgoyCWsxMTQ6djExNDIWazExNDpvdGhlcjp3aXRoOmNvbG9uczIHYmFyZTExNDIJejExNDpsYXN0OiQI9eLPqgYQ9+LPqgYY+a6ZpA8iBHMxMjMqBHMxMjUyBHMxMjc=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "uint32",
+     "uint32",
+     "uint32",
+     "uint64",
+     "uint64",
+     "uint64",
+     "uint64",
+     "map[string]uint32",
+     "map[string]uint32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "map[string][]string",
+     "map[string][]string",
+     "string",
+     "*time.Time",
+     "map[string]float64",
+     "map[string]int64",
+     "map[string]int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]map[string]string",
+     "[]map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.440227775Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     11,
+     4000000023,
+     4000000025,
+     18446744073709551582,
+     18446744073709551584,
+     18446744073709551586,
+     18446744073709551588,
+     {
+      "key13": 14,
+      "key15": 0
+     },
+     {
+      "key18": 19,
+      "key20": 21
+     },
+     4242,
+     9,
+     1700000123,
+     "protobuf",
+     6,
+     -8,
+     "1700000117.1700000119.4102444921-s123",
+     {
+      "bare114": [
+       ""
+      ],
+      "k114": [
+       "v114",
+       "other:with:colons"
+      ],
+      "z114": [
+       "last"
+      ]
+     },
+     {
+      "bare39": [
+       ""
+      ],
+      "k39": [
+       "v39",
+       "other:with:colons"
+      ],
+      "z39": [
+       "last"
+      ]
+     },
+     "s35",
+     "2023-11-14T22:13:57Z",
+     {
+      "key42": 43.123456789,
+      "key44": 45.123456789
+     },
+     {
+      "key52": 1700000053,
+      "key54": -55
+     },
+     {
+      "key47": 1700000048,
+      "key49": -50
+     },
+     [
+      "s58",
+      "s86"
+     ],
+     [
+      "s60 <&> \"é\"\n",
+      "s88 <&> \"é\"\n"
+     ],
+     [
+      "s62",
+      "s90"
+     ],
+     [
+      "s64 <&> \"é\"\n",
+      "s92 <&> \"é\"\n"
+     ],
+     [
+      "s66",
+      "s94"
+     ],
+     [
+      "s68 <&> \"é\"\n",
+      "s96 <&> \"é\"\n"
+     ],
+     [
+      "s70",
+      "s98"
+     ],
+     [
+      "s72 <&> \"é\"\n",
+      "s100 <&> \"é\"\n"
+     ],
+     [
+      "s74",
+      "s102"
+     ],
+     [
+      {
+       "key76": "s77",
+       "key78": "s79"
+      },
+      {
+       "key104": "s105",
+       "key106": "s107"
+      }
+     ],
+     [
+      {
+       "key81": "s82",
+       "key83": "s84 <&> \"é\"\n"
+      },
+      {
+       "key109": "s110",
+       "key111": "s112 <&> \"é\"\n"
+      }
+     ]
+    ]
+   ],
+   "insert": "INSERT INTO k8s_cluster\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, node_count,\n\t\t\t pod_capacity, pod_allocatable, cpu_capacity, cpu_allocatable,\n\t\t\t memory_capacity, memory_allocatable, kubelet_versions, apiserver_versions,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t group_id, group_size, agent_version, tags, cluster_tags,\n\t\t\t resource_version, creation_timestamp, metrics,\n\t\t\t extended_resources_capacity, extended_resources_allocatable,\n\t\t\t nodes_name, nodes_region, nodes_instance_type, nodes_os, nodes_os_image,\n\t\t\t nodes_architecture, nodes_kernel_version, nodes_container_runtime_version,\n\t\t\t nodes_kubelet_version, nodes_allocatable, nodes_capacity)",
+   "rows": [
+    {
+     "APIServerVersions": {
+      "key18": 19,
+      "key20": 21
+     },
+     "AgentVersion": "1700000117.1700000119.4102444921-s123",
+     "CPUAllocatable": 18446744073709551584,
+     "CPUCapacity": 18446744073709551582,
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterName": "s2",
+     "ClusterTags": {
+      "bare39": [
+       ""
+      ],
+      "k39": [
+       "v39",
+       "other:with:colons"
+      ],
+      "z39": [
+       "last"
+      ]
+     },
+     "CollectedAt": "2026-10-01T16:08:42.440227775Z",
+     "CreationTimestamp": "2023-11-14T22:13:57Z",
+     "Encoding": "protobuf",
+     "ExtendedResourcesAllocatable": {
+      "key47": 1700000048,
+      "key49": -50
+     },
+     "ExtendedResourcesCapacity": {
+      "key52": 1700000053,
+      "key54": -55
+     },
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": 1700000123,
+     "KubeletVersions": {
+      "key13": 14,
+      "key15": 0
+     },
+     "MemoryAllocatable": 18446744073709551588,
+     "MemoryCapacity": 18446744073709551586,
+     "Metrics": {
+      "key42": 43.123456789,
+      "key44": 45.123456789
+     },
+     "NodeCount": 11,
+     "NodesAllocatable": [
+      {
+       "key76": "s77",
+       "key78": "s79"
+      },
+      {
+       "key104": "s105",
+       "key106": "s107"
+      }
+     ],
+     "NodesArchitecture": [
+      "s68 <&> \"é\"\n",
+      "s96 <&> \"é\"\n"
+     ],
+     "NodesCapacity": [
+      {
+       "key81": "s82",
+       "key83": "s84 <&> \"é\"\n"
+      },
+      {
+       "key109": "s110",
+       "key111": "s112 <&> \"é\"\n"
+      }
+     ],
+     "NodesContainerRuntimeVersion": [
+      "s72 <&> \"é\"\n",
+      "s100 <&> \"é\"\n"
+     ],
+     "NodesInstanceType": [
+      "s62",
+      "s90"
+     ],
+     "NodesKernelVersion": [
+      "s70",
+      "s98"
+     ],
+     "NodesKubeletVersion": [
+      "s74",
+      "s102"
+     ],
+     "NodesName": [
+      "s58",
+      "s86"
+     ],
+     "NodesOS": [
+      "s64 <&> \"é\"\n",
+      "s92 <&> \"é\"\n"
+     ],
+     "NodesOSImage": [
+      "s66",
+      "s94"
+     ],
+     "NodesRegion": [
+      "s60 <&> \"é\"\n",
+      "s88 <&> \"é\"\n"
+     ],
+     "OrgID": 4242,
+     "PodAllocatable": 4000000025,
+     "PodCapacity": 4000000023,
+     "ResourceVersion": "s35",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare114": [
+       ""
+      ],
+      "k114": [
+       "v114",
+       "other:with:colons"
+      ],
+      "z114": [
+       "last"
+      ]
+     },
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_k8s_cluster",
+   "type": "storage.WriteK8sCluster"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorCluster_0",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/CollectedAt"
+ ]
+}

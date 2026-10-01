@@ -1,0 +1,101 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.508227761Z",
+ "request": {
+  "body_b64": "CgJ2MhIGbm9kZS0xGAEiVxJVCgZjLWZ1bGwSCmNvbnRhaW5lcmQqCwgCEgdvd25lci0xMgA6JggCEgQIARIAGhIIAxIJT09NS2lsbGVkGIkBIAAgyOPPqgYoATABGAAg5OLPqgZAACInCAESIwoHYy1uYW1lZDIDYXBwOhMICRoNCE0Y////////////ASgFIhkIAhIVKgA6ACD7//////////8BQIHiz6oGImwIARpoCgVwb2QtMRIHa3ViZWxldBis5M+qBiD648+qBipKCAISCQoHUGVuZGluZxoxEi8KDFBvZFNjaGVkdWxlZBIFRmFsc2UaDVVuc2NoZWR1bGFibGUiCTAvMyBub2RlcyCQ5c+qBigBMAEiJggBGiIKBXBvZC0yGAAqFwgBEgIKABoPEg0KBVJlYWR5EgRUcnVlIhcIARoTCgVwb2QtMyoKEgAaBhIEGgAiACIJGgcKBXBvZC00IhkiFwoKYXJuOnRhc2svMRIDZWNzGPTlz6oGIgIiACIAIgIIKioDY2lk",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/contimage"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeContainers"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.508223653Z",
+     "contimage",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/api/v2/contimage",
+     {},
+     "application/json",
+     "",
+     {},
+     {
+      "$b64": "CgJ2MhIGbm9kZS0xGAEiVxJVCgZjLWZ1bGwSCmNvbnRhaW5lcmQqCwgCEgdvd25lci0xMgA6JggCEgQIARIAGhIIAxIJT09NS2lsbGVkGIkBIAAgyOPPqgYoATABGAAg5OLPqgZAACInCAESIwoHYy1uYW1lZDIDYXBwOhMICRoNCE0Y////////////ASgFIhkIAhIVKgA6ACD7//////////8BQIHiz6oGImwIARpoCgVwb2QtMRIHa3ViZWxldBis5M+qBiD648+qBipKCAISCQoHUGVuZGluZxoxEi8KDFBvZFNjaGVkdWxlZBIFRmFsc2UaDVVuc2NoZWR1bGFibGUiCTAvMyBub2RlcyCQ5c+qBigBMAEiJggBGiIKBXBvZC0yGAAqFwgBEgIKABoPEg0KBVJlYWR5EgRUcnVlIhcIARoTCgVwb2QtMyoKEgAaBhIEGgAiACIJGgcKBXBvZC00IhkiFwoKYXJuOnRhc2svMRIDZWNzGPTlz6oGIgIiACIAIgIIKioDY2lk"
+     },
+     399,
+     "string field contains invalid UTF-8"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": {
+      "$b64": "CgJ2MhIGbm9kZS0xGAEiVxJVCgZjLWZ1bGwSCmNvbnRhaW5lcmQqCwgCEgdvd25lci0xMgA6JggCEgQIARIAGhIIAxIJT09NS2lsbGVkGIkBIAAgyOPPqgYoATABGAAg5OLPqgZAACInCAESIwoHYy1uYW1lZDIDYXBwOhMICRoNCE0Y////////////ASgFIhkIAhIVKgA6ACD7//////////8BQIHiz6oGImwIARpoCgVwb2QtMRIHa3ViZWxldBis5M+qBiD648+qBipKCAISCQoHUGVuZGluZxoxEi8KDFBvZFNjaGVkdWxlZBIFRmFsc2UaDVVuc2NoZWR1bGFibGUiCTAvMyBub2RlcyCQ5c+qBigBMAEiJggBGiIKBXBvZC0yGAAqFwgBEgIKABoPEg0KBVJlYWR5EgRUcnVlIhcIARoTCgVwb2QtMyoKEgAaBhIEGgAiACIJGgcKBXBvZC00IhkiFwoKYXJuOnRhc2svMRIDZWNzGPTlz6oGIgIiACIAIgIIKioDY2lk"
+     },
+     "BodyBytes": 399,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "contimage",
+     "Method": "POST",
+     "Note": "string field contains invalid UTF-8",
+     "Path": "/api/v2/contimage",
+     "Query": {},
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T16:08:42.508223653Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeContainers/lifecycle_on_images",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

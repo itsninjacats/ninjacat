@@ -1,0 +1,101 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.499392453Z",
+ "request": {
+  "body_b64": "AQA1CQoCczIQ/P//////////ARgGIk4ICRALIkIKB2sxNTp2MTUKFWsxNTpvdGhlcjp3aXRoOmNvbG9ucwoGYmFyZTE1Cgh6MTU6bGFzdBoDczE3KAEwFTgXSgNzMjYwneLPqgYidQjg//////////8BGkwIpYCAgICAgBAQJjIHazQxOnY0MTIVazQxOm90aGVyOndpdGg6Y29sb25zMgZiYXJlNDEyCHo0MTpsYXN0QK2AgICAgIAQUK/iz6oGKhQKA3M1MRA1IMj//////////wEwOzC+4s+qBipVCMOAgICAgIAQELz//////////wEyB2s3MTp2NzEyFWs3MTpvdGhlcjp3aXRoOmNvbG9uczIGYmFyZTcxMgh6NzE6bGFzdEDLgICAgICAEFDN4s+qBg==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.499389748Z",
+     "orchestrator",
+     "unexpected_shape",
+     "POST",
+     "example.com",
+     "/api/v2/orch",
+     {},
+     "application/json",
+     "",
+     {},
+     {
+      "$b64": "AQA1CQoCczIQ/P//////////ARgGIk4ICRALIkIKB2sxNTp2MTUKFWsxNTpvdGhlcjp3aXRoOmNvbG9ucwoGYmFyZTE1Cgh6MTU6bGFzdBoDczE3KAEwFTgXSgNzMjYwneLPqgYidQjg//////////8BGkwIpYCAgICAgBAQJjIHazQxOnY0MTIVazQxOm90aGVyOndpdGg6Y29sb25zMgZiYXJlNDEyCHo0MTpsYXN0QK2AgICAgIAQUK/iz6oGKhQKA3M1MRA1IMj//////////wEwOzC+4s+qBipVCMOAgICAgIAQELz//////////wEyB2s3MTp2NzEyFWs3MTpvdGhlcjp3aXRoOmNvbG9uczIGYmFyZTcxMgh6NzE6bGFzdEDLgICAgICAEFDN4s+qBg=="
+     },
+     307,
+     "orch: *process.CollectorProcDiscovery on an orchestrator intake"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": {
+      "$b64": "AQA1CQoCczIQ/P//////////ARgGIk4ICRALIkIKB2sxNTp2MTUKFWsxNTpvdGhlcjp3aXRoOmNvbG9ucwoGYmFyZTE1Cgh6MTU6bGFzdBoDczE3KAEwFTgXSgNzMjYwneLPqgYidQjg//////////8BGkwIpYCAgICAgBAQJjIHazQxOnY0MTIVazQxOm90aGVyOndpdGg6Y29sb25zMgZiYXJlNDEyCHo0MTpsYXN0QK2AgICAgIAQUK/iz6oGKhQKA3M1MRA1IMj//////////wEwOzC+4s+qBipVCMOAgICAgIAQELz//////////wEyB2s3MTp2NzEyFWs3MTpvdGhlcjp3aXRoOmNvbG9uczIGYmFyZTcxMgh6NzE6bGFzdEDLgICAgICAEFDN4s+qBg=="
+     },
+     "BodyBytes": 307,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "orchestrator",
+     "Method": "POST",
+     "Note": "orch: *process.CollectorProcDiscovery on an orchestrator intake",
+     "Path": "/api/v2/orch",
+     "Query": {},
+     "Reason": "unexpected_shape",
+     "ReceivedAt": "2026-10-01T16:08:42.499389748Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorProcDiscovery_3",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}
