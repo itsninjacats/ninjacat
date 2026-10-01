@@ -49,3 +49,10 @@ let ``the reader walks a known layout`` () =
 let ``a map key that is not a string is refused`` () =
     // {bin"a": 1}
     Assert.True(Result.isError (decode [ 0x81uy; 0xc4uy; 0x01uy; byte 'a'; 0x01uy ]))
+
+[<Fact>]
+let ``a body nested without end is an error, not a stack overflow`` () =
+    // A hundred thousand one-element array headers, one inside the other.
+    match Msgpack.decode (Array.create 100_000 0x91uy) with
+    | Error message -> Assert.Contains("nesting", message)
+    | Ok _ -> Assert.Fail "decoded"

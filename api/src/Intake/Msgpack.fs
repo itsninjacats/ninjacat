@@ -39,6 +39,7 @@ type MsgType =
 
 type MsgpackReader(data: byte[]) =
     let mutable position = 0
+    let mutable depth = 0
 
     let fail (message: string) = raise (MsgpackError message)
 
@@ -234,6 +235,20 @@ type MsgpackReader(data: byte[]) =
 
     /// The next value, whatever it is, as a tree.
     member r.ReadValue() : MsgValue =
+        // The walk is recursive and the .NET stack does not grow: a body of
+        // nothing but nested array headers must end in an error, not in the
+        // death of the process.
+        depth <- depth + 1
+
+        try
+            if depth > 512 then
+                fail "nesting deeper than 512 levels"
+
+            r.ReadValueUnbounded()
+        finally
+            depth <- depth - 1
+
+    member private r.ReadValueUnbounded() : MsgValue =
         match r.PeekType() with
         | NilType ->
             position <- position + 1
