@@ -148,7 +148,8 @@ let run (fixture: Fixture) : string list =
     for header in expected["headers"].AsObject() do
         let path = $"/response/headers/{header.Key}"
 
-        if header.Key <> "Content-Length" && not (ignored.Contains path) then
+        // A volatile header is listed by the path of its value, `…/<name>/0`.
+        if header.Key <> "Content-Length" && not (ignored.Contains path) && not (ignored.Contains(path + "/0")) then
             let want = strings header.Value
 
             let got =
