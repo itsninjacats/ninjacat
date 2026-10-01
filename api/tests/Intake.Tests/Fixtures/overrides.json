@@ -2,5 +2,21 @@
   "TestHandleLogsKeepsAnUndecodableBodyRaw/001": {
     "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
     "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestHandleDBMStoresRawOnDecodeError__body_is_not_JSON/001": {
+    "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
+    "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestHandleDBMStoresRawOnDecodeError__one_bad_element_beside_one_good_one/001": {
+    "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13", "/sends/1/rows/0/Note", "/sends/1/args/0/13"],
+    "why": "The note quotes encoding/json's type error, which names a Go type (map[string]jsontext.Value); F# says what the element is instead."
+  },
+  "TestHandleNDMMetadataStoresRawOnDecodeFailure/001": {
+    "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
+    "why": "The note is the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestHandleTelemetryNonObjectBodyGoesToRawPayloads/001": {
+    "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
+    "why": "The note is the JSON parser's error, and .NET's parser words it differently from Go's."
   }
 }
