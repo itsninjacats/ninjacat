@@ -1,0 +1,123 @@
+{
+ "recorded_at": "2026-10-01T16:19:49.954677418Z",
+ "request": {
+  "body_b64": "gaVTdGF0c5GBpVN0YXRzkYGrRWRnZUxhdGVuY3nE",
+  "headers": {
+   "Content-Type": [
+    "application/msgpack"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ],
+   "Via": [
+    "trace-agent 7.58.2"
+   ],
+   "X-Datadog-Additional-Tags": [
+    "_dd.tags.container:cid"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v0.1/pipeline_stats?x=1&x=2"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeTrace"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:19:49.954675975Z",
+     "trace",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/api/v0.1/pipeline_stats",
+     {
+      "x": [
+       "1",
+       "2"
+      ]
+     },
+     "application/msgpack",
+     "",
+     {
+      "Via": "trace-agent 7.58.2",
+      "X-Datadog-Additional-Tags": "_dd.tags.container:cid"
+     },
+     {
+      "$b64": "gaVTdGF0c5GBpVN0YXRzkYGrRWRnZUxhdGVuY3nE"
+     },
+     30,
+     "msgpack datastreams.StatsPayload: field \"Stats\": bucket field \"Stats\": point field \"EdgeLatency\": EOF"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": {
+      "$b64": "gaVTdGF0c5GBpVN0YXRzkYGrRWRnZUxhdGVuY3nE"
+     },
+     "BodyBytes": 30,
+     "ContentEncoding": "",
+     "ContentType": "application/msgpack",
+     "Headers": {
+      "Via": "trace-agent 7.58.2",
+      "X-Datadog-Additional-Tags": "_dd.tags.container:cid"
+     },
+     "Host": "example.com",
+     "Intake": "trace",
+     "Method": "POST",
+     "Note": "msgpack datastreams.StatsPayload: field \"Stats\": bucket field \"Stats\": point field \"EdgeLatency\": EOF",
+     "Path": "/api/v0.1/pipeline_stats",
+     "Query": {
+      "x": [
+       "1",
+       "2"
+      ]
+     },
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T16:19:49.954675975Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 18,
+ "test": "TestPortPipelineStats",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

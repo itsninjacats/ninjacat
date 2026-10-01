@@ -2,5 +2,25 @@
   "TestHandleLogsKeepsAnUndecodableBodyRaw/001": {
     "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
     "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestHandleTracesStoresUndecodableBodyRaw/001": {
+    "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
+    "why": "The note quotes the protobuf parser's error, and Google.Protobuf words it differently from Go's vtprotobuf."
+  },
+  "TestPortTraces/005": {
+    "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
+    "why": "The note quotes the protobuf parser's error for a truncated body, and Google.Protobuf words it differently from Go's vtprotobuf."
+  },
+  "TestPortTraces/008": {
+    "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
+    "why": "The note quotes the protobuf parser's error for trailing bytes, and Google.Protobuf words it differently from Go's vtprotobuf."
+  },
+  "TestPortDataStreams/008": {
+    "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
+    "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestPortDataStreams/009": {
+    "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
+    "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
   }
 }
