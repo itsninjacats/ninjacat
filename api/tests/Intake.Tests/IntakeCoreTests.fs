@@ -40,7 +40,7 @@ let private request (method: string) (host: string) (target: string) (headers: (
 let private ok: Handler = fun _ -> Response.status 200
 
 let private statusOf (auth: Auth) (routes: Route list) (method: string) (target: string) (headers: (string * string) list) : int =
-    let engine = Engine.create auth [ routes ]
+    let engine = Engine.create auth routes
     (Engine.respond (deps (CapturingSink())) engine (request method "example.com" target headers) [||]).Status
 
 // --- the key guard -------------------------------------------------------------------
@@ -118,7 +118,7 @@ let ``routes match literals, parameters and a trailing wildcard`` () =
 
 [<Fact>]
 let ``a path one trailing slash away from a route is redirected to it`` () =
-    let engine = Engine.create Auth.standard [ [ Route.get "/v2/" ok; Route.post "/upload" ok ] ]
+    let engine = Engine.create Auth.standard [ Route.get "/v2/" ok; Route.post "/upload" ok ]
 
     let respond method target =
         Engine.respond (deps (CapturingSink())) engine (request method "example.com" target []) [||]
@@ -158,7 +158,7 @@ let ``a body nested deeper than any telemetry is kept raw; one inside the limit 
         http.Request.Path <- Microsoft.AspNetCore.Http.PathString path
         http.Request.Headers["Dd-Api-Key"] <- Microsoft.Extensions.Primitives.StringValues Golden.Replay.testKey
         let body = System.Text.Encoding.UTF8.GetBytes(template.Replace("DEEP", deep))
-        let response = Routes.byGoNames deps [ routeSet ] http body
+        let response = Replay.byGoNames deps [ routeSet ] http body
         response.Status, sink.Rows<NinjaCat.Api.Storage.Rows.RawPayloadRow>() |> List.map _.Reason
 
     // Past the limit the body does not parse at all: kept whole, answered as usual.
@@ -213,7 +213,7 @@ let private storing (body: string) : Route list =
 [<Fact>]
 let ``a raw payload keeps what identifies the request, and no credentials`` () =
     let sink = CapturingSink()
-    let engine = Engine.create Auth.standard [ storing """{"x":1}""" ]
+    let engine = Engine.create Auth.standard (storing """{"x":1}""")
 
     let http =
         request
@@ -245,7 +245,7 @@ let ``a raw payload keeps what identifies the request, and no credentials`` () =
 [<Fact>]
 let ``nothing is stored without a tenant`` () =
     let sink = CapturingSink()
-    let engine = Engine.create Auth.none [ storing "body" ]
+    let engine = Engine.create Auth.none (storing "body")
     Engine.respond (deps sink) engine (request "POST" "example.com" "/api/v2/databasequery" []) [||] |> ignore
     Assert.Empty sink.Writes
 
@@ -256,7 +256,7 @@ let ``nothing is stored without a tenant`` () =
 [<InlineData(" {} \n")>]
 let ``the agent's empty probes are not stored`` (body: string) =
     let sink = CapturingSink()
-    let engine = Engine.create Auth.standard [ storing body ]
+    let engine = Engine.create Auth.standard (storing body)
     Engine.respond (deps sink) engine (request "POST" "example.com" "/api/v2/databasequery" [ "Dd-Api-Key", key ]) [||] |> ignore
     Assert.Empty sink.Writes
     Assert.False(Raw.isProbe (Encoding.UTF8.GetBytes """{"a":1}"""))

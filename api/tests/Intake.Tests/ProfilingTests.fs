@@ -86,7 +86,7 @@ let private post (routeSet: string) (url: string) (contentType: string) (body: b
     if contentType <> "" then
         http.Request.Headers["Content-Type"] <- StringValues contentType
 
-    Routes.byGoNames deps [ routeSet ] http body, sink
+    Replay.byGoNames deps [ routeSet ] http body, sink
 
 let private jsonValue (text: string) : JsonElement =
     use document = JsonDocument.Parse text

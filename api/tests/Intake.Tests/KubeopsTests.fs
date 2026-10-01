@@ -67,7 +67,7 @@ let private post (path: string) (body: byte[]) : Response * CapturingSink =
     http.Request.Host <- HostString "example.com"
     http.Request.Path <- PathString path
     http.Request.Headers["Dd-Api-Key"] <- StringValues Replay.testKey
-    Routes.byGoNames deps [ "routeKubeops" ] http body, sink
+    Replay.byGoNames deps [ "routeKubeops" ] http body, sink
 
 // ---- object collections ----
 

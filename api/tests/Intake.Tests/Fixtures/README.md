@@ -8,7 +8,8 @@ its intake, recorded with what Go answered and what it handed to storage:
 - `sends`: each batch written — the table (`to`), its INSERT statement, the
   rows as records (`rows`) and as the column values given to the ClickHouse
   driver (`args`). `null` when the Go test did not capture writes;
-- `routes`: the Go route sets of the engine that served the request;
+- `routes`: the Go route sets of the engine that served the request. Only
+  the tests know these names (`Golden/Replay.fs`); the server routes by host;
 - `volatile`: paths that differ between two runs of the same test (receive
   times, minted ids) and are not compared.
 

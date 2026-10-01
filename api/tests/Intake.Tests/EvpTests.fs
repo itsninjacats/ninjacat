@@ -54,7 +54,7 @@ let private post (routeSet: string) (url: string) (headers: (string * string) li
     for name, value in headers do
         http.Request.Headers[name] <- StringValues value
 
-    Routes.byGoNames deps [ routeSet ] http body, sink
+    Replay.byGoNames deps [ routeSet ] http body, sink
 
 let private assertAccepted (response: Response) =
     Assert.Equal(202, response.Status)

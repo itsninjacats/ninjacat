@@ -75,7 +75,7 @@ let private post (routeSet: string) (path: string) (contentType: string) (body: 
     if contentType <> "" then
         http.Request.Headers["Content-Type"] <- StringValues contentType
 
-    Routes.byGoNames deps [ routeSet ] http body, sink
+    Replay.byGoNames deps [ routeSet ] http body, sink
 
 /// init → bash (-c "cat file", matched by r1) → cat: one root, one child
 /// with a rule match and args, one grandchild.

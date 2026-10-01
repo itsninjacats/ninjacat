@@ -84,9 +84,9 @@ module Engine =
           Route.head "/support/flare/:case_id" Routers.Flare.handle
           Route.post "/support/flare/:case_id" Routers.Flare.handle ]
 
-    let create (auth: Auth) (routeSets: Route list list) : Engine =
+    let create (auth: Auth) (routes: Route list) : Engine =
         { Auth = auth
-          Routes = List.concat routeSets @ sharedRoutes }
+          Routes = routes @ sharedRoutes }
 
     let private segments (path: string) : string list =
         path.Split('/', StringSplitOptions.RemoveEmptyEntries) |> List.ofArray

@@ -39,7 +39,7 @@ let private post (routeSet: string) (path: string) (headers: (string * string) l
     for name, header in headers do
         http.Request.Headers[name] <- StringValues header
 
-    Routes.byGoNames deps [ routeSet ] http (Encoding.UTF8.GetBytes body), sink
+    Replay.byGoNames deps [ routeSet ] http (Encoding.UTF8.GetBytes body), sink
 
 let private telemetry (body: string) : APMTelemetryRow list =
     let response, sink = post "routeTelemetry" "/api/v2/apmtelemetry" [] body

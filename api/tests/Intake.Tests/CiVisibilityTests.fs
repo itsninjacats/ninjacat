@@ -38,7 +38,7 @@ let send (routeSet: string) (method: string) (url: string) (headers: (string * s
     for name, value in headers do
         http.Request.Headers[name] <- StringValues value
 
-    Routes.byGoNames deps [ routeSet ] http body, sink
+    Replay.byGoNames deps [ routeSet ] http body, sink
 
 let utf8 (text: string) : byte[] = Encoding.UTF8.GetBytes text
 

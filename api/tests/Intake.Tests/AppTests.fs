@@ -47,7 +47,7 @@ let send
     for name, value in headers do
         http.Request.Headers[name] <- StringValues value
 
-    Routes.byGoNames deps routeSets http body, sink
+    Replay.byGoNames deps routeSets http body, sink
 
 let private same (expected: 'a) (actual: 'a) =
     if expected <> actual then

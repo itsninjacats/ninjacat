@@ -32,7 +32,7 @@ let private post (routeSet: string) (path: string) (query: string) (body: byte[]
     http.Request.Path <- PathString path
     http.Request.QueryString <- QueryString query
     http.Request.Headers["Dd-Api-Key"] <- StringValues Replay.testKey
-    let response = Routes.byGoNames deps [ routeSet ] http body
+    let response = Replay.byGoNames deps [ routeSet ] http body
     Assert.Equal(202, response.Status)
     sink
 
@@ -148,7 +148,7 @@ let ``the agent's resources snapshot becomes one row per process group`` () =
     http.Request.Host <- HostString "example.com"
     http.Request.Path <- PathString "/intake/"
     http.Request.Headers["Dd-Api-Key"] <- StringValues Replay.testKey
-    let response = Routes.byGoNames deps [ "routeAPI" ] http (fixture "agent-7.84.0-intake-resources.json")
+    let response = Replay.byGoNames deps [ "routeAPI" ] http (fixture "agent-7.84.0-intake-resources.json")
     Assert.Equal(200, response.Status)
     Assert.Empty(sink.Rows<RawPayloadRow>())
 

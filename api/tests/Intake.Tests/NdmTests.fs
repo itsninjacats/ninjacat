@@ -43,7 +43,7 @@ let private post (path: string) (body: string) : Response * CapturingSink =
     http.Request.Host <- HostString "example.com"
     http.Request.Path <- PathString path
     http.Request.Headers["Dd-Api-Key"] <- StringValues Replay.testKey
-    Routes.byGoNames deps [ "routeNDM" ] http (Encoding.UTF8.GetBytes body), sink
+    Replay.byGoNames deps [ "routeNDM" ] http (Encoding.UTF8.GetBytes body), sink
 
 [<Fact>]
 let ``additional fields spread over the root come back, 64-bit digits intact`` () =

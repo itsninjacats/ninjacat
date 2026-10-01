@@ -43,7 +43,7 @@ let private post (path: string) (body: string) : Response * CapturingSink =
     http.Request.Host <- HostString "example.com"
     http.Request.Path <- PathString path
     http.Request.Headers["Dd-Api-Key"] <- StringValues Replay.testKey
-    Routes.byGoNames deps [ "routeDBM" ] http (Encoding.UTF8.GetBytes body), sink
+    Replay.byGoNames deps [ "routeDBM" ] http (Encoding.UTF8.GetBytes body), sink
 
 [<Fact>]
 let ``ddtags as one comma-joined string becomes a tag list, and the db object stays an extra key`` () =

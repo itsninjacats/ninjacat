@@ -222,7 +222,7 @@ let private post (path: string) (body: byte[]) : Response * CapturingSink =
     http.Request.Path <- PathString path
     http.Request.Headers["Dd-Api-Key"] <- StringValues Replay.testKey
     http.Request.Headers["X-Dd-Processagentversion"] <- StringValues agentVersion
-    Routes.byGoNames deps [ "routeProcess" ] http body, sink
+    Replay.byGoNames deps [ "routeProcess" ] http body, sink
 
 [<Fact>]
 let ``the reply carries a status, which the agent dereferences without checking`` () =

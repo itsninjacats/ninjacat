@@ -48,7 +48,7 @@ let private send (method: string) (url: string) (headers: (string * string) list
     for name, value in headers do
         http.Request.Headers[name] <- StringValues value
 
-    Routes.byGoNames deps [ "routeAPI" ] http body, sink
+    Replay.byGoNames deps [ "routeAPI" ] http body, sink
 
 let private post (path: string) (json: string) : Response * CapturingSink =
     send "POST" path [ "Content-Type", "application/json" ] (utf8 json)

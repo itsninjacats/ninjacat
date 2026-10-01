@@ -44,12 +44,62 @@ let all: Fixture list =
           RouteSets = json["routes"].AsArray() |> Seq.map (fun n -> n.GetValue<string>()) |> List.ofSeq })
     |> List.ofArray
 
+/// The Go server's name for each group of routes. The fixtures recorded
+/// which groups served a request under these names; nothing else uses them.
+let private goRouteSets: Map<string, Auth * Route list> =
+    let ciWebhookAuth =
+        Auth.fromSources [ KeyFromHeader "Dd-Api-Key"; KeyFromQuery "dd-api-key"; KeyFromQuery "api_key" ]
+
+    let dataObsAuth =
+        Auth.fromSources [ KeyFromHeader "Dd-Api-Key"; KeyFromBearer; KeyFromQuery "api_key" ]
+
+    Map
+        [ "routeAPI", (Auth.standard, Routers.Api.routes)
+          "routeCIVisibilityAPI", (Auth.standard, Routers.CiVisibility.apiRoutes)
+          "routeApp", (Auth.standard, Routers.App.routes)
+          "routeTrace", (Auth.standard, Routers.Trace.routes)
+          "routeLogs", (Auth.standard, Routers.Logs.routes)
+          "routeProcess", (Auth.standard, Routers.Process.routes)
+          "routeKubeops", (Auth.standard, Routers.Kubeops.routes)
+          "routeConfig", (Auth.standard, Routers.Config.routes)
+          "routeContainers", (Auth.standard, Routers.Containers.routes)
+          "routeDBM", (Auth.standard, Routers.Dbm.routes)
+          "routeNDM", (Auth.standard, Routers.Ndm.routes)
+          "routeResources", (Auth.standard, Routers.Misc.resourcesRoutes)
+          "routeTelemetry", (Auth.standard, Routers.Misc.telemetryRoutes)
+          "routeProfile", (Auth.standard, Routers.Profiling.profileRoutes)
+          "routeDebugger", (Auth.standard, Routers.Profiling.debuggerRoutes)
+          "routeSourcemap", (Auth.standard, Routers.Profiling.sourcemapRoutes)
+          "routeCWS", (Auth.standard, Routers.Security.cwsRoutes)
+          "routeRuntimeSecurity", (Auth.standard, Routers.Security.runtimeSecurityRoutes)
+          "routeCSPM", (Auth.standard, Routers.Security.cspmRoutes)
+          "routeSBOM", (Auth.standard, Routers.Security.sbomRoutes)
+          "routeSDS", (Auth.standard, Routers.Security.sdsRoutes)
+          "routeAgentDiscovery", (Auth.standard, Routers.Evp.agentDiscoveryRoutes)
+          "routeAgentHealth", (Auth.standard, Routers.Evp.agentHealthRoutes)
+          "routeEventManagement", (Auth.standard, Routers.Evp.eventManagementRoutes)
+          "routeSoftwareInventory", (Auth.standard, Routers.Evp.softwareInventoryRoutes)
+          "routeSynthetics", (Auth.standard, Routers.Evp.syntheticsRoutes)
+          "routeCITestCycle", (Auth.standard, Routers.CiVisibility.testCycleRoutes)
+          "routeCITestCov", (Auth.standard, Routers.CiVisibility.testCovRoutes)
+          "routeCIWebhook", (ciWebhookAuth, Routers.CiWebhook.routes)
+          "routeSyntheticsAgent", (Auth.standard, Routers.CiWebhook.syntheticsAgentRoutes)
+          "routeDataObs", (dataObsAuth, Routers.Evp.dataObsRoutes)
+          "routeRUM", (Routers.Rum.gate, Routers.Rum.routes)
+          "routeAIUsage", (Auth.standard, Routers.Install.aiUsageRoutes)
+          "routeLLMObs", (Auth.standard, Routers.Install.llmObsRoutes)
+          "routeInstall", (Auth.none, Routers.Install.routes) ]
+
+/// The intake made of the named Go route sets, guarded as the first one is.
+let byGoNames (deps: Deps) (names: string list) : Routes.Intake =
+    let sets = names |> List.map (fun name -> goRouteSets[name])
+    Routes.serve deps (fst sets.Head) (sets |> List.collect snd)
+
 /// The fixtures that can be replayed: served by route sets the intake has.
 /// (A few Go tests built an engine around a route of their own; those are
 /// ported by hand instead.)
 let replayable: Fixture list =
-    let known = Routes.routeSets |> List.map _.GoName |> Set.ofList
-    all |> List.filter (fun f -> not f.RouteSets.IsEmpty && f.RouteSets |> List.forall known.Contains)
+    all |> List.filter (fun f -> not f.RouteSets.IsEmpty && f.RouteSets |> List.forall goRouteSets.ContainsKey)
 
 /// The fixtures to replay: every replayable one, or with
 /// NINJACAT_GOLDEN_ROUTES set (comma-separated Go route set names) only those
@@ -121,9 +171,9 @@ let send (fixture: Fixture) : Response * CapturedWrite list =
             Routes.create deps
         elif fixture.RouteSets = [ "routeRUM" ] then
             // Go's RUM tests went through what sits above that router too.
-            Routers.Rum.wrap (Routes.byGoNames deps fixture.RouteSets)
+            Routers.Rum.wrap (byGoNames deps fixture.RouteSets)
         else
-            Routes.byGoNames deps fixture.RouteSets
+            byGoNames deps fixture.RouteSets
 
     intake http body, sink.Writes
 
