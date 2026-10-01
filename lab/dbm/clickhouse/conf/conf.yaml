@@ -1,0 +1,8 @@
+init_config:
+instances:
+  - server: dbmlab-db
+    port: 8123
+    username: datadog
+    password: datadog
+    dbm: true
+    tags: ["team:core"]

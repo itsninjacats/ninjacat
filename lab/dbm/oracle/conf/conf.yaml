@@ -1,0 +1,12 @@
+init_config:
+instances:
+  - dbm: true
+    server: dbmlab-db
+    port: 1521
+    service_name: FREE
+    username: c##datadog
+    password: datadog
+    tags: ["team:core"]
+    query_samples: { enabled: true, active_session_history: false }
+    query_metrics: { enabled: true }
+    execution_plans: { enabled: true }

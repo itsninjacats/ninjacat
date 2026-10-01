@@ -1,0 +1,25 @@
+init_config:
+instances:
+  - task_id: task-lab-1
+    min_collection_interval: 20
+    scanning_rules:
+      - id: email
+        pattern: '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]+'
+      - id: visa-card
+        pattern: '4[0-9]{15}'
+    scan_data:
+      - sub_task_id: sub-users
+        query: SELECT email, name, note FROM users
+        timeout_seconds: 5
+        connection: { host: dbmlab-db, port: 5432, dbname: shop, username: postgres, password: lab, ssl: disable }
+        entity: { platform: postgres, database_cluster_name: lab-cluster, database_instance_name: lab-instance, database: shop, schema: public, table: users }
+      - sub_task_id: sub-clean
+        query: SELECT id, amount FROM orders
+        timeout_seconds: 5
+        connection: { host: dbmlab-db, port: 5432, dbname: shop, username: postgres, password: lab, ssl: disable }
+        entity: { platform: postgres, database_cluster_name: lab-cluster, database_instance_name: lab-instance, database: shop, schema: public, table: orders }
+      - sub_task_id: sub-missing
+        query: SELECT x FROM no_such_table
+        timeout_seconds: 5
+        connection: { host: dbmlab-db, port: 5432, dbname: shop, username: postgres, password: lab, ssl: disable }
+        entity: { platform: postgres, database_cluster_name: lab-cluster, database_instance_name: lab-instance, database: shop, schema: public, table: no_such_table }
