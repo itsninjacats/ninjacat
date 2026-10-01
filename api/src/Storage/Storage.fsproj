@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Fnv.fs" />
     <Compile Include="Table.fs" />
     <Compile Include="Rows/Raw.fs" />
     <Compile Include="Rows/Logs.fs" />

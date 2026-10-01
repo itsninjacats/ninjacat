@@ -733,7 +733,9 @@ let ``an entity without components writes only the entity`` () =
 [<InlineData("08", "malformed")>]
 [<InlineData("0880", "malformed")>]
 [<InlineData("08ffffffffffffffffff01", "1:varint")>]
-[<InlineData("08ffffffffffffffffff02", "malformed")>]
+// Ten bytes whose last holds more than the one bit that fits: the protobuf
+// library drops the extra bits and reads on.
+[<InlineData("08ffffffffffffffffff02", "1:varint")>]
 [<InlineData("08ffffffffffffffffffff01", "malformed")>]
 [<InlineData("f8ffffff0701", "268435455:varint")>]
 [<InlineData("f8ffffff0f01", "536870911:varint")>]

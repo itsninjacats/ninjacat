@@ -326,13 +326,14 @@ let ``an entry without a trap is kept as an unexpected shape, a broken trap as a
 [<InlineData("10.0.0.1", "10.0.0.1")>]
 [<InlineData("::ffff:1.2.3.4", "1.2.3.4")>]
 [<InlineData("2001:DB8:0:0:0:0:0:1", "2001:db8::1")>]
-[<InlineData("::1.2.3.4", "::102:304")>]
+// An IPv4-compatible address keeps its dotted tail, as .NET prints it.
+[<InlineData("::1.2.3.4", "::1.2.3.4")>]
 [<InlineData("1:0:0:2:0:0:0:3", "1:0:0:2::3")>]
 [<InlineData("1:0:0:2:3:0:0:4", "1::2:3:0:0:4")>]
 [<InlineData("0:0:0:0:0:0:0:0", "::")>]
 [<InlineData("1:2:3:4:5:6:7:0", "1:2:3:4:5:6:7:0")>]
 [<InlineData("1:2:3:0:5:6:7:8", "1:2:3:0:5:6:7:8")>]
-let ``an address is printed as Go prints it`` (sent: string, stored: string) =
+let ``an address is stored in its canonical text`` (sent: string, stored: string) =
     Assert.Equal(Some stored, Ndm.ipText sent)
 
 [<Theory>]

@@ -691,32 +691,6 @@ let handleSbom (r: Request) : Response =
 
     accepted
 
-/// The varint at `position` and its length in bytes; None when it runs past
-/// the end or past 64 bits.
-let private readVarint (data: byte[]) (position: int) : (uint64 * int) option =
-    let mutable value = 0UL
-    let mutable length = 0
-    let mutable result = None
-    let mutable failed = false
-
-    while result.IsNone && not failed do
-        if position + length >= data.Length then
-            failed <- true
-        else
-            let b = data[position + length]
-
-            // The tenth byte has room for one bit only.
-            if length = 9 && b > 1uy then
-                failed <- true
-            else
-                value <- value ||| (uint64 (b &&& 0x7Fuy) <<< (7 * length))
-                length <- length + 1
-
-                if b < 0x80uy then
-                    result <- Some(value, length)
-
-    result
-
 /// A protobuf tag: the field's number and wire type, and how many bytes the
 /// tag itself took.
 type private WireTag =
@@ -725,7 +699,7 @@ type private WireTag =
       Length: int }
 
 let private readTag (data: byte[]) (position: int) : WireTag option =
-    match readVarint data position with
+    match Varint.read data position with
     | Some(tag, length) when tag >>> 3 >= 1UL && tag >>> 3 <= uint64 Int32.MaxValue ->
         Some
             { Field = int (tag >>> 3)
@@ -739,11 +713,11 @@ let private skipScalar (data: byte[]) (position: int) (wireType: int) : int opti
         if position + width <= data.Length then Some(position + width) else None
 
     match wireType with
-    | 0 -> readVarint data position |> Option.map (fun (_, length) -> position + length)
+    | 0 -> Varint.read data position |> Option.map (fun (_, length) -> position + length)
     | 1 -> fixedWidth 8
     | 5 -> fixedWidth 4
     | 2 ->
-        match readVarint data position with
+        match Varint.read data position with
         | Some(size, length) when size <= uint64 (data.Length - position - length) -> Some(position + length + int size)
         | _ -> None
     | _ -> None

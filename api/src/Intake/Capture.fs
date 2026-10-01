@@ -9,11 +9,11 @@
 module NinjaCat.Api.Intake.Capture
 
 open System
-open System.Buffers.Binary
 open System.IO
 open System.Text
 open System.Text.Json
 open System.Threading
+open Google.Protobuf
 open Microsoft.AspNetCore.Http
 
 let private strictUtf8 = UTF8Encoding(false, true)
@@ -28,92 +28,58 @@ let private printable (data: ReadOnlySpan<byte>) : string option =
     with :? DecoderFallbackException ->
         None
 
-/// A varint at `position`: its value and the position after it.
-let private varint (data: ReadOnlySpan<byte>) (position: int) : (uint64 * int) option =
-    let mutable value = 0UL
-    let mutable shift = 0
-    let mutable i = position
-    let mutable result = None
-    let mutable failed = false
-
-    while result.IsNone && not failed do
-        if i >= data.Length || shift > 63 then
-            failed <- true
-        else
-            let b = data[i]
-            value <- value ||| (uint64 (b &&& 0x7fuy) <<< shift)
-            i <- i + 1
-            shift <- shift + 7
-            if b < 0x80uy then result <- Some(value, i)
-
-    result
-
 let private hexPreview (data: ReadOnlySpan<byte>) : string =
     if data.Length > 16 then Convert.ToHexStringLower(data.Slice(0, 16)) + "..." else Convert.ToHexStringLower data
 
 /// Walks protobuf's wire format with no schema: `field_number: value` per
 /// line, nested messages indented. False when the bytes are not protobuf.
-let rec private dumpProtoInto (out: StringBuilder) (data: ReadOnlySpan<byte>) (depth: int) : bool =
+let rec private dumpProtoInto (out: StringBuilder) (data: byte[]) (depth: int) : bool =
     if data.Length = 0 || depth > 8 then
         false
     else
         let pad = String(' ', depth * 2)
-        let mutable i = 0
+        use input = new CodedInputStream(data)
         let mutable valid = true
 
-        while valid && i < data.Length do
-            match varint data i with
-            | None -> valid <- false
-            | Some(tag, afterTag) ->
-                i <- afterTag
-                let field = tag >>> 3
+        try
+            while valid && not input.IsAtEnd do
+                let tag = input.ReadTag()
+                let field = WireFormat.GetTagFieldNumber tag
 
-                if field = 0UL then
-                    valid <- false
-                else
-                    match int (tag &&& 7UL) with
-                    | 0 ->
-                        match varint data i with
-                        | None -> valid <- false
-                        | Some(value, next) ->
-                            out.Append($"{pad}{field}: {value}\n") |> ignore
-                            i <- next
-                    | 1 when i + 8 <= data.Length ->
-                        let bits = BinaryPrimitives.ReadUInt64LittleEndian(data.Slice(i, 8))
-                        out.Append($"{pad}{field}: {bits} (f64 {BitConverter.UInt64BitsToDouble bits})\n") |> ignore
-                        i <- i + 8
-                    | 5 when i + 4 <= data.Length ->
-                        let bits = BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(i, 4))
-                        out.Append($"{pad}{field}: {bits} (f32 {BitConverter.UInt32BitsToSingle bits})\n") |> ignore
-                        i <- i + 4
-                    | 2 ->
-                        match varint data i with
-                        | Some(length, next) when length <= uint64 (data.Length - next) ->
-                            let value = data.Slice(next, int length)
-                            i <- next + int length
-                            let nested = StringBuilder()
+                match WireFormat.GetTagWireType tag with
+                | WireFormat.WireType.Varint -> out.Append($"{pad}{field}: {input.ReadUInt64()}\n") |> ignore
+                | WireFormat.WireType.Fixed64 ->
+                    let bits = input.ReadFixed64()
+                    out.Append($"{pad}{field}: {bits} (f64 {BitConverter.UInt64BitsToDouble bits})\n") |> ignore
+                | WireFormat.WireType.Fixed32 ->
+                    let bits = input.ReadFixed32()
+                    out.Append($"{pad}{field}: {bits} (f32 {BitConverter.UInt32BitsToSingle bits})\n") |> ignore
+                | WireFormat.WireType.LengthDelimited ->
+                    let value = input.ReadBytes().ToByteArray()
+                    let nested = StringBuilder()
 
-                            // A length-delimited field is text, a nested
-                            // message, or bytes; tried in that order.
-                            if value.Length = 0 then
-                                out.Append($"{pad}{field}: \"\"\n") |> ignore
+                    // A length-delimited field is text, a nested message, or
+                    // bytes; tried in that order.
+                    if value.Length = 0 then
+                        out.Append($"{pad}{field}: \"\"\n") |> ignore
+                    else
+                        match printable (ReadOnlySpan value) with
+                        | Some text -> out.Append($"{pad}{field}: {JsonSerializer.Serialize text}\n") |> ignore
+                        | None ->
+                            if dumpProtoInto nested value (depth + 1) then
+                                out.Append($"{pad}{field}: {{\n{nested}{pad}}}\n") |> ignore
                             else
-                                match printable value with
-                                | Some text -> out.Append($"{pad}{field}: {JsonSerializer.Serialize text}\n") |> ignore
-                                | None ->
-                                    if dumpProtoInto nested value (depth + 1) then
-                                        out.Append($"{pad}{field}: {{\n{nested}{pad}}}\n") |> ignore
-                                    else
-                                        out.Append($"{pad}{field}: <{value.Length} B> {hexPreview value}\n") |> ignore
-                        | _ -> valid <- false
-                    | _ -> valid <- false
+                                out.Append($"{pad}{field}: <{value.Length} B> {hexPreview (ReadOnlySpan value)}\n") |> ignore
+                | _ -> valid <- false
+        with :? InvalidProtocolBufferException ->
+            valid <- false
 
         valid
 
 /// The bytes as a schema-less protobuf dump, or None when they are not protobuf.
 let dumpProto (data: byte[]) : string option =
     let out = StringBuilder()
-    if dumpProtoInto out (ReadOnlySpan data) 0 && out.Length > 0 then Some(out.ToString()) else None
+    if dumpProtoInto out data 0 && out.Length > 0 then Some(out.ToString()) else None
 
 /// The classic hexdump: offset, sixteen bytes, their ASCII. First 4096 bytes.
 let hexDump (data: byte[]) : string =

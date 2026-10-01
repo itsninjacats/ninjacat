@@ -481,34 +481,7 @@ let private ipv4Syntax =
 
 let private ipv6Syntax = Regex(@"\A[0-9a-fA-F:.]+\z", RegexOptions.Compiled)
 
-/// An IPv6 address as Go prints it: the longest run of two or more zero
-/// groups becomes "::", and the tail is never written in dotted form.
-let private formatIPv6 (bytes: byte[]) : string =
-    let groups = Array.init 8 (fun i -> (int bytes[2 * i] <<< 8) ||| int bytes[2 * i + 1])
-    let mutable runStart = -1
-    let mutable runLength = 0
-    let mutable i = 0
-
-    while i < 8 do
-        let mutable j = i
-
-        while j < 8 && groups[j] = 0 do
-            j <- j + 1
-
-        if j - i >= 2 && j - i > runLength then
-            runStart <- i
-            runLength <- j - i
-
-        i <- max j (i + 1)
-
-    let hex (part: int[]) : string = String.Join(":", part |> Array.map (fun g -> g.ToString "x"))
-
-    if runStart < 0 then
-        hex groups
-    else
-        hex groups[.. runStart - 1] + "::" + hex groups[runStart + runLength ..]
-
-/// An address as Go's net.IP reads and prints it; None when it is not one.
+/// An address in its canonical text; None when it is not one.
 /// "" is no address (a hop that did not answer) and stays "". Stricter than
 /// IPAddress.Parse: four plain decimal parts for IPv4, no zone for IPv6.
 let ipText (text: string) : string option =
@@ -524,7 +497,7 @@ let ipText (text: string) : string option =
             if address.IsIPv4MappedToIPv6 then
                 Some(address.MapToIPv4().ToString())
             else
-                Some(formatIPv6 (address.GetAddressBytes()))
+                Some(address.ToString())
         | _ -> None
     else
         None

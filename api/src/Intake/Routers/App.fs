@@ -43,32 +43,6 @@ let private flagHasUnit = uint64 metricFlags.FlagHasUnit
 /// Float64, so a sint64 past this is rounded on the way in.
 let private maxExactInt = 1L <<< 53
 
-/// Go's binary.Uvarint: the number at `start` and the bytes it took. None
-/// when the input ends inside the number or the number overflows 64 bits.
-let private uvarint (raw: byte[]) (start: int) : (uint64 * int) option =
-    let mutable value = 0UL
-    let mutable shift = 0
-    let mutable index = 0
-    let mutable result = None
-    let mutable finished = false
-
-    while not finished && start + index < raw.Length do
-        let b = raw[start + index]
-
-        if index = 10 then
-            finished <- true
-        elif b < 0x80uy then
-            if not (index = 9 && b > 1uy) then
-                result <- Some(value ||| (uint64 b <<< shift), index + 1)
-
-            finished <- true
-        else
-            value <- value ||| (uint64 (b &&& 0x7Fuy) <<< shift)
-            shift <- shift + 7
-            index <- index + 1
-
-    result
-
 /// A "varint length + bytes" string dictionary.
 ///
 /// Every reference column is base-1 with the empty string implicit at 0, so
@@ -81,7 +55,7 @@ let strDict (raw: byte[]) : string[] * string option =
     let mutable problem = None
 
     while problem.IsNone && at < raw.Length do
-        match uvarint raw at with
+        match Varint.read raw at with
         | Some(length, taken) when length <= uint64 (raw.Length - at - taken) ->
             entries.Add(Encoding.UTF8.GetString(raw, at + taken, int length))
             at <- at + taken + int length

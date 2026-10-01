@@ -161,22 +161,9 @@ let splitTraceId (bytes: byte[]) : uint64 * uint64 =
 /// The hex upper half of a 128-bit trace id, from meta["_dd.p.tid"]. Anything
 /// unparseable is 0, and stays in meta where a reader can still see it.
 let parseHex64 (text: string) : uint64 =
-    let mutable value = 0UL
-    let mutable valid = text <> ""
-
-    for c in text do
-        let digit =
-            if c >= '0' && c <= '9' then int c - int '0'
-            elif c >= 'a' && c <= 'f' then int c - int 'a' + 10
-            elif c >= 'A' && c <= 'F' then int c - int 'A' + 10
-            else -1
-
-        if digit < 0 || value > (UInt64.MaxValue >>> 4) then
-            valid <- false
-        else
-            value <- (value <<< 4) ||| uint64 digit
-
-    if valid then value else 0UL
+    match UInt64.TryParse(text, Globalization.NumberStyles.AllowHexSpecifier, Globalization.CultureInfo.InvariantCulture) with
+    | true, value -> value
+    | false, _ -> 0UL
 
 let private writeV04ArrayValue (writer: Utf8JsonWriter) (value: AttributeArrayValue) : unit =
     match value.Type with

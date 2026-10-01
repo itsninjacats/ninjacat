@@ -4,6 +4,7 @@ open System
 open System.Text
 open System.Text.Json
 open System.Text.RegularExpressions
+open Google.Protobuf
 open Microsoft.Extensions.Logging
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
@@ -50,6 +51,53 @@ module Text =
 
     /// ClickHouse has no Bool in these tables; flags are UInt8.
     let flag (value: bool) : uint8 = if value then 1uy else 0uy
+
+/// Protobuf's variable-length integers, where they appear outside a message
+/// the generated classes read: the dictionaries of metrics v3, the DNS
+/// buffers of a connections payload, a walk over fields with no schema.
+module Varint =
+    /// The varint at `position`: its value and the bytes it took. None when
+    /// the bytes run out before `stop`, or it is longer than a varint can be.
+    let readBefore (data: byte[]) (position: int) (stop: int) : (uint64 * int) option =
+        if position < 0 || position >= stop then
+            None
+        else
+            use input = new CodedInputStream(data, position, stop - position)
+            let before = input.Position
+
+            try
+                let value = input.ReadUInt64()
+                Some(value, int (input.Position - before))
+            with :? InvalidProtocolBufferException ->
+                None
+
+    let read (data: byte[]) (position: int) : (uint64 * int) option = readBefore data position data.Length
+
+/// Protobuf messages as JSON text, written by the protobuf library in
+/// proto3's JSON mapping: lowerCamelCase names, 64-bit integers as strings,
+/// enums by name, fields at their default left out.
+module ProtoJson =
+    /// "" for a message that is absent.
+    let message (value: IMessage) : string =
+        if isNull value then "" else JsonFormatter.Default.Format value
+
+    /// A list of messages as a JSON array; "" for an empty list.
+    let messages (values: seq<'message> when 'message :> IMessage) : string =
+        if Seq.isEmpty values then
+            ""
+        else
+            "[" + String.Join(",", values |> Seq.map (fun value -> JsonFormatter.Default.Format value)) + "]"
+
+    /// A map of messages as a JSON object, in the map's own order; "" for an
+    /// empty map.
+    let messageMap (entries: seq<Collections.Generic.KeyValuePair<'key, 'message>> when 'message :> IMessage) : string =
+        if Seq.isEmpty entries then
+            ""
+        else
+            let entry (pair: Collections.Generic.KeyValuePair<'key, 'message>) =
+                JsonSerializer.Serialize(string pair.Key) + ":" + JsonFormatter.Default.Format pair.Value
+
+            "{" + String.Join(",", entries |> Seq.map entry) + "}"
 
 module Time =
     let private rfc3339 =

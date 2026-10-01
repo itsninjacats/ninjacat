@@ -9,6 +9,7 @@ module NinjaCat.Api.Intake.Routers.ProcessBuffers
 open System
 open System.Buffers.Binary
 open System.Text
+open NinjaCat.Api.Intake
 
 let private uint16At (buffer: byte[]) (at: int) : int =
     int (BinaryPrimitives.ReadUInt16LittleEndian(ReadOnlySpan(buffer, at, 2)))
@@ -107,31 +108,6 @@ module TagBuffer =
 /// keeps the names inside `encodedDNS`, version 2 in a buffer of their own,
 /// `encodedDomainDatabase`.
 module DnsBuffer =
-    /// A varint as Go's binary.Uvarint reads one: the value and the bytes it
-    /// took. None when the buffer ends inside the number or it overflows 64
-    /// bits.
-    let private uvarint (buffer: byte[]) (at: int) : (uint64 * int) option =
-        let mutable value = 0UL
-        let mutable shift = 0
-        let mutable i = 0
-        let mutable result = None
-        let mutable reading = true
-
-        while reading && at + i < buffer.Length do
-            let b = buffer[at + i]
-
-            if i = 10 || (i = 9 && b > 1uy && b < 0x80uy) then
-                reading <- false
-            elif b < 0x80uy then
-                result <- Some(value ||| (uint64 b <<< shift), i + 1)
-                reading <- false
-            else
-                value <- value ||| (uint64 (b &&& 0x7Fuy) <<< shift)
-                shift <- shift + 7
-                i <- i + 1
-
-        result
-
     /// `count` names from `at`, each behind a varint length, stopping at `stop`.
     let private readNames (buffer: byte[]) (at: int) (stop: int) (count: uint64) : Result<string[], string> =
         let names = ResizeArray<string>()
@@ -139,7 +115,7 @@ module DnsBuffer =
         let mutable error = None
 
         while error.IsNone && position < stop && uint64 names.Count < count do
-            match uvarint buffer position with
+            match Varint.read buffer position with
             | None -> error <- Some $"unreadable name length at byte {position}"
             | Some(length, read) ->
                 let first = position + read
@@ -161,11 +137,11 @@ module DnsBuffer =
         if buffer.Length < 3 then
             Error "encodedDNS is shorter than its preamble"
         else
-            let positionBlockLength = uvarint buffer 3
+            let positionBlockLength = Varint.read buffer 3
 
             let nameBlockLength =
                 match positionBlockLength with
-                | Some(_, read) -> uvarint buffer (3 + read)
+                | Some(_, read) -> Varint.read buffer (3 + read)
                 | None -> None
 
             match nameBlockLength with
@@ -177,10 +153,10 @@ module DnsBuffer =
     /// Version 2: the number of names, a varint that is never used, then the
     /// names.
     let private namesV2 (buffer: byte[]) : Result<string[], string> =
-        match uvarint buffer 0 with
+        match Varint.read buffer 0 with
         | None -> Ok [||]
         | Some(count, read) ->
-            match uvarint buffer read with
+            match Varint.read buffer read with
             | None when read < buffer.Length -> Error "encodedDomainDatabase: unreadable header"
             | None -> Ok [||]
             | Some(_, readForMiddle) -> readNames buffer (read + readForMiddle) buffer.Length count

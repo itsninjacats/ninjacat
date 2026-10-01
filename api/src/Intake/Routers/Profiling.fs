@@ -465,26 +465,8 @@ let handleProfile (label: string) : Handler =
 let private isJsonSpace (b: byte) : bool =
     b = ' 'B || b = '\t'B || b = '\r'B || b = '\n'B
 
-/// What Go's bytes.TrimSpace takes for white space: Unicode's, not ASCII's.
-let private isSpace (rune: Rune) : bool =
-    match rune.Value with
-    | 0x09
-    | 0x0A
-    | 0x0B
-    | 0x0C
-    | 0x0D
-    | 0x20
-    | 0x85
-    | 0xA0
-    | 0x1680
-    | 0x2028
-    | 0x2029
-    | 0x202F
-    | 0x205F
-    | 0x3000 -> true
-    | value -> value >= 0x2000 && value <= 0x200A
-
-/// The bytes without the white space at either end.
+/// The bytes without the white space at either end: Unicode's white space,
+/// not ASCII's.
 let private trimSpace (data: byte[]) : byte[] =
     let mutable first = 0
     let mutable last = data.Length
@@ -493,7 +475,7 @@ let private trimSpace (data: byte[]) : byte[] =
     while trimming && first < last do
         let status, rune, length = Rune.DecodeFromUtf8(ReadOnlySpan(data, first, last - first))
 
-        if status = OperationStatus.Done && isSpace rune then
+        if status = OperationStatus.Done && Rune.IsWhiteSpace rune then
             first <- first + length
         else
             trimming <- false
@@ -503,7 +485,7 @@ let private trimSpace (data: byte[]) : byte[] =
     while trimming && first < last do
         let status, rune, length = Rune.DecodeLastFromUtf8(ReadOnlySpan(data, first, last - first))
 
-        if status = OperationStatus.Done && isSpace rune then
+        if status = OperationStatus.Done && Rune.IsWhiteSpace rune then
             last <- last - length
         else
             trimming <- false
