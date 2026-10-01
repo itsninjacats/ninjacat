@@ -79,8 +79,8 @@ routers that needed them, which is how the copies came about.
 - [ ] **Engine**: two SQL parameter collectors, two tag-filter models, three duration
       parsers, `maxPoints` 2000 in `Panel` and 1500 in `Plan`. `Panel.querySeries`
       aggregates in one pass, which `Compile.fs` itself calls wrong for multi-host series.
-- [ ] **Dead code**: `Text.joinOrDash`, `Route.put`, `ProcessFrame.typeName`,
-      `Json.tryInt64`; used only by tests: `Json.tryParseList`, `Rum.wrap`. Unused
+- [ ] **Dead code**: `Text.joinOrDash`, `ProcessFrame.typeName`,
+      `Json.tryInt64`; used only by tests: `Json.tryParseList`. Unused
       endpoint: `/internal/metrics/hosts` (check for other callers first).
 - [ ] **Parity machinery with nothing left to match**: `TraceSketch.GoMath` (125 lines
       re-implementing Go's `math` to the last bit), `ApiPayloads.wrongWireType` and
@@ -92,6 +92,52 @@ routers that needed them, which is how the copies came about.
       `Intake/Routes.fs:14`, `Engine/Query/Compile.fs:102,123`, `Routers/Lenient.fs:104`,
       `Routers/Rum.fs:353` (trusting any `X-Forwarded-For`, justified only by Gin's default
       — a security decision that needs its own reason).
+
+## 1b. Use what the framework and the libraries already do
+
+From a second audit on 2026-10-01, of home-made replacements for things .NET, ASP.NET or a
+referenced library provides. Each replacement API was checked against the pinned version;
+the items themselves are not started. (Done already: the intake's own HTTP router, replaced
+by Oxpecker's.)
+
+- [ ] **Pprof**: `Routers/Pprof.fs` decodes by hand a message `src/Proto` already generates
+      (`Perftools.Profiles.Profile`). `Profile.Parser.ParseFrom` plus the soundness checks;
+      about 200 lines go. A few verdicts on malformed input change (`pprofVerdicts`).
+- [ ] **Protobuf to JSON**: three hand writers (`Kubeops.GoJson`, `Process.GoJson`,
+      `ApiPayloads.sketchJson`) beside `JsonFormatter.Default`, which `Security.fs` and
+      `Evp.fs` already use, so two dialects are stored. `JsonFormatter` cannot write the
+      Go-shaped one (64-bit integers as strings, spaces). Decide: one writer of ours, or the
+      library's everywhere and every kubeops and process fixture `edited`.
+- [ ] **Logs over TCP**: own accept loop, TLS handshake and a buffer that is quadratic on a
+      busy connection. Kestrel's `Listen` + `UseHttps` + `UseConnectionHandler`; the framing
+      code stays.
+- [ ] **RUM CORS**: hand-written headers; ASP.NET's `AddCors`/`UseCors`. Differences to
+      check against 20 fixtures: what it sends without an `Origin`, and on non-preflights.
+- [ ] **RUM client address**: re-implements Gin's trust-every-proxy default.
+      `UseForwardedHeaders`, which is also where the trust decision belongs.
+- [ ] **ClickHouse inserts**: the driver already gets the rows (`InsertBinaryAsync` with
+      `object[]`); nothing is hand-built there. Inserting records instead is possible
+      (`InsertBinaryAsync<T>`, a `ClickHouseColumn` attribute per field) and would remove
+      the ~900 lines of `Values` lambdas and the pairing of columns by position, but 207
+      option fields would have to become `Nullable`/null, nested records be flattened, and
+      the driver cannot write nanosecond `DateTime64` at all. A migration, not a deletion.
+      Small things that can go now: `Table.Writer` (89 of 90 are `"storage_" + Name`), the
+      backtick trimming for one column, `WriterLimits`.
+- [ ] **Engine request errors** are three regexes over the JSON deserializer's exception
+      text (`Api/V2/Timeseries.fs`). Reading the two request bodies by hand is longer and
+      does not depend on message wording.
+- [ ] **Kubeops** reads protobuf fields by name string to treat 24 collector kinds as one.
+      Plain: one branch per kind, about 100 lines more.
+- [ ] Small: `Trace.parseHex64` → `UInt64.TryParse(…, AllowHexSpecifier)`;
+      `Profiling.isSpace` → `Rune.IsWhiteSpace`; `Ndm.formatIPv6` → `IPAddress.ToString()`
+      (differs only for embedded IPv4); `median`, `movingAverage`, `dist` → MathNet;
+      FNV-1a written twice; the hand-written varint readers → `CodedInputStream`.
+
+Looked home-made, kept on purpose: body decompression (the middleware drops
+`Content-Encoding`, has no zstd, and throws on a mislabelled body), the migration runner
+(nothing referenced migrates ClickHouse), the Postgres URL parser (Npgsql refuses
+`postgres://` URLs), `Config.fs`, `Capture.fs`, DDSketch and the STL/DBSCAN/Huber code
+(MathNet has none of them), the RFC 3339 and half-surrogate handling.
 
 ## 2. Intake: not served yet
 
