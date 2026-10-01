@@ -43,6 +43,22 @@ let ``zstd from the agent's pure Go build`` () = assertTheProcess (frame 5) 5uy
 let ``zstd 0.x, the legacy encoding, is refused by name`` () =
     Assert.Equal(Error "zstd 0.x frames (message encoding 2) are not supported", ProcessFrame.decode (frame 2) |> Result.map ignore)
 
+/// POST /api/v1/collector as a real datadog/agent 7.84.0 sent it (hostname
+/// "probe"): what current agents put on the wire is encoding 4.
+[<Fact>]
+let ``a frame from a real agent`` () =
+    let data = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", "frames", "frame_agent_7_84_0.bin"))
+
+    match ProcessFrame.decode data with
+    | Error e -> Assert.Fail e
+    | Ok decoded ->
+        Assert.Equal(4uy, decoded.Header.Encoding)
+        Assert.Equal(12uy, decoded.Header.Type)
+        let proc = decoded.Body :?> CollectorProc
+        Assert.Equal("probe", proc.HostName)
+        Assert.NotEmpty proc.Processes
+        Assert.Contains(proc.Processes, (fun p -> p.Command.Args |> Seq.exists (fun arg -> arg.Contains "agent")))
+
 [<Fact>]
 let ``header problems are named as the agent's library names them`` () =
     Assert.Equal(Error "invalid message length: 3", ProcessFrame.decode [| 3uy; 0uy; 12uy |] |> Result.map ignore)
