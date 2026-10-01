@@ -132,15 +132,6 @@ type ProcessRow =
       OSVersion: string
       KernelVersion: string }
 
-module ProcessTime =
-    /// A start time as its column takes it. A row without one holds Go's zero
-    /// time, the year 1. clickhouse-go wrote that as the epoch; the .NET
-    /// driver refuses it for a DateTime column, losing the whole batch, and
-    /// writes it as the year 1 into a DateTime64. So the epoch is passed, and
-    /// has_create_time says it is not a real time.
-    let column (time: DateTime) : obj =
-        if time = DateTime.MinValue then box DateTime.UnixEpoch else box time
-
 module Processes =
     let table: Table<ProcessRow> =
         { Table.create
@@ -171,7 +162,7 @@ module Processes =
                 "host_uuid"; "os_name"; "os_platform"; "os_family"; "os_version"; "kernel_version" ]
               (fun (r: ProcessRow) ->
                   [| r.TenantID; r.Timestamp; r.Host; r.PID; r.PPID; r.User; r.Comm; r.Exe; r.Cmdline
-                     r.RSS; r.VMS; r.CPUPct; r.Threads; r.OpenFDs; r.State; ProcessTime.column r.CreateTime; r.ContainerID; r.Tags
+                     r.RSS; r.VMS; r.CPUPct; r.Threads; r.OpenFDs; r.State; r.CreateTime; r.ContainerID; r.Tags
                      r.SnapshotID; r.NsPID; r.Key
                      r.Cwd; r.Root; r.OnDisk; r.Pgroup; r.Args
                      r.UID; r.GID; r.EUID; r.EGID; r.SUID; r.SGID

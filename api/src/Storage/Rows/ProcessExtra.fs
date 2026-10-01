@@ -559,7 +559,7 @@ module ProcessStats =
                 "agent_version"; "request_id" ]
               (fun (r: ProcessStatRow) ->
                   [| r.TenantID; r.Timestamp; r.Host; r.SnapshotID
-                     r.PID; r.Key; ProcessTime.column r.CreateTime; r.HasCreateTime
+                     r.PID; r.Key; r.CreateTime; r.HasCreateTime
                      r.Nice; r.Threads; r.OpenFDs
                      r.MemRSS; r.MemVMS; r.MemSwap; r.MemShared
                      r.MemText; r.MemLib; r.MemData; r.MemDirty
@@ -657,7 +657,7 @@ module ProcessDiscoveries =
                 "group_id"; "group_size"; "agent_version"; "request_id" ]
               (fun (r: ProcessDiscoveryRow) ->
                   [| r.TenantID; r.Timestamp; r.Host; r.SnapshotID
-                     r.PID; r.NsPID; ProcessTime.column r.CreateTime; r.HasCreateTime; r.ByteKey
+                     r.PID; r.NsPID; r.CreateTime; r.HasCreateTime; r.ByteKey
                      r.Comm; r.Exe; r.Cmdline; r.Args; r.Cwd; r.Root; r.OnDisk; r.PPID; r.Pgroup
                      r.User; r.UID; r.GID; r.EUID; r.EGID; r.SUID; r.SGID; r.HostInfo
                      r.GroupID; r.GroupSize; r.AgentVersion; r.RequestID |])

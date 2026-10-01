@@ -91,3 +91,61 @@ let ``every row the fixtures produce fits its ClickHouse table`` () =
         Assert.NotEmpty writes
     finally
         admin.ExecuteNonQueryAsync($"DROP DATABASE IF EXISTS {database}").GetAwaiter().GetResult() |> ignore
+
+[<Fact>]
+let ``times ClickHouse cannot hold are brought into range, not the end of the batch`` () =
+    let admin = client "default"
+
+    try
+        admin.PingAsync().GetAwaiter().GetResult() |> ignore
+    with _ ->
+        Assert.Skip "ClickHouse is not reachable"
+
+    let database = "ninjacat_roundtrip_" + Guid.NewGuid().ToString "N"
+    admin.ExecuteNonQueryAsync($"CREATE DATABASE {database}").GetAwaiter().GetResult() |> ignore
+
+    try
+        let scratch = client database
+
+        scratch
+            .ExecuteNonQueryAsync(
+                "CREATE TABLE times (id UInt8, plain DateTime('UTC'), milli DateTime64(3, 'UTC'), nano DateTime64(9, 'UTC'), "
+                + "maybe Nullable(DateTime64(3, 'UTC')), many Array(Nullable(DateTime64(3, 'UTC')))) ENGINE = MergeTree ORDER BY id"
+            )
+            .GetAwaiter()
+            .GetResult()
+        |> ignore
+
+        let log = ErrorLog()
+        let sink = ClickHouseSink(scratch, log)
+        let table: Table<obj[]> = Table.create "storage_times" "times" [ "id"; "plain"; "milli"; "nano"; "maybe"; "many" ] id
+        let year (y: int) = DateTime(y, 6, 1, 0, 0, 0, DateTimeKind.Utc)
+
+        (sink :> ISink)
+            .Write(
+                table,
+                [| // Go's zero time: the Go driver wrote the epoch.
+                   [| 1uy; DateTime.MinValue; DateTime.MinValue; UnixNanos 1_790_179_838_123_456_789L; null; [| Nullable DateTime.MinValue; Nullable() |] |]
+                   [| 2uy; year 9999; year 9999; UnixNanos 0L; year 2026; [| Nullable(year 2026) |] |]
+                   [| 3uy; year 1950; year 1800; UnixNanos 1L; null; Array.empty<Nullable<DateTime>> |] |]
+            )
+
+        sink.StopAsync().GetAwaiter().GetResult()
+        Assert.Empty log.Errors
+
+        use reader =
+            scratch
+                .ExecuteReaderAsync("SELECT toString(plain), toString(milli), toString(nano), toString(maybe), toString(many) FROM times ORDER BY id")
+                .GetAwaiter()
+                .GetResult()
+
+        let rows = [ while reader.Read() do [ for i in 0..4 -> reader.GetString i ] ]
+
+        Assert.Equal<string list list>(
+            [ [ "1970-01-01 00:00:00"; "1970-01-01 00:00:00.000"; "2026-09-23 16:10:38.123456789"; ""; "['1970-01-01 00:00:00.000',NULL]" ]
+              [ "2105-12-31 23:59:59"; "2262-04-11 23:47:16.000"; "1970-01-01 00:00:00.000000000"; "2026-06-01 00:00:00.000"; "['2026-06-01 00:00:00.000']" ]
+              [ "1970-01-01 00:00:00"; "1900-01-01 00:00:00.000"; "1970-01-01 00:00:00.000000001"; ""; "[]" ] ],
+            rows
+        )
+    finally
+        admin.ExecuteNonQueryAsync($"DROP DATABASE IF EXISTS {database}").GetAwaiter().GetResult() |> ignore

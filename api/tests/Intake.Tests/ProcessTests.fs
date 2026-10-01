@@ -360,18 +360,6 @@ let ``a start time past what the column holds is pinned to its end`` () =
     Assert.Equal(1uy, row.HasCreateTime)
     Assert.Equal(DateTime(2106, 2, 7, 6, 28, 15, DateTimeKind.Utc), row.CreateTime)
 
-/// Go's zero time is the year 1, which the driver refuses for a DateTime
-/// column; clickhouse-go wrote it as the epoch.
-[<Fact>]
-let ``a row without a start time gives the epoch to its column`` () =
-    let proc = CollectorProc()
-    proc.Processes.Add(Process(Pid = 1))
-    let row = processRow info proc proc.Processes[0]
-    let column = Processes.table.Columns |> List.findIndex (fun name -> name = "create_time")
-
-    Assert.Equal(DateTime.MinValue, row.CreateTime)
-    Assert.Equal(box DateTime.UnixEpoch, (Processes.table.Values row)[column])
-
 [<Fact>]
 let ``an enum value newer than the definitions is stored as its number`` () =
     let proc = CollectorProc()
