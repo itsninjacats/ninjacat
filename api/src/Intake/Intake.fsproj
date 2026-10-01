@@ -24,6 +24,8 @@
     <Compile Include="Routers/Dbm.fs" />
     <Compile Include="Routers/Ndm.fs" />
     <Compile Include="Routers/Misc.fs" />
+    <Compile Include="Routers/Lenient.fs" />
+    <Compile Include="Routers/Pprof.fs" />
     <Compile Include="Routers/Profiling.fs" />
     <Compile Include="Routers/Security.fs" />
     <Compile Include="Routers/Evp.fs" />
