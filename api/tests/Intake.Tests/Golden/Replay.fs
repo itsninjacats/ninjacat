@@ -99,9 +99,9 @@ let private insertColumns (insert: string) : string list =
     |> Array.map _.Trim()
     |> List.ofArray
 
-/// Runs the fixture's request; returns the differences from what Go did.
-let run (fixture: Fixture) : string list =
-    let json = fixture.Json
+/// Sends the fixture's request to the F# intake; returns the answer and what
+/// was written.
+let send (fixture: Fixture) : Response * CapturedWrite list =
     let sink = CapturingSink()
 
     let deps: Deps =
@@ -110,7 +110,7 @@ let run (fixture: Fixture) : string list =
           Log = NullLogger.Instance
           AckUnknown = false }
 
-    let http, body = request json
+    let http, body = request fixture.Json
 
     // Most Go tests built one engine and sent to "example.com"; the ones that
     // went through the host dispatch carry a real intake host.
@@ -120,7 +120,12 @@ let run (fixture: Fixture) : string list =
         else
             Routes.create deps
 
-    let response = intake http body
+    intake http body, sink.Writes
+
+/// Runs the fixture's request; returns the differences from what Go did.
+let run (fixture: Fixture) : string list =
+    let json = fixture.Json
+    let response, writes = send fixture
 
     let ignored =
         Set.ofList (strings json["volatile"] @ strings (overrides[fixture.Id] |> Option.ofObj |> Option.map (fun o -> o["ignore"]) |> Option.toObj))
@@ -167,7 +172,6 @@ let run (fixture: Fixture) : string list =
     // Null means the Go test ran without a capturing node: nothing to compare.
     if not (isNull json["sends"]) then
         let sends = json["sends"].AsArray()
-        let writes = sink.Writes
 
         if sends.Count <> writes.Length then
             let goTables = sends |> Seq.map (fun s -> s["to"].GetValue<string>()) |> String.concat ", "

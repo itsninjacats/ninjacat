@@ -13,6 +13,9 @@
     <Compile Include="MsgpackTests.fs" />
     <Compile Include="ProcessFrameTests.fs" />
     <Compile Include="TcpLogsTests.fs" />
+    <Compile Include="IntakeCoreTests.fs" />
+    <Compile Include="MigrationsTests.fs" />
+    <Compile Include="ClickHouseRoundTripTests.fs" />
     <Compile Include="ApiTests.fs" />
     <Compile Include="AppTests.fs" />
     <Compile Include="ConfigTests.fs" />
@@ -40,6 +43,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="ClickHouse.Driver" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Intake/Intake.fsproj" />

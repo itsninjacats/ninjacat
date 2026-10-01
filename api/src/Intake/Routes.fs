@@ -84,7 +84,9 @@ let hostName (http: HttpContext) : string = http.Request.Host.Host.TrimEnd '.'
 
 let private unknownHost (deps: Deps) (host: string) : Response =
     deps.Log.LogWarning("UNKNOWN HOST: \"{Host}\" — no intake serves this name", host)
-    Response.errors 404 [ $"no intake for host \"{host}\"" ]
+    // The body names the host we saw: the one thing the operator cannot read
+    // off their own config, where DD_SITE and each override build it differently.
+    Response.bytes 404 "application/json" (System.Text.Encoding.UTF8.GetBytes($"{{\"errors\":[\"no intake for host \\\"{host}\\\"\"]}}\n"))
 
 /// The whole intake: the request's host picks the product.
 ///

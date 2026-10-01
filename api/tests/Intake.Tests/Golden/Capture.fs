@@ -6,6 +6,7 @@ open NinjaCat.Api.Storage
 /// column values that would be inserted.
 type CapturedWrite =
     { Writer: string
+      Table: string
       Columns: string list
       Rows: obj[]
       Args: obj[][] }
@@ -24,6 +25,7 @@ type CapturingSink() =
         member _.Write(table: Table<'row>, rows: 'row[]) =
             writes.Add
                 { Writer = table.Writer
+                  Table = table.Name
                   Columns = table.Columns
                   Rows = rows |> Array.map box
                   Args = rows |> Array.map table.Values }
