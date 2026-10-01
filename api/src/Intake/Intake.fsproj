@@ -30,6 +30,7 @@
     <Compile Include="Routers/CiVisibility.fs" />
     <Compile Include="Routers/CiWebhook.fs" />
     <Compile Include="Routers/Trace.fs" />
+    <Compile Include="Routers/ProcessBuffers.fs" />
     <Compile Include="Routers/Process.fs" />
     <Compile Include="Routers/Rum.fs" />
     <Compile Include="Routes.fs" />
