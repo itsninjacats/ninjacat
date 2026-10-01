@@ -4,7 +4,8 @@
 ///   forced and HTTPS was unreachable at agent start-up.
 ///
 /// A raw TCP (or TLS) byte stream, not HTTP. The agent sends and never reads:
-/// no handshake, no acknowledgement.
+/// no handshake, no acknowledgement. Kestrel owns the socket; this file owns
+/// the bytes.
 ///
 /// Two framings exist, chosen by the agent's `dev_mode_use_proto` for the
 /// whole process, so decided here once per connection:
@@ -20,12 +21,13 @@ module NinjaCat.Api.Intake.TcpLogs
 
 open System
 open System.Buffers.Binary
+open System.Buffers
 open System.IO
-open System.Net.Security
-open System.Net.Sockets
-open System.Security.Cryptography.X509Certificates
+open System.IO.Pipelines
 open System.Threading
 open System.Threading.Tasks
+open Microsoft.AspNetCore.Connections
+open Microsoft.AspNetCore.Connections.Features
 open Microsoft.Extensions.Logging
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
@@ -182,7 +184,7 @@ let takeFrames (framing: Framing) (buffer: ReadOnlySpan<byte>) : Result<byte[] l
 
 /// Owns one connection: decides its framing, then reads frames and stores
 /// what they give, in batches, until the peer leaves or a key is unknown.
-let private handleConnection (deps: Deps) (remote: string) (stream: Stream) (ct: CancellationToken) : Task =
+let private handleConnection (deps: Deps) (remote: string) (input: PipeReader) (serverStopping: CancellationToken) : Task =
     task {
         let gate = obj ()
         let logs = ResizeArray<LogRow>()
@@ -201,45 +203,48 @@ let private handleConnection (deps: Deps) (remote: string) (stream: Stream) (ct:
 
         try
             try
-                let chunk = Array.zeroCreate<byte> (64 * 1024)
-                let mutable pending = Array.empty<byte>
                 let mutable framing = None
                 let mutable opened = true
                 let connectedAt = DateTime.UtcNow
 
                 while opened do
-                    let! read = stream.ReadAsync(chunk.AsMemory(), ct)
+                    // Everything received and not yet consumed, however many
+                    // reads it took to arrive.
+                    let! read = input.ReadAsync serverStopping
+                    let received = read.Buffer.ToArray()
+                    let mutable consumed = 0
 
-                    if read = 0 then
+                    // The framing shows in the first 33 bytes. A sender
+                    // slower than that is taken for the default.
+                    if framing.IsNone && (received.Length > keyLength || DateTime.UtcNow - connectedAt > flushInterval) then
+                        framing <- Some(detectFraming received)
+
+                    match framing with
+                    | None -> ()
+                    | Some framing ->
+                        match takeFrames framing (ReadOnlySpan received) with
+                        | Error e ->
+                            deps.Log.LogWarning("[logs-tcp] {Remote}: closing connection: {Error}", remote, e)
+                            opened <- false
+                        | Ok(frames, taken) ->
+                            consumed <- taken
+
+                            for frame in frames do
+                                if opened then
+                                    match handleFrame deps.Store deps.Log remote framing frame with
+                                    | Nothing -> ()
+                                    | LogLine row -> lock gate (fun () -> logs.Add row)
+                                    | Undecodable row -> lock gate (fun () -> raws.Add row)
+                                    | UnknownKey -> opened <- false
+
+                            if lock gate (fun () -> logs.Count >= maxBatch || raws.Count >= maxBatch) then
+                                flush ()
+
+                    // What was not a whole frame stays in the pipe for the next read.
+                    input.AdvanceTo(read.Buffer.GetPosition(int64 consumed), read.Buffer.End)
+
+                    if read.IsCompleted then
                         opened <- false
-                    else
-                        pending <- Array.append pending chunk[.. read - 1]
-
-                        // The framing shows in the first 33 bytes. A sender
-                        // slower than that is taken for the default.
-                        if framing.IsNone && (pending.Length > keyLength || DateTime.UtcNow - connectedAt > flushInterval) then
-                            framing <- Some(detectFraming pending)
-
-                        match framing with
-                        | None -> ()
-                        | Some framing ->
-                            match takeFrames framing (ReadOnlySpan pending) with
-                            | Error e ->
-                                deps.Log.LogWarning("[logs-tcp] {Remote}: closing connection: {Error}", remote, e)
-                                opened <- false
-                            | Ok(frames, consumed) ->
-                                pending <- pending[consumed..]
-
-                                for frame in frames do
-                                    if opened then
-                                        match handleFrame deps.Store deps.Log remote framing frame with
-                                        | Nothing -> ()
-                                        | LogLine row -> lock gate (fun () -> logs.Add row)
-                                        | Undecodable row -> lock gate (fun () -> raws.Add row)
-                                        | UnknownKey -> opened <- false
-
-                                if lock gate (fun () -> logs.Count >= maxBatch || raws.Count >= maxBatch) then
-                                    flush ()
             with
             | :? OperationCanceledException -> ()
             | :? IOException as e -> deps.Log.LogDebug("[logs-tcp] {Remote}: connection ended: {Error}", remote, e.Message)
@@ -248,38 +253,16 @@ let private handleConnection (deps: Deps) (remote: string) (stream: Stream) (ct:
             flush ()
     }
 
-/// Accepts connections until cancelled. With a certificate, connections are TLS.
-let serve (deps: Deps) (listener: TcpListener) (certificate: X509Certificate2 option) (ct: CancellationToken) : Task =
-    task {
-        listener.Start()
+/// One connection, as Kestrel hands it over: Kestrel listens, accepts and,
+/// when the endpoint has a certificate, speaks TLS.
+type Connection(deps: Deps) =
+    inherit ConnectionHandler()
 
-        try
-            try
-                while not ct.IsCancellationRequested do
-                    let! client = listener.AcceptTcpClientAsync ct
-                    let remote = string client.Client.RemoteEndPoint
+    override _.OnConnectedAsync(connection: ConnectionContext) : Task =
+        // An agent holds its connection open for good, so a stopping server
+        // has to be the one to leave. This token is the server's request; the
+        // connection's own (ConnectionClosed) fires when the PEER closes,
+        // which can be before its last bytes were read.
+        let lifetime = connection.Features.Get<IConnectionLifetimeNotificationFeature>()
 
-                    Task.Run(
-                        (fun () ->
-                            task {
-                                use client = client
-
-                                try
-                                    match certificate with
-                                    | None -> do! handleConnection deps remote (client.GetStream()) ct
-                                    | Some certificate ->
-                                        use tls = new SslStream(client.GetStream())
-                                        do! tls.AuthenticateAsServerAsync(certificate)
-                                        do! handleConnection deps remote tls ct
-                                with e ->
-                                    deps.Log.LogWarning("[logs-tcp] {Remote}: {Error}", remote, e.Message)
-                            }
-                            :> Task),
-                        ct
-                    )
-                    |> ignore
-            with :? OperationCanceledException ->
-                ()
-        finally
-            listener.Stop()
-    }
+        handleConnection deps (string connection.RemoteEndPoint) connection.Transport.Input lifetime.ConnectionClosedRequested

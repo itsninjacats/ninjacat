@@ -9,13 +9,6 @@ let private envOr (key: string) (fallback: string) =
     | "" -> fallback
     | v -> v
 
-/// `:8080` and `0.0.0.0:8080`, as the Go server took them, in the URL form
-/// Kestrel wants.
-let private listenUrl (address: string) : string =
-    if address.Contains "://" then address
-    elif address.StartsWith ":" then $"http://*{address}"
-    else $"http://{address}"
-
 /// A duration as Go wrote it ("15s"), or a bare number of seconds.
 let private duration (key: string) (fallback: TimeSpan) : TimeSpan =
     let raw = envOr key ""
@@ -26,12 +19,12 @@ let private duration (key: string) (fallback: TimeSpan) : TimeSpan =
     | _ -> fallback
 
 type Config =
-    { /// Where the intake process listens (NINJACAT_ADDR). Reachable from
-      /// agent machines.
-      IntakeUrl: string
+    { /// Where the intake process listens (NINJACAT_ADDR), as `:8080` or
+      /// `host:8080`. Reachable from agent machines.
+      IntakeAddr: string
       /// Where the query process listens (NINJACAT_INTERNAL_ADDR): the panel's
       /// and the query API. Internal only: nothing on it asks for a key.
-      InternalUrl: string
+      InternalAddr: string
       /// The agent's TCP transport for logs (NINJACAT_LOGS_TCP_ADDR), or
       /// None when it is "off".
       LogsTcpAddr: string option
@@ -47,6 +40,10 @@ type Config =
       /// Apply the ClickHouse migrations at start-up (NINJACAT_AUTO_MIGRATE).
       /// With more than one replica, turn it off and run `migrate` as a job.
       AutoMigrate: bool
+      /// Reverse proxies in front of the intake (NINJACAT_TRUSTED_PROXIES):
+      /// addresses or networks (`10.0.0.0/8`), comma-separated. Only what
+      /// such a proxy says in X-Forwarded-For is believed.
+      TrustedProxies: string list
       /// Answer 202 on unknown intake paths (NINJACAT_ACK_UNKNOWN).
       AckUnknown: bool
       /// DEBUG=true: every intake request is also dumped to CaptureDir.
@@ -60,8 +57,8 @@ type Config =
 // both while they coexist. The address is the exception: Go spoke the native
 // protocol on :9000, the .NET driver speaks HTTP on :8123.
 let load () =
-    { IntakeUrl = listenUrl (envOr "NINJACAT_ADDR" ":8080")
-      InternalUrl = listenUrl (envOr "NINJACAT_INTERNAL_ADDR" ":8081")
+    { IntakeAddr = envOr "NINJACAT_ADDR" ":8080"
+      InternalAddr = envOr "NINJACAT_INTERNAL_ADDR" ":8081"
       LogsTcpAddr =
         match envOr "NINJACAT_LOGS_TCP_ADDR" ":10516" with
         | "off" -> None
@@ -78,6 +75,9 @@ let load () =
         | "" -> failwith "DATABASE_URL is not set (e.g. postgres://root:mysecretpassword@localhost:5433/local)"
         | url -> url
       AutoMigrate = envOr "NINJACAT_AUTO_MIGRATE" "true" <> "false"
+      TrustedProxies =
+        (envOr "NINJACAT_TRUSTED_PROXIES" "").Split(',', StringSplitOptions.RemoveEmptyEntries ||| StringSplitOptions.TrimEntries)
+        |> List.ofArray
       AckUnknown = envOr "NINJACAT_ACK_UNKNOWN" "" = "true"
       Debug = envOr "DEBUG" "" = "true"
       CaptureDir = envOr "NINJACAT_CAPTURE_DIR" "captures"

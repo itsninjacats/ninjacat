@@ -7,11 +7,15 @@
 module NinjaCat.Api.Server.QueryHost
 
 open Microsoft.AspNetCore.Builder
+open Microsoft.AspNetCore.Hosting
 open Microsoft.Extensions.DependencyInjection
 open Oxpecker
 
 let run (cfg: Config.Config) (args: string[]) : int =
-    let builder = Hosting.createBuilder args cfg.InternalUrl
+    let builder = Hosting.createBuilder args
+
+    builder.WebHost.ConfigureKestrel(fun options -> Hosting.listen options cfg.InternalAddr ignore)
+    |> ignore
 
     // One client per database for the process: each owns its connection
     // pool. Registered through factories so the container disposes them.

@@ -8,13 +8,15 @@ module NinjaCat.Api.Server.IntakeHost
 open System
 open System.IO
 open System.Net
-open System.Net.Sockets
 open System.Security.Cryptography.X509Certificates
 open System.Threading
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Builder
+open Microsoft.AspNetCore.Connections
 open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.Http
+open Microsoft.AspNetCore.HttpOverrides
+open Microsoft.AspNetCore.Server.Kestrel.Core
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
@@ -28,30 +30,25 @@ type private SinkLifetime(sink: ClickHouseSink) =
         member _.StartAsync(_: CancellationToken) = Task.CompletedTask
         member _.StopAsync(_: CancellationToken) = sink.StopAsync()
 
-/// The agent's TCP transport for logs, as a part of the host.
-type private LogsTcpListener(deps: Deps, cfg: Config.Config, log: ILogger<LogsTcpListener>) =
-    inherit BackgroundService()
-
-    override _.ExecuteAsync(ct: CancellationToken) : Task =
-        match cfg.LogsTcpAddr with
-        | None -> Task.CompletedTask
-        | Some address ->
-            let port = int (address.Substring(address.LastIndexOf ':' + 1))
-
-            let certificate =
-                if cfg.TlsCertFile = "" && cfg.TlsKeyFile = "" then
-                    None
-                else
-                    Some(X509Certificate2.CreateFromPemFile(cfg.TlsCertFile, cfg.TlsKeyFile))
-
-            log.LogInformation("logs TCP listening on {Address} ({Mode})", address, (if certificate.IsSome then "TLS" else "plain"))
-            TcpLogs.serve deps (new TcpListener(IPAddress.Any, port)) certificate ct
-
 let run (cfg: Config.Config) (args: string[]) : int =
-    let builder = Hosting.createBuilder args cfg.IntakeUrl
+    let builder = Hosting.createBuilder args
 
-    // Flares and profiles are tens of megabytes; the agent decides the size.
-    builder.WebHost.ConfigureKestrel(fun options -> options.Limits.MaxRequestBodySize <- Nullable())
+    builder.WebHost.ConfigureKestrel(fun options ->
+        // Flares and profiles are tens of megabytes; the agent decides the size.
+        options.Limits.MaxRequestBodySize <- Nullable()
+
+        Hosting.listen options cfg.IntakeAddr ignore
+
+        // The agent's TCP transport for logs: not HTTP, so the connections go
+        // to a handler of their own. With a certificate they are TLS.
+        match cfg.LogsTcpAddr with
+        | None -> ()
+        | Some address ->
+            Hosting.listen options address (fun endpoint ->
+                if cfg.TlsCertFile <> "" || cfg.TlsKeyFile <> "" then
+                    endpoint.UseHttps(X509Certificate2.CreateFromPemFile(cfg.TlsCertFile, cfg.TlsKeyFile)) |> ignore
+
+                endpoint.UseConnectionHandler<TcpLogs.Connection>() |> ignore))
     |> ignore
 
     let writeClient = ClickHouse.createWriteClient cfg
@@ -63,6 +60,20 @@ let run (cfg: Config.Config) (args: string[]) : int =
         | Error e -> failwith e
 
     let store = ApiKeys.Store()
+
+    // Whose X-Forwarded-For is believed. ASP.NET trusts the loopback by
+    // default; these are added to it. A chain of proxies is followed as long
+    // as every hop is one of them.
+    builder.Services.Configure<ForwardedHeadersOptions>(fun (options: ForwardedHeadersOptions) ->
+        options.ForwardedHeaders <- ForwardedHeaders.XForwardedFor
+        options.ForwardLimit <- Nullable()
+
+        for proxy in cfg.TrustedProxies do
+            if proxy.Contains '/' then
+                options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse proxy)
+            else
+                options.KnownProxies.Add(IPAddress.Parse proxy))
+    |> ignore
 
     builder.Services
         .AddNpgsqlDataSource(Postgres.connectionString cfg.DatabaseUrl)
@@ -81,8 +92,8 @@ let run (cfg: Config.Config) (args: string[]) : int =
         .AddSingleton<ApiKeysKeeper>()
         .AddHostedService<ApiKeysKeeper>(fun services -> services.GetRequiredService<ApiKeysKeeper>())
         .AddHostedService<SelfMonitor>()
-        .AddHostedService<LogsTcpListener>()
         .AddRouting()
+        .AddCors()
         .AddOxpecker()
     |> ignore
 

@@ -7,6 +7,10 @@ open System.Net.Sockets
 open System.Text
 open System.Threading
 open Google.Protobuf
+open Microsoft.AspNetCore.Builder
+open Microsoft.AspNetCore.Connections
+open Microsoft.AspNetCore.Hosting
+open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Logging.Abstractions
 open Xunit
 open NinjaCat.Api.Intake
@@ -115,15 +119,22 @@ let ``an unknown key closes the connection, a frame without a key is dropped`` (
     Assert.Equal(TcpLogs.Nothing, handle TcpLogs.Lines (utf8 "nospacehere"))
     Assert.Equal(TcpLogs.Nothing, handle TcpLogs.Lines [||])
 
-/// Sends bytes to a real listener and waits for the rows.
+/// Sends bytes to a real Kestrel endpoint and waits for the rows.
 let private overTcp (payload: byte[]) (expectedRows: int) : CapturingSink =
     let sink = CapturingSink()
     let deps: Deps = { Store = store; Sink = sink; Log = NullLogger.Instance; AckUnknown = false }
-    let listener = new TcpListener(IPAddress.Loopback, 0)
-    use stop = new CancellationTokenSource()
-    listener.Start()
-    let port = (listener.LocalEndpoint :?> IPEndPoint).Port
-    let serving = TcpLogs.serve deps listener None stop.Token
+
+    let builder = WebApplication.CreateEmptyBuilder(WebApplicationOptions())
+    builder.WebHost.UseKestrelCore() |> ignore
+    builder.Services.AddSingleton<Deps>(deps) |> ignore
+
+    builder.WebHost.ConfigureKestrel(fun options ->
+        options.Listen(IPAddress.Loopback, 0, (fun endpoint -> endpoint.UseConnectionHandler<TcpLogs.Connection>() |> ignore)))
+    |> ignore
+
+    use app = builder.Build()
+    app.StartAsync().GetAwaiter().GetResult()
+    let port = Uri(Seq.head app.Urls).Port
 
     do
         use client = new TcpClient()
@@ -135,8 +146,7 @@ let private overTcp (payload: byte[]) (expectedRows: int) : CapturingSink =
     while sink.Rows<LogRow>().Length < expectedRows && DateTime.UtcNow < deadline do
         Thread.Sleep 20
 
-    stop.Cancel()
-    serving.Wait(TimeSpan.FromSeconds 5.0) |> ignore
+    app.StopAsync().Wait(TimeSpan.FromSeconds 5.0) |> ignore
     sink
 
 [<Fact>]
