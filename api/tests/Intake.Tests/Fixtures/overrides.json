@@ -1,10 +1,22 @@
 {
   "TestHandleLogsKeepsAnUndecodableBodyRaw/001": {
-    "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
     "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
   },
   "TestHandleAppV3KeepsUndecodableBodies__not_protobuf_at_all/001": {
-    "ignore": ["/sends/0/rows/0/Note", "/sends/0/args/0/13"],
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
     "why": "The note quotes the protobuf parser's error, and Google.Protobuf words it differently from Go's proto package."
+  },
+  "TestHandleProcDiscoveryStoresRows/001": {
+    "ignore": [
+      "/sends/1/args/1/6"
+    ],
+    "why": "create_time of a discovery without a start time. Go hands clickhouse-go its zero time (year 1), and that driver writes it as the epoch. The .NET driver writes year 1 as it is into this DateTime64 column (and refuses it outright for the DateTime column of `processes`), so the F# table passes the epoch itself: what Go stored. The row's CreateTime (/sends/1/rows/1/CreateTime) is still Go's zero time and is compared."
   }
 }
