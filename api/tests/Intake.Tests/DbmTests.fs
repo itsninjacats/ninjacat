@@ -136,6 +136,13 @@ let ``an event that is not an object is refused, null by name`` () =
     Assert.True((Dbm.decodeEnvelope (json "42")).IsError)
 
 [<Fact>]
+let ``the agent's empty probe stores nothing`` () =
+    for body in [ "{}"; "[]"; "" ] do
+        let response, sink = post "/api/v2/dbmmetrics" body
+        Assert.Equal(202, response.Status)
+        Assert.Empty sink.Writes
+
+[<Fact>]
 let ``a body is an array of events, one bare object, or refused`` () =
     let count (body: string) =
         Dbm.splitEvents (Encoding.UTF8.GetBytes body) |> Result.map List.length
@@ -153,19 +160,34 @@ let ``timestamp: an integer stays exact, a fraction rounds to the millisecond, a
     Assert.Equal(None, Dbm.timestamp "")
 
 [<Fact>]
-let ``planSteps tells no definition, an empty plan, three steps and not-a-list apart`` () =
+let ``planSteps tells no definition, a list of steps, an EXPLAIN document and neither apart`` () =
     Assert.Equal(Dbm.NoDefinition, Dbm.planSteps None)
+    // What the postgres check sends when it could not collect a plan.
+    Assert.Equal(Dbm.NoDefinition, Dbm.planSteps (Some(json "null")))
     Assert.Equal(Dbm.Steps 0u, Dbm.planSteps (Some(json "[]")))
     Assert.Equal(Dbm.Steps 3u, Dbm.planSteps (Some(json """[{"id":1},{"id":2},{"id":3}]""")))
-    Assert.Equal(Dbm.NotAList, Dbm.planSteps (Some(json "\"oops\"")))
+    Assert.Equal(Dbm.Document, Dbm.planSteps (Some(json "\"{\\\"Plan\\\":{}}\"")))
+    Assert.Equal(Dbm.NotAPlan, Dbm.planSteps (Some(json "5")))
 
 [<Fact>]
-let ``a plan whose definition is not a list keeps its signature and is noted as undecoded`` () =
+let ``a postgres plan, EXPLAIN output inside a string, is a plan and not an undecoded key`` () =
+    let r =
+        row
+            "databasequery"
+            """{"timestamp":1758326400000,"host":"pg1","ddsource":"postgres","dbm_type":"plan",
+                "db":{"instance":"shop","statement":"SELECT ?","plan":{"signature":"sig-1","definition":"{\"Plan\":{\"Node Type\":\"Limit\"}}"}}}"""
+
+    Assert.Equal(Some "sig-1", r.PlanSignature)
+    Assert.Equal(None, r.PlanDefinitionSteps)
+    Assert.Empty r.UndecodedKeys
+
+[<Fact>]
+let ``a plan whose definition is neither a list nor a document keeps its signature and is noted as undecoded`` () =
     let r =
         row
             "databasequery"
             """{"timestamp":1758326400000,"host":"db1","database_instance":"db1/orcl","dbm_type":"plan",
-                "db":{"instance":"orcl","plan":{"signature":"plan-xyz","definition":"oops"}}}"""
+                "db":{"instance":"orcl","plan":{"signature":"plan-xyz","definition":5}}}"""
 
     Assert.Equal(None, r.PlanDefinitionSteps)
     Assert.Equal(Some "plan-xyz", r.PlanSignature)

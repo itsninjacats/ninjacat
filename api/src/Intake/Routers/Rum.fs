@@ -15,6 +15,7 @@
 ///   POST /api/v2/replay    multipart             → rum_replay_segments
 ///   POST /api/v2/spans     NDJSON of envelopes   → rum_spans
 ///   POST /api/v2/profile   multipart             → (Profiling.fs)
+///   GET  /api/v2/profiling/quota                 → nothing; every session is admitted
 ///   POST /api/v2/debugger  NDJSON or multipart   → (Profiling.fs)
 ///
 /// 202 always. Android drops a batch on 200, iOS on anything but 202, and
@@ -48,8 +49,10 @@ let private accepted = Response.json 202 "{}"
 /// string (browser). The browser has no choice: its fetch sets no headers at
 /// all, to stay a "simple request" and interchangeable with sendBeacon. A key
 /// in a URL lands in every proxy's access log, which is why only this intake
-/// accepts it.
-let gate: Auth = Auth.fromSources [ KeyFromHeader "Dd-Api-Key"; KeyFromQuery "dd-api-key" ]
+/// accepts it. The one request the browser SDK does put a header on, the
+/// profiler's quota check, names it DD-CLIENT-TOKEN.
+let gate: Auth =
+    Auth.fromSources [ KeyFromHeader "Dd-Api-Key"; KeyFromQuery "dd-api-key"; KeyFromHeader "Dd-Client-Token" ]
 
 /// What a preflight is told it may send. DD-API-KEY and DD-EVP-* are for the
 /// mobile SDKs and for a browser deployment that chose headers over the query
@@ -1031,6 +1034,13 @@ let handleSpans (r: Request) : Response =
             Sink.write r.Sink RumSpans.table (rows.ToArray())
             accepted
 
+/// GET /api/v2/profiling/quota?session_id=… — the browser profiler asks
+/// before it starts whether this session may be profiled. There is no quota
+/// here, so every session is admitted. Without an answer the SDK profiles
+/// anyway, but marks the session's events with the reason "api-error".
+let private handleProfilingQuota (_: Request) : Response =
+    Response.json 200 """{"data":{"attributes":{"admitted":true,"reason":"quota_ok"}}}"""
+
 let routes: Route list =
     [ Route.post "/api/v2/rum" handleRum
       // Logs from an SDK are the wire format the agent sends; only the
@@ -1041,4 +1051,5 @@ let routes: Route list =
       // The browser profiler's multipart is the envelope the tracers send,
       // so it reuses that handler under its own label.
       Route.post "/api/v2/profile" (Profiling.handleProfile "profile-browser")
+      Route.get "/api/v2/profiling/quota" handleProfilingQuota
       Route.post "/api/v2/debugger" Profiling.handleDebugger ]

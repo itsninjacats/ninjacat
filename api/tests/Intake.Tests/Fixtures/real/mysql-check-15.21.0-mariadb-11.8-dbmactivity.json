@@ -1,0 +1,1 @@
+[{"host":"dbmlab-db","ddagentversion":"7.84.0","ddsource":"mysql","dbm_type":"activity","collection_interval":10.0,"ddtags":["port:3306","database_instance:dbmlab-db","database_hostname:dbmlab-db","server:dbmlab-db","dbms_flavor:mariadb","team:core"],"timestamp":1790878822421.453,"cloud_metadata":{},"service":"","mysql_activity":[]}]

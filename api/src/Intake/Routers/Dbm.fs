@@ -174,19 +174,25 @@ let timestamp (wire: string) : DateTime option =
                 Some(Time.fromUnixMillis (int64 (Math.Round(millis, MidpointRounding.AwayFromZero))))
             | _ -> None
 
-/// What `db.plan.definition` says about the plan's steps. Three facts, and
-/// the column can hold only two of them (NULL or a count).
+/// What `db.plan.definition` says about the plan's steps. The column can
+/// hold only two of these facts (NULL or a count).
 type PlanSteps =
+    /// Absent or null: the check sends null when it could not collect a plan.
     | NoDefinition
-    | NotAList
+    /// The oracle check's shape: a list of steps.
     | Steps of uint32
+    /// The postgres and mysql checks' shape: the database's own EXPLAIN
+    /// output, as JSON inside a string. There are no steps to count.
+    | Document
+    | NotAPlan
 
 let planSteps (definition: JsonElement option) : PlanSteps =
     match definition with
     | None -> NoDefinition
+    | Some value when value.ValueKind = JsonValueKind.Null -> NoDefinition
     | Some value when value.ValueKind = JsonValueKind.Array -> Steps(uint32 (value.GetArrayLength()))
-    | Some value when value.ValueKind = JsonValueKind.Null -> Steps 0u
-    | Some _ -> NotAList
+    | Some value when value.ValueKind = JsonValueKind.String -> Document
+    | Some _ -> NotAPlan
 
 /// The `db` object of a databasequery event, as the oracle check's FQT and
 /// plan payloads agree on it.
@@ -218,11 +224,11 @@ let toRow (tenant: string) (track: string) (receivedAt: DateTime) (event: string
     let sample = envelope.Extra.TryFind "db" |> Option.bind querySample
     let plan = sample |> Option.bind _.Plan
 
-    // A plan whose definition is not a list of steps is not "no plan". The
-    // column cannot say so, so the list of undecoded keys does.
+    // A definition that is neither shape is not "no plan". The column
+    // cannot say so, so the list of undecoded keys does.
     let undecoded =
         match plan with
-        | Some(_, NotAList) -> envelope.Undecoded @ [ "db.plan.definition" ]
+        | Some(_, NotAPlan) -> envelope.Undecoded @ [ "db.plan.definition" ]
         | _ -> envelope.Undecoded
 
     { TenantID = tenant
@@ -256,6 +262,8 @@ let toRow (tenant: string) (track: string) (receivedAt: DateTime) (event: string
 /// say they arrived on.
 let handle (track: string) (r: Request) : Response =
     match splitEvents r.Body with
+    // The agent's start-up probe: a row of it would be an event with nothing in it.
+    | _ when Raw.isProbe r.Body -> ()
     | Error e ->
         r.Log.LogWarning("[{Track}] not a JSON array: {Error}", track, e)
         Raw.store r "dbm" "decode_error" $"[{track}] not a JSON array or object: {e}" r.Body

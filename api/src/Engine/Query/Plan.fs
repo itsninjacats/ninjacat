@@ -184,7 +184,7 @@ type Seasonality =
     /// Points per season.
     member s.Period = int (s.Length / s.Step)
 
-/// The `metrics` table's TTL (server/schema/migrations/0001_initial.sql).
+/// The `metrics` table's TTL (schema/migrations/0001_initial.sql).
 /// When retention becomes configurable, read it here.
 let rawRetention = TimeSpan.FromDays 30.0
 
@@ -513,7 +513,12 @@ let private rankBy (name: string) : RankBy option =
 ///
 /// WARNING(undocumented): top()'s defaults. We require all four arguments, as
 /// Datadog's editor always writes them.
-let private topArgs (args: Literal list) : Result<int * RankBy * SortOrder, string> =
+type private Ranking =
+    { Limit: int
+      By: RankBy
+      Order: SortOrder }
+
+let private topArgs (args: Literal list) : Result<Ranking, string> =
     match args with
     | [ Num n; by; direction ] ->
         let limit = int n
@@ -523,8 +528,8 @@ let private topArgs (args: Literal list) : Result<int * RankBy * SortOrder, stri
         else
             match word by |> Option.bind rankBy, word direction with
             | None, _ -> Error "top() ranks by one of 'max', 'mean', 'min', 'sum', 'last', 'l2norm', 'area'"
-            | Some by, Some "desc" -> Ok(limit, by, Desc)
-            | Some by, Some "asc" -> Ok(limit, by, Asc)
+            | Some by, Some "desc" -> Ok { Limit = limit; By = by; Order = Desc }
+            | Some by, Some "asc" -> Ok { Limit = limit; By = by; Order = Asc }
             | Some _, _ -> Error "top() direction must be 'asc' or 'desc'"
     | _ -> Error "top() takes a query, a limit, a ranking and a direction: top(query, 10, 'mean', 'desc')"
 
@@ -532,7 +537,7 @@ let private topArgs (args: Literal list) : Result<int * RankBy * SortOrder, stri
 /// [top|bottom][5|10|15|20]_[mean|min|max|last|area|l2norm].
 ///
 /// WARNING(undocumented): bare `top10()`. Not accepted.
-let private topShorthand (name: string) : (int * RankBy * SortOrder) option =
+let private topShorthand (name: string) : Ranking option =
     let m = Regex.Match(name, "^(top|bottom)(5|10|15|20)_(mean|min|max|last|area|l2norm)$")
 
     if not m.Success then
@@ -542,7 +547,7 @@ let private topShorthand (name: string) : (int * RankBy * SortOrder) option =
         let count = int m.Groups[2].Value
 
         match rankBy m.Groups[3].Value with
-        | Some by -> Some(count, by, order)
+        | Some by -> Some { Limit = count; By = by; Order = order }
         | None -> None
 
 /// `outliers(q, 'dbscan', 3)` or `outliers(q, 'mad', 3, 20)`. Algorithm names
@@ -645,7 +650,7 @@ let private applyFunction (from: DateTimeOffset) (name: string) (args: Literal l
         | Error e -> Error e
     | "top" ->
         match topArgs args with
-        | Ok(count, by, order) -> Ok(Top(inner, count, by, order))
+        | Ok ranking -> Ok(Top(inner, ranking.Limit, ranking.By, ranking.Order))
         | Error e -> Error e
     | "outliers" ->
         match outlierArgs args with
@@ -670,7 +675,7 @@ let private applyFunction (from: DateTimeOffset) (name: string) (args: Literal l
     | _ ->
         match timewiseFunction name, topShorthand name with
         | Some fn, _ -> if args.IsEmpty then Ok(Timewise(fn, inner)) else Error oneArgument
-        | None, Some(count, by, order) -> if args.IsEmpty then Ok(Top(inner, count, by, order)) else Error oneArgument
+        | None, Some ranking -> if args.IsEmpty then Ok(Top(inner, ranking.Limit, ranking.By, ranking.Order)) else Error oneArgument
         | None, None -> Error $"function '{name}' is not supported yet"
 
 let private arith (op: ArithOp) (left: Result<Node, string list>) (right: Result<Node, string list>) : Result<Node, string list> =

@@ -152,55 +152,76 @@ let limit (l: ParsedLimit option) (series: Series list) : Series list =
         | Some n -> List.truncate n ordered
         | None -> ordered
 
+/// The range a value is expected in.
+type Range = { Lower: float; Upper: float }
+
+/// One forecast point, past the window.
+type Predicted =
+    { TimeMs: int64
+      Value: float
+      Range: Range }
+
 /// What a series carries beside its values, when its formula asked.
 type SeriesExtra =
-    { /// Time → (lower, upper), within the window.
-      Band: Map<int64, float * float> option
-      /// Past the window: (time, value, lower, upper).
-      Forecast: (int64 * float * float * float) list option }
+    { /// The expected range by time, within the window.
+      Band: Map<int64, Range> option
+      Forecast: Predicted list option }
 
 let noExtra = { Band = None; Forecast = None }
 
+/// One series of an output, with what its formula adds beside it.
+type OutputSeries = { Data: Series; Extra: SeriesExtra }
+
+/// One output of a plan: a formula, or a query when there are no formulas.
+type OutputResult =
+    { QueryIndex: int
+      Lines: OutputSeries list }
+
 /// Every output's series with their extras, laid out on one time axis.
-let responseWith (outputs: (int * (Series * SeriesExtra) list) list) : TimeseriesFormulaQueryResponse =
-    let flat = outputs |> List.collect (fun (qi, xs) -> xs |> List.map (fun (s, e) -> qi, s, e))
+let responseWith (outputs: OutputResult list) : TimeseriesFormulaQueryResponse =
+    let flat = outputs |> List.collect (fun output -> output.Lines |> List.map (fun s -> output.QueryIndex, s))
 
     let times =
-        flat |> Seq.collect (fun (_, s, _) -> s.Points.Keys) |> Seq.distinct |> Seq.sort |> List.ofSeq
+        flat |> Seq.collect (fun (_, s) -> s.Data.Points.Keys) |> Seq.distinct |> Seq.sort |> List.ofSeq
 
-    let anyBand = flat |> List.exists (fun (_, _, e) -> e.Band.IsSome)
-    let anyForecast = flat |> List.exists (fun (_, _, e) -> e.Forecast.IsSome)
+    let anyBand = flat |> List.exists (fun (_, s) -> s.Extra.Band.IsSome)
+    let anyForecast = flat |> List.exists (fun (_, s) -> s.Extra.Forecast.IsSome)
 
     { Data =
         { Id = "0"
           Type = "timeseries_response"
           Attributes =
-            { Series = flat |> List.map (fun (qi, s, _) -> { GroupTags = s.GroupTags; QueryIndex = qi })
+            { Series = flat |> List.map (fun (index, s) -> { GroupTags = s.Data.GroupTags; QueryIndex = index })
               Times = times
-              Values = flat |> List.map (fun (_, s, _) -> times |> List.map s.Points.TryFind)
+              Values = flat |> List.map (fun (_, s) -> times |> List.map s.Data.Points.TryFind)
               NinjacatBounds =
                 if not anyBand then None
                 else
                     flat
-                    |> List.map (fun (_, _, e) ->
-                        e.Band
+                    |> List.map (fun (_, s) ->
+                        s.Extra.Band
                         |> Option.map (fun band ->
-                            { Upper = times |> List.map (band.TryFind >> Option.map snd)
-                              Lower = times |> List.map (band.TryFind >> Option.map fst) }))
+                            ({ Upper = times |> List.map (band.TryFind >> Option.map _.Upper)
+                               Lower = times |> List.map (band.TryFind >> Option.map _.Lower) }
+                            : NinjacatBounds)))
                     |> Some
               NinjacatForecast =
                 if not anyForecast then None
                 else
                     flat
-                    |> List.map (fun (_, _, e) ->
-                        e.Forecast
+                    |> List.map (fun (_, s) ->
+                        s.Extra.Forecast
                         |> Option.map (fun points ->
-                            { Times = points |> List.map (fun (t, _, _, _) -> t)
-                              Values = points |> List.map (fun (_, v, _, _) -> v)
-                              Lower = points |> List.map (fun (_, _, lo, _) -> lo)
-                              Upper = points |> List.map (fun (_, _, _, hi) -> hi) }))
+                            { Times = points |> List.map _.TimeMs
+                              Values = points |> List.map _.Value
+                              Lower = points |> List.map _.Range.Lower
+                              Upper = points |> List.map _.Range.Upper }))
                     |> Some } } }
 
 /// Every output's series, laid out on one time axis.
 let response (outputs: (int * Series list) list) : TimeseriesFormulaQueryResponse =
-    outputs |> List.map (fun (qi, series) -> qi, series |> List.map (fun s -> s, noExtra)) |> responseWith
+    outputs
+    |> List.map (fun (index, series) ->
+        { QueryIndex = index
+          Lines = series |> List.map (fun s -> { Data = s; Extra = noExtra }) })
+    |> responseWith

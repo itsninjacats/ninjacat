@@ -62,17 +62,25 @@ type Stats =
 
 /// Raw measurements as agent-compatible buckets: keys ascending, counts in
 /// matching order.
-let build (values: float[]) : int32[] * uint32[] * Stats =
+type Sketch =
+    { Keys: int32[]
+      Counts: uint32[]
+      Stats: Stats }
+
+let build (values: float[]) : Sketch =
     if values.Length = 0 then
-        [||], [||], { Count = 0L; Min = 0.0; Max = 0.0; Avg = 0.0; Sum = 0.0 }
+        { Keys = [||]
+          Counts = [||]
+          Stats = { Count = 0L; Min = 0.0; Max = 0.0; Avg = 0.0; Sum = 0.0 } }
     else
         let tally = values |> Array.countBy key |> Array.sortBy fst
         let sum = Array.sum values
 
-        tally |> Array.map fst,
-        tally |> Array.map (fun (_, count) -> uint32 count),
-        { Count = int64 values.Length
-          Min = Array.min values
-          Max = Array.max values
-          Avg = sum / float values.Length
-          Sum = sum }
+        { Keys = tally |> Array.map fst
+          Counts = tally |> Array.map (fun (_, count) -> uint32 count)
+          Stats =
+            { Count = int64 values.Length
+              Min = Array.min values
+              Max = Array.max values
+              Avg = sum / float values.Length
+              Sum = sum } }

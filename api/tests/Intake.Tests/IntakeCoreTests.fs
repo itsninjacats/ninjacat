@@ -134,6 +134,43 @@ let ``a path one trailing slash away from a route is redirected to it`` () =
 
     Assert.Equal(404, (respond "GET" "/v3").Status)
 
+[<Theory>]
+[<InlineData("agent-http-intake.logs.x", "/api/v2/logs", "routeLogs", """[{"message":"m","deep":DEEP}]""")>]
+[<InlineData("event-management-intake.x", "/api/v2/events", "routeEventManagement", """{"data":{"attributes":{"title":"t","attributes":{"x":DEEP}}}}""")>]
+[<InlineData("kubeops-intake.x", "/api/v2/kubeactions", "routeKubeops", """[{"action_id":"a","deep":DEEP}]""")>]
+[<InlineData("app.x", "/api/v1/series", "routeAPI", """{"series":[{"metric":"m","points":[[1790000000,2]],"deep":DEEP}]}""")>]
+let ``a body nested deeper than any telemetry is kept raw; one inside the limit is stored; neither is a 500``
+    (_host: string, path: string, routeSet: string, template: string)
+    =
+    let send (depth: int) =
+        let deep = System.String('[', depth) + System.String(']', depth)
+        let sink = Golden.CapturingSink()
+
+        let deps: Deps =
+            { Store = Golden.Replay.testStore ()
+              Sink = sink
+              Log = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance
+              AckUnknown = false }
+
+        let http = Microsoft.AspNetCore.Http.DefaultHttpContext()
+        http.Request.Method <- "POST"
+        http.Request.Host <- Microsoft.AspNetCore.Http.HostString "example.com"
+        http.Request.Path <- Microsoft.AspNetCore.Http.PathString path
+        http.Request.Headers["Dd-Api-Key"] <- Microsoft.Extensions.Primitives.StringValues Golden.Replay.testKey
+        let body = System.Text.Encoding.UTF8.GetBytes(template.Replace("DEEP", deep))
+        let response = Routes.byGoNames deps [ routeSet ] http body
+        response.Status, sink.Rows<NinjaCat.Api.Storage.Rows.RawPayloadRow>() |> List.map _.Reason
+
+    // Past the limit the body does not parse at all: kept whole, answered as usual.
+    let status, reasons = send (Json.maxDepth + 100)
+    Assert.True(status = 200 || status = 202, $"status {status}")
+    Assert.Equal<string list>([ "decode_error" ], reasons)
+
+    // Inside it: parsed, and writing it back into a column must not throw.
+    let status, reasons = send (Json.maxDepth - 100)
+    Assert.True(status = 200 || status = 202, $"status {status}")
+    Assert.DoesNotContain("decode_error", reasons)
+
 [<Fact>]
 let ``a timestamp beyond year 9999 is kept at the limit, not an error`` () =
     Assert.Equal(9999, (Time.fromUnixSeconds 999_999_999_999_999L).Year)

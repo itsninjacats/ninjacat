@@ -52,7 +52,7 @@
      "test",
      "2026-10-01T15:21:35.288903825Z",
      "sds",
-     "no_schema",
+     "unexpected_shape",
      "POST",
      "example.com",
      "/api/v2/sdsresult",
@@ -62,7 +62,7 @@
      {},
      "\b\u0001",
      2,
-     "1:varint"
+     "not an SdsResultPayload: no resource and no results; 1:varint"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -76,10 +76,10 @@
      "Host": "example.com",
      "Intake": "sds",
      "Method": "POST",
-     "Note": "1:varint",
+     "Note": "not an SdsResultPayload: no resource and no results; 1:varint",
      "Path": "/api/v2/sdsresult",
      "Query": {},
-     "Reason": "no_schema",
+     "Reason": "unexpected_shape",
      "ReceivedAt": "2026-10-01T15:21:35.288903825Z",
      "TenantID": "test"
     }
@@ -93,5 +93,6 @@
  "volatile": [
   "/sends/0/args/0/1",
   "/sends/0/rows/0/ReceivedAt"
- ]
+ ],
+ "edited": "Reason was no_schema and Note was the bare wire layout in the Go recording, when every scanner result was kept raw. Results are decoded now (sds_result.proto); this body names no resource and has no result, so it is still kept raw, as an unexpected shape."
 }

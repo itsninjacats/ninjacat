@@ -148,6 +148,33 @@ type ActionConnectionRow =
       Credentials: string
       Extra: Map<string, string> }
 
+/// The processes of one name on a host, summed: what the agent's resources
+/// check reports beside the host metadata.
+type ProcessGroupRow =
+    { TenantID: string
+      /// The agent's clock when it took the snapshot.
+      Timestamp: DateTime
+      Host: string
+      Name: string
+      Usernames: string[]
+      ProcessCount: uint32
+      CPUPct: float
+      MemPct: float
+      VMS: uint64
+      RSS: uint64 }
+
+module ProcessGroups =
+    let table: Table<ProcessGroupRow> =
+        { Table.create
+              "storage_process_groups"
+              "process_groups"
+              [ "tenant_id"; "timestamp"; "host"; "name"; "usernames"; "process_count"; "cpu_pct"; "mem_pct"; "vms"; "rss" ]
+              (fun (r: ProcessGroupRow) ->
+                  [| r.TenantID; r.Timestamp; r.Host; r.Name; r.Usernames; r.ProcessCount; r.CPUPct; r.MemPct; r.VMS; r.RSS |])
+          with
+              MaxRows = 2_000
+              FlushInterval = TimeSpan.FromSeconds 10.0 }
+
 module AgentBatchMetadata =
     let table: Table<AgentBatchMetadataRow> =
         { Table.create

@@ -20,7 +20,7 @@
 ///   Private Action Runner                 runner_enrollments, runner_dequeues,
 ///                                         runner_task_updates, runner_heartbeats,
 ///                                         action_connections
-///   GET /api/v1/query, POST /api/v2/validate, the runner's health-check:
+///   GET /api/v1/query, GET /api/v2/validate, the runner's health-check:
 ///                                         nothing; they are questions, not data
 ///
 /// The rule for every handler: what has a column is stored, what cannot be
@@ -117,13 +117,12 @@ let handleSeriesV2 (r: Request) : Response =
             if Body.isJson (r.Header "Content-Type") r.Body then
                 parseSeriesV2Json r.Body
             else
-                parseSeriesV2Protobuf r.Body |> Result.mapError Undecodable
+                parseSeriesV2Protobuf r.Body
 
         match decoded with
-        | Error(Undecodable error) ->
+        | Error error ->
             r.Log.LogWarning("[v2/series] {Error}", error)
             Raw.store r "series" "decode_error" error r.Body
-        | Error Panics -> r.Log.LogWarning("[v2/series] a null series or resource: nothing stored")
         | Ok payload ->
             if r.Tenant <> "" then
                 let points = ResizeArray<MetricPoint>()
@@ -223,16 +222,21 @@ let handleSeriesV1 (r: Request) : Response =
                     ("v1 payload carried undeclared top-level keys: " + keyList payload.Additional)
                     r.Body
 
+            for at, item in payload.Rejected do
+                r.Log.LogWarning("[v1/series] series #{Index} is not a datadogV1.Series, kept raw", at)
+                Raw.store r "series" "unexpected_shape" $"v1 series #{at} is not a datadogV1.Series" (GoJson.rawBytes item)
+
             if r.Tenant <> "" then
                 let points = ResizeArray<MetricPoint>()
                 let mutable badPoints = 0
 
                 for i in 0 .. payload.Series.Length - 1 do
                     let series = payload.Series[i]
+                    let at = payload.Positions[i]
 
                     if series.Unparsed then
-                        r.Log.LogWarning("[v1/series] series #{Index} did not fit datadogV1.Series, kept raw", i)
-                        Raw.store r "series" "unexpected_shape" $"v1 series #{i} did not fit datadogV1.Series" (GoJson.rawBytes series.Raw)
+                        r.Log.LogWarning("[v1/series] series #{Index} did not fit datadogV1.Series, kept raw", at)
+                        Raw.store r "series" "unexpected_shape" $"v1 series #{at} did not fit datadogV1.Series" (GoJson.rawBytes series.Raw)
                     else
                         let interval =
                             match series.Interval with
@@ -272,7 +276,7 @@ let handleSeriesV1 (r: Request) : Response =
                                     r
                                     "series"
                                     "unexpected_shape"
-                                    $"v1 series #{i} ({series.Metric}) point #{j} has a nil timestamp or value"
+                                    $"v1 series #{at} ({series.Metric}) point #{j} has a nil timestamp or value"
                                     (GoJson.rawBytes point.Raw)
 
                 if badPoints > 0 then
@@ -426,24 +430,35 @@ let handleDistributionPoints (r: Request) : Response =
                     ("payload carried undeclared top-level keys: " + keyList payload.Additional)
                     r.Body
 
+            for at, item in payload.Rejected do
+                r.Log.LogWarning("[distribution_points] series #{Index} is not a series, kept raw", at)
+
+                Raw.store
+                    r
+                    "distribution_points"
+                    "unexpected_shape"
+                    $"series #{at} is not a datadogV1.DistributionPointsSeries"
+                    (GoJson.rawBytes item)
+
             if r.Tenant <> "" then
                 let rows = ResizeArray<SketchRow>()
                 let mutable badPairs = 0
 
                 for i in 0 .. payload.Series.Length - 1 do
                     let series = payload.Series[i]
+                    let at = payload.Positions[i]
 
                     if series.Unparsed then
                         // When only the `type` word was wrong the points came
                         // through and still become rows: a typo there must
                         // not cost a host its distribution.
-                        r.Log.LogWarning("[distribution_points] series #{Index} did not fit the model, kept raw", i)
+                        r.Log.LogWarning("[distribution_points] series #{Index} did not fit the model, kept raw", at)
 
                         Raw.store
                             r
                             "distribution_points"
                             "unexpected_shape"
-                            $"series #{i} did not fit datadogV1.DistributionPointsSeries"
+                            $"series #{at} did not fit datadogV1.DistributionPointsSeries"
                             (GoJson.rawBytes series.Raw)
 
                     let extra = extraEncoded [] series.Additional
@@ -455,7 +470,8 @@ let handleDistributionPoints (r: Request) : Response =
 
                         match distributionPoint point.Items with
                         | Some(timestamp, values) when not unfit ->
-                            let keys, counts, stats = DDSketch.build values
+                            let sketch = DDSketch.build values
+                            let stats = sketch.Stats
 
                             rows.Add
                                 { TenantID = r.Tenant
@@ -468,8 +484,8 @@ let handleDistributionPoints (r: Request) : Response =
                                   Max = stats.Max
                                   Avg = stats.Avg
                                   Sum = stats.Sum
-                                  BucketKeys = keys
-                                  BucketCounts = counts
+                                  BucketKeys = sketch.Keys
+                                  BucketCounts = sketch.Counts
                                   OriginProduct = 0u
                                   OriginCategory = 0u
                                   OriginService = 0u
@@ -482,7 +498,7 @@ let handleDistributionPoints (r: Request) : Response =
                                 r
                                 "distribution_points"
                                 "unexpected_shape"
-                                $"series #{i} ({series.Metric}) point #{j} is not a [timestamp, [values]] pair"
+                                $"series #{at} ({series.Metric}) point #{j} is not a [timestamp, [values]] pair"
                                 (GoJson.rawBytes point.Raw)
 
                 if badPairs > 0 then
@@ -510,10 +526,9 @@ let handleCheckRun (r: Request) : Response =
         ackSeries
     else
         match parseCheckRuns r.Body with
-        | Error(Undecodable error) ->
+        | Error error ->
             r.Log.LogWarning("[check_run] {Error}", error)
             Raw.store r "check_run" "decode_error" error r.Body
-        | Error Panics -> r.Log.LogWarning("[check_run] a null check in the batch: nothing stored")
         | Ok checks ->
             if not checks.Undecodable.IsEmpty then
                 r.Log.LogWarning("[check_run] {Count} checks could not be decoded, kept raw", checks.Undecodable.Length)
@@ -947,13 +962,83 @@ let private intakeHost (r: Request) (envelope: Map<string, JsonElement>) : unit 
 
         Sink.write r.Sink Hosts.table [| row |]
 
+/// One row of a resources snapshot, as gohai writes it:
+/// [usernames, cpu %, memory %, vms, rss, name, number of pids]
+/// (pkg/gohai/processes). None when it is not that.
+let private processGroup (tenant: string) (host: string) (at: DateTime) (fields: JsonElement) : ProcessGroupRow option =
+    if fields.ValueKind <> JsonValueKind.Array || fields.GetArrayLength() <> 7 then
+        None
+    else
+        let field (i: int) = fields[i]
+
+        match GoJson.asString (field 0), GoJson.asFloat (field 1), GoJson.asFloat (field 2), GoJson.asString (field 5) with
+        | Some usernames, Some cpu, Some mem, Some name ->
+            let unsigned (i: int) : uint64 =
+                match (field i).TryGetUInt64() with
+                | true, n -> n
+                | false, _ -> 0UL
+
+            Some
+                { TenantID = tenant
+                  Timestamp = at
+                  Host = host
+                  Name = name
+                  // The agent joins them with commas.
+                  Usernames = (if usernames = "" then [||] else usernames.Split ',')
+                  ProcessCount = uint32 (unsigned 6)
+                  CPUPct = cpu
+                  MemPct = mem
+                  VMS = unsigned 3
+                  RSS = unsigned 4 }
+        | _ -> None
+
+/// {"meta":{"host":…},"processes":{"snaps":[[unix seconds, [row, …]], …]}}:
+/// the processes of the host grouped by name, sent with the host metadata.
+/// Whatever of it is not that shape keeps the body raw, once.
+let private intakeResources (r: Request) (resources: JsonElement) : unit =
+    let host =
+        GoJson.field "meta" resources |> Option.bind (GoJson.field "host") |> Option.bind GoJson.asString |> Option.defaultValue ""
+
+    let snaps =
+        match GoJson.field "processes" resources |> Option.bind (GoJson.field "snaps") with
+        | Some list when list.ValueKind = JsonValueKind.Array -> Some(List.ofSeq (list.EnumerateArray()))
+        | _ -> None
+
+    match snaps with
+    | None -> Raw.store r "intake" "unexpected_shape" "resources without processes.snaps" r.Body
+    | Some snaps ->
+        let rows = ResizeArray<ProcessGroupRow>()
+        let mutable unread = 0
+
+        for snap in snaps do
+            let groups =
+                if snap.ValueKind = JsonValueKind.Array && snap.GetArrayLength() = 2 && snap[1].ValueKind = JsonValueKind.Array then
+                    GoJson.asInt64 snap[0] |> Option.map (fun seconds -> Time.fromUnixSeconds seconds, snap[1])
+                else
+                    None
+
+            match groups with
+            | None -> unread <- unread + 1
+            | Some(at, list) ->
+                for fields in list.EnumerateArray() do
+                    match processGroup r.Tenant host at fields with
+                    | Some row -> rows.Add row
+                    | None -> unread <- unread + 1
+
+        if unread > 0 then
+            r.Log.LogWarning("[intake] resources: {Count} snapshots or rows not read, kept raw", unread)
+            Raw.store r "intake" "unexpected_shape" $"resources: {unread} snapshots or rows are not the resources check's shape" r.Body
+
+        if r.Tenant <> "" then
+            Sink.write r.Sink ProcessGroups.table (rows.ToArray())
+
 /// Four producers share /intake/ and nothing but the path; they are told
 /// apart by their top-level keys, in this order:
 ///
 ///   events                 agent events, the shutdown event among them
 ///   agent_checks           the V5 collector: check statuses, external host tags
 ///   gohai or systemStats   host metadata
-///   resources alone        the legacy V5 process snapshot
+///   resources alone        the resources check's process groups
 let private decodeIntake (r: Request) : unit =
     let undecodable (error: string) =
         r.Log.LogWarning("[intake] JSON: {Error}", error)
@@ -973,9 +1058,7 @@ let private decodeIntake (r: Request) : unit =
         elif envelope.ContainsKey "gohai" || envelope.ContainsKey "systemStats" then
             intakeHost r envelope
         elif envelope.ContainsKey "resources" && envelope.Count = 1 then
-            // The process intake owns that format and parses it in full; a
-            // second decoder here would be two to keep in step.
-            Raw.store r "intake" "no_schema" "legacy V5 resources snapshot — the process intake owns this format" r.Body
+            intakeResources r envelope["resources"]
         else
             r.Log.LogWarning("[intake] unrecognised shape, keys: {Keys}", keyList envelope)
             Raw.store r "intake" "unexpected_shape" ("no known /intake/ variant key, keys: " + keyList envelope) r.Body
@@ -1059,13 +1142,16 @@ let handleMetadata (r: Request) : Response =
 // Endpoints the agent reads from: each needs a real answer, not a 202
 // ---------------------------------------------------------------------------
 
-/// POST /api/v2/validate — the trace-agent's reachability probe for On-Prem
-/// Management (the Private Action Runner). The probe cannot be turned off and
-/// is built from the core dd_url, which is why it lives here. It wants
-/// {"data":{"id":"<non-empty>"}}; after four failures the agent gives up on
-/// the runner for the life of the process.
-let handleOpmValidate (_: Request) : Response =
-    Response.jsonOf 200 {| data = {| id = Guid.NewGuid().ToString() |} |}
+/// GET /api/v2/validate — the trace-agent asks which org its key belongs to
+/// (pkg/trace/api/opm.go) and wants {"data":{"id":"<org UUID>"}}. It hashes
+/// the id into the Org Propagation Marker that tracers attach to the trace
+/// context they pass on, so the id must be the same on every call: here it
+/// is derived from the tenant. Two installations that both use the tenant
+/// "default" therefore share a marker. After four failures the agent leaves
+/// the marker unset for the life of the process.
+let handleOpmValidate (r: Request) : Response =
+    let digest = SHA256.HashData(Encoding.UTF8.GetBytes("ninjacat-org:" + r.Tenant))
+    Response.jsonOf 200 {| data = {| id = Guid(digest.AsSpan(0, 16)).ToString() |} |}
 
 /// The SHA-256 of a delegated-auth proof, hex. The proof never leaves here.
 let private proofFingerprint (proof: string) : string =
@@ -1077,8 +1163,9 @@ let private proofFingerprint (proof: string) : string =
 /// POST /api/v2/intake-key: the delegated-auth exchange. The agent sends an
 /// empty body with `Authorization: Delegated <proof>` and reads
 /// {"data":{"attributes":{"api_key":"…"}}}; an empty api_key is an error on
-/// its side. The key that admitted the request is what it gets back. The
-/// proof IS the credential, so only its fingerprint is stored.
+/// its side. The key that admitted the request is what it gets back,
+/// whether it came in the header or in the query. The proof IS the
+/// credential, so only its fingerprint is stored.
 let handleIntakeKey (r: Request) : Response =
     let authorization = r.Header "Authorization"
 
@@ -1099,7 +1186,8 @@ let handleIntakeKey (r: Request) : Response =
         Sink.write r.Sink DelegatedAuth.table [| row |]
     | _ -> ()
 
-    Response.jsonOf 200 {| data = {| attributes = {| api_key = r.Header "Dd-Api-Key" |} |} |}
+    let admittedWith = Text.firstNonEmpty [ r.Header "Dd-Api-Key"; r.Query "api_key" ]
+    Response.jsonOf 200 {| data = {| attributes = {| api_key = admittedWith |} |} |}
 
 /// GET /api/v1/query, for the cluster-agent's External Metrics Provider.
 /// Nothing is queryable here yet, so the answer is a well-formed EMPTY
@@ -1372,6 +1460,8 @@ let routes: Route list =
       Route.post "/api/v2/intake-key" handleIntakeKey
       Route.get "/api/v1/query" handleQuery
       Route.post "/api/v2/profiles/symbols/query" handleSymbolsQuery
+      // The agent sends GET; POST gets the same answer.
+      Route.get "/api/v2/validate" handleOpmValidate
       Route.post "/api/v2/validate" handleOpmValidate
 
       Route.post "/api/unstable/on_prem_runners" handleRunnerEnroll

@@ -95,12 +95,10 @@ let ``a linear forecast extends an exact line`` () =
     let ys = xs |> Array.map (fun x -> 100.0 + 0.5 * x)
     for model in [ "default"; "simple"; "reactive" ] do
         let predicted = linearForecast model 1.0 xs ys [| 0.0; 60.0 |]
-        let v0, lo0, hi0 = predicted[0]
-        let v60, _, _ = predicted[1]
-        Assert.Equal(100.0, v0, 6)
-        Assert.Equal(130.0, v60, 6)
-        Assert.Equal(v0, lo0, 6) // no residuals, no band
-        Assert.Equal(v0, hi0, 6)
+        Assert.Equal(100.0, predicted[0].Value, 6)
+        Assert.Equal(130.0, predicted[1].Value, 6)
+        Assert.Equal(predicted[0].Value, predicted[0].Lower, 6) // no residuals, no band
+        Assert.Equal(predicted[0].Value, predicted[0].Upper, 6)
 
 [<Fact>]
 let ``the basic band does not collapse on a mostly constant integer series`` () =

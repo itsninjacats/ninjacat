@@ -169,11 +169,12 @@ let ``extras appear only when asked, as ninjacat_ fields`` () =
     let plain = NinjaCat.Api.Engine.Json.options |> fun o -> System.Text.Json.JsonSerializer.Serialize(Series.response [ 0, [ s ] ], o)
     Assert.DoesNotContain("ninjacat_", plain)
 
-    let extra =
-        { Series.Band = Some(Map [ 20000L, (1.5, 2.5) ])
-          Series.Forecast = Some [ 40000L, 3.0, 2.0, 4.0 ] }
+    let extra: Series.SeriesExtra =
+        { Band = Some(Map [ 20000L, ({ Lower = 1.5; Upper = 2.5 }: Series.Range) ])
+          Forecast = Some [ { TimeMs = 40000L; Value = 3.0; Range = { Lower = 2.0; Upper = 4.0 } } ] }
 
-    let json = System.Text.Json.JsonSerializer.Serialize(Series.responseWith [ 0, [ s, extra ] ], NinjaCat.Api.Engine.Json.options)
+    let outputs: Series.OutputResult list = [ { QueryIndex = 0; Lines = [ { Data = s; Extra = extra } ] } ]
+    let json = System.Text.Json.JsonSerializer.Serialize(Series.responseWith outputs, NinjaCat.Api.Engine.Json.options)
     Assert.Contains("\"times\":[0,20000]", json)
     Assert.Contains("\"ninjacat_bounds\":[{\"upper\":[null,2.5],\"lower\":[null,1.5]}]", json)
     Assert.Contains("\"ninjacat_forecast\":[{\"times\":[40000],\"values\":[3],\"upper\":[4],\"lower\":[2]}]", json)

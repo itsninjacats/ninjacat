@@ -26,9 +26,7 @@ let ``containers keep their order`` () =
 [<Fact>]
 let ``a forged length is refused before anything is allocated`` () =
     // array32 claiming four billion elements, with no elements behind it.
-    match decode [ 0xdduy; 0xffuy; 0xffuy; 0xffuy; 0xffuy ] with
-    | Error message -> Assert.Contains("exceeds", message)
-    | Ok value -> Assert.Fail $"decoded {value}"
+    Assert.True(Result.isError (decode [ 0xdduy; 0xffuy; 0xffuy; 0xffuy; 0xffuy ]))
 
 [<Fact>]
 let ``an empty or truncated body is an error`` () =
@@ -36,14 +34,43 @@ let ``an empty or truncated body is an error`` () =
     Assert.True(Result.isError (decode [ 0xa5uy; byte 'h' ]))
 
 [<Fact>]
-let ``the reader walks a known layout`` () =
-    // [ "svc", 42, nil ]
-    let reader = MsgpackReader [| 0x93uy; 0xa3uy; byte 's'; byte 'v'; byte 'c'; 0x2auy; 0xc0uy |]
-    Assert.Equal(3, reader.ReadArrayHeader())
-    Assert.Equal("svc", reader.ReadString())
-    Assert.Equal(42L, reader.ReadInt64())
-    Assert.True(reader.TryReadNil())
-    Assert.True reader.AtEnd
+let ``fields are read by name: the last of two equal keys wins, nil is absent`` () =
+    // {"n": 1, "s": "a", "n": 7, "gone": nil}
+    let body = [ 0x84uy; 0xa1uy; byte 'n'; 0x01uy; 0xa1uy; byte 's'; 0xa1uy; byte 'a'; 0xa1uy; byte 'n'; 0x07uy; 0xa4uy; byte 'g'; byte 'o'; byte 'n'; byte 'e'; 0xc0uy ]
+
+    match decode body with
+    | Error e -> Assert.Fail e
+    | Ok root ->
+        let problems = ResizeArray<string>()
+        let fields = MsgFields(problems, "", root)
+        Assert.Equal((7UL, "a", "", 0L), (fields.UInt64 "n", fields.String "s", fields.String "gone", fields.Int64 "missing"))
+        Assert.Empty problems
+        Assert.Equal<Map<string, MsgValue>>(Map [ "gone", MsgNil; "s", MsgStr "a" ], fields.Unknown(set [ "n" ]))
+
+[<Fact>]
+let ``a field of the wrong type keeps its default and is noted with its path`` () =
+    // {"items": [{"count": "three"}, nil, {"count": -1}]}
+    let item (value: byte list) = [ 0x81uy; 0xa5uy; byte 'c'; byte 'o'; byte 'u'; byte 'n'; byte 't' ] @ value
+
+    let body =
+        [ 0x81uy; 0xa5uy; byte 'i'; byte 't'; byte 'e'; byte 'm'; byte 's'; 0x93uy ]
+        @ item [ 0xa5uy; byte 't'; byte 'h'; byte 'r'; byte 'e'; byte 'e' ]
+        @ [ 0xc0uy ]
+        @ item [ 0xffuy ]
+
+    match decode body with
+    | Error e -> Assert.Fail e
+    | Ok root ->
+        let problems = ResizeArray<string>()
+        let items = MsgFields(problems, "", root).Maps "items"
+        // The nil element is left out, and the others keep their place in the path.
+        Assert.Equal<uint64 list>([ 0UL; 0UL ], items |> List.map (fun item -> item.UInt64 "count"))
+
+        Assert.Equal<string list>(
+            [ "items/0/count: expected an unsigned integer, got a string"
+              "items/2/count: expected an unsigned integer, got the integer -1" ],
+            List.ofSeq problems
+        )
 
 [<Fact>]
 let ``a map key that is not a string is refused`` () =

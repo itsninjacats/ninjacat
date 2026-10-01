@@ -43,54 +43,57 @@ git clone <this repo> && cd ninjacat
 docker compose up
 ```
 
-That brings up ClickHouse, Postgres, the backend and the panel, applies both schemas,
-and watches both source trees: saving a `.go` file rebuilds and restarts the server
-(via Air), saving a Svelte file hot-reloads the browser.
+That brings up ClickHouse, Postgres, the server and the panel, applies both schemas,
+and watches both source trees: saving an F# file rebuilds and restarts the server
+(via `dotnet watch`), saving a Svelte file hot-reloads the browser.
 
 | | |
 |---|---|
 | Panel | http://localhost:5173 |
 | Agent intake | http://localhost:8080 |
-| Panel API | http://localhost:8081 |
-| Ergo observer | http://localhost:9911 |
+| Panel and query API (internal) | http://localhost:8081 |
 
 To work on the host instead, run just the databases with
-`docker compose up -d postgres clickhouse`, then `go run ./cmd/ninjacat` in `server/`
-and `bun run dev` in `frontend/`. Development needs Go 1.26+ and [Bun](https://bun.sh);
-the build requires `CGO_ENABLED=1`, because the process-agent frames use a legacy zstd
-that is not pure Go.
+`docker compose up -d postgres clickhouse`, then `dotnet run --project src/Server` in
+`api/` and `bun run dev` in `frontend/`. Development needs the .NET 10 SDK and
+[Bun](https://bun.sh).
 
-Create an API key in the panel under Settings, then send an agent at it:
+Create an API key in the panel under Settings, then send an agent at it. The intake
+routes on the hostname, as Datadog does, so each product needs its Datadog-shaped name
+(`app.`, `trace.agent.`, `process.`, …) resolving to NinjaCat:
 
 ```bash
 DD_API_KEY=<the key you just created>
-DD_DD_URL=http://ninjacat-host:8080
-DD_APM_DD_URL=http://ninjacat-host:8080
-DD_PROCESS_CONFIG_PROCESS_DD_URL=http://ninjacat-host:8080
-DD_LOGS_CONFIG_LOGS_DD_URL=ninjacat-host:8080
+DD_DD_URL=http://app.ninjacat.example:8080
+DD_APM_DD_URL=http://trace.agent.ninjacat.example:8080
+DD_PROCESS_CONFIG_PROCESS_DD_URL=http://process.ninjacat.example:8080
+DD_LOGS_CONFIG_LOGS_DD_URL=agent-http-intake.logs.ninjacat.example:8080
 DD_LOGS_CONFIG_USE_HTTP=true
 DD_LOGS_CONFIG_LOGS_NO_SSL=true
 ```
 
-`server/docker-compose.datadog-lab.yml` runs a real agent against NinjaCat on a network
-with `internal: true`, so nothing can escape to Datadog regardless of how the agent is
-configured. That is the recommended way to try this the first time.
+`compose.lab.yaml` does exactly that with a real agent, on a network with
+`internal: true`, so nothing can escape to Datadog regardless of how the agent is
+configured. That is the recommended way to try this the first time:
+
+```bash
+DD_API_KEY=<key> docker compose -f compose.yaml -f compose.lab.yaml up
+```
 
 ## Architecture
 
 ```
-Datadog Agent ──:8080──▶ intake ──▶ storage actors ──▶ ClickHouse
-                                          ▲
-SvelteKit panel ──:8081──▶ panel API ──▶ query pool ──┘
+Datadog Agent ──:8080──▶ intake ──▶ one writer per table ──▶ ClickHouse
+                                                                 ▲
+SvelteKit panel ──:8081──▶ panel and query API ─────────────────┘
        │
        └──▶ Postgres (users, sessions, API keys)
 ```
 
-The backend runs as a single [Ergo](https://ergo.services) node: every component is a
-supervised application, so a failure is contained and restarted rather than taking the
-process down. Ingest and querying are deliberately separate applications — a slow
-dashboard query must never be able to stall the write path, and the two are meant to be
-splittable across nodes later.
+The server is one F# process (`api/`) with two ports: agents reach the intake and only
+the intake; the panel's API and Datadog's query API stay on the internal one. The agent
+gets its answer before anything is written — rows are buffered per table and inserted in
+batches, so a burst of logs cannot delay metrics.
 
 Intake routes on the `Host` header, mirroring the way Datadog puts every product on its
 own hostname. That is what lets a single `DD_SITE` reconfigure an entire agent.

@@ -262,6 +262,9 @@ type private Cursors =
       mutable Unit: int
       mutable WideInts: int }
 
+/// A sketch point's sum, min and max, which share one value type.
+type private SketchTotals = { Sum: float; Min: float; Max: float }
+
 type private SketchPoint =
     { Keys: int32[]
       Counts: uint32[]
@@ -422,17 +425,16 @@ let decode (tenant: string) (payload: Payload) : Decoded =
             fail $"series {series}: unknown valueType 0x{valueType:x}"
             Ok 0.0
 
-    /// A sketch point's sum, min and max.
-    let summary (valueType: uint64) (series: int) (point: uint64) : Result<float * float * float, string> =
+    let summary (valueType: uint64) (series: int) (point: uint64) : Result<SketchTotals, string> =
         if valueType = zeroValue then
-            Ok(0.0, 0.0, 0.0)
+            Ok { Sum = 0.0; Min = 0.0; Max = 0.0 }
         elif valueType = sint64Value then
             let sum = nextSint64 ()
             let min = if sum.IsSome then nextSint64 () else None
             let max = if min.IsSome then nextSint64 () else None
 
             match sum, min, max with
-            | Some sum, Some min, Some max -> Ok(sum, min, max)
+            | Some sum, Some min, Some max -> Ok { Sum = sum; Min = min; Max = max }
             | _ -> Error $"valsSint64 ran out in a sketch summary at series {series} point {point}: {truncated}"
         elif valueType = float32Value then
             if at.Float32 + 3 > valsFloat32.Length then
@@ -440,17 +442,23 @@ let decode (tenant: string) (payload: Payload) : Decoded =
             else
                 let first = at.Float32
                 at.Float32 <- first + 3
-                Ok(float valsFloat32[first], float valsFloat32[first + 1], float valsFloat32[first + 2])
+                Ok
+                    { Sum = float valsFloat32[first]
+                      Min = float valsFloat32[first + 1]
+                      Max = float valsFloat32[first + 2] }
         elif valueType = float64Value then
             if at.Float64 + 3 > valsFloat64.Length then
                 Error $"valsFloat64 ran out in a sketch summary at series {series} point {point}: {truncated}"
             else
                 let first = at.Float64
                 at.Float64 <- first + 3
-                Ok(valsFloat64[first], valsFloat64[first + 1], valsFloat64[first + 2])
+                Ok
+                    { Sum = valsFloat64[first]
+                      Min = valsFloat64[first + 1]
+                      Max = valsFloat64[first + 2] }
         else
             fail $"series {series}: unknown valueType 0x{valueType:x}"
-            Ok(0.0, 0.0, 0.0)
+            Ok { Sum = 0.0; Min = 0.0; Max = 0.0 }
 
     let sketchPoint (valueType: uint64) (series: int) (point: uint64) : Result<SketchPoint, string> =
         if at.NumBins >= numBins.Length then
@@ -475,7 +483,7 @@ let decode (tenant: string) (payload: Payload) : Decoded =
 
                 match summary valueType series point with
                 | Error text -> Error text
-                | Ok(sum, min, max) ->
+                | Ok totals ->
                     // The count is ALWAYS a sint64, whatever the summary's
                     // value type: the one part of the sketch layout the
                     // ValueType nibble does not tell.
@@ -485,9 +493,9 @@ let decode (tenant: string) (payload: Payload) : Decoded =
                         Ok
                             { Keys = keys
                               Counts = counts
-                              Sum = sum
-                              Min = min
-                              Max = max
+                              Sum = totals.Sum
+                              Min = totals.Min
+                              Max = totals.Max
                               Count = (if count > 0.0 then uint64 count else 0UL) }
 
     let points = ResizeArray<MetricPoint>()

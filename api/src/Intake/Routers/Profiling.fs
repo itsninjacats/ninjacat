@@ -101,7 +101,12 @@ module private MediaType =
             result
 
     /// `; name=value` at the start of the text, and what follows it.
-    let private parameter (text: string) : (string * string * string) option =
+    type private Parameter =
+        { Name: string
+          Value: string
+          Rest: string }
+
+    let private parameter (text: string) : Parameter option =
         let text = text.TrimStart()
 
         if not (text.StartsWith ';') then
@@ -114,7 +119,11 @@ module private MediaType =
                 None
             else
                 match value (rest.Substring(1).TrimStart()) with
-                | Some(found, after) -> Some(name.ToLowerInvariant(), found, after)
+                | Some(found, after) ->
+                    Some
+                        { Name = name.ToLowerInvariant()
+                          Value = found
+                          Rest = after }
                 | None -> None
 
     let parse (header: string) : Parsed =
@@ -144,15 +153,15 @@ module private MediaType =
                         // A trailing semicolon is not an error.
                         result <- Some { Type = mediaType; Parameters = parameters; Error = "" }
                     | None -> result <- Some { Type = mediaType; Parameters = Map.empty; Error = "mime: invalid media parameter" }
-                    | Some(name, found, after) ->
-                        match parameters.TryFind name with
-                        | Some earlier when earlier <> found ->
+                    | Some found ->
+                        match parameters.TryFind found.Name with
+                        | Some earlier when earlier <> found.Value ->
                             result <- Some { Type = ""; Parameters = Map.empty; Error = "mime: duplicate parameter name" }
                         | _ ->
-                            if not (name.Contains '*') then
-                                parameters <- parameters.Add(name, found)
+                            if not (found.Name.Contains '*') then
+                                parameters <- parameters.Add(found.Name, found.Value)
 
-                            rest <- after
+                            rest <- found.Rest
 
             result.Value
 

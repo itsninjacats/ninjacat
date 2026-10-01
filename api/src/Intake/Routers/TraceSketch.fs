@@ -242,12 +242,12 @@ let private indexToValue (mapping: Test.IndexMapping) : Result<int64 -> float, s
         | other -> Error $"interpolation not supported: {int other}"
 
 /// Turns one summary into the columns the tables keep: the bytes, the state,
-/// and the numbers when it really decoded. Also returns the decode error; it
-/// is for the log, never a reason to store nothing.
-let summary (raw: byte[]) : SketchSummary * string option =
+/// and the numbers when it really decoded. Bytes that do not decode are a
+/// state with its reason, never a reason to store nothing.
+let summary (raw: byte[]) : SketchSummary =
     let blank: SketchSummary =
         { Raw = raw
-          State = SketchSummary.absent
+          State = SketchState.Absent
           Count = None
           Sum = None
           Min = None
@@ -256,7 +256,7 @@ let summary (raw: byte[]) : SketchSummary * string option =
           BinCounts = [||] }
 
     if raw.Length = 0 then
-        blank, None
+        blank
     else
         let parsed =
             try
@@ -265,12 +265,12 @@ let summary (raw: byte[]) : SketchSummary * string option =
                 Error $"undecodable: {e.Message}"
 
         match parsed with
-        | Error problem -> { blank with State = SketchSummary.undecodable }, Some problem
+        | Error problem -> { blank with State = SketchState.Undecodable problem }
         | Ok sketch ->
             match indexToValue sketch.Mapping with
             // Bytes that arrived and are not a DDSketch stay in the raw
             // column: usually version skew, and this is the evidence.
-            | Error problem -> { blank with State = SketchSummary.undecodable }, Some $"not a DDSketch: {problem}"
+            | Error problem -> { blank with State = SketchState.Undecodable $"not a DDSketch: {problem}" }
             | Ok value ->
                 let positive = store sketch.PositiveValues
                 let negative = store sketch.NegativeValues
@@ -278,7 +278,7 @@ let summary (raw: byte[]) : SketchSummary * string option =
 
                 if zeroCount = 0.0 && positive.IsEmpty && negative.IsEmpty then
                     // A valid sketch with no values: not the same as no sketch.
-                    { blank with State = SketchSummary.empty }, None
+                    { blank with State = SketchState.Empty }
                 else
                     let positiveBins = positive.Bins
                     // sketches-go counts the zero bin into the sum as 0 × count,
@@ -306,11 +306,10 @@ let summary (raw: byte[]) : SketchSummary * string option =
                     // Only the positive store is broken out: these are
                     // durations and sizes. The raw bytes keep the rest.
                     { blank with
-                        State = SketchSummary.ok
+                        State = SketchState.Ok
                         Count = Some(zeroCount + positive.Total + negative.Total)
                         Sum = Some sum
                         Min = minValue
                         Max = maxValue
                         BinKeys = positiveBins |> Array.map (fun (index, _) -> int32 index)
-                        BinCounts = positiveBins |> Array.map snd },
-                    None
+                        BinCounts = positiveBins |> Array.map snd }

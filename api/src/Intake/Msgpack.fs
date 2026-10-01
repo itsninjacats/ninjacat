@@ -1,14 +1,12 @@
-/// MessagePack, read. Tracers send traces and CI events in it.
-///
-/// Two ways in: `Msgpack.decode` for a whole body as a tree, and
-/// `MsgpackReader` for decoders that walk a known layout field by field.
+/// MessagePack, read. Tracers send APM stats, Data Streams and CI events in
+/// it. The bytes are read by the MessagePack library; this file only says
+/// what a value is to us and how a decoder takes fields out of one.
 namespace NinjaCat.Api.Intake
 
 open System
-open System.Buffers.Binary
-open System.Text
-
-exception MsgpackError of message: string
+open System.Buffers
+open System.IO
+open MessagePack
 
 type MsgValue =
     | MsgNil
@@ -25,272 +23,200 @@ type MsgValue =
     | MsgMap of (string * MsgValue) list
     | MsgExt of extType: sbyte * data: byte[]
 
-type MsgType =
-    | NilType
-    | BoolType
-    | IntType
-    | UIntType
-    | FloatType
-    | StrType
-    | BinType
-    | ArrayType
-    | MapType
-    | ExtType
-
-type MsgpackReader(data: byte[]) =
-    let mutable position = 0
-    let mutable depth = 0
-
-    let fail (message: string) = raise (MsgpackError message)
-
-    let need (count: int) =
-        if count < 0 || position + count > data.Length then
-            fail $"unexpected end of data at byte {position} (need {count} more)"
-
-    let take (count: int) : ReadOnlySpan<byte> =
-        need count
-        let span = ReadOnlySpan(data, position, count)
-        position <- position + count
-        span
-
-    let u8 () = (take 1)[0]
-    let u16 () = BinaryPrimitives.ReadUInt16BigEndian(take 2)
-    let u32 () = BinaryPrimitives.ReadUInt32BigEndian(take 4)
-    let u64 () = BinaryPrimitives.ReadUInt64BigEndian(take 8)
-
-    /// A length that cannot be real is refused before anything is allocated:
-    /// every element takes at least one byte.
-    let length (n: uint32) : int =
-        if int64 n > int64 (data.Length - position) then
-            fail $"length {n} at byte {position} exceeds the {data.Length - position} bytes left"
-
-        int n
-
-    member _.Position = position
-    member _.AtEnd = position >= data.Length
-
-    member _.PeekType() : MsgType =
-        need 1
-        let b = data[position]
-
-        if b <= 0x7fuy then UIntType
-        elif b <= 0x8fuy then MapType
-        elif b <= 0x9fuy then ArrayType
-        elif b <= 0xbfuy then StrType
-        elif b >= 0xe0uy then IntType
-        else
-            match b with
-            | 0xc0uy -> NilType
-            | 0xc2uy
-            | 0xc3uy -> BoolType
-            | 0xc4uy
-            | 0xc5uy
-            | 0xc6uy -> BinType
-            | 0xc7uy
-            | 0xc8uy
-            | 0xc9uy
-            | 0xd4uy
-            | 0xd5uy
-            | 0xd6uy
-            | 0xd7uy
-            | 0xd8uy -> ExtType
-            | 0xcauy
-            | 0xcbuy -> FloatType
-            | 0xccuy
-            | 0xcduy
-            | 0xceuy
-            | 0xcfuy -> UIntType
-            | 0xd0uy
-            | 0xd1uy
-            | 0xd2uy
-            | 0xd3uy -> IntType
-            | 0xd9uy
-            | 0xdauy
-            | 0xdbuy -> StrType
-            | 0xdcuy
-            | 0xdduy -> ArrayType
-            | 0xdeuy
-            | 0xdfuy -> MapType
-            | other -> fail $"invalid type byte 0x{other:x2} at byte {position}"
-
-    /// Consumes a nil if one is next; says whether it did.
-    member r.TryReadNil() : bool =
-        if position < data.Length && data[position] = 0xc0uy then
-            position <- position + 1
-            true
-        else
-            false
-
-    member _.ReadBool() : bool =
-        match u8 () with
-        | 0xc2uy -> false
-        | 0xc3uy -> true
-        | other -> fail $"expected a bool, got 0x{other:x2} at byte {position - 1}"
-
-    /// Any integer format, as int64. An unsigned value past int64 is an error.
-    member _.ReadInt64() : int64 =
-        let b = u8 ()
-
-        if b <= 0x7fuy then int64 b
-        elif b >= 0xe0uy then int64 (sbyte b)
-        else
-            match b with
-            | 0xccuy -> int64 (u8 ())
-            | 0xcduy -> int64 (u16 ())
-            | 0xceuy -> int64 (u32 ())
-            | 0xcfuy ->
-                let v = u64 ()
-                if v > uint64 Int64.MaxValue then fail $"integer {v} overflows int64"
-                int64 v
-            | 0xd0uy -> int64 (sbyte (u8 ()))
-            | 0xd1uy -> int64 (int16 (u16 ()))
-            | 0xd2uy -> int64 (int32 (u32 ()))
-            | 0xd3uy -> int64 (u64 ())
-            | other -> fail $"expected an integer, got 0x{other:x2} at byte {position - 1}"
-
-    /// Any integer format, as uint64. A negative value is an error.
-    member r.ReadUInt64() : uint64 =
-        need 1
-
-        if data[position] = 0xcfuy then
-            position <- position + 1
-            u64 ()
-        else
-            let v = r.ReadInt64()
-            if v < 0L then fail $"integer {v} is negative, expected unsigned"
-            uint64 v
-
-    /// A float32, a float64, or an integer, as float.
-    member r.ReadFloat() : float =
-        need 1
-
-        match data[position] with
-        | 0xcauy ->
-            position <- position + 1
-            float (BinaryPrimitives.ReadSingleBigEndian(take 4))
-        | 0xcbuy ->
-            position <- position + 1
-            BinaryPrimitives.ReadDoubleBigEndian(take 8)
-        | 0xcfuy -> float (r.ReadUInt64())
-        | _ -> float (r.ReadInt64())
-
-    /// The raw bytes of a str or bin value.
-    member _.ReadBytes() : byte[] =
-        let b = u8 ()
-
-        let count =
-            if b >= 0xa0uy && b <= 0xbfuy then int (b &&& 0x1fuy)
-            else
-                match b with
-                | 0xd9uy
-                | 0xc4uy -> int (u8 ())
-                | 0xdauy
-                | 0xc5uy -> int (u16 ())
-                | 0xdbuy
-                | 0xc6uy -> length (u32 ())
-                | other -> fail $"expected a string or bytes, got 0x{other:x2} at byte {position - 1}"
-
-        (take count).ToArray()
-
-    /// A str (or bin) value as text.
-    member r.ReadString() : string = Encoding.UTF8.GetString(r.ReadBytes())
-
-    member _.ReadArrayHeader() : int =
-        let b = u8 ()
-
-        if b >= 0x90uy && b <= 0x9fuy then int (b &&& 0x0fuy)
-        else
-            match b with
-            | 0xdcuy -> int (u16 ())
-            | 0xdduy -> length (u32 ())
-            | other -> fail $"expected an array, got 0x{other:x2} at byte {position - 1}"
-
-    member _.ReadMapHeader() : int =
-        let b = u8 ()
-
-        if b >= 0x80uy && b <= 0x8fuy then int (b &&& 0x0fuy)
-        else
-            match b with
-            | 0xdeuy -> int (u16 ())
-            | 0xdfuy -> length (u32 ())
-            | other -> fail $"expected a map, got 0x{other:x2} at byte {position - 1}"
-
-    member private r.ReadExt() : MsgValue =
-        let b = u8 ()
-
-        let count =
-            match b with
-            | 0xd4uy -> 1
-            | 0xd5uy -> 2
-            | 0xd6uy -> 4
-            | 0xd7uy -> 8
-            | 0xd8uy -> 16
-            | 0xc7uy -> int (u8 ())
-            | 0xc8uy -> int (u16 ())
-            | 0xc9uy -> length (u32 ())
-            | other -> fail $"expected an extension, got 0x{other:x2} at byte {position - 1}"
-
-        let extType = sbyte (u8 ())
-        MsgExt(extType, (take count).ToArray())
-
-    /// The next value, whatever it is, as a tree.
-    member r.ReadValue() : MsgValue =
-        // The walk is recursive and the .NET stack does not grow: a body of
-        // nothing but nested array headers must end in an error, not in the
-        // death of the process.
-        depth <- depth + 1
-
-        try
-            if depth > 512 then
-                fail "nesting deeper than 512 levels"
-
-            r.ReadValueUnbounded()
-        finally
-            depth <- depth - 1
-
-    member private r.ReadValueUnbounded() : MsgValue =
-        match r.PeekType() with
-        | NilType ->
-            position <- position + 1
-            MsgNil
-        | BoolType -> MsgBool(r.ReadBool())
-        | IntType -> MsgInt(r.ReadInt64())
-        | UIntType -> MsgUInt(r.ReadUInt64())
-        | FloatType ->
-            if data[position] = 0xcauy then
-                position <- position + 1
-                MsgFloat32(BinaryPrimitives.ReadSingleBigEndian(take 4))
-            else
-                MsgFloat(r.ReadFloat())
-        | StrType -> MsgStr(r.ReadString())
-        | BinType -> MsgBin(r.ReadBytes())
-        | ArrayType ->
-            let count = r.ReadArrayHeader()
-            MsgArray [ for _ in 1..count -> r.ReadValue() ]
-        | MapType ->
-            let count = r.ReadMapHeader()
-
-            MsgMap
-                [ for _ in 1..count ->
-                      // A key must be a string; Go's reader refuses anything else.
-                      if r.PeekType() <> StrType then
-                          fail $"map key at byte {position} is not a string"
-
-                      let key = r.ReadString()
-                      key, r.ReadValue() ]
-        | ExtType -> r.ReadExt()
-
-    /// Skips the next value.
-    member r.Skip() : unit = r.ReadValue() |> ignore
-
 module Msgpack =
+    /// How deep a value may nest. The walk below is recursive and a stack
+    /// overflow ends the process, so a body of nothing but nested array
+    /// headers has to end in an error.
+    let maxDepth = 512
+
+    let private isUnsigned (code: byte) : bool =
+        code <= MessagePackCode.MaxFixInt || (code >= MessagePackCode.UInt8 && code <= MessagePackCode.UInt64)
+
+    /// The value at the reader's position. Throws what the library throws
+    /// when the bytes are not MessagePack; `decode` is where that is caught.
+    let rec private value (reader: byref<MessagePackReader>) (depth: int) : MsgValue =
+        if depth > maxDepth then
+            raise (MessagePackSerializationException $"nesting deeper than {maxDepth} levels")
+
+        match reader.NextMessagePackType with
+        | MessagePackType.Nil ->
+            reader.ReadNil() |> ignore
+            MsgNil
+        | MessagePackType.Boolean -> MsgBool(reader.ReadBoolean())
+        | MessagePackType.Integer -> if isUnsigned reader.NextCode then MsgUInt(reader.ReadUInt64()) else MsgInt(reader.ReadInt64())
+        | MessagePackType.Float ->
+            if reader.NextCode = MessagePackCode.Float32 then MsgFloat32(reader.ReadSingle()) else MsgFloat(reader.ReadDouble())
+        | MessagePackType.String -> MsgStr(reader.ReadString())
+        | MessagePackType.Binary ->
+            let bytes = reader.ReadBytes()
+            MsgBin(if bytes.HasValue then bytes.Value.ToArray() else [||])
+        | MessagePackType.Array ->
+            let count = reader.ReadArrayHeader()
+            let items = ResizeArray<MsgValue>()
+
+            for _ in 1..count do
+                items.Add(value &reader (depth + 1))
+
+            MsgArray(List.ofSeq items)
+        | MessagePackType.Map ->
+            let count = reader.ReadMapHeader()
+            let entries = ResizeArray<string * MsgValue>()
+
+            for _ in 1..count do
+                if reader.NextMessagePackType <> MessagePackType.String then
+                    raise (MessagePackSerializationException $"map key at byte {reader.Consumed} is not a string")
+
+                let key = reader.ReadString()
+                entries.Add(key, value &reader (depth + 1))
+
+            MsgMap(List.ofSeq entries)
+        | MessagePackType.Extension ->
+            let extension = reader.ReadExtensionFormat()
+            MsgExt(extension.TypeCode, extension.Data.ToArray())
+        | _ -> raise (MessagePackSerializationException $"byte 0x{reader.NextCode:x2} at position {reader.Consumed} starts no MessagePack value")
+
+    let truncated = "the data ends before the value does"
+    let forged = "a length in the data is larger than any value could be"
+
+    /// The next value of a reader a decoder is walking by hand.
+    let read (reader: byref<MessagePackReader>) : MsgValue = value &reader 0
+
     /// A whole body as one value.
     let decode (body: byte[]) : Result<MsgValue, string> =
         if body.Length = 0 then
             Error "empty body"
         else
             try
-                Ok(MsgpackReader(body).ReadValue())
+                let mutable reader = MessagePackReader(ReadOnlyMemory body)
+                Ok(value &reader 0)
             with
-            | MsgpackError message -> Error message
-            | :? DecoderFallbackException as e -> Error e.Message
+            | :? MessagePackSerializationException as e -> Error e.Message
+            | :? EndOfStreamException -> Error truncated
+            // A header announcing more elements than an int holds.
+            | :? OverflowException -> Error forged
+
+    /// What a value is, for a note about one that does not fit.
+    let kind (value: MsgValue) : string =
+        match value with
+        | MsgNil -> "nil"
+        | MsgBool _ -> "a bool"
+        | MsgInt n -> $"the integer {n}"
+        | MsgUInt n -> $"the integer {n}"
+        | MsgFloat32 _
+        | MsgFloat _ -> "a float"
+        | MsgStr _ -> "a string"
+        | MsgBin _ -> "bytes"
+        | MsgArray _ -> "an array"
+        | MsgMap _ -> "a map"
+        | MsgExt _ -> "an extension value"
+
+/// The fields of a MessagePack map, read by name, the way a decoder
+/// generated for a struct reads them: the last of two equal keys wins, and
+/// nil is the same as absent. A value of the wrong type is noted in
+/// `problems` with its path and the field keeps its default; the caller
+/// looks at `problems` once the whole document has been read.
+type MsgFields(problems: ResizeArray<string>, path: string, value: MsgValue) =
+    let entries =
+        match value with
+        | MsgMap entries -> entries
+        | MsgNil -> []
+        | other ->
+            problems.Add(if path = "" then $"expected a map, got {Msgpack.kind other}" else $"{path}: expected a map, got {Msgpack.kind other}")
+            []
+
+    let where (name: string) : string = if path = "" then name else path + "/" + name
+
+    let find (name: string) : MsgValue option =
+        entries
+        |> List.tryFindBack (fun (key, _) -> key = name)
+        |> Option.map snd
+        |> Option.filter (fun found -> found <> MsgNil)
+
+    let refuse (name: string) (wanted: string) (found: MsgValue) : unit =
+        problems.Add $"{where name}: expected {wanted}, got {Msgpack.kind found}"
+
+    /// The field read with `read`; `zero` when it is absent or does not fit.
+    let field (name: string) (wanted: string) (zero: 'a) (read: MsgValue -> 'a option) : 'a =
+        match find name with
+        | None -> zero
+        | Some found ->
+            match read found with
+            | Some result -> result
+            | None ->
+                refuse name wanted found
+                zero
+
+    let unsigned (found: MsgValue) : uint64 option =
+        match found with
+        | MsgUInt n -> Some n
+        | MsgInt n when n >= 0L -> Some(uint64 n)
+        | _ -> None
+
+    let signed (found: MsgValue) : int64 option =
+        match found with
+        | MsgInt n -> Some n
+        | MsgUInt n when n <= uint64 Int64.MaxValue -> Some(int64 n)
+        | _ -> None
+
+    let items (found: MsgValue) : MsgValue list option =
+        match found with
+        | MsgArray items -> Some items
+        | _ -> None
+
+    member _.String(name: string) : string =
+        field name "a string" "" (fun found ->
+            match found with
+            | MsgStr text -> Some text
+            | _ -> None)
+
+    member _.Bool(name: string) : bool =
+        field name "a bool" false (fun found ->
+            match found with
+            | MsgBool flag -> Some flag
+            | _ -> None)
+
+    member _.UInt64(name: string) : uint64 = field name "an unsigned integer" 0UL unsigned
+
+    member _.UInt32(name: string) : uint32 =
+        field name "an unsigned 32-bit integer" 0u (fun found ->
+            unsigned found |> Option.filter (fun n -> n <= uint64 UInt32.MaxValue) |> Option.map uint32)
+
+    member _.Int64(name: string) : int64 = field name "an integer" 0L signed
+
+    member _.Int32(name: string) : int32 =
+        field name "a 32-bit integer" 0 (fun found ->
+            signed found |> Option.filter (fun n -> n >= int64 Int32.MinValue && n <= int64 Int32.MaxValue) |> Option.map int32)
+
+    member _.Bytes(name: string) : byte[] =
+        field name "bytes" [||] (fun found ->
+            match found with
+            | MsgBin bytes -> Some bytes
+            | _ -> None)
+
+    member _.Strings(name: string) : string[] =
+        field name "an array of strings" [||] (fun found ->
+            match items found with
+            | Some list when list |> List.forall (fun item -> item.IsMsgStr) ->
+                Some [| for item in list do
+                            match item with
+                            | MsgStr text -> text
+                            | _ -> () |]
+            | _ -> None)
+
+    /// An array of maps, each as its fields. A nil element is left out: an
+    /// encoder writes one for a nil pointer. Unlike a scalar, a list that
+    /// appears under the same key twice is the two lists one after the other.
+    member _.Maps(name: string) : MsgFields list =
+        [ for key, found in entries do
+              if key = name then
+                  match found with
+                  | MsgNil -> ()
+                  | MsgArray list ->
+                      for i, item in List.indexed list do
+                          if item <> MsgNil then
+                              MsgFields(problems, $"{where name}/{i}", item)
+                  | other -> refuse name "an array" other ]
+
+    /// The fields whose names are not in `known`, with their values.
+    member _.Unknown(known: Set<string>) : Map<string, MsgValue> =
+        entries |> List.filter (fun (key, _) -> not (known.Contains key)) |> Map.ofList

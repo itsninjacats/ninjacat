@@ -15,9 +15,8 @@ open System.Text.RegularExpressions
 open System.Text.Unicode
 open NinjaCat.Api.Intake
 
-/// Go's decoder gives up at this nesting depth; .NET's default is 64, which
-/// a symbol database's nested scopes could reach.
-let jsonDepth = 10_000
+/// .NET's default is 64, which a symbol database's nested scopes could reach.
+let jsonDepth = Json.maxDepth
 
 /// One JSON value with nothing but white space around it, or the parser's
 /// message. Bytes that are not UTF-8 are replaced first.

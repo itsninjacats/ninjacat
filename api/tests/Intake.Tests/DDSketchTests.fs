@@ -44,7 +44,8 @@ let ``key and value round-trip`` () =
 [<Fact>]
 let ``build tallies values into sorted buckets`` () =
     let values = [| 11.9; 12.1; 12.0; 12.2; 47.3; 47.0; 46.9; 48.1; 51.0; 890.0; 895.0; 1150.0 |]
-    let keys, counts, stats = DDSketch.build values
+    let sketch = DDSketch.build values
+    let keys, counts, stats = sketch.Keys, sketch.Counts, sketch.Stats
 
     Assert.Equal(keys.Length, counts.Length)
     Assert.Equal<int32[]>(Array.sort keys, keys)
@@ -58,7 +59,7 @@ let ``build tallies values into sorted buckets`` () =
 
 [<Fact>]
 let ``build of nothing is empty`` () =
-    let keys, counts, stats = DDSketch.build [||]
-    Assert.Empty keys
-    Assert.Empty counts
-    Assert.Equal(0L, stats.Count)
+    let sketch = DDSketch.build [||]
+    Assert.Empty sketch.Keys
+    Assert.Empty sketch.Counts
+    Assert.Equal(0L, sketch.Stats.Count)

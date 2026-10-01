@@ -96,7 +96,9 @@ module TagBuffer =
             []
         else
             match buffer[0] with
-            | 1uy -> readV1 buffer tagIndex
+            // Byte 0 of a version 1 buffer is the version, never a tag set:
+            // an index of 0 there is one that was not sent.
+            | 1uy -> if tagIndex = 0 then [] else readV1 buffer tagIndex
             | 2uy
             | 3uy -> readV2 buffer tagIndex
             | _ -> []

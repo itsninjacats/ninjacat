@@ -1,11 +1,11 @@
 # NinjaCat — development stack.
 #
 #   docker compose up            everything, with hot reload on both sides
-#   docker compose up -d db      just the databases, if you run the apps on the host
+#   docker compose up -d postgres clickhouse   just the databases, if you run the apps on the host
 #
-# Both application services rebuild themselves on save: the Go server through
-# Air (see server/.air.toml), the panel through Vite's dev server. Source is
-# bind-mounted, so an edit on the host is an edit in the container.
+# Both application services rebuild themselves on save: the server through
+# `dotnet watch`, the panel through Vite's dev server. Source is bind-mounted,
+# so an edit on the host is an edit in the container.
 #
 # Databases publish on 127.0.0.1 only. They have passwords, but exposing a
 # development database on 0.0.0.0 is a separate decision — drop the prefix if
@@ -27,7 +27,7 @@ services:
       CLICKHOUSE_PASSWORD: ninjacat
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     # No docker-entrypoint-initdb.d mount: the server owns the schema and
-    # applies its embedded migrations at startup (server/schema). The
+    # applies its embedded migrations at startup (api/schema). The
     # entrypoint mechanism only ever fired on an empty data directory anyway.
     # CLICKHOUSE_DB above still creates the (empty) database itself.
     volumes:
@@ -81,43 +81,8 @@ services:
       postgres: { condition: service_healthy }
     restart: "no"
 
-  server:
-    build:
-      context: ./server
-      dockerfile: Dockerfile.dev
-    container_name: ninjacat-server
-    restart: unless-stopped
-    ports:
-      - "8080:8080"   # agent intake — reachable from agent machines
-      - "8081:8081"   # panel API — internal
-      - "9911:9911"   # Ergo observer
-    environment:
-      DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
-      CLICKHOUSE_ADDR: clickhouse:9000
-      CLICKHOUSE_DB: ninjacat
-      CLICKHOUSE_USER: ninjacat
-      CLICKHOUSE_PASSWORD: ninjacat
-      NINJACAT_ADDR: ":8080"
-      NINJACAT_INTERNAL_ADDR: ":8081"
-      # The observer binds this address. 0.0.0.0 is what makes it reachable
-      # from the host at http://localhost:9911.
-      NINJACAT_OBSERVER_HOST: 0.0.0.0
-      NINJACAT_CAPTURE_DIR: /data/captures
-      DEBUG: "true"
-    volumes:
-      - ./server:/app
-      - ./server/captures:/data/captures
-      # Module and build caches live in volumes, not in the bind mount, so a
-      # rebuild after an edit is seconds rather than a full download.
-      - go-mod-cache:/go/pkg/mod
-      - go-build-cache:/root/.cache/go-build
-    depends_on:
-      clickhouse: { condition: service_healthy }
-      postgres: { condition: service_healthy }
-      migrate: { condition: service_completed_successfully }
-
-  # The read side, in F#. `dotnet watch` rebuilds on save. It reads
-  # ClickHouse over HTTP (:8123), not the native port the Go server uses.
+  # The server: agent intake, panel API and query API in one process.
+  # `dotnet watch` rebuilds on save. It reaches ClickHouse over HTTP (:8123).
   api:
     image: mcr.microsoft.com/dotnet/sdk:10.0
     container_name: ninjacat-api
@@ -125,24 +90,25 @@ services:
     working_dir: /app
     command: ["dotnet", "watch", "--project", "src/Server", "run", "--non-interactive"]
     ports:
-      - "8082:8082"   # F# API — internal
+      - "8080:8080"     # agent intake — reachable from agent machines
+      - "8081:8081"     # panel and query API — internal
+      - "10516:10516"   # logs over TCP, for agents with force_use_tcp
     environment:
-      # While the Go server still takes the agents' traffic, this one only
-      # serves the internal port; its intake listens where nothing sends.
-      NINJACAT_INTERNAL_ADDR: ":8082"
-      NINJACAT_ADDR: ":8083"
-      NINJACAT_LOGS_TCP_ADDR: "off"
-      NINJACAT_AUTO_MIGRATE: "false"
+      DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
       CLICKHOUSE_HTTP_ADDR: clickhouse:8123
       CLICKHOUSE_DB: ninjacat
       CLICKHOUSE_USER: ninjacat
       CLICKHOUSE_PASSWORD: ninjacat
-      DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
+      NINJACAT_ADDR: ":8080"
+      NINJACAT_INTERNAL_ADDR: ":8081"
+      NINJACAT_CAPTURE_DIR: /data/captures
+      DEBUG: "true"
       NINJACAT_ARTIFACTS_PATH: /artifacts
       # Polling, because inotify events do not cross the bind mount everywhere.
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
     volumes:
       - ./api:/app
+      - ./api/captures:/data/captures
       # Build output lives here, not in the bind mount (see NINJACAT_ARTIFACTS_PATH),
       # so host and container builds never collide.
       - api-artifacts:/artifacts
@@ -163,9 +129,7 @@ services:
     environment:
       DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
       # The panel talks to :8081, never to the agent intake on :8080.
-      NINJACAT_INTERNAL_URL: http://server:8081
-      # The query API (F#): Datadog's query language, for the metrics explorer.
-      NINJACAT_QUERY_URL: http://api:8082
+      NINJACAT_INTERNAL_URL: http://api:8081
       ORIGIN: http://localhost:5173
       BETTER_AUTH_SECRET: dev-only-secret-change-me-in-production-32ch
     volumes:
@@ -182,8 +146,6 @@ volumes:
   clickhouse-data:
   clickhouse-logs:
   pgdata:
-  go-mod-cache:
-  go-build-cache:
   frontend-node-modules:
   frontend-svelte-kit:
   api-artifacts:

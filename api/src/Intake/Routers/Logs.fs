@@ -49,7 +49,7 @@ let parseItems (body: byte[]) : Result<JsonElement list, string> =
         | Error e -> Error $"JSON logs array: {e}"
     else
         let items = ResizeArray<JsonElement>()
-        let mutable reader = Utf8JsonReader(ReadOnlySpan(Json.repair body), JsonReaderOptions(AllowMultipleValues = true, MaxDepth = 10_000))
+        let mutable reader = Utf8JsonReader(ReadOnlySpan(Json.repair body), JsonReaderOptions(AllowMultipleValues = true, MaxDepth = Json.maxDepth))
 
         try
             while reader.Read() do
@@ -109,7 +109,14 @@ let private attributeInt64 (name: string) (attributes: Map<string, JsonElement>)
 /// `timestamp` before `date`, a millisecond number before an RFC 3339 string.
 /// A value that does not parse falls through to the next candidate, and is
 /// then left among the attributes rather than lost.
-let timestamp (attributes: Map<string, JsonElement>) (arrival: DateTime) : DateTime * string * string =
+type LogTime =
+    { Time: DateTime
+      /// "timestamp_ms", "timestamp_string", "date_ms", "date_string" or "arrival".
+      Source: string
+      /// The attribute the time was read from; "" when it is the arrival time.
+      Key: string }
+
+let timestamp (attributes: Map<string, JsonElement>) (arrival: DateTime) : LogTime =
     let millis (name: string) =
         attributeInt64 name attributes |> Option.filter (fun ms -> ms > 0L) |> Option.map Time.fromUnixMillis
 
@@ -117,14 +124,14 @@ let timestamp (attributes: Map<string, JsonElement>) (arrival: DateTime) : DateT
         attributeString name attributes |> Option.bind Time.tryRfc3339
 
     match millis "timestamp", text "timestamp", millis "date", text "date" with
-    | Some t, _, _, _ -> t, "timestamp_ms", "timestamp"
-    | None, Some t, _, _ -> t, "timestamp_string", "timestamp"
-    | None, None, Some t, _ -> t, "date_ms", "date"
-    | None, None, None, Some t -> t, "date_string", "date"
+    | Some t, _, _, _ -> { Time = t; Source = "timestamp_ms"; Key = "timestamp" }
+    | None, Some t, _, _ -> { Time = t; Source = "timestamp_string"; Key = "timestamp" }
+    | None, None, Some t, _ -> { Time = t; Source = "date_ms"; Key = "date" }
+    | None, None, None, Some t -> { Time = t; Source = "date_string"; Key = "date" }
     // HTTPLogItem has no timestamp field at all, so official clients cannot
     // always send one. The row says so instead of passing arrival off as the
     // sender's clock.
-    | None, None, None, None -> arrival, "arrival", ""
+    | None, None, None, None -> { Time = arrival; Source = "arrival"; Key = "" }
 
 /// The attributes left after some became columns, as JSON text; "" if none.
 let private attributesJson (attributes: Map<string, JsonElement>) : string =
@@ -161,17 +168,17 @@ let toRow (tenant: string) (item: LogItem) (arrival: DateTime) (defaults: BatchD
         else
             None
 
-    let time, timeSource, timeKey = timestamp item.Attributes arrival
+    let time = timestamp item.Attributes arrival
     let status = attributeString "status" item.Attributes
 
     // Only attributes that were actually USED leave the JSON column.
     let rest =
         item.Attributes
         |> Map.filter (fun name _ ->
-            not (name = timeKey || (name = "status" && status.IsSome) || (name = "host" && hostAttribute.IsSome)))
+            not (name = time.Key || (name = "status" && status.IsSome) || (name = "host" && hostAttribute.IsSome)))
 
     { TenantID = tenant
-      Timestamp = time
+      Timestamp = time.Time
       Host = Text.firstNonEmpty [ item.Hostname; defaultArg hostAttribute ""; defaults.Host ]
       Service = Text.firstNonEmpty [ item.Service; defaults.Service ]
       Source = Text.firstNonEmpty [ item.Source; defaults.Source ]
@@ -180,7 +187,7 @@ let toRow (tenant: string) (item: LogItem) (arrival: DateTime) (defaults: BatchD
       // Batch tags first: they are the weaker statement.
       Tags = Tags.toMultiMap (defaults.Tags @ Tags.splitDDTags item.Tags)
       Attributes = attributesJson rest
-      TimestampSource = timeSource }
+      TimestampSource = time.Source }
 
 /// Datadog answers logs with an empty object and 202, whatever happened.
 let private accepted = Response.json 202 "{}"

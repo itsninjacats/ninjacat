@@ -423,10 +423,9 @@ let private goSketch () : byte[] =
 [<Fact>]
 let ``a sketch summary has the numbers sketches-go computes`` () =
     let raw = goSketch ()
-    let summary, problem = TraceSketch.summary raw
+    let summary = TraceSketch.summary raw
 
-    Assert.Equal(None, problem)
-    Assert.Equal(SketchSummary.ok, summary.State)
+    Assert.Equal(SketchState.Ok, summary.State)
     Assert.Equal<byte[]>(raw, summary.Raw)
     Assert.Equal(Some 3.0, summary.Count)
     // Exact, not approximate: the arithmetic is Go's, to the last bit.
@@ -438,27 +437,24 @@ let ``a sketch summary has the numbers sketches-go computes`` () =
 
 [<Fact>]
 let ``no sketch, an empty sketch and bytes that are not one are three different states`` () =
-    let absent, _ = TraceSketch.summary [||]
-    Assert.Equal(SketchSummary.absent, absent.State)
+    let absent = TraceSketch.summary [||]
+    Assert.Equal(SketchState.Absent, absent.State)
 
     // A valid sketch that measured nothing; its bytes are kept.
     let raw = Test.DDSketch(Mapping = Test.IndexMapping(Gamma = 1.02), PositiveValues = Test.Store()).ToByteArray()
-    let empty, problem = TraceSketch.summary raw
-    Assert.Equal(None, problem)
-    Assert.Equal(SketchSummary.empty, empty.State)
+    let empty = TraceSketch.summary raw
+    Assert.Equal(SketchState.Empty, empty.State)
     Assert.Equal(None, empty.Count)
     Assert.Equal<byte[]>(raw, empty.Raw)
 
-    let garbage, problem = TraceSketch.summary (Encoding.UTF8.GetBytes "not a sketch")
-    Assert.True problem.IsSome
-    Assert.Equal(SketchSummary.undecodable, garbage.State)
+    let garbage = TraceSketch.summary (Encoding.UTF8.GetBytes "not a sketch")
+    Assert.True garbage.State.IsUndecodable
     Assert.Equal("not a sketch", Encoding.UTF8.GetString garbage.Raw)
     Assert.Equal(None, garbage.Count)
 
     // A sketch without its mapping cannot be read either.
-    let unmapped, problem = TraceSketch.summary (Test.DDSketch(ZeroCount = 4.0).ToByteArray())
-    Assert.Equal(Some "not a DDSketch: cannot create IndexMapping from nil protobuf index mapping", problem)
-    Assert.Equal(SketchSummary.undecodable, unmapped.State)
+    let unmapped = TraceSketch.summary (Test.DDSketch(ZeroCount = 4.0).ToByteArray())
+    Assert.Equal(SketchState.Undecodable "not a DDSketch: cannot create IndexMapping from nil protobuf index mapping", unmapped.State)
 
 [<Fact>]
 let ``stat rows carry payload, client and bucket, and keep the sketches`` () =
@@ -532,15 +528,15 @@ let ``stat rows carry payload, client and bucket, and keep the sketches`` () =
     Assert.Equal("true", row.IsTraceRoot)
     Assert.Equal("not_set", rows[1].IsTraceRoot)
 
-    Assert.Equal(SketchSummary.ok, row.OkSummary.State)
+    Assert.Equal(SketchState.Ok, row.OkSummary.State)
     Assert.Equal<byte[]>(okBytes, row.OkSummary.Raw)
     Assert.Equal(Some 3.0, row.OkSummary.Count)
     Assert.Equal(3, row.OkSummary.BinKeys.Length)
     Assert.Equal(3, row.OkSummary.BinCounts.Length)
-    Assert.Equal(SketchSummary.undecodable, row.ErrorSummary.State)
+    Assert.True row.ErrorSummary.State.IsUndecodable
     Assert.Equal("not a sketch", Encoding.UTF8.GetString row.ErrorSummary.Raw)
     Assert.Equal(None, row.ErrorSummary.Count)
-    Assert.Equal(SketchSummary.absent, rows[1].OkSummary.State)
+    Assert.Equal(SketchState.Absent, rows[1].OkSummary.State)
     Assert.Empty(rows[1].OkSummary.Raw)
 
 // --- /api/v0.1/pipeline_stats ---
@@ -639,9 +635,9 @@ let ``a pipeline stats payload is decoded by its Go field names, unknown ones ke
     let blobRow = Assert.Single blobs
     Assert.Equal("orders", pointRow.DSMCommon.Service)
     Assert.Equal("trace-agent", pointRow.Via)
-    Assert.Equal(SketchSummary.ok, pointRow.PathwayLatency.State)
-    Assert.Equal(SketchSummary.absent, pointRow.EdgeLatency.State)
-    Assert.Equal(SketchSummary.undecodable, pointRow.PayloadSize.State)
+    Assert.Equal(SketchState.Ok, pointRow.PathwayLatency.State)
+    Assert.Equal(SketchState.Absent, pointRow.EdgeLatency.State)
+    Assert.True pointRow.PayloadSize.State.IsUndecodable
     Assert.Equal("garbage", Encoding.UTF8.GetString pointRow.PayloadSize.Raw)
     Assert.Equal<string[]>([| "payload.SomethingNew" |], pointRow.UnknownKeys)
     Assert.Equal("""{"payload.SomethingNew":"hello"}""", pointRow.UnknownJSON)
@@ -654,7 +650,7 @@ let ``a body that is not a pipeline stats payload is refused`` () =
     Assert.Equal(Error "empty body", Trace.decodeDsmPayload [||])
     Assert.True(Result.isError (Trace.decodeDsmPayload (Encoding.UTF8.GetBytes """{"Env":"prod"}""")))
     // A map that announces one entry and ends.
-    Assert.Equal(Error "EOF", Trace.decodeDsmPayload [| 0x81uy |])
+    Assert.Equal(Error Msgpack.truncated, Trace.decodeDsmPayload [| 0x81uy |])
 
 // --- /api/v2/data_streams_messages ---
 

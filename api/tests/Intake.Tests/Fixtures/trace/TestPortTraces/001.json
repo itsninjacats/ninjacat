@@ -631,8 +631,8 @@
      [
       "{\"big\":{\"double\":1e+300},\"code\":{\"int\":-9223372036854775808},\"frames\":{\"array\":[{\"string\":\"a\"},{\"int\":7},{\"bool\":false},{\"double\":2.5},null]},\"message\":{\"string\":\"boom \\\"quoted\\\"\"},\"noarray\":{\"array\":[]},\"odd\":null,\"ratio\":{\"double\":0.5},\"retry\":{\"bool\":true}}",
       "",
-      "{\"_encode_error\":\"json: unsupported value: NaN\"}",
-      "{\"_encode_error\":\"json: unsupported value: -Inf\"}"
+      "{\"x\":{\"double\":\"NaN\"}}",
+      "{\"x\":{\"array\":[{\"double\":\"-Inf\"}]}}"
      ]
     ],
     [
@@ -1147,8 +1147,8 @@
      "EventAttributes": [
       "{\"big\":{\"double\":1e+300},\"code\":{\"int\":-9223372036854775808},\"frames\":{\"array\":[{\"string\":\"a\"},{\"int\":7},{\"bool\":false},{\"double\":2.5},null]},\"message\":{\"string\":\"boom \\\"quoted\\\"\"},\"noarray\":{\"array\":[]},\"odd\":null,\"ratio\":{\"double\":0.5},\"retry\":{\"bool\":true}}",
       "",
-      "{\"_encode_error\":\"json: unsupported value: NaN\"}",
-      "{\"_encode_error\":\"json: unsupported value: -Inf\"}"
+      "{\"x\":{\"double\":\"NaN\"}}",
+      "{\"x\":{\"array\":[{\"double\":\"-Inf\"}]}}"
      ],
      "EventName": [
       "exception",
@@ -1737,5 +1737,6 @@
   "/sends/0/rows/5/ReceivedAt",
   "/sends/0/rows/6/ReceivedAt",
   "/sends/0/rows/7/ReceivedAt"
- ]
+ ],
+ "edited": "EventAttributes held Go's marker {\"_encode_error\":\"json: unsupported value: …\"} in the recording: one NaN or infinity among the attributes cost all of them. The number is written as the text \"NaN\", \"+Inf\" or \"-Inf\" now and the other attributes are kept."
 }

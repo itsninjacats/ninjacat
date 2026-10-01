@@ -51,8 +51,11 @@ type private ErrorLog() =
                 let cause = if isNull error then "" else ": " + error.GetBaseException().Message
                 lock errors (fun () -> errors.Add(format.Invoke(state, error) + cause))
 
-[<Fact>]
-let ``every row the fixtures produce fits its ClickHouse table`` () =
+/// Runs `write` against the real sink over a scratch database built from the
+/// migrations, then fails for every table that did not take all of its rows.
+/// `expected` is the number of rows per table. Skips when ClickHouse is not
+/// reachable.
+let roundTrip (expected: Map<string, int>) (write: ISink -> unit) : unit =
     let admin = client "default"
 
     try
@@ -70,27 +73,38 @@ let ``every row the fixtures produce fits its ClickHouse table`` () =
         | Error e -> Assert.Fail e
         | Ok _ -> ()
 
-        let writes = Replay.selected |> List.collect (fun fixture -> snd (Replay.send fixture))
         let log = ErrorLog()
         let sink = ClickHouseSink(scratch, log)
+        write sink
+        sink.StopAsync().GetAwaiter().GetResult()
 
+        let written = sink.Stats |> List.map (fun stats -> stats.Table, stats) |> Map.ofList
+
+        let failures =
+            [ for pair in expected do
+                  match written.TryFind pair.Key with
+                  | Some stats when stats.Failed = 0L && int stats.Written = pair.Value -> ()
+                  | Some stats -> $"{pair.Key}: {stats.Written} of {pair.Value} rows written, {stats.Failed} failed"
+                  | None -> $"{pair.Key}: nothing written, {pair.Value} rows expected" ]
+
+        if not failures.IsEmpty || not log.Errors.IsEmpty then
+            Assert.Fail(String.concat "\n" (failures @ log.Errors))
+    finally
+        admin.ExecuteNonQueryAsync($"DROP DATABASE IF EXISTS {database}").GetAwaiter().GetResult() |> ignore
+
+[<Fact>]
+let ``every row the fixtures produce fits its ClickHouse table`` () =
+    let writes = Replay.selected |> List.collect (fun fixture -> snd (Replay.send fixture))
+    Assert.NotEmpty writes
+
+    let expected =
+        writes |> List.groupBy _.Table |> List.map (fun (table, group) -> table, group |> List.sumBy _.Args.Length) |> Map.ofList
+
+    roundTrip expected (fun sink ->
         for write in writes do
             // The rows are already column values; the table only has to pass them on.
             let table: Table<obj[]> = Table.create write.Writer write.Table write.Columns id
-            (sink :> ISink).Write(table, write.Args)
-
-        sink.StopAsync().GetAwaiter().GetResult()
-
-        let expected = writes |> List.groupBy _.Table |> List.map (fun (table, group) -> table, group |> List.sumBy _.Args.Length) |> Map.ofList
-        let failures = sink.Stats |> List.filter (fun stats -> stats.Failed > 0L || int stats.Written <> expected[stats.Table])
-
-        if not failures.IsEmpty || not log.Errors.IsEmpty then
-            let lines = failures |> List.map (fun s -> $"{s.Table}: {s.Written} of {expected[s.Table]} rows written, {s.Failed} failed")
-            Assert.Fail(String.concat "\n" (lines @ log.Errors))
-
-        Assert.NotEmpty writes
-    finally
-        admin.ExecuteNonQueryAsync($"DROP DATABASE IF EXISTS {database}").GetAwaiter().GetResult() |> ignore
+            sink.Write(table, write.Args))
 
 [<Fact>]
 let ``times ClickHouse cannot hold are brought into range, not the end of the batch`` () =

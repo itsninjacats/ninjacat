@@ -27,7 +27,6 @@ open Google.Protobuf.Collections
 open Microsoft.Extensions.Logging
 open Datadog.Trace
 open NinjaCat.Api.Intake
-open NinjaCat.Api.Intake.Routers.TraceMsgp
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
 
@@ -36,29 +35,37 @@ let private intake = "trace"
 
 // --- JSON for the *_json columns ---
 
-/// Go's encoding/json refuses NaN and the infinities. Carries the value as Go prints it.
-exception private UnsupportedNumber of name: string
-
-/// Writes one of the *_json columns. A number JSON cannot hold makes the
-/// whole column an error marker, as it did in Go: an empty column would read
-/// as "no attributes".
+/// Writes one of the *_json columns.
 let private jsonText (write: Utf8JsonWriter -> unit) : string =
     use buffer = new MemoryStream()
 
-    try
-        do
-            use writer = new Utf8JsonWriter(buffer, JsonWriterOptions(Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping))
-            write writer
+    do
+        use writer = new Utf8JsonWriter(buffer, JsonWriterOptions(Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping))
+        write writer
 
-        Encoding.UTF8.GetString(buffer.ToArray())
-    with UnsupportedNumber name ->
-        $"{{\"_encode_error\":\"json: unsupported value: {name}\"}}"
+    Encoding.UTF8.GetString(buffer.ToArray())
 
+/// A float as JSON can hold it. JSON has numbers, but no NaN and no infinity.
+type private JsonDouble =
+    | Finite of float
+    | NotANumber
+    | PlusInfinity
+    | MinusInfinity
+
+let private jsonDouble (value: float) : JsonDouble =
+    if Double.IsNaN value then NotANumber
+    elif Double.IsPositiveInfinity value then PlusInfinity
+    elif Double.IsNegativeInfinity value then MinusInfinity
+    else Finite value
+
+/// A number, or one of three words in its place: the attributes beside a
+/// NaN are kept, and a reader can still tell what was sent.
 let private writeDouble (writer: Utf8JsonWriter) (value: float) : unit =
-    if Double.IsNaN value then raise (UnsupportedNumber "NaN")
-    elif Double.IsPositiveInfinity value then raise (UnsupportedNumber "+Inf")
-    elif Double.IsNegativeInfinity value then raise (UnsupportedNumber "-Inf")
-    else writer.WriteNumberValue value
+    match jsonDouble value with
+    | Finite number -> writer.WriteNumberValue number
+    | NotANumber -> writer.WriteStringValue "NaN"
+    | PlusInfinity -> writer.WriteStringValue "+Inf"
+    | MinusInfinity -> writer.WriteStringValue "-Inf"
 
 /// Bytes as base64, the only portable way to put them in JSON.
 let private writeBytes (writer: Utf8JsonWriter) (bytes: byte[]) : unit =
@@ -604,138 +611,92 @@ let handleTraces (r: Request) : Response =
 
 // --- /api/v0.2/stats -> apm_stats ---
 
-/// The ceiling msgp's generated decoder puts on any map, array or byte string.
-let private statsLimit = 500_000
+// The trace-agent writes this payload with msgp: a map keyed by the Go field
+// name at every level. A field of the wrong type refuses the payload, which
+// then goes to raw_payloads with the first such field named.
 
-let private checkLimit (count: int) : unit =
-    if count > statsLimit then
-        raise (MsgpFailure(Other "msgp: configured reader limit exceeded"))
+let private groupOf (f: MsgFields) : ClientGroupedStats =
+    let group =
+        ClientGroupedStats(
+            Service = f.String "Service",
+            Name = f.String "Name",
+            Resource = f.String "Resource",
+            HTTPStatusCode = f.UInt32 "HTTPStatusCode",
+            Type = f.String "Type",
+            DBType = f.String "DBType",
+            Hits = f.UInt64 "Hits",
+            Errors = f.UInt64 "Errors",
+            Duration = f.UInt64 "Duration",
+            OkSummary = ByteString.CopyFrom(f.Bytes "OkSummary"),
+            ErrorSummary = ByteString.CopyFrom(f.Bytes "ErrorSummary"),
+            Synthetics = f.Bool "Synthetics",
+            TopLevelHits = f.UInt64 "TopLevelHits",
+            SpanKind = f.String "SpanKind",
+            IsTraceRoot = enum<Trilean> (f.Int32 "IsTraceRoot"),
+            GRPCStatusCode = f.String "GRPCStatusCode",
+            HTTPMethod = f.String "HTTPMethod",
+            HTTPEndpoint = f.String "HTTPEndpoint",
+            // The one key that is not the field's name.
+            ServiceSource = f.String "srv_src"
+        )
 
-let private readStrings (r: MsgpReader) (field: string) (into: RepeatedField<string>) : unit =
-    let count = Msgp.at field r.ReadArrayHeader
-    checkLimit count
-    into.Clear()
-
-    for i in 0 .. count - 1 do
-        into.Add(Msgp.atIndex field i r.ReadString)
-
-let private readSummary (r: MsgpReader) (field: string) : ByteString =
-    let bytes = Msgp.at field r.ReadBin
-    checkLimit bytes.Length
-    ByteString.CopyFrom bytes
-
-/// Reads an array of maps into `into`. A nil element is skipped: msgp writes
-/// one for a nil pointer, and no row comes of it.
-let private readList (r: MsgpReader) (into: RepeatedField<'item>) (readItem: MsgpReader -> 'item) : unit =
-    let count = Msgp.at "Stats" r.ReadArrayHeader
-    checkLimit count
-    into.Clear()
-
-    for i in 0 .. count - 1 do
-        if r.IsNil then
-            r.ReadNil()
-        else
-            into.Add(Msgp.atIndex "Stats" i (fun () -> readItem r))
-
-let private readGroup (r: MsgpReader) : ClientGroupedStats =
-    let group = ClientGroupedStats()
-    let fields = r.ReadMapHeader()
-    checkLimit fields
-
-    for _ in 1..fields do
-        match r.ReadMapKey() with
-        | "Service" -> group.Service <- Msgp.at "Service" r.ReadString
-        | "Name" -> group.Name <- Msgp.at "Name" r.ReadString
-        | "Resource" -> group.Resource <- Msgp.at "Resource" r.ReadString
-        | "HTTPStatusCode" -> group.HTTPStatusCode <- Msgp.at "HTTPStatusCode" r.ReadUInt32
-        | "Type" -> group.Type <- Msgp.at "Type" r.ReadString
-        | "DBType" -> group.DBType <- Msgp.at "DBType" r.ReadString
-        | "Hits" -> group.Hits <- Msgp.at "Hits" r.ReadUInt64
-        | "Errors" -> group.Errors <- Msgp.at "Errors" r.ReadUInt64
-        | "Duration" -> group.Duration <- Msgp.at "Duration" r.ReadUInt64
-        | "OkSummary" -> group.OkSummary <- readSummary r "OkSummary"
-        | "ErrorSummary" -> group.ErrorSummary <- readSummary r "ErrorSummary"
-        | "Synthetics" -> group.Synthetics <- Msgp.at "Synthetics" r.ReadBool
-        | "TopLevelHits" -> group.TopLevelHits <- Msgp.at "TopLevelHits" r.ReadUInt64
-        | "SpanKind" -> group.SpanKind <- Msgp.at "SpanKind" r.ReadString
-        | "PeerTags" -> readStrings r "PeerTags" group.PeerTags
-        | "IsTraceRoot" -> group.IsTraceRoot <- enum<Trilean> (Msgp.at "IsTraceRoot" r.ReadInt32)
-        | "GRPCStatusCode" -> group.GRPCStatusCode <- Msgp.at "GRPCStatusCode" r.ReadString
-        | "HTTPMethod" -> group.HTTPMethod <- Msgp.at "HTTPMethod" r.ReadString
-        | "HTTPEndpoint" -> group.HTTPEndpoint <- Msgp.at "HTTPEndpoint" r.ReadString
-        // The one key that is not the field's name.
-        | "srv_src" -> group.ServiceSource <- Msgp.at "ServiceSource" r.ReadString
-        | "SpanDerivedPrimaryTags" -> readStrings r "SpanDerivedPrimaryTags" group.SpanDerivedPrimaryTags
-        | "AdditionalMetricTags" -> readStrings r "AdditionalMetricTags" group.AdditionalMetricTags
-        | _ -> r.Skip()
-
+    group.PeerTags.AddRange(f.Strings "PeerTags")
+    group.SpanDerivedPrimaryTags.AddRange(f.Strings "SpanDerivedPrimaryTags")
+    group.AdditionalMetricTags.AddRange(f.Strings "AdditionalMetricTags")
     group
 
-let private readBucket (r: MsgpReader) : ClientStatsBucket =
-    let bucket = ClientStatsBucket()
-    let fields = r.ReadMapHeader()
-    checkLimit fields
+let private bucketOf (f: MsgFields) : ClientStatsBucket =
+    let bucket =
+        ClientStatsBucket(Start = f.UInt64 "Start", Duration = f.UInt64 "Duration", AgentTimeShift = f.Int64 "AgentTimeShift")
 
-    for _ in 1..fields do
-        match r.ReadMapKey() with
-        | "Start" -> bucket.Start <- Msgp.at "Start" r.ReadUInt64
-        | "Duration" -> bucket.Duration <- Msgp.at "Duration" r.ReadUInt64
-        | "Stats" -> readList r bucket.Stats readGroup
-        | "AgentTimeShift" -> bucket.AgentTimeShift <- Msgp.at "AgentTimeShift" r.ReadInt64
-        | _ -> r.Skip()
-
+    bucket.Stats.AddRange(f.Maps "Stats" |> List.map groupOf)
     bucket
 
-let private readClient (r: MsgpReader) : ClientStatsPayload =
-    let client = ClientStatsPayload()
-    let fields = r.ReadMapHeader()
-    checkLimit fields
+let private clientOf (f: MsgFields) : ClientStatsPayload =
+    let client =
+        ClientStatsPayload(
+            Hostname = f.String "Hostname",
+            Env = f.String "Env",
+            Version = f.String "Version",
+            Lang = f.String "Lang",
+            TracerVersion = f.String "TracerVersion",
+            RuntimeID = f.String "RuntimeID",
+            Sequence = f.UInt64 "Sequence",
+            AgentAggregation = f.String "AgentAggregation",
+            Service = f.String "Service",
+            ContainerID = f.String "ContainerID",
+            GitCommitSha = f.String "GitCommitSha",
+            ImageTag = f.String "ImageTag",
+            ProcessTagsHash = f.UInt64 "ProcessTagsHash",
+            ProcessTags = f.String "ProcessTags"
+        )
 
-    for _ in 1..fields do
-        match r.ReadMapKey() with
-        | "Hostname" -> client.Hostname <- Msgp.at "Hostname" r.ReadString
-        | "Env" -> client.Env <- Msgp.at "Env" r.ReadString
-        | "Version" -> client.Version <- Msgp.at "Version" r.ReadString
-        | "Stats" -> readList r client.Stats readBucket
-        | "Lang" -> client.Lang <- Msgp.at "Lang" r.ReadString
-        | "TracerVersion" -> client.TracerVersion <- Msgp.at "TracerVersion" r.ReadString
-        | "RuntimeID" -> client.RuntimeID <- Msgp.at "RuntimeID" r.ReadString
-        | "Sequence" -> client.Sequence <- Msgp.at "Sequence" r.ReadUInt64
-        | "AgentAggregation" -> client.AgentAggregation <- Msgp.at "AgentAggregation" r.ReadString
-        | "Service" -> client.Service <- Msgp.at "Service" r.ReadString
-        | "ContainerID" -> client.ContainerID <- Msgp.at "ContainerID" r.ReadString
-        | "Tags" -> readStrings r "Tags" client.Tags
-        | "GitCommitSha" -> client.GitCommitSha <- Msgp.at "GitCommitSha" r.ReadString
-        | "ImageTag" -> client.ImageTag <- Msgp.at "ImageTag" r.ReadString
-        | "ProcessTagsHash" -> client.ProcessTagsHash <- Msgp.at "ProcessTagsHash" r.ReadUInt64
-        | "ProcessTags" -> client.ProcessTags <- Msgp.at "ProcessTags" r.ReadString
-        | _ -> r.Skip()
-
+    client.Stats.AddRange(f.Maps "Stats" |> List.map bucketOf)
+    client.Tags.AddRange(f.Strings "Tags")
     client
 
-/// Reads a msgpack StatsPayload, as the decoder msgp generates for the
-/// agent's type does: a map keyed by field name at every level.
+/// Reads a msgpack StatsPayload.
 let decodeStatsPayload (body: byte[]) : Result<StatsPayload, string> =
-    let r = MsgpReader(body, Slice)
+    match Msgpack.decode body with
+    | Error problem -> Error problem
+    // The agent always sends the map; nil here is not an empty payload.
+    | Ok MsgNil -> Error "expected a map, got nil"
+    | Ok root ->
+        let problems = ResizeArray<string>()
+        let f = MsgFields(problems, "", root)
 
-    try
-        let payload = StatsPayload()
-        let fields = r.ReadMapHeader()
-        checkLimit fields
+        let payload =
+            StatsPayload(
+                AgentHostname = f.String "AgentHostname",
+                AgentEnv = f.String "AgentEnv",
+                AgentVersion = f.String "AgentVersion",
+                ClientComputed = f.Bool "ClientComputed",
+                SplitPayload = f.Bool "SplitPayload"
+            )
 
-        for _ in 1..fields do
-            match r.ReadMapKey() with
-            | "AgentHostname" -> payload.AgentHostname <- Msgp.at "AgentHostname" r.ReadString
-            | "AgentEnv" -> payload.AgentEnv <- Msgp.at "AgentEnv" r.ReadString
-            | "Stats" -> readList r payload.Stats readClient
-            | "AgentVersion" -> payload.AgentVersion <- Msgp.at "AgentVersion" r.ReadString
-            | "ClientComputed" -> payload.ClientComputed <- Msgp.at "ClientComputed" r.ReadBool
-            | "SplitPayload" -> payload.SplitPayload <- Msgp.at "SplitPayload" r.ReadBool
-            | _ -> r.Skip()
+        payload.Stats.AddRange(f.Maps "Stats" |> List.map clientOf)
 
-        Ok payload
-    with MsgpFailure error ->
-        Error(MsgpError.text error)
+        if problems.Count = 0 then Ok payload else Error problems[0]
 
 /// The Trilean's name, as the Enum8 column declares it.
 let private trileanName (value: Trilean) : string =
@@ -749,10 +710,10 @@ let private trileanName (value: Trilean) : string =
 /// table records.
 let statRows (log: ILogger) (tenant: string) (receivedAt: DateTime) (payload: StatsPayload) : APMStatRow[] =
     let summaryOf (group: ClientGroupedStats) (column: string) (raw: ByteString) : SketchSummary =
-        let summary, problem = TraceSketch.summary (raw.ToByteArray())
+        let summary = TraceSketch.summary (raw.ToByteArray())
 
-        match problem with
-        | Some error ->
+        match summary.State with
+        | SketchState.Undecodable error ->
             log.LogWarning(
                 "[apm-stats] {Service} {Name} {Column} {Bytes} B: {Error}",
                 group.Service,
@@ -761,7 +722,7 @@ let statRows (log: ILogger) (tenant: string) (receivedAt: DateTime) (payload: St
                 raw.Length,
                 error
             )
-        | None -> ()
+        | _ -> ()
 
         summary
 
@@ -880,183 +841,60 @@ type DsmPayload =
       Buckets: DsmBucket list
       Unknown: Map<string, MsgValue> }
 
-/// A string as Go's %q prints it, near enough for a field name.
-let private quoted (text: string) : string =
-    let escaped = StringBuilder()
+let private dsmBacklog (f: MsgFields) : DsmBacklog =
+    { Tags = f.Strings "Tags"
+      Value = f.Int64 "Value" }
 
-    for c in text do
-        match c with
-        | '"' -> escaped.Append "\\\"" |> ignore
-        | '\\' -> escaped.Append "\\\\" |> ignore
-        | '\n' -> escaped.Append "\\n" |> ignore
-        | '\r' -> escaped.Append "\\r" |> ignore
-        | '\t' -> escaped.Append "\\t" |> ignore
-        | c when c < ' ' || c = '\127' -> escaped.Append($"\\x{int c:x2}") |> ignore
-        | c -> escaped.Append c |> ignore
+let private dsmPointKeys =
+    set [ "EdgeTags"; "Hash"; "ParentHash"; "PathwayLatency"; "EdgeLatency"; "PayloadSize"; "TimestampType" ]
 
-    "\"" + escaped.ToString() + "\""
+let private dsmPoint (f: MsgFields) : DsmPoint =
+    { EdgeTags = f.Strings "EdgeTags"
+      Hash = f.UInt64 "Hash"
+      ParentHash = f.UInt64 "ParentHash"
+      PathwayLatency = f.Bytes "PathwayLatency"
+      EdgeLatency = f.Bytes "EdgeLatency"
+      PayloadSize = f.Bytes "PayloadSize"
+      TimestampType = f.String "TimestampType"
+      Unknown = f.Unknown dsmPointKeys }
 
-/// Runs a read; an error it raises is reported as `<label> "<key>": <error>`.
-let private named (label: string) (key: string) (read: unit -> 'a) : 'a =
-    try
-        read ()
-    with MsgpFailure error ->
-        raise (MsgpFailure(Other $"{label} {quoted key}: {MsgpError.text error}"))
+// "Ids", not "IDs": dd-trace-go spells the field that way to match the Java
+// tracer's wire format.
+let private dsmBucketKeys =
+    set [ "Start"; "Duration"; "Stats"; "Backlogs"; "Transactions"; "TransactionCheckpointIds" ]
 
-/// The number of entries of the map that is next. A nil in place of the map
-/// counts as empty: msgp writes nil for an absent value.
-let private mapLength (r: MsgpReader) : int =
-    if r.IsNil then
-        r.ReadNil()
-        0
-    else
-        r.ReadMapHeader()
+let private dsmBucket (f: MsgFields) : DsmBucket =
+    { Start = f.UInt64 "Start"
+      Duration = f.UInt64 "Duration"
+      Points = f.Maps "Stats" |> List.map dsmPoint
+      Backlogs = f.Maps "Backlogs" |> List.map dsmBacklog
+      Transactions = f.Bytes "Transactions"
+      TransactionCheckpointIDs = f.Bytes "TransactionCheckpointIds"
+      Unknown = f.Unknown dsmBucketKeys }
 
-let private arrayLength (r: MsgpReader) : int =
-    if r.IsNil then
-        r.ReadNil()
-        0
-    else
-        r.ReadArrayHeader()
-
-let private dsmStrings (r: MsgpReader) : string[] =
-    let count = arrayLength r
-    [| for _ in 1..count -> r.ReadString() |]
-
-let private dsmBytes (r: MsgpReader) : byte[] =
-    if r.IsNil then
-        r.ReadNil()
-        [||]
-    else
-        r.ReadBin()
-
-/// Reads a field this decoder does not know, value and all. No count in it
-/// may exceed the body's length: every element costs at least a byte, so a
-/// forged header fails here instead of asking for gigabytes.
-let private dsmUnknown (r: MsgpReader) (bodyLength: int) (key: string) (known: Map<string, MsgValue>) : Map<string, MsgValue> =
-    known.Add(key, named "unknown field" key (fun () -> r.ReadAny bodyLength))
-
-let private dsmBacklog (r: MsgpReader) (bodyLength: int) : DsmBacklog =
-    let mutable tags: string[] = [||]
-    let mutable value = 0L
-
-    for _ in 1 .. mapLength r do
-        match r.ReadString() with
-        | "Tags" as key -> tags <- named "backlog field" key (fun () -> dsmStrings r)
-        | "Value" as key -> value <- named "backlog field" key r.ReadInt64
-        | key -> dsmUnknown r bodyLength key Map.empty |> ignore
-
-    { Tags = tags; Value = value }
-
-let private dsmPoint (r: MsgpReader) (bodyLength: int) : DsmPoint =
-    let mutable edgeTags: string[] = [||]
-    let mutable hash = 0UL
-    let mutable parentHash = 0UL
-    let mutable pathwayLatency: byte[] = [||]
-    let mutable edgeLatency: byte[] = [||]
-    let mutable payloadSize: byte[] = [||]
-    let mutable timestampType = ""
-    let mutable unknown: Map<string, MsgValue> = Map.empty
-
-    for _ in 1 .. mapLength r do
-        match r.ReadString() with
-        | "EdgeTags" as key -> edgeTags <- named "point field" key (fun () -> dsmStrings r)
-        | "Hash" as key -> hash <- named "point field" key r.ReadUInt64
-        | "ParentHash" as key -> parentHash <- named "point field" key r.ReadUInt64
-        | "PathwayLatency" as key -> pathwayLatency <- named "point field" key (fun () -> dsmBytes r)
-        | "EdgeLatency" as key -> edgeLatency <- named "point field" key (fun () -> dsmBytes r)
-        | "PayloadSize" as key -> payloadSize <- named "point field" key (fun () -> dsmBytes r)
-        | "TimestampType" as key -> timestampType <- named "point field" key r.ReadString
-        | key -> unknown <- dsmUnknown r bodyLength key unknown
-
-    { EdgeTags = edgeTags
-      Hash = hash
-      ParentHash = parentHash
-      PathwayLatency = pathwayLatency
-      EdgeLatency = edgeLatency
-      PayloadSize = payloadSize
-      TimestampType = timestampType
-      Unknown = unknown }
-
-let private dsmBucket (r: MsgpReader) (bodyLength: int) : DsmBucket =
-    let mutable start = 0UL
-    let mutable duration = 0UL
-    let points = ResizeArray<DsmPoint>()
-    let backlogs = ResizeArray<DsmBacklog>()
-    let mutable transactions: byte[] = [||]
-    let mutable checkpointIds: byte[] = [||]
-    let mutable unknown: Map<string, MsgValue> = Map.empty
-
-    for _ in 1 .. mapLength r do
-        match r.ReadString() with
-        | "Start" as key -> start <- named "bucket field" key r.ReadUInt64
-        | "Duration" as key -> duration <- named "bucket field" key r.ReadUInt64
-        | "Stats" as key ->
-            named "bucket field" key (fun () ->
-                for _ in 1 .. arrayLength r do
-                    points.Add(dsmPoint r bodyLength))
-        | "Backlogs" as key ->
-            named "bucket field" key (fun () ->
-                for _ in 1 .. arrayLength r do
-                    backlogs.Add(dsmBacklog r bodyLength))
-        | "Transactions" as key -> transactions <- named "bucket field" key (fun () -> dsmBytes r)
-        // "Ids", not "IDs": dd-trace-go spells the field that way to match
-        // the Java tracer's wire format.
-        | "TransactionCheckpointIds" as key -> checkpointIds <- named "bucket field" key (fun () -> dsmBytes r)
-        | key -> unknown <- dsmUnknown r bodyLength key unknown
-
-    { Start = start
-      Duration = duration
-      Points = List.ofSeq points
-      Backlogs = List.ofSeq backlogs
-      Transactions = transactions
-      TransactionCheckpointIDs = checkpointIds
-      Unknown = unknown }
+let private dsmPayloadKeys =
+    set [ "Env"; "Service"; "TracerVersion"; "Lang"; "Version"; "ProcessTags"; "ProductMask"; "Stats" ]
 
 /// Reads one msgpack datastreams.StatsPayload.
 let decodeDsmPayload (body: byte[]) : Result<DsmPayload, string> =
-    if body.Length = 0 then
-        Error "empty body"
-    else
-        let r = MsgpReader(body, Stream)
-        let mutable env = ""
-        let mutable service = ""
-        let mutable tracerVersion = ""
-        let mutable lang = ""
-        let mutable version = ""
-        let mutable processTags: string[] = [||]
-        let mutable productMask = 0UL
-        let buckets = ResizeArray<DsmBucket>()
-        let mutable unknown: Map<string, MsgValue> = Map.empty
+    match Msgpack.decode body with
+    | Error problem -> Error problem
+    | Ok root ->
+        let problems = ResizeArray<string>()
+        let f = MsgFields(problems, "", root)
 
-        try
-            for _ in 1 .. mapLength r do
-                match r.ReadString() with
-                | "Env" as key -> env <- named "field" key r.ReadString
-                | "Service" as key -> service <- named "field" key r.ReadString
-                | "TracerVersion" as key -> tracerVersion <- named "field" key r.ReadString
-                | "Lang" as key -> lang <- named "field" key r.ReadString
-                | "Version" as key -> version <- named "field" key r.ReadString
-                | "ProcessTags" as key -> processTags <- named "field" key (fun () -> dsmStrings r)
-                | "ProductMask" as key -> productMask <- named "field" key r.ReadUInt64
-                | "Stats" as key ->
-                    named "field" key (fun () ->
-                        for _ in 1 .. arrayLength r do
-                            buckets.Add(dsmBucket r body.Length))
-                | key -> unknown <- dsmUnknown r body.Length key unknown
+        let payload =
+            { Env = f.String "Env"
+              Service = f.String "Service"
+              TracerVersion = f.String "TracerVersion"
+              Lang = f.String "Lang"
+              Version = f.String "Version"
+              ProcessTags = f.Strings "ProcessTags"
+              ProductMask = f.UInt64 "ProductMask"
+              Buckets = f.Maps "Stats" |> List.map dsmBucket
+              Unknown = f.Unknown dsmPayloadKeys }
 
-            Ok
-                { Env = env
-                  Service = service
-                  TracerVersion = tracerVersion
-                  Lang = lang
-                  Version = version
-                  ProcessTags = processTags
-                  ProductMask = productMask
-                  Buckets = List.ofSeq buckets
-                  Unknown = unknown }
-        with MsgpFailure error ->
-            Error(MsgpError.text error)
+        if problems.Count = 0 then Ok payload else Error problems[0]
 
 /// A value of an unknown field as JSON; bytes become base64.
 let rec private writeUnknown (writer: Utf8JsonWriter) (value: MsgValue) : unit =
@@ -1136,9 +974,9 @@ let dsmRows
                   Hash = point.Hash
                   ParentHash = point.ParentHash
                   TimestampType = point.TimestampType
-                  PathwayLatency = fst (TraceSketch.summary point.PathwayLatency)
-                  EdgeLatency = fst (TraceSketch.summary point.EdgeLatency)
-                  PayloadSize = fst (TraceSketch.summary point.PayloadSize)
+                  PathwayLatency = TraceSketch.summary point.PathwayLatency
+                  EdgeLatency = TraceSketch.summary point.EdgeLatency
+                  PayloadSize = TraceSketch.summary point.PayloadSize
                   Via = headers.Via
                   AdditionalTags = headers.AdditionalTags
                   ContainerTags = headers.ContainerTags
@@ -1196,7 +1034,7 @@ let handlePipelineStats (r: Request) : Response =
 // --- /api/v2/data_streams_messages -> dsm_messages ---
 
 /// Go's JSON depth limit; .NET's default of 64 would refuse what Go took.
-let private jsonDepth = 10_000
+let private jsonDepth = Json.maxDepth
 
 /// The body as the messages of the array the forwarder sends, each as the
 /// bytes it arrived as, or why the body is not one. `null` is an empty batch,

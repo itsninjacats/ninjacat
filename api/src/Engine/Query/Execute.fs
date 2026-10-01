@@ -106,7 +106,7 @@ let private modelInput (s: Seasonality) (seasons: int) (fromMs: int64) (toMs: in
 
 /// Runs a timeseries plan: for each output, in plan order, its query_index
 /// and its series with their extras.
-let evaluate (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<(int * (Series.Series * Series.SeriesExtra) list) list> =
+let evaluate (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<Series.OutputResult list> =
     task {
         let! fetched = fetchAll execute tenant plan (plan.Outputs |> List.map _.Node)
 
@@ -133,7 +133,7 @@ let evaluate (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : 
         // An output's series, with what its outermost function adds beside
         // them. The extras read history before the window, so the node is
         // evaluated from there, and the series trimmed back to the window.
-        let evalOutput (o: Output) : Task<(Series.Series * Series.SeriesExtra) list> =
+        let evalOutput (o: Output) : Task<Series.OutputSeries list> =
             task {
                 let stepMs = fetched.StepMs[Evaluate.fetches o.Node |> List.head |> fst]
                 let visible (s: Series.Series) = { s with Points = s.Points |> Map.filter (fun t _ -> t >= fromMs) }
@@ -141,7 +141,9 @@ let evaluate (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : 
                 let withExtras (historyFrom: int64) (extra: Series.Series -> Series.SeriesExtra) =
                     let full = Evaluate.evalFrom fetched historyFrom o.Node
                     let kept = full |> List.map visible |> Series.limit o.Limit |> List.map _.GroupTags |> set
-                    full |> List.filter (fun s -> kept.Contains s.GroupTags) |> List.map (fun s -> visible s, extra s)
+                    full
+                    |> List.filter (fun s -> kept.Contains s.GroupTags)
+                    |> List.map (fun s -> ({ Data = visible s; Extra = extra s }: Series.OutputSeries))
 
                 /// A band from expected values: `bounds` standard deviations,
                 /// the model's spread combined with the spread inside a model
@@ -172,13 +174,17 @@ let evaluate (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : 
                                 if recent.Length >= 5 then sqrt (recent |> Array.averageBy (fun d -> d * d)) else 0.0
 
                             let sigma = sqrt (modelSigma * modelSigma + withinSigma * withinSigma)
-                            t, (e - bounds * sigma, e + bounds * sigma)))
+                            t, ({ Lower = e - bounds * sigma; Upper = e + bounds * sigma }: Series.Range)))
                     |> Array.choose id
                     |> Array.filter (fun (t, _) -> t >= fromMs)
                     |> Map.ofArray
 
                 match o.Extra with
-                | NoExtra -> return Evaluate.evalFrom fetched fromMs o.Node |> Series.limit o.Limit |> List.map (fun s -> s, Series.noExtra)
+                | NoExtra ->
+                    return
+                        Evaluate.evalFrom fetched fromMs o.Node
+                        |> Series.limit o.Limit
+                        |> List.map (fun s -> ({ Data = s; Extra = Series.noExtra }: Series.OutputSeries))
 
                 | Anomalies(Basic, bounds) ->
                     return
@@ -189,7 +195,11 @@ let evaluate (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : 
                             { Series.noExtra with
                                 Band =
                                     Array.zip pts band
-                                    |> Array.choose (fun ((t, _), b) -> if t >= fromMs then b |> Option.map (fun b -> t, b) else None)
+                                    |> Array.choose (fun ((t, _), b) ->
+                                        if t >= fromMs then
+                                            b |> Option.map (fun (lower, upper) -> t, ({ Lower = lower; Upper = upper }: Series.Range))
+                                        else
+                                            None)
                                     |> Map.ofArray
                                     |> Some })
 
@@ -276,7 +286,12 @@ let evaluate (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : 
 
                                         if k >= 0 && k < predicted.Length then
                                             let v, se = predicted[k]
-                                            Some(t, v, v - deviations * se, v + deviations * se)
+                                            Some(
+                                                { TimeMs = t
+                                                  Value = v
+                                                  Range = { Lower = v - deviations * se; Upper = v + deviations * se } }
+                                                : Series.Predicted
+                                            )
                                         else
                                             None)
 
@@ -307,10 +322,25 @@ let evaluate (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : 
                                     Algorithms.linearForecast modelName deviations (pts |> Array.map (fst >> seconds)) (Array.map snd pts) (future |> Array.map seconds)
 
                                 { Series.noExtra with
-                                    Forecast = Array.map2 (fun t (v, lo, hi) -> t, v, lo, hi) future predicted |> List.ofArray |> Some })
+                                    Forecast =
+                                        Array.map2
+                                            (fun t (p: Algorithms.Prediction) ->
+                                                ({ TimeMs = t; Value = p.Value; Range = { Lower = p.Lower; Upper = p.Upper } }: Series.Predicted))
+                                            future
+                                            predicted
+                                        |> List.ofArray
+                                        |> Some })
             }
 
-        let! outputs = plan.Outputs |> List.map (fun o -> task { let! r = evalOutput o in return o.QueryIndex, r }) |> Task.WhenAll
+        let! outputs =
+            plan.Outputs
+            |> List.map (fun o ->
+                task {
+                    let! series = evalOutput o
+                    return ({ QueryIndex = o.QueryIndex; Lines = series }: Series.OutputResult)
+                })
+            |> Task.WhenAll
+
         return List.ofArray outputs
     }
 

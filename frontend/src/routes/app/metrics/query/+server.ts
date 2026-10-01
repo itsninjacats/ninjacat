@@ -9,7 +9,7 @@ import {
 import type { RequestHandler } from './$types';
 
 // Proxy between the explorer and the F# query API, for the same reason as
-// data/+server.ts: the browser never learns :8082 exists. The session check is
+// data/+server.ts: the browser never learns :8081 exists. The session check is
 // repeated on purpose — the /app layout guard does not run for +server.ts.
 
 const AGGREGATORS = ['avg', 'min', 'max', 'sum', 'last'];

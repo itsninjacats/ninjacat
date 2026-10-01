@@ -551,7 +551,7 @@ let ``an untranslated connection has no NAT entry, and its tags come out of the 
             RemoteServiceTagsIdx = -1
         )
 
-    let row = connectionRow info "host-a" tagsV2 plain
+    let row = connectionRow info "host-a" tagsV3 tagsV2 plain
     Assert.Equal(None, row.IPTranslationReplSrcIP)
     Assert.Equal(None, row.IPTranslationReplSrcPort)
     Assert.Equal<string list>([ "tcp"; "v4"; "outgoing" ], [ row.Type; row.Family; row.Direction ])
@@ -561,10 +561,16 @@ let ``an untranslated connection has no NAT entry, and its tags come out of the 
     Assert.Equal<Map<string, string[]>>(Map [ "env", [| "prod" |]; "role", [| "db" |] ], row.LocalContainerTags)
     Assert.Empty(row.RemoteServiceTags)
 
+    // The container's tags index encodedTags, the connection's own index
+    // encodedConnectionsTags: without the first buffer only the latter resolve.
+    let withoutEncodedTags = connectionRow info "host-a" [||] tagsV2 plain
+    Assert.Equal<string[]>([| "a"; "b" |], withoutEncodedTags.Tags["kube_service"])
+    Assert.Empty(withoutEncodedTags.LocalContainerTags)
+
     let translated =
         Connection(Pid = 2, IpTranslation = IPTranslation(ReplSrcIP = "172.17.0.2", ReplDstIP = "10.0.0.9", ReplSrcPort = 1, ReplDstPort = 2))
 
-    let nat = connectionRow info "host-a" tagsV2 translated
+    let nat = connectionRow info "host-a" tagsV3 tagsV2 translated
     Assert.Equal(Some "172.17.0.2", nat.IPTranslationReplSrcIP)
     Assert.Equal(Some "10.0.0.9", nat.IPTranslationReplDstIP)
     Assert.Equal(Some 1, nat.IPTranslationReplSrcPort)
@@ -572,6 +578,33 @@ let ``an untranslated connection has no NAT entry, and its tags come out of the 
     // A connection with no addresses must not invent one.
     Assert.Equal("", nat.LaddrIP)
     Assert.Equal(0, nat.RaddrPort)
+
+/// A version 2 buffer as the agent builds encodedTags: the set ["-"] at
+/// index 0, then [env:prod] at index 6.
+let private tagsWithDummy =
+    Array.concat
+        [ [| 2uy; 18uy; 0uy; 0uy; 0uy |] // version, where the footer starts
+          [| 1uy; 0uy |]
+          Text.Encoding.UTF8.GetBytes "-" // at 5
+          [| 8uy; 0uy |]
+          Text.Encoding.UTF8.GetBytes "env:prod" // at 8
+          [| 1uy; 0uy; 5uy; 0uy; 0uy; 0uy |] // set 0: one tag, at 5
+          [| 1uy; 0uy; 8uy; 0uy; 0uy; 0uy |] ] // set 6: one tag, at 8
+
+[<Fact>]
+let ``an index into encodedTags that was not sent lands on the agent's "-" set and means none`` () =
+    Assert.Equal<string list>([ "-" ], TagBuffer.tags tagsWithDummy 0)
+
+    let unset = connectionRow info "host-a" tagsWithDummy [||] (Connection(Pid = 1))
+    Assert.Empty unset.LocalContainerTags
+    Assert.Empty unset.RemoteServiceTags
+
+    let sent = connectionRow info "host-a" tagsWithDummy [||] (Connection(Pid = 1, LocalContainerTagsIndex = 6, RemoteServiceTagsIdx = -1))
+    Assert.Equal<Map<string, string[]>>(Map [ "env", [| "prod" |] ], sent.LocalContainerTags)
+    Assert.Empty sent.RemoteServiceTags
+
+    let payload = connectionsPayloadRow info (CollectorConnections(EncodedTags = Google.Protobuf.ByteString.CopyFrom tagsWithDummy)) [||]
+    Assert.Empty payload.HostTags
 
 let private firstSet = [ "env:prod"; "kube_service:a"; "kube_service:b" ]
 let private secondSet = [ "env:prod"; "role:db" ]
@@ -583,6 +616,8 @@ let ``tag sets come out of a version 1 buffer`` () =
     Assert.Equal<string list>([ "zeta:1"; "alpha:2"; "alpha:2" ], TagBuffer.tags tagsV1 66)
     // What the encoder returned for an empty set.
     Assert.Empty(TagBuffer.tags tagsV1 94)
+    // Byte 0 is the version: an index of 0 is one that was not sent.
+    Assert.Empty(TagBuffer.tags tagsV1 0)
 
 [<Fact>]
 let ``tag sets come out of a version 2 buffer`` () =
@@ -816,6 +851,46 @@ let ``the whole sub-messages of a process are the JSON Go wrote`` () =
     // A host that was sent but empty is "{}", not "".
     let container = Assert.Single(sink.Rows<ContainerRow>())
     Assert.Equal("{}", container.HostInfo)
+
+[<Fact>]
+let ``what system-probe saw inside a connection becomes stat rows that point back at it`` () =
+    let endpoint = HTTPStats(Path = "/orders", Method = HTTPMethod.Get)
+    endpoint.StatsByStatusCode[200] <- HTTPStats.Types.Data(Count = 1u, FirstLatencySample = 5e6)
+    let aggregations = HTTPAggregations()
+    aggregations.EndpointAggregations.Add endpoint
+
+    let conns = CollectorConnections(HostName = "host-a")
+
+    conns.Connections.Add(
+        Connection(
+            Pid = 7,
+            Laddr = Addr(Ip = "10.0.0.1", Port = 5000),
+            Raddr = Addr(Ip = "10.0.0.2", Port = 80),
+            HttpAggregations = aggregations.ToByteString(),
+            // Not a DatabaseAggregations: logged, and the connection is stored all the same.
+            DatabaseAggregations = ByteString.CopyFrom [| 0xffuy; 0xffuy; 0xffuy |]
+        )
+    )
+
+    let _, sink = post "/api/v1/connections" (ProcessFrame.encode 22uy 0L conns)
+
+    let connection = Assert.Single(sink.Rows<ConnectionRow>())
+    let stat = Assert.Single(sink.Rows<ConnectionHttpStatRow>())
+    Assert.Equal(("/orders", 200, 1u), (stat.Path, stat.StatusCode, stat.Count))
+
+    Assert.Equal(
+        (connection.PayloadID, connection.Timestamp, connection.Host, 7, "10.0.0.1", 5000, "10.0.0.2", 80),
+        (stat.Connection.PayloadID,
+         stat.Connection.Timestamp,
+         stat.Connection.Host,
+         stat.Connection.PID,
+         stat.Connection.LaddrIP,
+         stat.Connection.LaddrPort,
+         stat.Connection.RaddrIP,
+         stat.Connection.RaddrPort)
+    )
+
+    Assert.Empty(sink.Rows<ConnectionDatabaseStatRow>())
 
 [<Fact>]
 let ``a DNS buffer that cannot be read through still stores the payload`` () =

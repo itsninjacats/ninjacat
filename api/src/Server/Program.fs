@@ -64,6 +64,13 @@ let main args =
         let builder = WebApplication.CreateBuilder(args)
         builder.WebHost.UseUrls(cfg.IntakeUrl, cfg.InternalUrl) |> ignore
 
+        // At the default level every request is four lines and every key
+        // refresh one; an intake under load would bury its own warnings.
+        builder.Logging
+            .AddFilter("Microsoft.AspNetCore", LogLevel.Warning)
+            .AddFilter("Npgsql", LogLevel.Warning)
+        |> ignore
+
         // Flares and profiles are tens of megabytes; the agent decides the size.
         builder.WebHost.ConfigureKestrel(fun options -> options.Limits.MaxRequestBodySize <- Nullable())
         |> ignore

@@ -446,7 +446,7 @@
       "d1": "NaN",
       "http.method": "GET"
      },
-     "{\"_encode_error\":\"json: unsupported value: NaN\"}",
+     "{\"d1\":{\"double\":\"NaN\"},\"http.method\":{\"string\":\"GET\"}}",
      "checkout",
      "flask.request",
      "GET /pay",
@@ -565,7 +565,7 @@
       "d1": "NaN",
       "http.method": "GET"
      },
-     "{\"_encode_error\":\"json: unsupported value: NaN\"}",
+     "{\"d1\":{\"double\":\"NaN\"},\"http.method\":{\"string\":\"GET\"}}",
      "",
      "",
      "",
@@ -641,7 +641,7 @@
       "d1": "NaN",
       "http.method": "GET"
      },
-     "{\"_encode_error\":\"json: unsupported value: NaN\"}",
+     "{\"d1\":{\"double\":\"NaN\"},\"http.method\":{\"string\":\"GET\"}}",
      "",
      "",
      "",
@@ -717,7 +717,7 @@
       "d1": "NaN",
       "http.method": "GET"
      },
-     "{\"_encode_error\":\"json: unsupported value: NaN\"}",
+     "{\"d1\":{\"double\":\"NaN\"},\"http.method\":{\"string\":\"GET\"}}",
      "",
      "",
      "",
@@ -903,7 +903,7 @@
      "AgentVersion": "",
      "AppVersion": "",
      "AttributesJSON": "{\"d1\":{\"double\":2.5},\"deep\":{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"array\":[{\"_depth_exceeded\":32}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]},\"empty\":null,\"flag\":{\"bool\":false},\"http.method\":{\"string\":\"GET\"},\"payload\":{\"bytes\":\"AAH/\"},\"retries\":{\"int\":9007199254740993},\"tags\":{\"array\":[{\"string\":\"a\"},{\"double\":1.5}]}}",
-     "ChunkAttributesJSON": "{\"_encode_error\":\"json: unsupported value: NaN\"}",
+     "ChunkAttributesJSON": "{\"d1\":{\"double\":\"NaN\"},\"http.method\":{\"string\":\"GET\"}}",
      "ChunkTags": {
       "d1": "NaN",
       "http.method": "GET"
@@ -1022,7 +1022,7 @@
      "AgentVersion": "",
      "AppVersion": "",
      "AttributesJSON": "",
-     "ChunkAttributesJSON": "{\"_encode_error\":\"json: unsupported value: NaN\"}",
+     "ChunkAttributesJSON": "{\"d1\":{\"double\":\"NaN\"},\"http.method\":{\"string\":\"GET\"}}",
      "ChunkTags": {
       "d1": "NaN",
       "http.method": "GET"
@@ -1098,7 +1098,7 @@
      "AgentVersion": "",
      "AppVersion": "",
      "AttributesJSON": "",
-     "ChunkAttributesJSON": "{\"_encode_error\":\"json: unsupported value: NaN\"}",
+     "ChunkAttributesJSON": "{\"d1\":{\"double\":\"NaN\"},\"http.method\":{\"string\":\"GET\"}}",
      "ChunkTags": {
       "d1": "NaN",
       "http.method": "GET"
@@ -1174,7 +1174,7 @@
      "AgentVersion": "",
      "AppVersion": "",
      "AttributesJSON": "",
-     "ChunkAttributesJSON": "{\"_encode_error\":\"json: unsupported value: NaN\"}",
+     "ChunkAttributesJSON": "{\"d1\":{\"double\":\"NaN\"},\"http.method\":{\"string\":\"GET\"}}",
      "ChunkTags": {
       "d1": "NaN",
       "http.method": "GET"
@@ -1409,5 +1409,6 @@
   "/sends/0/rows/3/ReceivedAt",
   "/sends/0/rows/4/ReceivedAt",
   "/sends/0/rows/5/ReceivedAt"
- ]
+ ],
+ "edited": "ChunkAttributesJSON held Go's marker {\"_encode_error\":\"json: unsupported value: …\"} in the recording: one NaN or infinity among the attributes cost all of them. The number is written as the text \"NaN\", \"+Inf\" or \"-Inf\" now and the other attributes are kept."
 }

@@ -132,7 +132,7 @@
      [
       "point.New"
      ],
-     "{\"_encode_error\":\"json: unsupported value: NaN\"}"
+     "{\"point.New\":\"NaN\"}"
     ]
    ],
    "insert": "INSERT INTO dsm_pipeline_stats\n\t\t\t(tenant_id, received_at,\n\t\t\t env, service, tracer_version, lang, version, process_tags, product_mask,\n\t\t\t bucket_start, bucket_duration_ns,\n\t\t\t edge_tags, hash, parent_hash, timestamp_type,\n\t\t\t pathway_latency, pathway_latency_state,\n\t\t\t pathway_count, pathway_sum, pathway_min, pathway_max,\n\t\t\t pathway_bin_keys, pathway_bin_counts,\n\t\t\t edge_latency, edge_latency_state,\n\t\t\t edge_count, edge_sum, edge_min, edge_max,\n\t\t\t edge_bin_keys, edge_bin_counts,\n\t\t\t payload_size, payload_size_state,\n\t\t\t payload_size_count, payload_size_sum, payload_size_min, payload_size_max,\n\t\t\t payload_size_bin_keys, payload_size_bin_counts,\n\t\t\t via, additional_tags, container_tags, content_encoding,\n\t\t\t unknown_keys, unknown_json)",
@@ -188,7 +188,7 @@
       "Sum": null
      },
      "TimestampType": "",
-     "UnknownJSON": "{\"_encode_error\":\"json: unsupported value: NaN\"}",
+     "UnknownJSON": "{\"point.New\":\"NaN\"}",
      "UnknownKeys": [
       "point.New"
      ],
@@ -204,5 +204,6 @@
  "volatile": [
   "/sends/0/args/0/1",
   "/sends/0/rows/0/DSMCommon/ReceivedAt"
- ]
+ ],
+ "edited": "UnknownJSON held Go's marker {\"_encode_error\":\"json: unsupported value: …\"} in the recording: one NaN or infinity among the attributes cost all of them. The number is written as the text \"NaN\", \"+Inf\" or \"-Inf\" now and the other attributes are kept."
 }

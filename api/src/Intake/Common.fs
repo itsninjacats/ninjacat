@@ -148,8 +148,16 @@ module Json =
             // Of the three alternatives only half a pair is six characters long.
             Encoding.UTF8.GetBytes(escapes.Replace(text, (fun found -> if found.Length = 6 then "\\ufffd" else found.Value)))
 
-    // Go nests to 10000; System.Text.Json stops at 64 unless told otherwise.
-    let private documentOptions = JsonDocumentOptions(MaxDepth = 10_000)
+    /// How deep a JSON body may nest, for every parser of the intake.
+    ///
+    /// A limit has to exist: several functions here walk a document by
+    /// recursion, and a stack overflow in .NET ends the process. It also has
+    /// to stay below what Utf8JsonWriter will write back (1000), or a body
+    /// that parsed would throw when a column is written. No telemetry nests
+    /// anywhere near this; a body that does is kept in raw_payloads.
+    let maxDepth = 512
+
+    let private documentOptions = JsonDocumentOptions(MaxDepth = maxDepth)
 
     /// The body as JSON, or the parser's message.
     let tryParse (body: byte[]) : Result<JsonElement, string> =

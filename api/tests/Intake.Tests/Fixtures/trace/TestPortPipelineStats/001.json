@@ -298,59 +298,6 @@
       "payload.SomethingNew"
      ],
      "{\"bucket.BucketNew\":-1,\"payload.Nested\":{\"a\":\"AP8Q\",\"empty\":null,\"ext\":{\"Data\":\"AQID\",\"Type\":42},\"ext0\":{\"Data\":null,\"Type\":-7},\"f32\":1.1,\"f64\":1e+21,\"i8\":5,\"small\":1.5e-9,\"z\":[-7,18446744073709551615,null,true]},\"payload.SomethingNew\":\"hello\"}"
-    ],
-    [
-     "test",
-     "2026-10-01T16:19:49.95321644Z",
-     "prod2",
-     "orders",
-     "2.9.0",
-     "go",
-     "1.4.0",
-     [
-      "entrypoint:worker",
-      "cwd:/srv"
-     ],
-     3,
-     "1970-01-01T00:00:00.000000006Z",
-     0,
-     [],
-     0,
-     0,
-     "",
-     "",
-     "absent",
-     null,
-     null,
-     null,
-     null,
-     [],
-     [],
-     "",
-     "absent",
-     null,
-     null,
-     null,
-     null,
-     [],
-     [],
-     "",
-     "absent",
-     null,
-     null,
-     null,
-     null,
-     [],
-     [],
-     "trace-agent 7.58.2",
-     "_dd.tags.container:cid",
-     "",
-     "",
-     [
-      "payload.Nested",
-      "payload.SomethingNew"
-     ],
-     "{\"payload.Nested\":{\"a\":\"AP8Q\",\"empty\":null,\"ext\":{\"Data\":\"AQID\",\"Type\":42},\"ext0\":{\"Data\":null,\"Type\":-7},\"f32\":1.1,\"f64\":1e+21,\"i8\":5,\"small\":1.5e-9,\"z\":[-7,18446744073709551615,null,true]},\"payload.SomethingNew\":\"hello\"}"
     ]
    ],
    "insert": "INSERT INTO dsm_pipeline_stats\n\t\t\t(tenant_id, received_at,\n\t\t\t env, service, tracer_version, lang, version, process_tags, product_mask,\n\t\t\t bucket_start, bucket_duration_ns,\n\t\t\t edge_tags, hash, parent_hash, timestamp_type,\n\t\t\t pathway_latency, pathway_latency_state,\n\t\t\t pathway_count, pathway_sum, pathway_min, pathway_max,\n\t\t\t pathway_bin_keys, pathway_bin_counts,\n\t\t\t edge_latency, edge_latency_state,\n\t\t\t edge_count, edge_sum, edge_min, edge_max,\n\t\t\t edge_bin_keys, edge_bin_counts,\n\t\t\t payload_size, payload_size_state,\n\t\t\t payload_size_count, payload_size_sum, payload_size_min, payload_size_max,\n\t\t\t payload_size_bin_keys, payload_size_bin_counts,\n\t\t\t via, additional_tags, container_tags, content_encoding,\n\t\t\t unknown_keys, unknown_json)",
@@ -490,67 +437,6 @@
       "payload.SomethingNew"
      ],
      "Via": "trace-agent 7.58.2"
-    },
-    {
-     "AdditionalTags": "_dd.tags.container:cid",
-     "ContainerTags": "",
-     "ContentEncoding": "",
-     "DSMCommon": {
-      "BucketDurationNs": 0,
-      "BucketStart": "1970-01-01T00:00:00.000000006Z",
-      "Env": "prod2",
-      "Lang": "go",
-      "ProcessTags": [
-       "entrypoint:worker",
-       "cwd:/srv"
-      ],
-      "ProductMask": 3,
-      "ReceivedAt": "2026-10-01T16:19:49.95321644Z",
-      "Service": "orders",
-      "TenantID": "test",
-      "TracerVersion": "2.9.0",
-      "Version": "1.4.0"
-     },
-     "EdgeLatency": {
-      "BinCounts": [],
-      "BinKeys": [],
-      "Count": null,
-      "Max": null,
-      "Min": null,
-      "Raw": "",
-      "State": "absent",
-      "Sum": null
-     },
-     "EdgeTags": [],
-     "Hash": 0,
-     "ParentHash": 0,
-     "PathwayLatency": {
-      "BinCounts": [],
-      "BinKeys": [],
-      "Count": null,
-      "Max": null,
-      "Min": null,
-      "Raw": "",
-      "State": "absent",
-      "Sum": null
-     },
-     "PayloadSize": {
-      "BinCounts": [],
-      "BinKeys": [],
-      "Count": null,
-      "Max": null,
-      "Min": null,
-      "Raw": "",
-      "State": "absent",
-      "Sum": null
-     },
-     "TimestampType": "",
-     "UnknownJSON": "{\"payload.Nested\":{\"a\":\"AP8Q\",\"empty\":null,\"ext\":{\"Data\":\"AQID\",\"Type\":42},\"ext0\":{\"Data\":null,\"Type\":-7},\"f32\":1.1,\"f64\":1e+21,\"i8\":5,\"small\":1.5e-9,\"z\":[-7,18446744073709551615,null,true]},\"payload.SomethingNew\":\"hello\"}",
-     "UnknownKeys": [
-      "payload.Nested",
-      "payload.SomethingNew"
-     ],
-     "Via": "trace-agent 7.58.2"
     }
    ],
    "to": "storage_dsm_pipeline_stats",
@@ -610,24 +496,6 @@
       "partition:3"
      ],
      -17
-    ],
-    [
-     "test",
-     "2026-10-01T16:19:49.95321644Z",
-     "prod2",
-     "orders",
-     "2.9.0",
-     "go",
-     "1.4.0",
-     [
-      "entrypoint:worker",
-      "cwd:/srv"
-     ],
-     3,
-     "2023-11-14T22:13:20.000000007Z",
-     10000000000,
-     [],
-     0
     ]
    ],
    "insert": "INSERT INTO dsm_backlogs\n\t\t\t(tenant_id, received_at,\n\t\t\t env, service, tracer_version, lang, version, process_tags, product_mask,\n\t\t\t bucket_start, bucket_duration_ns,\n\t\t\t tags, value)",
@@ -654,26 +522,6 @@
       "partition:3"
      ],
      "Value": -17
-    },
-    {
-     "DSMCommon": {
-      "BucketDurationNs": 10000000000,
-      "BucketStart": "2023-11-14T22:13:20.000000007Z",
-      "Env": "prod2",
-      "Lang": "go",
-      "ProcessTags": [
-       "entrypoint:worker",
-       "cwd:/srv"
-      ],
-      "ProductMask": 3,
-      "ReceivedAt": "2026-10-01T16:19:49.95321644Z",
-      "Service": "orders",
-      "TenantID": "test",
-      "TracerVersion": "2.9.0",
-      "Version": "1.4.0"
-     },
-     "Tags": [],
-     "Value": 0
     }
    ],
    "to": "storage_dsm_backlogs",
@@ -806,17 +654,14 @@
  "volatile": [
   "/sends/0/args/0/1",
   "/sends/0/args/1/1",
-  "/sends/0/args/2/1",
   "/sends/0/rows/0/DSMCommon/ReceivedAt",
   "/sends/0/rows/1/DSMCommon/ReceivedAt",
-  "/sends/0/rows/2/DSMCommon/ReceivedAt",
   "/sends/1/args/0/1",
-  "/sends/1/args/1/1",
   "/sends/1/rows/0/DSMCommon/ReceivedAt",
-  "/sends/1/rows/1/DSMCommon/ReceivedAt",
   "/sends/2/args/0/1",
   "/sends/2/args/1/1",
   "/sends/2/rows/0/DSMCommon/ReceivedAt",
   "/sends/2/rows/1/DSMCommon/ReceivedAt"
- ]
+ ],
+ "edited": "The Go recording had a third point and a second backlog, each with every field at zero: its reader turned a nil element of the Stats and Backlogs arrays into an empty row. A nil element is left out now, as in the APM stats payload."
 }

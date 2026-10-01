@@ -401,10 +401,10 @@ let ``a profile event with broken text is still read`` () =
     Assert.Equal(None, row.StartParsed)
     Assert.Equal<byte[]>(event, row.Event)
 
-/// Go reads JSON 10 000 levels deep; .NET stops at 64 unless told otherwise.
+/// .NET stops at 64 unless told otherwise; the intake reads to Json.maxDepth.
 [<Fact>]
 let ``JSON nested far deeper than .NET's default is still read`` () =
-    let deep = String('[', 600) + String(']', 600)
+    let deep = String('[', 300) + String(']', 300)
     let event = utf8 $"{{\"family\": \"go\", \"start\": {deep}}}"
     let row = Profiling.profileRow "t" "profile" "" "" Map.empty (Lenient.tryObject event) Map.empty
 

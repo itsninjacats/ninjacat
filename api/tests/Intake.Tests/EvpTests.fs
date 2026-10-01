@@ -598,9 +598,23 @@ let ``an event envelope without a data.attributes object gives no row`` (json: s
 // Go marshals a nil map here, which is the text "null". Pinned so that the
 // port keeps storing what the Go server stored.
 [<Fact>]
-let ``an event without inner attributes stores the text null for them`` () =
+let ``an event with half a surrogate pair, or nested deeper than 64, is stored and not a 500`` () =
+    let halfPair = Text.Encoding.UTF8.GetBytes """{"data":{"attributes":{"title":"a\ud800","attributes":{}}}}"""
+    let key = [ "Dd-Api-Key", Replay.testKey ]
+    let response, sink = post "routeEventManagement" "/api/v2/events" key halfPair
+    Assert.Equal(202, response.Status)
+    Assert.Equal("a\uFFFD", (Assert.Single(sink.Rows<EventManagementEventRow>())).Title)
+
+    let deep = String.replicate 80 """{"a":""" + "1" + String.replicate 80 "}"
+    let body = Text.Encoding.UTF8.GetBytes("""{"data":{"attributes":{"title":"deep","attributes":""" + deep + "}}}")
+    let _, deepSink = post "routeEventManagement" "/api/v2/events" key body
+    Assert.Empty(deepSink.Rows<RawPayloadRow>())
+    Assert.Equal("deep", (Assert.Single(deepSink.Rows<EventManagementEventRow>())).Title)
+
+[<Fact>]
+let ``an event without inner attributes stores an empty object for them`` () =
     let row = eventRow """{"data": {"attributes": {"title": "t"}}}"""
-    Assert.Equal("null", row.Attributes)
+    Assert.Equal("{}", row.Attributes)
     Assert.Equal("", row.DataType)
     Assert.Equal("", row.Timestamp)
     Assert.Equal(None, row.TimestampParsed)

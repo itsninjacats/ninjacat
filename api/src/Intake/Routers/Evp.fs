@@ -171,10 +171,12 @@ let private mergePrefixed (prefix: string) (inner: Map<string, string>) (outer: 
 let private isObjectOrNull (value: JsonElement) : bool =
     value.ValueKind = JsonValueKind.Object || value.ValueKind = JsonValueKind.Null
 
-/// A body as one JSON object (or null). Like Go's Decoder, it reads the first
-/// value and does not look at what follows it.
+/// A body as one JSON object (or null): the first value, whatever follows
+/// it. Repaired first and read as deep as every other intake reads, or half
+/// a surrogate pair would throw later, when the string is taken out.
 let parseObject (body: byte[]) : JsonElement option =
-    let mutable reader = Utf8JsonReader(ReadOnlySpan body, JsonReaderOptions(AllowMultipleValues = true))
+    let options = JsonReaderOptions(AllowMultipleValues = true, MaxDepth = Json.maxDepth)
+    let mutable reader = Utf8JsonReader(ReadOnlySpan(Json.repair body), options)
 
     try
         if reader.Read() then
@@ -660,12 +662,10 @@ let eventManagementRow (tenant: string) (receivedAt: DateTime) (envelope: JsonEl
             |> mergePrefixed "data." (unknownKeys eventDataKeys data)
             |> mergePrefixed "top." (unknownKeys eventEnvelopeKeys top)
 
-        // Without an inner object Go stores the text "null" (it marshals a
-        // nil map), not "". Kept as it is.
         let inner =
             match asObject (child "attributes" attrs) with
             | Some object -> canonicalJson object
-            | None -> "null"
+            | None -> "{}"
 
         Some
             { TenantID = tenant
@@ -847,15 +847,20 @@ let private lineageKeys =
     set [ "eventType"; "eventTime"; "producer"; "schemaURL"; "run"; "job"; "inputs"; "outputs" ]
 
 /// An inputs[] or outputs[] list as three index-aligned arrays.
-let private datasetArrays (value: JsonElement option) : string[] * string[] * string[] =
-    let datasets =
+type private Datasets =
+    { Namespaces: string[]
+      Names: string[]
+      Facets: string[] }
+
+let private datasets (value: JsonElement option) : Datasets =
+    let items =
         match value with
         | Some list when list.ValueKind = JsonValueKind.Array -> list.EnumerateArray() |> Seq.map Some |> Array.ofSeq
         | _ -> [||]
 
-    datasets |> Array.map (fun d -> text (child "namespace" d)),
-    datasets |> Array.map (fun d -> text (child "name" d)),
-    datasets |> Array.map (fun d -> json (child "facets" d))
+    { Namespaces = items |> Array.map (fun d -> text (child "namespace" d))
+      Names = items |> Array.map (fun d -> text (child "name" d))
+      Facets = items |> Array.map (fun d -> json (child "facets" d)) }
 
 /// Field names follow the published OpenLineage spec (RunEvent).
 let openLineageEventRow
@@ -869,8 +874,8 @@ let openLineageEventRow
     let run = child "run" top
     let job = child "job" top
     let eventTime = text (child "eventTime" top)
-    let inputNamespaces, inputNames, inputFacets = datasetArrays (child "inputs" top)
-    let outputNamespaces, outputNames, outputFacets = datasetArrays (child "outputs" top)
+    let inputs = datasets (child "inputs" top)
+    let outputs = datasets (child "outputs" top)
 
     { TenantID = tenant
       ReceivedAt = receivedAt
@@ -884,12 +889,12 @@ let openLineageEventRow
       JobNamespace = text (child "namespace" job)
       JobName = text (child "name" job)
       JobFacets = json (child "facets" job)
-      InputNamespace = inputNamespaces
-      InputName = inputNames
-      InputFacets = inputFacets
-      OutputNamespace = outputNamespaces
-      OutputName = outputNames
-      OutputFacets = outputFacets
+      InputNamespace = inputs.Namespaces
+      InputName = inputs.Names
+      InputFacets = inputs.Facets
+      OutputNamespace = outputs.Namespaces
+      OutputName = outputs.Names
+      OutputFacets = outputs.Facets
       APIVersion = apiVersion
       Via = via
       Extra = unknownKeys lineageKeys top }

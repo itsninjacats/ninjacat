@@ -34,13 +34,16 @@
     <Compile Include="CiWebhookTests.fs" />
     <Compile Include="TraceTests.fs" />
     <Compile Include="ProcessTests.fs" />
+    <Compile Include="UsmTests.fs" />
     <Compile Include="RumTests.fs" />
+    <Compile Include="RealPayloadTests.fs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Fixtures/go/**/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Fixtures/trace/**/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Fixtures/overrides.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Fixtures/frames/*.bin" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures/real/*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />

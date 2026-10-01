@@ -109,25 +109,25 @@ let private labels (queries: string list) (formulas: string list) =
     if formulas.IsEmpty then queries else formulas
 
 /// The engine's own results, as records.
-let private results (names: string list) (outputs: (int * (Series.Series * Series.SeriesExtra) list) list) : FormulaResult list =
-    [ for (index, series) in outputs ->
-          { Formula = names[index]
+let private results (names: string list) (outputs: Series.OutputResult list) : FormulaResult list =
+    [ for output in outputs ->
+          { Formula = names[output.QueryIndex]
             Series =
-              [ for (s, extra) in series ->
-                    { Tags = tags s.GroupTags
+              [ for s in output.Lines ->
+                    { Tags = tags s.Data.GroupTags
                       Points =
-                        [ for p in s.Points ->
+                        [ for p in s.Data.Points ->
                               { Time = time p.Key
                                 Value = p.Value
                                 Expected =
-                                  extra.Band
+                                  s.Extra.Band
                                   |> Option.bind (Map.tryFind p.Key)
-                                  |> Option.map (fun (lo, hi) -> { Lower = lo; Upper = hi }) } ]
+                                  |> Option.map (fun range -> { Lower = range.Lower; Upper = range.Upper }) } ]
                       Forecast =
-                        [ for (t, v, lo, hi) in defaultArg extra.Forecast [] ->
-                              { Time = time t
-                                Value = v
-                                Band = { Lower = lo; Upper = hi } } ] } ] } ]
+                        [ for predicted in defaultArg s.Extra.Forecast [] ->
+                              { Time = time predicted.TimeMs
+                                Value = predicted.Value
+                                Band = { Lower = predicted.Range.Lower; Upper = predicted.Range.Upper } } ] } ] } ]
 
 /// The primitive under the others: an already parsed request — trees, not
 /// strings. For code that parses once and runs many times, as a monitor

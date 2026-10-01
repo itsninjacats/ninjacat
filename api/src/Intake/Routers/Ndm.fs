@@ -362,8 +362,13 @@ let private handleTraps (r: Request) : Response =
         batch
         |> List.iteri (fun i entry ->
             let keep (reason: string) (note: string) =
-                r.Log.LogWarning("[ndmtraps] {Note}", note)
-                Raw.store r "ndmtraps" reason note (Encoding.UTF8.GetBytes entry.Text)
+                let body = Encoding.UTF8.GetBytes entry.Text
+
+                // The agent's start-up probe is `{}`: not worth a warning.
+                if not (Raw.isProbe body) then
+                    r.Log.LogWarning("[ndmtraps] {Note}", note)
+
+                Raw.store r "ndmtraps" reason note body
 
             match entry.Json with
             | Error e -> keep "decode_error" $"entry {i}: {e}"

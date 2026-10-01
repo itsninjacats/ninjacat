@@ -31,11 +31,10 @@ open NinjaCat.Api.Intake
 /// JSON read with the rules of Go's encoding/json, where they differ from
 /// System.Text.Json's and the difference decides what is stored.
 module GoJson =
-    // Go nests to 10000; System.Text.Json stops at 64 unless told otherwise.
-    let private documentOptions = JsonDocumentOptions(MaxDepth = 10000)
+    let private documentOptions = JsonDocumentOptions(MaxDepth = Json.maxDepth)
 
     let private writerOptions =
-        JsonWriterOptions(Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, MaxDepth = 10000)
+        JsonWriterOptions(Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping)
 
     let private hexDigit (b: byte) : int =
         if b >= '0'B && b <= '9'B then int (b - '0'B)
@@ -281,14 +280,6 @@ module GoJson =
 
         Encoding.UTF8.GetString(buffer.ToArray())
 
-/// Why a body gave nothing to store.
-type Problem =
-    /// It cannot be decoded. The text goes into the raw row's note.
-    | Undecodable of error: string
-    /// The Go handler panics on this body, after its reply is queued: the
-    /// sender gets the usual answer and nothing is stored.
-    | Panics
-
 // ---------------------------------------------------------------------------
 // /api/v2/series and /api/beta/sketches: protobuf, or JSON of the same shape
 // ---------------------------------------------------------------------------
@@ -314,16 +305,15 @@ let private fill
         | Some x -> assign x
         | None -> misfit $"{path}.{name}" value
 
-/// A Go slice of structs: every element an object, or null for the zero
-/// value.
-let private structs (path: string) (decode: string -> JsonElement -> 'a) (zero: unit -> 'a) (list: JsonElement) : 'a list =
+/// A list of objects. A null element carries nothing and is left out.
+let private structs (path: string) (decode: string -> JsonElement -> 'a) (list: JsonElement) : 'a list =
     if list.ValueKind <> JsonValueKind.Array then
         misfit path list
     else
         [ for item in list.EnumerateArray() do
               match item.ValueKind with
               | JsonValueKind.Object -> decode path item
-              | JsonValueKind.Null -> zero ()
+              | JsonValueKind.Null -> ()
               | _ -> misfit path item ]
 
 let private metadataOfJson (path: string) (value: JsonElement) : Metadata =
@@ -364,14 +354,14 @@ let private seriesOfJson (path: string) (value: JsonElement) : MetricPayload.Typ
     let series = MetricPayload.Types.MetricSeries()
 
     match GoJson.field "resources" value with
-    | Some list -> series.Resources.AddRange(structs (path + ".resources") resourceOfJson MetricPayload.Types.Resource list)
+    | Some list -> series.Resources.AddRange(structs (path + ".resources") resourceOfJson list)
     | None -> ()
 
     fill value path "metric" GoJson.asString (fun x -> series.Metric <- x)
     fill value path "tags" GoJson.asStrings (fun x -> series.Tags.AddRange x)
 
     match GoJson.field "points" value with
-    | Some list -> series.Points.AddRange(structs (path + ".points") pointOfJson MetricPayload.Types.MetricPoint list)
+    | Some list -> series.Points.AddRange(structs (path + ".points") pointOfJson list)
     | None -> ()
 
     // The type is the enum's number here, not its name: Go reads this JSON
@@ -386,34 +376,6 @@ let private seriesOfJson (path: string) (value: JsonElement) : MetricPayload.Typ
     | None -> ()
 
     series
-
-/// A null in a resource list, before any resource of type "host".
-let private nullBeforeHost (resources: JsonElement) : bool =
-    let mutable hostSeen = false
-    let mutable found = false
-
-    for item in resources.EnumerateArray() do
-        if item.ValueKind = JsonValueKind.Null then
-            if not hostSeen then
-                found <- true
-        elif GoJson.field "type" item |> Option.bind GoJson.asString = Some "host" then
-            hostSeen <- true
-
-    found
-
-/// Go decodes a null series or resource into a nil pointer and its handler
-/// dereferences it: a null series always, a null resource while it looks for
-/// the host.
-let private seriesPanicInGo (root: JsonElement) : bool =
-    match GoJson.field "series" root with
-    | Some list when list.ValueKind = JsonValueKind.Array ->
-        list.EnumerateArray()
-        |> Seq.exists (fun series ->
-            match series.ValueKind, GoJson.field "resources" series with
-            | JsonValueKind.Null, _ -> true
-            | _, Some resources when resources.ValueKind = JsonValueKind.Array -> nullBeforeHost resources
-            | _ -> false)
-    | _ -> false
 
 /// The varint at `at` and the index after it; nothing when the bytes run out
 /// before `stop`.
@@ -513,30 +475,23 @@ let private parseProtobuf
 let parseSeriesV2Protobuf (body: byte[]) : Result<MetricPayload, string> =
     parseProtobuf "MetricPayload" MetricPayload.Parser MetricPayload.Descriptor body
 
-let parseSeriesV2Json (body: byte[]) : Result<MetricPayload, Problem> =
+let parseSeriesV2Json (body: byte[]) : Result<MetricPayload, string> =
     match GoJson.parse body with
-    | Error e -> Error(Undecodable $"JSON v2 series: {e}")
+    | Error e -> Error $"JSON v2 series: {e}"
     | Ok root when root.ValueKind = JsonValueKind.Null -> Ok(MetricPayload())
     | Ok root when root.ValueKind <> JsonValueKind.Object ->
-        Error(Undecodable $"""JSON v2 series: {GoJson.mismatch root "gogen.MetricPayload"}""")
+        Error $"""JSON v2 series: {GoJson.mismatch root "gogen.MetricPayload"}"""
     | Ok root ->
         try
             let payload = MetricPayload()
 
             match GoJson.field "series" root with
             | None -> ()
-            | Some list when list.ValueKind = JsonValueKind.Array ->
-                for item in list.EnumerateArray() do
-                    match item.ValueKind with
-                    | JsonValueKind.Object -> payload.Series.Add(seriesOfJson "series" item)
-                    // Left out here; seriesPanicInGo answers for it below.
-                    | JsonValueKind.Null -> ()
-                    | _ -> misfit "series" item
-            | Some other -> misfit "series" other
+            | Some list -> payload.Series.AddRange(structs "series" seriesOfJson list)
 
-            if seriesPanicInGo root then Error Panics else Ok payload
+            Ok payload
         with Misfit(field, found) ->
-            Error(Undecodable $"JSON v2 series: cannot unmarshal {found} into field {field}")
+            Error $"JSON v2 series: cannot unmarshal {found} into field {field}"
 
 let private floatField (object: JsonElement) (path: string) (name: string) (assign: float -> unit) : unit =
     fill object path name GoJson.asFloat assign
@@ -575,7 +530,7 @@ let private sketchOfJson (path: string) (value: JsonElement) : SketchPayload.Typ
     match GoJson.field "distributions" value with
     | Some list ->
         sketch.Distributions.AddRange(
-            structs (path + ".distributions") distributionOfJson SketchPayload.Types.Sketch.Types.Distribution list
+            structs (path + ".distributions") distributionOfJson list
         )
     | None -> ()
 
@@ -584,7 +539,7 @@ let private sketchOfJson (path: string) (value: JsonElement) : SketchPayload.Typ
     match GoJson.field "dogsketches" value with
     | Some list ->
         sketch.Dogsketches.AddRange(
-            structs (path + ".dogsketches") dogsketchOfJson SketchPayload.Types.Sketch.Types.Dogsketch list
+            structs (path + ".dogsketches") dogsketchOfJson list
         )
     | None -> ()
 
@@ -608,7 +563,7 @@ let parseSketchesJson (body: byte[]) : Result<SketchPayload, string> =
             let payload = SketchPayload()
 
             match GoJson.field "sketches" root with
-            | Some list -> payload.Sketches.AddRange(structs "sketches" sketchOfJson SketchPayload.Types.Sketch list)
+            | Some list -> payload.Sketches.AddRange(structs "sketches" sketchOfJson list)
             | None -> ()
 
             match GoJson.field "metadata" root with
@@ -976,6 +931,10 @@ let decodeDistributionSeries (item: JsonElement) : Result<DistributionSeries, st
 /// whatever else the sender put beside it.
 type SeriesPayload<'series> =
     { Series: 'series[]
+      /// Where each of Series stood in the list as sent.
+      Positions: int[]
+      /// Elements of the list that are not a series, each with its place.
+      Rejected: (int * JsonElement) list
       Additional: Map<string, JsonElement>
       /// The body fit no series list at all; Series is empty.
       Unparsed: bool }
@@ -989,7 +948,7 @@ let private parsePayload
     | Error e -> Error $"{label}: {e}"
     | Ok root ->
         let whole () =
-            match unparsed root { Series = [||]; Additional = Map.empty; Unparsed = true } with
+            match unparsed root { Series = [||]; Positions = [||]; Rejected = []; Additional = Map.empty; Unparsed = true } with
             | Ok payload -> Ok payload
             | Error e -> Error $"{label}: {e}"
 
@@ -999,25 +958,34 @@ let private parsePayload
             match GoJson.field "series" root with
             | None -> Error $"{label}: required field series missing"
             | Some list when list.ValueKind = JsonValueKind.Array ->
-                // One series that is an error (not an object, or without a
-                // required field) fails the list, and the model then keeps
-                // the whole body unparsed.
-                let decoded = [| for item in list.EnumerateArray() -> decode item |]
+                // Item by item, so one element that is not a series (not an
+                // object, or without a required field) does not cost the
+                // series beside it. A null carries nothing and is left out.
+                let decoded =
+                    list.EnumerateArray()
+                    |> Seq.indexed
+                    |> Seq.filter (fun (_, item) -> item.ValueKind <> JsonValueKind.Null)
+                    |> Seq.map (fun (i, item) -> i, item, decode item)
+                    |> List.ofSeq
 
                 let fitted =
                     decoded
-                    |> Array.choose (fun result ->
+                    |> List.choose (fun (i, _, result) ->
                         match result with
-                        | Ok series -> Some series
+                        | Ok series -> Some(i, series)
                         | Error _ -> None)
 
-                if fitted.Length = decoded.Length then
-                    Ok
-                        { Series = fitted
-                          Additional = additional [ "series" ] root
-                          Unparsed = false }
-                else
-                    whole ()
+                Ok
+                    { Series = fitted |> List.map snd |> Array.ofList
+                      Positions = fitted |> List.map fst |> Array.ofList
+                      Rejected =
+                        decoded
+                        |> List.choose (fun (i, item, result) ->
+                            match result with
+                            | Ok _ -> None
+                            | Error _ -> Some(i, item))
+                      Additional = additional [ "series" ] root
+                      Unparsed = false }
             | Some _ -> whole ()
         | _ -> Error $"{label}: {notAnObject root}"
 
@@ -1104,38 +1072,36 @@ let decodeServiceCheck (supplyTags: bool) (item: JsonElement) : Result<ServiceCh
                 if valid then Ok fitted else unparsed item fitted
 
 /// Decodes a check_run batch item by item, so one odd check does not discard
-/// the checks beside it. A body that is not an array is read as one check —
-/// datadogpy posts a bare object — and there no tags are supplied, as in Go.
-let parseCheckRuns (body: byte[]) : Result<CheckRuns, Problem> =
+/// the checks beside it; a null item carries nothing and is left out. A body
+/// that is not an array is read as one check — datadogpy posts a bare object
+/// — and there no tags are supplied.
+let parseCheckRuns (body: byte[]) : Result<CheckRuns, string> =
     match GoJson.parse body with
-    | Error e -> Error(Undecodable $"JSON check_run: {e}")
+    | Error e -> Error $"JSON check_run: {e}"
     | Ok root when root.ValueKind = JsonValueKind.Null -> Ok { Runs = []; Undecodable = [] }
     | Ok root when root.ValueKind = JsonValueKind.Array ->
-        let items = List.ofSeq (root.EnumerateArray())
+        let decoded =
+            [ for item in root.EnumerateArray() do
+                  if item.ValueKind <> JsonValueKind.Null then
+                      item, decodeServiceCheck true item ]
 
-        // Go's withTags writes into a nil map for a null item.
-        if items |> List.exists (fun item -> item.ValueKind = JsonValueKind.Null) then
-            Error Panics
-        else
-            let decoded = items |> List.map (fun item -> item, decodeServiceCheck true item)
-
-            Ok
-                { Runs =
-                    decoded
-                    |> List.choose (fun (_, result) ->
-                        match result with
-                        | Ok run -> Some run
-                        | Error _ -> None)
-                  Undecodable =
-                    decoded
-                    |> List.choose (fun (item, result) ->
-                        match result with
-                        | Ok _ -> None
-                        | Error _ -> Some item) }
+        Ok
+            { Runs =
+                decoded
+                |> List.choose (fun (_, result) ->
+                    match result with
+                    | Ok run -> Some run
+                    | Error _ -> None)
+              Undecodable =
+                decoded
+                |> List.choose (fun (item, result) ->
+                    match result with
+                    | Ok _ -> None
+                    | Error _ -> Some item) }
     | Ok root ->
         match decodeServiceCheck false root with
         | Ok run -> Ok { Runs = [ run ]; Undecodable = [] }
-        | Error e -> Error(Undecodable $"JSON check_run: {e}")
+        | Error e -> Error $"JSON check_run: {e}"
 
 /// The alert types and priorities Datadog's enums allow.
 let eventAlertTypes =

@@ -1,0 +1,1 @@
+[{"host":"dfa20a6c733f","database_instance":"dfa20a6c733f","agent_version":"7.84.0","dbms":"oracle","kind":"database_instance","collection_interval":300,"dbms_version":"23.26.3.0.0","tags":["team:core"],"timestamp":1790880535960,"metadata":{"dbm":true,"connection_host":"dbmlab-db:1521/FREE"}}]

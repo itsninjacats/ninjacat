@@ -1,6 +1,6 @@
 import { env } from '$env/dynamic/private';
 
-// Address of the Go panel API. This is NOT the agent intake port (8080),
+// Address of the server's internal port. This is NOT the agent intake port (8080),
 // which is exposed to the machines running agents. The panel talks to 8081,
 // which can stay on an internal network.
 //
@@ -11,8 +11,8 @@ const BASE = env.NINJACAT_INTERNAL_URL || 'http://localhost:8081';
 // Control calls are best-effort and must never hold up a page.
 const CONTROL_TIMEOUT_MS = 2000;
 
-// Queries hit ClickHouse, so they get more room. Still shorter than the Go
-// side's own budget, so a slow query surfaces as our timeout rather than
+// Queries hit ClickHouse, so they get more room. Still shorter than the
+// server's own budget, so a slow query surfaces as our timeout rather than
 // hanging a request handler.
 const QUERY_TIMEOUT_MS = 10_000;
 
@@ -54,7 +54,7 @@ export type LogFacets = {
 	statuses: FacetCount[];
 };
 
-/** Thrown by the query helpers when the Go server cannot answer. */
+/** Thrown by the query helpers when the server cannot answer. */
 export class NinjacatError extends Error {}
 
 async function get<T>(path: string, timeoutMs = QUERY_TIMEOUT_MS): Promise<T> {
@@ -134,11 +134,10 @@ export async function fetchMetricSeries(opts: {
 	return get<SeriesResponse>(`/internal/metrics/query?${q}`);
 }
 
-// ---- the query API (F#, :8082): Datadog's v2 query endpoints ----------------------
+// ---- the query API: Datadog's v2 query endpoints ----------------------------------
 
-// A separate service from the Go panel API: it speaks Datadog's query language
-// (formulas, functions, anomalies, forecasts) and only reads ClickHouse.
-const QUERY_BASE = env.NINJACAT_QUERY_URL || 'http://localhost:8082';
+// Datadog's query language (formulas, functions, anomalies, forecasts), on the
+// same internal port as the calls above.
 
 /** One query as Datadog writes it, e.g. `avg:system.cpu.user{env:prod} by {host}`. */
 export type NamedQuery = { name: string; query: string };
@@ -180,7 +179,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
 	try {
-		const res = await fetch(`${QUERY_BASE}${path}`, {
+		const res = await fetch(`${BASE}${path}`, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify(body),
@@ -362,12 +361,12 @@ export async function fetchLogFacets(from: string, to?: string): Promise<LogFace
 }
 
 /**
- * Asks the Go server to re-read the API keys from the database now.
+ * Asks the server to re-read the API keys from the database now.
  *
  * Called after a key is added or removed so the change takes effect
  * immediately instead of waiting for the periodic refresh.
  *
- * NEVER throws: a Go server that is down must not break an operation that
+ * NEVER throws: a server that is down must not break an operation that
  * already succeeded in Postgres — the keeper will pick the key up within 30
  * seconds anyway. It reports whether it worked instead.
  */

@@ -33,10 +33,11 @@
     <Compile Include="Routers/Evp.fs" />
     <Compile Include="Routers/CiVisibility.fs" />
     <Compile Include="Routers/CiWebhook.fs" />
-    <Compile Include="Routers/TraceMsgp.fs" />
     <Compile Include="Routers/TraceSketch.fs" />
     <Compile Include="Routers/Trace.fs" />
+    <Compile Include="Routers/ProcessEnum.fs" />
     <Compile Include="Routers/ProcessBuffers.fs" />
+    <Compile Include="Routers/Usm.fs" />
     <Compile Include="Routers/Process.fs" />
     <Compile Include="Routers/Rum.fs" />
     <Compile Include="TcpLogs.fs" />
@@ -48,6 +49,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="ZstdSharp.Port" />
     <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="MessagePack" />
     <ProjectReference Include="../Storage/Storage.fsproj" />
     <ProjectReference Include="../Proto/NinjaCat.Api.Proto.csproj" />
   </ItemGroup>

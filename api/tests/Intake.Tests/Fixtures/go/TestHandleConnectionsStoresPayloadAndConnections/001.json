@@ -640,9 +640,25 @@
      0,
      {},
      0,
-     {},
+     {
+      "env": [
+       "prod"
+      ],
+      "role": [
+       "db",
+       "cache"
+      ]
+     },
      0,
-     {},
+     {
+      "env": [
+       "prod"
+      ],
+      "role": [
+       "db",
+       "cache"
+      ]
+     },
      0,
      {
       "110": 2
@@ -715,9 +731,25 @@
      0,
      {},
      0,
-     {},
+     {
+      "env": [
+       "prod"
+      ],
+      "role": [
+       "db",
+       "cache"
+      ]
+     },
      0,
-     {},
+     {
+      "env": [
+       "prod"
+      ],
+      "role": [
+       "db",
+       "cache"
+      ]
+     },
      0,
      {},
      "",
@@ -779,7 +811,15 @@
      "LastTCPRecoveryCount": 0,
      "LastTCPReordSeen": 0,
      "LastTCPRtoCount": 4,
-     "LocalContainerTags": {},
+     "LocalContainerTags": {
+      "env": [
+       "prod"
+      ],
+      "role": [
+       "db",
+       "cache"
+      ]
+     },
      "LocalContainerTagsIndex": 0,
      "NetNS": 0,
      "PID": 1,
@@ -793,7 +833,15 @@
      "RaddrPort": 443,
      "RemoteEcsTask": "",
      "RemoteNetworkID": "",
-     "RemoteServiceTags": {},
+     "RemoteServiceTags": {
+      "env": [
+       "prod"
+      ],
+      "role": [
+       "db",
+       "cache"
+      ]
+     },
      "RemoteServiceTagsIdx": 0,
      "RequestID": "b0a1f2c3-0000-4000-8000-000000000001",
      "ResolvConfIdx": 0,
@@ -854,7 +902,15 @@
      "LastTCPRecoveryCount": 0,
      "LastTCPReordSeen": 0,
      "LastTCPRtoCount": 0,
-     "LocalContainerTags": {},
+     "LocalContainerTags": {
+      "env": [
+       "prod"
+      ],
+      "role": [
+       "db",
+       "cache"
+      ]
+     },
      "LocalContainerTagsIndex": 0,
      "NetNS": 0,
      "PID": 2,
@@ -868,7 +924,15 @@
      "RaddrPort": 0,
      "RemoteEcsTask": "",
      "RemoteNetworkID": "",
-     "RemoteServiceTags": {},
+     "RemoteServiceTags": {
+      "env": [
+       "prod"
+      ],
+      "role": [
+       "db",
+       "cache"
+      ]
+     },
      "RemoteServiceTagsIdx": 0,
      "RequestID": "b0a1f2c3-0000-4000-8000-000000000001",
      "ResolvConfIdx": 0,
@@ -910,5 +974,6 @@
   "/sends/2/rows/0/Timestamp",
   "/sends/2/rows/1/PayloadID",
   "/sends/2/rows/1/Timestamp"
- ]
+ ],
+ "edited": "LocalContainerTags and RemoteServiceTags of storage_connections were {} in the Go recording. Go resolved both indices against encodedConnectionsTags; the agent encodes them into encodedTags (pkg/process/checks/net.go). This payload leaves both indices unset (0) and its encodedTags holds the host's tags at 0, without the \"-\" set a real agent puts there, so both now resolve to that set."
 }

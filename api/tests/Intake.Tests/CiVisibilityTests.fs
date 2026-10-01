@@ -404,13 +404,13 @@ let ``an empty test-cycle body is answered and nothing is stored`` () =
     Assert.Empty sink.Writes
 
 [<Fact>]
-let ``an event that is not a map goes raw, the others become rows`` () =
-    let body = utf8 """{"version":3,"events":[5,{"type":"test","version":2,"content":{"service":"s","meta":{"test.is_new":" YES "}}}]}"""
+let ``events that are not maps keep the body raw once, the others become rows`` () =
+    let body = utf8 """{"version":3,"events":[5,{"type":"test","version":2,"content":{"service":"s","meta":{"test.is_new":" YES "}}},"x"]}"""
     let response, sink = send "routeCITestCycle" "POST" "/api/v2/citestcycle" [ "Content-Type", "application/json" ] body
 
     Assert.Equal(202, response.Status)
     Assert.Equal<string list>([ "storage_raw_payloads"; "storage_ci_test_events" ], sink.Writes |> List.map _.Writer)
-    Assert.Equal("event 0 is not a map", (Assert.Single(sink.Rows<RawPayloadRow>())).Note)
+    Assert.Equal("2 of 3 events are not maps: 0, 2", (Assert.Single(sink.Rows<RawPayloadRow>())).Note)
 
     let row = Assert.Single(sink.Rows<CITestEventRow>())
     Assert.Equal(3, row.PayloadVersion)
@@ -564,6 +564,18 @@ let ``a packfile upload that is not multipart is kept raw and still answered 204
     Assert.Equal("gitmeta", raw.Intake)
     Assert.Equal("packfile multipart, content-type application/octet-stream: content-type application/octet-stream is not multipart", raw.Note)
     Assert.Empty(sink.Rows<GitPackfileRow>())
+
+[<Fact>]
+let ``a packfile upload without a packfile part is kept raw and stores no pack`` () =
+    let contentType, body =
+        multipart [ { Name = "pushedSha"; FileName = ""; ContentType = "application/json"; Data = utf8 """{"data":{"id":"abc"}}""" } ]
+
+    let response, sink = send "routeCIVisibilityAPI" "POST" "/api/v2/git/repository/packfile" [ "Content-Type", contentType ] body
+    Assert.Equal(204, response.Status)
+    let raw = Assert.Single(sink.Rows<RawPayloadRow>())
+    Assert.Equal(("unexpected_shape", "packfile upload without a packfile part"), (raw.Reason, raw.Note))
+    Assert.Empty(sink.Rows<GitPackfileRow>())
+    Assert.Empty(sink.Rows<GitCommitRow>())
 
 [<Fact>]
 let ``a pushedSha part that does not decode is kept beside the pack`` () =

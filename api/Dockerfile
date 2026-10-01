@@ -1,13 +1,15 @@
-# Production image for the query service, built in two stages.
+# Production image for the server, built in two stages.
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS builder
 
 WORKDIR /src
 
 # Project files first: the restore layer is reused until a dependency changes.
 COPY global.json Directory.Build.props Directory.Packages.props NinjaCat.Api.slnx ./
+COPY src/Proto/NinjaCat.Api.Proto.csproj src/Proto/
 COPY src/Engine/Engine.fsproj src/Engine/
+COPY src/Storage/Storage.fsproj src/Storage/
+COPY src/Intake/Intake.fsproj src/Intake/
 COPY src/Server/Server.fsproj src/Server/
-COPY tests/Engine.Tests/Engine.Tests.fsproj tests/Engine.Tests/
 RUN dotnet restore src/Server/Server.fsproj
 
 COPY . .
@@ -18,10 +20,14 @@ RUN dotnet publish src/Server/Server.fsproj -c Release --no-restore -o /out
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 
 COPY --from=builder /out /app
-WORKDIR /app
+
+# Capture dumps (DEBUG=true) land in the working directory by default.
+RUN mkdir /data && chown app:app /data
+WORKDIR /data
 USER app
 
-ENV NINJACAT_API_URL=http://0.0.0.0:8082
-EXPOSE 8082
+# 8080 agent intake, 8081 panel and query API, 10516 logs over TCP.
+EXPOSE 8080 8081 10516
 
-ENTRYPOINT ["dotnet", "ninjacat-api.dll"]
+# `migrate` as the only argument applies the ClickHouse migrations and exits.
+ENTRYPOINT ["dotnet", "/app/ninjacat-api.dll"]

@@ -28,6 +28,7 @@ open System.Text.Encodings.Web
 open System.Text.Json
 open System.Text.RegularExpressions
 open System.Text.Unicode
+open MessagePack
 open Microsoft.AspNetCore.WebUtilities
 open Microsoft.Extensions.Logging
 open Microsoft.Net.Http.Headers
@@ -73,7 +74,7 @@ module GoJson =
             RegexOptions.IgnoreCase ||| RegexOptions.Singleline ||| RegexOptions.Compiled
         )
 
-    let private maxDepth = 512
+    let private maxDepth = Json.maxDepth
 
     let private repaired (body: byte[]) : byte[] =
         let span = ReadOnlySpan<byte> body
@@ -661,13 +662,21 @@ let private storeTestCycle (r: Request) : unit =
             let headers = agentHeaders r
             let rows = ResizeArray<CITestEventRow>()
 
+            let notMaps = ResizeArray<int>()
+
             events
             |> List.iteri (fun i event ->
                 match event with
                 | Value.Object _ ->
                     if r.Tenant <> "" then
                         rows.Add(testEventRow r.Tenant now headers payloadVersion metadata event)
-                | _ -> Raw.store r "citestcycle" "decode_error" $"event {i} is not a map" r.Body)
+                | _ -> notMaps.Add i)
+
+            // The body is kept once, however many of its events are bad.
+            if notMaps.Count > 0 then
+                let places = notMaps |> Seq.truncate 8 |> Seq.map string |> String.concat ", "
+                let more = if notMaps.Count > 8 then ", …" else ""
+                Raw.store r "citestcycle" "decode_error" $"{notMaps.Count} of {events.Length} events are not maps: {places}{more}" r.Body
 
             Sink.write r.Sink CITestEvents.table (rows.ToArray())
     | Ok _ -> Raw.store r "citestcycle" "unexpected_shape" $"payload is not a {format} map" r.Body
@@ -797,47 +806,55 @@ let private coverageEntriesJson (data: byte[]) : Result<int32 * CoverageEntry li
 /// cut out of the part: the bytes between the reader's position before and
 /// after one value.
 let coverageEntriesMsgpack (data: byte[]) : Result<int32 * CoverageEntry list, string> =
-    let reader = MsgpackReader data
     let entries = ResizeArray<CoverageEntry>()
     let mutable version = 0
     let mutable reading = "envelope map header"
+    let mutable problem: string option = None
 
     try
+        let mutable reader = MessagePackReader(ReadOnlyMemory data)
         let keys = reader.ReadMapHeader()
+        let mutable i = 0
 
-        for i in 0 .. keys - 1 do
+        while problem.IsNone && i < keys do
             reading <- $"envelope key {i}"
 
-            if reader.PeekType() <> StrType then
-                raise (MsgpackError "the key is not a string")
+            if reader.NextMessagePackType <> MessagePackType.String then
+                problem <- Some "the key is not a string"
+            else
+                match reader.ReadString() with
+                | "version" ->
+                    // Read as any value: an encoder that changed this field's
+                    // width or type must not make real coverage undecodable.
+                    reading <- "version"
+                    version <- int32 (Value.toInt64 (Value.ofMsgpack (Msgpack.read &reader)))
+                | "coverages" ->
+                    reading <- "coverages array header"
+                    let count = reader.ReadArrayHeader()
 
-            match reader.ReadString() with
-            | "version" ->
-                // Read as any value: an encoder that changed this field's
-                // width or type must not make real coverage undecodable.
-                reading <- "version"
-                version <- int32 (Value.toInt64 (Value.ofMsgpack (reader.ReadValue())))
-            | "coverages" ->
-                reading <- "coverages array header"
-                let count = reader.ReadArrayHeader()
+                    for j in 0 .. count - 1 do
+                        reading <- $"coverages[{j}]"
+                        let start = int reader.Consumed
+                        let value = Value.ofMsgpack (Msgpack.read &reader)
 
-                for j in 0 .. count - 1 do
-                    reading <- $"coverages[{j}]"
-                    let start = reader.Position
-                    let value = Value.ofMsgpack (reader.ReadValue())
+                        entries.Add
+                            { Value = value
+                              Raw = data[start .. int reader.Consumed - 1] }
+                | other ->
+                    // A key this decoder does not know is skipped, not refused: a
+                    // newer encoder adding a field must not cost the coverage.
+                    reading <- $"skipping \"{other}\""
+                    reader.Skip()
 
-                    entries.Add
-                        { Value = value
-                          Raw = data[start .. reader.Position - 1] }
-            | other ->
-                // A key this decoder does not know is skipped, not refused: a
-                // newer encoder adding a field must not cost the coverage.
-                reading <- $"skipping \"{other}\""
-                reader.Skip()
+            i <- i + 1
 
-        Ok(version, List.ofSeq entries)
-    with MsgpackError message ->
-        Error $"{reading}: {message}"
+        match problem with
+        | Some text -> Error $"{reading}: {text}"
+        | None -> Ok(version, List.ofSeq entries)
+    with
+    | :? MessagePackSerializationException as e -> Error $"{reading}: {e.Message}"
+    | :? EndOfStreamException -> Error $"{reading}: {Msgpack.truncated}"
+    | :? OverflowException -> Error $"{reading}: {Msgpack.forged}"
 
 /// Splits the coverage payload into its entries; says which format it was
 /// taken for.
@@ -1152,11 +1169,17 @@ let handleSearchCommits (r: Request) : Response =
         Response.json 200 ("""{"data":[],"meta":{"repository_url":""" + quoted repository + "}}")
 
 /// The JSON part of a packfile upload: {"data": {"id", "type"}, "meta":
-/// {"repository_url"}}. Returns the sha and the repository if the part sets
-/// them, and whether all of it decoded.
-let private readPushedSha (data: byte[]) : string option * string option * bool =
+/// {"repository_url"}}. The sha and the repository are None when the part
+/// does not set them.
+type private PushedSha =
+    { Sha: string option
+      Repository: string option
+      /// False when any of the part did not decode.
+      Decoded: bool }
+
+let private readPushedSha (data: byte[]) : PushedSha =
     match GoJson.parse data with
-    | Error _ -> None, None, false
+    | Error _ -> { Sha = None; Repository = None; Decoded = false }
     | Ok root ->
         let problems = ResizeArray<string>()
         let document = GoStruct.fields problems "the document" root
@@ -1165,7 +1188,7 @@ let private readPushedSha (data: byte[]) : string option * string option * bool 
         let sha = GoStruct.tryText problems "data." "id" commit
         let meta = GoStruct.child problems "meta" "meta" document
         let repository = GoStruct.tryText problems "meta." "repository_url" meta
-        sha, repository, problems.Count = 0
+        { Sha = sha; Repository = repository; Decoded = problems.Count = 0 }
 
 /// One git packfile: multipart with a "pushedSha" JSON part and a "packfile"
 /// part, one request per .pack file.
@@ -1183,7 +1206,7 @@ let handlePackfile (r: Request) : Response =
     | Ok parts ->
         let mutable sha = ""
         let mutable repository = ""
-        let mutable pack: byte[] = [||]
+        let mutable pack: byte[] option = None
         let mutable filename = ""
         let mutable other: Map<string, byte[]> = Map.empty
 
@@ -1192,19 +1215,23 @@ let handlePackfile (r: Request) : Response =
             | "pushedSha" ->
                 // A repeated part changes only what it sets, as Go's decoder
                 // did when it filled the same struct twice.
-                let pushedSha, pushedRepository, decoded = readPushedSha part.Data
-                sha <- defaultArg pushedSha sha
-                repository <- defaultArg pushedRepository repository
+                let pushed = readPushedSha part.Data
+                sha <- defaultArg pushed.Sha sha
+                repository <- defaultArg pushed.Repository repository
 
-                if not decoded then
+                if not pushed.Decoded then
                     r.Log.LogWarning("[gitmeta] packfile pushedSha did not decode")
                     other <- other.Add("pushedSha.undecodable", part.Data)
             | "packfile" ->
-                pack <- part.Data
+                pack <- Some part.Data
                 filename <- part.FileName
             | name -> other <- other.Add(name, part.Data)
 
-        if r.Tenant <> "" then
+        match pack with
+        | None ->
+            r.Log.LogWarning("[gitmeta] packfile upload without a packfile part")
+            Raw.store r "gitmeta" "unexpected_shape" "packfile upload without a packfile part" r.Body
+        | Some pack when r.Tenant <> "" ->
             let packfileID = Convert.ToHexStringLower(SHA256.HashData pack)
             let now = DateTime.UtcNow
 
@@ -1235,6 +1262,7 @@ let handlePackfile (r: Request) : Response =
                          SeenAt = now
                          PackfileID = Some packfileID
                          Source = "packfile" } |]
+        | Some _ -> ()
 
         Response.status 204
 

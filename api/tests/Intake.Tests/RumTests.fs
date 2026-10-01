@@ -116,6 +116,21 @@ let private view =
         "feature_flags":{"feature_one":true}}"""
 
 [<Fact>]
+let ``the browser profiler's quota check is admitted with the key in DD-CLIENT-TOKEN`` () =
+    let ask (headers: (string * string) list) =
+        let sink = CapturingSink()
+        let response = serve [] sink (httpContext "GET" "/api/v2/profiling/quota?session_id=s-1" headers) [||]
+        Assert.Empty sink.Writes
+        response.Status, Text.Encoding.UTF8.GetString response.Body
+
+    Assert.Equal(
+        (200, """{"data":{"attributes":{"admitted":true,"reason":"quota_ok"}}}"""),
+        ask [ "DD-CLIENT-TOKEN", Replay.testKey; "Origin", "https://shop.example" ]
+    )
+
+    Assert.Equal(403, fst (ask [ "DD-CLIENT-TOKEN", "not-a-key" ]))
+
+[<Fact>]
 let ``a view keeps its identity, its version and the SDK's date`` () =
     let row = Rum.viewRow sender "view" (json view) view
 

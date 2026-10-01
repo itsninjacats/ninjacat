@@ -289,6 +289,12 @@ let basicBand (window: int) (bounds: float) (values: float[]) : (float * float) 
             let sd = sqrt (past |> Array.averageBy (fun x -> (x - mean) * (x - mean)))
             Some(centre - bounds * sd, centre + bounds * sd))
 
+/// One predicted value with the band around it.
+type Prediction =
+    { Value: float
+      Lower: float
+      Upper: float }
+
 /// A linear forecast from (seconds, value) history: the value and band at each
 /// of `future` seconds.
 ///
@@ -299,7 +305,7 @@ let basicBand (window: int) (bounds: float) (values: float[]) : (float * float) 
 /// recent fifth ("extrapolates recent behavior ... at the risk of
 /// overfitting"). The band is `deviations` robust standard deviations of the
 /// fit's residuals, the same width at every horizon.
-let linearForecast (model: string) (deviations: float) (xs: float[]) (ys: float[]) (future: float[]) =
+let linearForecast (model: string) (deviations: float) (xs: float[]) (ys: float[]) (future: float[]) : Prediction[] =
     let n = xs.Length
 
     let from =
@@ -314,4 +320,10 @@ let linearForecast (model: string) (deviations: float) (xs: float[]) (ys: float[
     let residuals = Array.map2 (fun x y -> y - (intercept + slope * x)) fx fy
     let width = deviations * madToSigma * mad residuals
 
-    future |> Array.map (fun x -> let v = intercept + slope * x in v, v - width, v + width)
+    future
+    |> Array.map (fun x ->
+        let value = intercept + slope * x
+
+        { Value = value
+          Lower = value - width
+          Upper = value + width })

@@ -17,12 +17,30 @@ open NinjaCat.Api.Storage
 /// The raw bytes are the record: a DDSketch merges with other sketches and
 /// answers any quantile afterwards. The decoded fields only save the common
 /// query from unmarshalling a blob.
+[<RequireQualifiedAccess>]
+type SketchState =
+    /// No bytes were sent.
+    | Absent
+    /// Bytes arrived and are not a DDSketch. The reason is for the log; the
+    /// table records only that it happened, and keeps the bytes.
+    | Undecodable of reason: string
+    /// A valid sketch with no values.
+    | Empty
+    | Ok
+
+module SketchState =
+    /// The state as the tables' Enum8 column spells it.
+    let name (state: SketchState) : string =
+        match state with
+        | SketchState.Absent -> "absent"
+        | SketchState.Undecodable _ -> "undecodable"
+        | SketchState.Empty -> "empty"
+        | SketchState.Ok -> "ok"
+
 type SketchSummary =
     { Raw: byte[]
-      /// "absent" (no bytes), "undecodable" (bytes that are not a DDSketch),
-      /// "empty" (a valid sketch with no values) or "ok".
-      State: string
-      /// The four numbers exist only in the "ok" state: a zero would read as
+      State: SketchState
+      /// The four numbers exist only in the Ok state: a zero would read as
       /// a measurement of zero.
       Count: float option
       Sum: float option
@@ -33,16 +51,9 @@ type SketchSummary =
       BinCounts: float[] }
 
 module SketchSummary =
-    let absent = "absent"
-    let undecodable = "undecodable"
-    let empty = "empty"
-    let ok = "ok"
-
     /// The eight columns a summary occupies, in schema order.
     let values (s: SketchSummary) : obj list =
-        // The state is an Enum8: an empty string would fail the whole batch.
-        let state = if s.State = "" then absent else s.State
-        [ s.Raw; state; Col.opt s.Count; Col.opt s.Sum; Col.opt s.Min; Col.opt s.Max; s.BinKeys; s.BinCounts ]
+        [ s.Raw; SketchState.name s.State; Col.opt s.Count; Col.opt s.Sum; Col.opt s.Min; Col.opt s.Max; s.BinKeys; s.BinCounts ]
 
 /// One span, with the agent, tracer and chunk it arrived under copied onto it.
 type SpanRow =

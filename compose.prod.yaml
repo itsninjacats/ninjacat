@@ -19,7 +19,7 @@ services:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-ninjacat}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD}
     # No docker-entrypoint-initdb.d mount: the server applies its embedded
-    # ClickHouse migrations at startup (server/schema). CLICKHOUSE_DB still
+    # ClickHouse migrations at startup (api/schema). CLICKHOUSE_DB still
     # creates the (empty) database itself.
     volumes:
       - clickhouse-data:/var/lib/clickhouse
@@ -66,18 +66,18 @@ services:
       postgres: { condition: service_healthy }
     restart: "no"
 
-  server:
+  api:
     build:
-      context: ./server
+      context: ./api
     restart: unless-stopped
     ports:
-      # The intake must be reachable by the agents. The panel API on 8081 is
+      # The intake must be reachable by the agents. The internal port 8081 is
       # deliberately NOT published — only the frontend container needs it,
       # and it reaches it over the compose network.
       - "8080:8080"
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-ninjacat}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ninjacat}
-      CLICKHOUSE_ADDR: clickhouse:9000
+      CLICKHOUSE_HTTP_ADDR: clickhouse:8123
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ninjacat}
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-ninjacat}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
@@ -97,14 +97,14 @@ services:
       - "3000:3000"
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-ninjacat}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ninjacat}
-      NINJACAT_INTERNAL_URL: http://server:8081
+      NINJACAT_INTERNAL_URL: http://api:8081
       # Must be the URL users actually reach, or form actions and auth break.
       ORIGIN: ${ORIGIN:?set ORIGIN, e.g. https://ninjacat.example.com}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
     depends_on:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
-      server: { condition: service_started }
+      api: { condition: service_started }
 
 volumes:
   clickhouse-data:

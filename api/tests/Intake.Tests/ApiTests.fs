@@ -253,11 +253,30 @@ let ``a broken line of logs is named by its number`` () =
 // ---------------------------------------------------------------------------
 
 [<Fact>]
-let ``one series that is an error leaves the whole v1 payload unparsed`` () =
-    for body in [ """{"series":[null]}"""; """{"series":["x"]}"""; """{"series":[{"points":[]}]}"""; """{"series":[{"metric":"m","points":null}]}""" ] do
-        match parseSeriesV1 (utf8 body) with
-        | Ok payload -> Assert.True(payload.Unparsed && payload.Series.Length = 0, body)
-        | Error e -> Assert.Fail $"{body}: {e}"
+let ``a v1 element that is not a series is set aside alone, a null is left out`` () =
+    let good = """{"metric":"ok","points":[[1790151330,1]]}"""
+
+    for bad in [ "\"x\""; """{"points":[]}"""; """{"metric":"m","points":null}""" ] do
+        match parseSeriesV1 (utf8 $"""{{"series":[{bad},null,{good}]}}""") with
+        | Ok payload ->
+            Assert.False payload.Unparsed
+            Assert.Equal<string[]>([| "ok" |], payload.Series |> Array.map _.Metric)
+            // The good series stood third in the list as sent.
+            Assert.Equal<int[]>([| 2 |], payload.Positions)
+            Assert.Equal<(int * string) list>([ 0, bad ], payload.Rejected |> List.map (fun (at, item) -> at, item.GetRawText()))
+        | Error e -> Assert.Fail $"{bad}: {e}"
+
+[<Fact>]
+let ``v1 series: one element that is not a series is kept raw, the others are stored`` () =
+    let _, sink =
+        post "/api/v1/series" """{"series":[{"metric":"a","points":[[1790151330,1]]},"x",{"metric":"b","points":[[1790151330,2]]}]}"""
+
+    Assert.Equal<string list>([ "a"; "b" ], sink.Rows<MetricPoint>() |> List.map _.Metric)
+
+    Assert.Equal<(string * string * string) list>(
+        [ "unexpected_shape", "v1 series #1 is not a datadogV1.Series", "\"x\"" ],
+        raws sink
+    )
 
 [<Fact>]
 let ``a series with a field of the wrong type is unparsed, with its fields empty`` () =
@@ -285,9 +304,15 @@ let ``a number beyond float64 fails the body only where the model would keep the
     | Ok payload -> Assert.Equal("1e999", payload.Series[0].Additional["big"].GetRawText())
     | Error e -> Assert.Fail e
 
-    Assert.True((parseSeriesV1 (utf8 """{"series":[{"metric":"m","points":"x","big":1e999}]}""")).IsError)
-    Assert.True((parseSeriesV1 (utf8 """{"series":[{"metric":"m","points":[[1e999,2]]}]}""")).IsError)
-    Assert.True((parseDistributionPoints (utf8 """{"series":[{"metric":"m","points":[[1,[1e999]]]}]}""")).IsError)
+    // Where the item itself does not fit, it is set aside alone.
+    let rejected (result: Result<SeriesPayload<'a>, string>) =
+        match result with
+        | Ok payload -> payload.Series.Length, payload.Rejected |> List.map fst
+        | Error e -> failwith e
+
+    Assert.Equal((0, [ 0 ]), rejected (parseSeriesV1 (utf8 """{"series":[{"metric":"m","points":"x","big":1e999}]}""")))
+    Assert.Equal((0, [ 0 ]), rejected (parseSeriesV1 (utf8 """{"series":[{"metric":"m","points":[[1e999,2]]}]}""")))
+    Assert.Equal((0, [ 0 ]), rejected (parseDistributionPoints (utf8 """{"series":[{"metric":"m","points":[[1,[1e999]]]}]}""")))
 
 [<Fact>]
 let ``a v1 point keeps its nulls, and a null pair is an empty one`` () =
@@ -489,15 +514,16 @@ let ``v2 series as JSON: nulls, repeated resources and bare tags`` () =
 
     Assert.Equal((202, """{"errors":[]}"""), (response.Status, text response))
     let points = sink.Rows<MetricPoint>()
-    Assert.Equal<float list>([ 0.0; 2.0; 3.0 ], points |> List.map _.Value)
-    let second = points[1]
+    // The null point is left out.
+    Assert.Equal<float list>([ 2.0; 3.0 ], points |> List.map _.Value)
+    let second = points[0]
     Assert.Equal(("h", "GAUGE", "byte", "src", 10u), (second.Host, second.MetricType, second.Unit, second.SourceType, second.Interval))
     Assert.Equal(DateTime(2026, 9, 23, 8, 15, 30, DateTimeKind.Utc), second.Timestamp)
-    // A null resource after the host reads as one with no type and no name.
-    Assert.Equal<(string * string) list>([ "", ""; "device", "eth1" ], second.Resources |> Map.toList)
+    // The null resource is left out; of two devices the last one stays.
+    Assert.Equal<(string * string) list>([ "device", "eth1" ], second.Resources |> Map.toList)
     Assert.Equal<(string * string[]) list>([ "", [| "" |]; "a", [| "b" |]; "c", [| "" |] ], second.Tags |> Map.toList)
     // A point without a timestamp is stamped on arrival.
-    Assert.True(points[0].Timestamp.Year >= 2026 && points[0].Timestamp <> second.Timestamp)
+    Assert.True(points[1].Timestamp.Year >= 2026 && points[1].Timestamp <> second.Timestamp)
 
 [<Fact>]
 let ``v2 series: the format is taken from Content-Type, then from the first byte`` () =
@@ -511,13 +537,22 @@ let ``v2 series: the format is taken from Content-Type, then from the first byte
     Assert.Equal<string list>([ "decode_error" ], raws lied |> List.map (fun (reason, _, _) -> reason))
 
 [<Fact>]
-let ``v2 series: a body Go's handler panics on is answered 202 and stores nothing`` () =
-    for body in
-        [ """{"series":[{"metric":"ok","points":[{"timestamp":1790151330,"value":1}]},null]}"""
-          """{"series":[{"metric":"m","resources":[null,{"type":"host","name":"h"}],"points":[{"timestamp":1790151330,"value":1}]}]}""" ] do
+let ``v2 series: a null series or resource is left out, what stands beside it is stored`` () =
+    let stored (body: string) =
         let response, sink = post "/api/v2/series" body
         Assert.Equal((202, """{"errors":[]}"""), (response.Status, text response))
-        Assert.Empty sink.Writes
+        Assert.Empty(raws sink)
+        sink.Rows<MetricPoint>() |> List.map (fun point -> point.Metric, point.Host)
+
+    Assert.Equal<(string * string) list>(
+        [ "ok", "" ],
+        stored """{"series":[null,{"metric":"ok","points":[{"timestamp":1790151330,"value":1}]},null]}"""
+    )
+
+    Assert.Equal<(string * string) list>(
+        [ "m", "h" ],
+        stored """{"series":[{"metric":"m","resources":[null,{"type":"host","name":"h"}],"points":[{"timestamp":1790151330,"value":1}]}]}"""
+    )
 
 [<Fact>]
 let ``v2 series: wrong types are a decode error, kept raw`` () =
@@ -698,18 +733,14 @@ let ``sketches over protobuf: a legacy distribution is kept raw, the sender's ke
     Assert.Empty(sink.Rows<AgentBatchMetadataRow>())
 
 [<Fact>]
-let ``sketches as JSON: a null sketch, dogsketch or distribution is an empty one`` () =
+let ``sketches as JSON: a null sketch, dogsketch or distribution is left out`` () =
     let _, sink =
         post
             "/api/beta/sketches"
             """{"sketches":[null,{"metric":"m","host":"h","dogsketches":[null,{"ts":1790151330,"cnt":3,"k":[1,null],"n":[2]}],"distributions":[null],"tags":["a:b"]}],"metadata":{"timezone":"UTC"}}"""
 
-    Assert.Equal<string list>(
-        [ """{"metric":"m","host":"h","distributions":[{}],"tags":["a:b"],"dogsketches":[{},{"ts":1790151330,"cnt":3,"k":[1,0],"n":[2]}]}""" ],
-        raws sink |> List.map (fun (_, _, body) -> body)
-    )
-
-    Assert.Equal<int32[] list>([ [||]; [| 1; 0 |] ], sink.Rows<SketchRow>() |> List.map _.BucketKeys)
+    Assert.Empty(raws sink)
+    Assert.Equal<int32[] list>([ [| 1; 0 |] ], sink.Rows<SketchRow>() |> List.map _.BucketKeys)
     Assert.Equal<string list>([ "UTC" ], sink.Rows<AgentBatchMetadataRow>() |> List.map _.Timezone)
 
 [<Fact>]
@@ -741,13 +772,14 @@ let ``check_run: the notes of the two kinds of rejected check count separately``
     | other -> Assert.Fail $"{other}"
 
 [<Fact>]
-let ``check_run: a bare check without tags is rejected, and a null in a batch stores nothing`` () =
+let ``check_run: a bare check without tags is rejected, and a null in a batch is left out`` () =
     let _, bare = post "/api/v1/check_run" """{"check":"c","host_name":"h","status":1}"""
     Assert.Equal<(string * string) list>([ "decode_error", "JSON check_run: required field tags missing" ], raws bare |> List.map (fun (reason, note, _) -> reason, note))
 
     let response, withNull = post "/api/v1/check_run" """[{"check":"a","host_name":"h","status":0,"tags":[]},null,"x"]"""
     Assert.Equal((202, """{"errors":[]}"""), (response.Status, text response))
-    Assert.Empty withNull.Writes
+    Assert.Equal<string list>([ "a" ], withNull.Rows<CheckRunRow>() |> List.map _.CheckName)
+    Assert.Equal<(string * string) list>([ "unexpected_shape", "\"x\"" ], raws withNull |> List.map (fun (reason, _, body) -> reason, body))
 
     let _, nothing = post "/api/v1/check_run" "null"
     Assert.Empty nothing.Writes
@@ -820,7 +852,14 @@ let ``intake: a body of no known shape is kept, with the keys it had`` () =
 
     Assert.Equal<(string * string) list>([ "unexpected_shape", "no known /intake/ variant key, keys: (none)" ], notes "null")
     Assert.Equal<(string * string) list>([ "decode_error", "json: cannot unmarshal array into Go value of type map[string]jsontext.Value" ], notes "[1]")
-    Assert.Equal<(string * string) list>([ "no_schema", "legacy V5 resources snapshot — the process intake owns this format" ], notes """{"resources":{"processes":{"snaps":[]}}}""")
+    // A resources snapshot with nothing in it is not an error and stores nothing.
+    Assert.Empty(notes """{"resources":{"processes":{"snaps":[]}}}""")
+    Assert.Equal<(string * string) list>([ "unexpected_shape", "resources without processes.snaps" ], notes """{"resources":{"meta":{"host":"h"}}}""")
+
+    Assert.Equal<(string * string) list>(
+        [ "unexpected_shape", "resources: 2 snapshots or rows are not the resources check's shape" ],
+        notes """{"resources":{"processes":{"snaps":[[1790878655,[["root",0,0.5,10,5,"agent",1],["short"]]],"x"]}}}"""
+    )
     Assert.Equal<(string * string) list>([ "unexpected_shape", "no known /intake/ variant key, keys: other, resources" ], notes """{"resources":{},"other":1}""")
     Assert.Empty(notes "")
 
@@ -974,14 +1013,21 @@ let ``the runner's health check answers 200 with the server's time`` () =
     Assert.Empty sink.Writes
 
 [<Fact>]
-let ``POST /api/v2/validate answers a non-empty id and stores nothing`` () =
-    let response, sink = post "/api/v2/validate" """{"anything":1}"""
-    Assert.Equal(200, response.Status)
-    Assert.NotEqual<string>("", (parsed (text response)).GetProperty("data").GetProperty("id").GetString())
-    Assert.Empty sink.Writes
+let ``/api/v2/validate answers the tenant's org id, the same on every call, and stores nothing`` () =
+    let orgId (method: string) =
+        let response, sink = send method "/api/v2/validate" [] [||]
+        Assert.Equal(200, response.Status)
+        Assert.Empty sink.Writes
+        (parsed (text response)).GetProperty("data").GetProperty("id").GetString()
+
+    // The agent derives its Org Propagation Marker from the id: it has to be stable.
+    let first = orgId "GET"
+    Assert.True(fst (Guid.TryParse first))
+    Assert.Equal(first, orgId "GET")
+    Assert.Equal(first, orgId "POST")
 
 [<Fact>]
-let ``intake-key: the scheme is what precedes the first space, and the key echoed is the header's`` () =
+let ``intake-key: the scheme is what precedes the first space, and the key echoed is the one that admitted`` () =
     let exchange (url: string) (headers: (string * string) list) =
         let response, sink = send "POST" url headers [||]
         let key = (parsed (text response)).GetProperty("data").GetProperty("attributes").GetProperty("api_key").GetString()
@@ -990,8 +1036,8 @@ let ``intake-key: the scheme is what precedes the first space, and the key echoe
     Assert.Equal((Replay.testKey, [ "", 0, "test" ]), exchange "/api/v2/intake-key" [])
     Assert.Equal((Replay.testKey, [ "Bearer", 0, "test" ]), exchange "/api/v2/intake-key" [ "Authorization", "Bearer" ])
     Assert.Equal((Replay.testKey, [ "A", 64, "test" ]), exchange "/api/v2/intake-key" [ "Authorization", "A  B C" ])
-    // Admitted through the query parameter, there is no header to echo.
-    Assert.Equal(("", [ "Delegated", 64, "test" ]), exchange $"/api/v2/intake-key?api_key={Replay.testKey}" [ "Dd-Api-Key", ""; "Authorization", "Delegated p" ])
+    // Admitted through the query parameter, that is the key it gets back.
+    Assert.Equal((Replay.testKey, [ "Delegated", 64, "test" ]), exchange $"/api/v2/intake-key?api_key={Replay.testKey}" [ "Dd-Api-Key", ""; "Authorization", "Delegated p" ])
 
 [<Fact>]
 let ``the runner's requests: a body that is not JSON:API is kept raw and the answer does not move`` () =

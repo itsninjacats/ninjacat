@@ -63,6 +63,7 @@ let rec value (v: obj) : JsonNode =
     | :? DateTime as t -> JsonValue.Create(dateTime t)
     | :? DateTimeOffset as t -> JsonValue.Create(dateTime t.UtcDateTime)
     | :? Guid as g -> JsonValue.Create(g.ToString "D")
+    | :? Rows.SketchState as state -> JsonValue.Create(Rows.SketchState.name state)
     | :? UnixNanos as n ->
         let (UnixNanos ns) = n
         let seconds = floorDiv ns 1_000_000_000L

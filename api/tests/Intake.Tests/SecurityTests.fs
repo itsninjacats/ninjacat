@@ -1,6 +1,9 @@
 /// Tests of Routers/Security.fs beyond the golden fixtures.
 module NinjaCat.Api.Intake.Tests.SecurityTests
 
+// The scanner's schema marks fields older scanners still send as deprecated.
+#nowarn "44"
+
 open System
 open System.IO
 open System.Text
@@ -12,7 +15,10 @@ open Microsoft.Extensions.Primitives
 open Xunit
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Intake.Routers
+open Datadog.Sds
+open NinjaCat.Api.Intake.Tests
 open NinjaCat.Api.Intake.Tests.Golden
+open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
 
 type private Dump = Datadog.Cws.Dumpsv1.SecDump
@@ -365,7 +371,7 @@ let ``an envelope with text that is not valid Unicode keeps its row`` () =
 
 [<Fact>]
 let ``an envelope nested far deeper than .NET's default is still read`` () =
-    let deep = String('[', 600) + String(']', 600)
+    let deep = String('[', 300) + String(']', 300)
     let rows = Security.eventRows "t" now "secruntime" (envelopes $"[{{\"hostname\": \"h\", \"deep\": {deep}}}]")
 
     Assert.Equal("h", (Assert.Single rows).Hostname)
@@ -750,21 +756,143 @@ let ``nested groups are followed as deep as Go follows them`` (depth: int, expec
     Assert.Equal(expected, defaultArg (Security.wireLayout body) "malformed")
 
 [<Theory>]
-[<InlineData("0801080212036162631a00", "1:varintx2 2:bytes 3:bytes")>]
-[<InlineData("08", "protobuf did not parse as a sequence of top-level fields")>]
-[<InlineData("706c61696e2074657874", "protobuf did not parse as a sequence of top-level fields")>]
-let ``scanner results are always kept raw, the note saying what was there`` (body: string, note: string) =
+[<InlineData("0801080212036162631a00", "unexpected_shape", "not an SdsResultPayload: no resource and no results; 1:varintx2 2:bytes 3:bytes")>]
+[<InlineData("08", "decode_error", "")>]
+[<InlineData("706c61696e2074657874", "decode_error", "")>]
+let ``bytes that are not a scanner result are kept raw, the note saying what was there`` (body: string, reason: string, note: string) =
     let bytes = Convert.FromHexString body
     let response, sink = post "routeSDS" "/api/v2/sdsresult" "application/x-protobuf" bytes
 
     Assert.Equal(202, response.Status)
     Assert.Equal("{}", Encoding.UTF8.GetString response.Body)
     let raw = Assert.Single(sink.Rows<RawPayloadRow>())
-    Assert.Equal("sds", raw.Intake)
-    Assert.Equal("no_schema", raw.Reason)
-    Assert.Equal(note, raw.Note)
+    Assert.Equal(("sds", reason), (raw.Intake, raw.Reason))
+
+    if note <> "" then
+        Assert.Equal(note, raw.Note)
+    else
+        Assert.StartsWith("protobuf SdsResultPayload: ", raw.Note)
+
     Assert.Equal<byte[]>(bytes, raw.Body)
     Assert.Equal(1, sink.Writes.Length)
+
+/// What the agent's data security check builds for one Postgres table
+/// (pkg/collector/sharedlibrary/rustchecks/checks/datasecurity, result.rs).
+let private agentScan () : SdsResultPayload =
+    let table =
+        SdsResultPayload.Types.PostgresTable(
+            DatabaseClusterName = "cluster",
+            DatabaseInstanceName = "inst",
+            DatabaseHostName = "pg1",
+            DatabaseName = "shop",
+            SchemaName = "public",
+            TableName = "users",
+            ScannedRowCount = 2L
+        )
+
+    table.ScannedColumns.Add(SdsResultPayload.Types.PostgresTable.Types.ScannedColumn(Name = "email", DataType = "text"))
+    table.ScannedColumns.Add(SdsResultPayload.Types.PostgresTable.Types.ScannedColumn(Name = "name", DataType = "varchar"))
+
+    let result =
+        SdsResultPayload.Types.ScanResult(
+            Location = SdsResultPayload.Types.ScanLocation(PostgresTable = table),
+            ScanMetadata =
+                SdsResultPayload.Types.ScanMetadata(
+                    ScanTaskMetadata =
+                        SdsResultPayload.Types.ScanMetadata.Types.ScanTaskMetadata(
+                            TaskId = "task-1",
+                            SubTaskId = "sub-1",
+                            Status = SdsResultPayload.Types.ScanMetadata.Types.ScanTaskMetadata.Types.Status.Success
+                        )
+                )
+        )
+
+    result.TableMatches.Add(
+        SdsResultPayload.Types.TableMatch(RuleId = "email", ColumnName = "email", CountMatchedRows = 2L, CountMatches = 3L)
+    )
+
+    let payload =
+        SdsResultPayload(
+            Timestamp = 1_790_877_420_109L,
+            Resource = SdsResultPayload.Types.Resource(Type = "postgres_table", Name = "cluster.shop.public.users"),
+            ScanningSource = ScanningSource(Agent = ScanningSource.Types.Agent())
+        )
+
+    payload.RuleIds.Add "email"
+    payload.ScanResults.Add result
+    payload
+
+[<Fact>]
+let ``a scan of a Postgres table is one scan, one result and one row per rule that matched`` () =
+    let _, sink = post "routeSDS" "/api/v2/sdsresult" "application/x-protobuf" (agentScan().ToByteArray())
+    Assert.Empty(sink.Rows<RawPayloadRow>())
+
+    let scan = Assert.Single(sink.Rows<SdsScanRow>())
+    Assert.Equal(("postgres_table", "cluster.shop.public.users", "agent"), (scan.ResourceType, scan.ResourceName, scan.ScanningSource))
+    Assert.Equal(Some(DateTime(2026, 10, 1, 17, 57, 0, 109, DateTimeKind.Utc)), scan.Timestamp)
+    Assert.Equal<string[]>([| "email" |], scan.RuleIDs)
+    // No statistics were sent: unknown, not zero.
+    Assert.Equal(None, scan.FilesScanned)
+    Assert.Equal(1u, scan.ResultCount)
+
+    let result = Assert.Single(sink.Rows<SdsResultRow>())
+    Assert.Equal(scan.ScanID, result.ScanID)
+    Assert.Equal<SdsLocation>({ Kind = "postgres_table"; DatabaseName = "shop"; SchemaName = "public"; TableName = "users"; Path = "" }, result.Location)
+    Assert.Equal(Some 2L, result.ScannedRowCount)
+    Assert.Equal<string[]>([| "email"; "name" |], result.ScannedColumnNames)
+    Assert.Equal<string[]>([| "text"; "varchar" |], result.ScannedColumnTypes)
+    Assert.Equal(("task-1", "sub-1", "SUCCESS", ""), (result.TaskID, result.SubTaskID, result.TaskStatus, result.FailureReason))
+    Assert.Equal(None, result.TaskStartedAt)
+    Assert.Contains("\"databaseHostName\": \"pg1\"", result.LocationJson)
+    Assert.Equal((0u, 1u), (result.MatchCount, result.TableMatchCount))
+
+    let found = Assert.Single(sink.Rows<SdsMatchRow>())
+    Assert.Equal(("table_match", "email", "email", 2L, 3L), (found.Kind, found.RuleID, found.ColumnName, found.CountMatchedRows, found.CountMatches))
+    Assert.Equal((scan.ScanID, 0u, result.Location), (found.ScanID, found.ResultIndex, found.Location))
+
+[<Fact>]
+let ``a match in a file keeps where it was found, and a clean location still gets its result row`` () =
+    let hit = SdsResultPayload.Types.ScanMatch(RuleId = "aws-key", StartIndex = 4L, EndIndex = 24L, Sample = "AKIA…", Line = 7L)
+
+    let dirty = SdsResultPayload.Types.ScanResult(Location = SdsResultPayload.Types.ScanLocation(S3File = SdsResultPayload.Types.S3File(Path = "s3://b/a.txt")))
+    dirty.Matches.Add hit
+    let clean = SdsResultPayload.Types.ScanResult(Location = SdsResultPayload.Types.ScanLocation(Path = "/old/style"))
+
+    let payload =
+        SdsResultPayload(
+            Resource = SdsResultPayload.Types.Resource(Type = "s3_bucket", Name = "b"),
+            ScanStats = ScanStats(FilesScanned = 2L),
+            ScanningSource = ScanningSource(Agentless = ScanningSource.Types.Agentless(Version = "1.2", Region = "eu"))
+        )
+
+    payload.ScanResults.AddRange [ dirty; clean ]
+    payload.Rules["aws-key"] <- SdsResultPayload.Types.RuleInfo(Id = "aws-key", Name = "AWS key", Priority = "high")
+
+    let rows = Security.sdsRows "t" DateTime.UnixEpoch Guid.Empty payload
+    let scan, results, matches = rows.Scan, rows.Results, rows.Matches
+    Assert.Equal((None, "agentless", "1.2", "eu"), (scan.Timestamp, scan.ScanningSource, scan.SourceVersion, scan.SourceRegion))
+    Assert.Equal((Some 2L, Some 0L), (scan.FilesScanned, scan.TotalFilesFound))
+    Assert.StartsWith("{\"aws-key\":{", scan.Rules)
+
+    Assert.Equal<(string * string * uint32) list>(
+        [ "s3_file", "s3://b/a.txt", 1u; "path", "/old/style", 0u ],
+        results |> List.map (fun r -> r.Location.Kind, r.Location.Path, r.MatchCount)
+    )
+
+    let found = Assert.Single matches
+    Assert.Equal(("match", "aws-key", "AKIA…", 4L, 24L, Some 7L, None), (found.Kind, found.RuleID, found.Sample, found.StartIndex, found.EndIndex, found.Line, found.Row))
+    Assert.Equal(0u, found.ResultIndex)
+
+[<Fact>]
+let ``the scanner's rows fit their ClickHouse tables`` () =
+    let rows = Security.sdsRows "t" DateTime.UtcNow (Guid.NewGuid()) (agentScan ())
+
+    ClickHouseRoundTripTests.roundTrip
+        (Map [ "sds_scans", 1; "sds_results", rows.Results.Length; "sds_matches", rows.Matches.Length ])
+        (fun sink ->
+            Sink.write sink SdsScans.table [| rows.Scan |]
+            Sink.write sink SdsResults.table (Array.ofList rows.Results)
+            Sink.write sink SdsMatches.table (Array.ofList rows.Matches))
 
 [<Fact>]
 let ``an empty scanner result is a probe and is not stored`` () =
