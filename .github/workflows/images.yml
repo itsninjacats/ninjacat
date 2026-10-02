@@ -1,7 +1,7 @@
 # Builds the server and panel images and publishes them to GHCR.
 #
 # Images land at:
-#   ghcr.io/itsninjacats/ninjacat/server
+#   ghcr.io/itsninjacats/ninjacat/api
 #   ghcr.io/itsninjacats/ninjacat/frontend
 #
 # Built from ${{ github.repository }} rather than hardcoded, so a fork
@@ -38,8 +38,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: server
-            context: ./server
+          - name: api
+            context: ./api
           - name: frontend
             context: ./frontend
 
@@ -78,9 +78,8 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # amd64 only, deliberately. The server needs CGO, so an arm64 image
-          # means either a cross toolchain in the Dockerfile or QEMU emulation
-          # that turns a two-minute build into twenty. Add linux/arm64 here when
+          # amd64 only, deliberately: an arm64 image built under QEMU emulation
+          # turns a two-minute build into twenty. Add linux/arm64 here when
           # something actually needs it.
           platforms: linux/amd64
           cache-from: type=gha,scope=${{ matrix.name }}

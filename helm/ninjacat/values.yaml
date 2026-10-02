@@ -124,7 +124,7 @@ ingress:
     # Defaults to <fullname>-intake-tls.
     tlsSecretName: ""
     # One host per Datadog product, prefixed onto domainRoot. The list mirrors
-    # the switch in server/intake/routes.go — keep the two in sync. Explicit
+    # the list in api/src/Intake/Routes.fs — keep the two in sync. Explicit
     # rather than a wildcard because several hosts are two labels deep
     # (trace.agent., http-intake.logs.) and neither Ingress nor a wildcard
     # certificate matches across a dot.

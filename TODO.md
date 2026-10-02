@@ -1,7 +1,7 @@
 # TODO
 
 Open work, grouped by what it unblocks. Scoped write-ups of single items live in
-`server/docs/zadania/` (to move, see below); this file is the list.
+`api/docs/zadania/`; this file is the list.
 
 **Focus for now: infrastructure** — the agent, Kubernetes, network, databases — and the
 backend that receives it. What applications send (tracers, profiles, RUM, error tracking) and
@@ -10,18 +10,18 @@ tracers.
 
 ## 1. Finish the move to one server
 
-The F# server (`api/`) took over from the Go one; compose already runs only it, as two
-processes (`intake`, `query`). What is left before `server/` can go:
+The F# server (`api/`) is the only server: the Go one was removed on 2026-10-02, and its
+notes moved to `api/docs/`. What still names it:
 
-- [ ] `lab/k8s/`: build and deploy `api/` instead of `server/` (image, `CLICKHOUSE_HTTP_ADDR`,
-      `ninjacat-api migrate`), then run it. Also the first live check of the Kubernetes
-      intake on F#.
-- [ ] `helm/ninjacat`: the same switch in the chart (`templates/server.yaml`, the migrate
-      job, `values.yaml`).
-- [ ] Move `server/docs/` to `api/docs/` and fix the links to it (`CLAUDE.md`, `api/README.md`,
-      comments).
-- [ ] Delete `server/`, the root `go.mod` and the empty `query/`. The ClickHouse migrations
-      already live in `api/schema/migrations/`; the copy under `server/` goes with it.
+- [ ] `lab/k8s/`: its scripts build `server/`, which is gone, so the kind lab does not run.
+      Build and deploy `api/` instead (one image, two processes: `intake`, `query`;
+      `CLICKHOUSE_HTTP_ADDR`; `ninjacat-api migrate`), then run it. Also the first live
+      check of the Kubernetes intake on F#.
+- [ ] `helm/ninjacat`: the chart still deploys the Go image as one `server`
+      (`templates/server.yaml`, the migrate job, `values.yaml`). The same switch.
+- [ ] `api/docs/**` describe Go files that no longer exist; say what the F# equivalent is
+      as each note is translated.
+- [ ] An untracked `query/` directory at the root holds only IDE settings; it can go.
 - [ ] Consolidate what the parallel port wrote several times: section 1a.
 - [ ] Comments that explain a behaviour by "as Go did": say why the behaviour is right, or
       change it.
@@ -357,6 +357,6 @@ data is here; the product is not.
 ## 8. Language debt
 
 English is canonical; what is still Polish is listed in `CLAUDE.md` ("Language policy"):
-`server/docs/**`, `frontend/docs/**`, route segments (`/zadania`, `/app/ustawienia/klucze`),
+`api/docs/**`, `frontend/docs/**`, route segments (`/zadania`, `/app/ustawienia/klucze`),
 identifiers in `frontend/src/lib/server/api-keys.ts`. Translate when touched; rename routes
 in one deliberate batch.

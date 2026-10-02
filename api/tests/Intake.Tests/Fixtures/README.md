@@ -23,9 +23,10 @@ A fixture with an `edited` key no longer says what Go did: the F# server
 deliberately does something else there, the expectation was changed by hand,
 and the key says what changed and why.
 
-They were recorded by `server/intake/fixtures_test.go` (two runs, merged by
-`merge.py`, which is how `volatile` is found) and are frozen: they are what
-the Go server did at the time it was replaced.
+They were recorded by the Go server's own tests (two runs, merged, which is
+how `volatile` was found) and are frozen: they are what the Go server did at
+the time it was replaced. The Go server, and the recorder with it, was removed
+on 2026-10-02; its last commit is in the history of `server/`.
 
 `go/TestPortProbe*` were recorded the same way from a probe written during the
 port (every Kubernetes object kind, sparse and full, bad frames, container

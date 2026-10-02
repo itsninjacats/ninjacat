@@ -6,7 +6,7 @@ keeps the configuration it has. Nothing here is started.
 
 Sources: the agent's code at tag 7.84.0 (`pkg/config/remote`, `pkg/remoteconfig/state`), the
 schema in `api/src/Proto/protos/datadog-agent/datadog/remoteconfig/remoteconfig.proto`, and
-one experiment on agent 7.83.2 (`server/docs/zadania/remote-config-tuf.md`, which predates
+one experiment on agent 7.83.2 (`api/docs/zadania/remote-config-tuf.md`, which predates
 the `.proto` files and is out of date where it says the exchange is unknown).
 
 ## What travels through it

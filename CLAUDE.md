@@ -26,7 +26,7 @@ Message keys and the `en` values are authored first; `es`/`pl` follow.
 **Existing violations are migration debt, not precedent.** Large parts of the tree are still
 Polish and should be converted to English when touched, not extended:
 
-- `server/docs/**` and `frontend/docs/**` — Polish prose.
+- `api/docs/**` and `frontend/docs/**` — Polish prose.
 - `api/schema/migrations/0001_initial.sql` — Polish comments (an applied migration is never edited, so these stay).
 - `frontend/src/lib/server/api-keys.ts` — Polish identifiers (`nowyKlucz`, `skrotKlucza`, `prefiks`).
 - Polish route segments and payload keys: `/zadania`, `/app/ustawienia/klucze`, `uzytkownik`,
@@ -43,10 +43,9 @@ Independent units, no shared build:
 - `api/` — **the server**, in F# (.NET 10): one program run as two processes. `intake`
   takes what agents send and owns the write path and the ClickHouse migrations; `query`
   serves the panel API and Datadog's query API. `api/README.md` is the detailed guide.
+  `api/docs/` holds the protocol notes. They were written beside the Go server this one
+  replaced (removed on 2026-10-02), so the Go files they name no longer exist.
 - `frontend/` — SvelteKit 5 panel + Postgres (Better Auth, Drizzle). Bun.
-- `server/` — the Go server that `api/` replaced. **Retired**: compose no longer builds or
-  runs it. It stays until it is removed, as the reference the golden fixtures were recorded
-  from; do not extend it. `server/docs/` still holds the protocol notes.
 - `experiments/goja-sandbox/` — a standalone spike on sandboxed user JS. Own module, not wired in.
 
 ## Commands
@@ -291,8 +290,8 @@ Tick an item there when it is done; add one when something is deferred.
 
 ## Docs worth reading before extending the intake
 
-`server/docs/spis-endpointow-datadoga.md` (full endpoint inventory),
+`api/docs/spis-endpointow-datadoga.md` (full endpoint inventory),
 `datadog-agent.md`, `konfiguracja-agenta.md`, `traces.md`, `ddsketch-agenta.md`.
-`server/docs/zadania/` holds scoped work items (RUM router, OTLP, remote-config TUF, query
+`api/docs/zadania/` holds scoped work items (RUM router, OTLP, remote-config TUF, query
 engine, missing API endpoints, …). `frontend/docs/auth-i-ochrona-tras.md` documents the
 session model empirically. All currently in Polish — translate as you touch them.
