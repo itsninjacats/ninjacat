@@ -38,7 +38,8 @@ Fixed that day, each checked against the shipping image:
       not ours. The chart names GHCR, where CI publishes.
 - [x] CI published images with no test in front. `ci.yml`: server tests against a real
       ClickHouse, panel type check and tests, chart lint, then both images or neither;
-      actions pinned to commits; `latest` only on a release. Not yet run on GitHub.
+      actions pinned to commits; `latest` only on a release. First run on pull request #1:
+      all four jobs passed, 1 547 and 267 tests with none skipped, images built and not pushed.
 
 - [x] **Any pod in the cluster could read every tenant's telemetry.** The chart has a
       NetworkPolicy: the query port is reached from the panel's pods alone (it takes a
@@ -70,8 +71,9 @@ Fixed that day, each checked against the shipping image:
 
 Open, most urgent first:
 
-- [ ] **Merge and tag.** The chart on `main` is still the Go one. Merge this branch, tag
-      from `main`; `ci.yml` has not run on GitHub yet. (The owner does this.)
+- [ ] **Merge and tag.** The chart on `main` is still the Go one. Merge pull request #1,
+      tag from `main`. The publishing half of `ci.yml` (push to `main`, a tag) has not run
+      yet. (The owner does this.)
 - [ ] **A key has no kind** (decided 2026-10-02: do it, later). A RUM client token is a
       full API key: copied from a page it writes metrics, logs and traces for its tenant.
       A `kind` column on `api_key` (the panel's schema), carried as a claim by the keeper;
