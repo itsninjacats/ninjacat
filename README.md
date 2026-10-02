@@ -61,9 +61,12 @@ and `dotnet run --project src/Server -- query` in `api/`, and `bun run dev` in `
 Nobody can register: accounts are made on the server. Create the first one, then sign in:
 
 ```bash
-docker compose exec frontend bun run user:create -- you@example.com '<password>' 'Your Name'
-# with the shipping image: node create-user.js you@example.com '<password>' 'Your Name'
+docker compose exec frontend bun run user:create -- you@example.com --name 'Your Name'
+# with the shipping image: node create-user.js you@example.com --name 'Your Name'
 ```
+
+It asks for the password, as Django's `createsuperuser` does. Where nobody is there to type
+(a Job, a script), it takes it from `NINJACAT_USER_PASSWORD`.
 
 Create an API key in the panel under Settings, then send an agent at it. The intake
 routes on the hostname, as Datadog does, so each product needs its Datadog-shaped name

@@ -64,6 +64,10 @@ Fixed that day, each checked against the shipping image:
       an ordinary pod got no answer from the query port; install, upgrade, `helm test`, two
       intake replicas and `create-user.js` all work on the read-only filesystem.
 
+- [x] `create-user.js` asks for the password, twice and without echo, as Django's
+      `createsuperuser` does; with no terminal it reads `NINJACAT_USER_PASSWORD`. The
+      password is no longer an argument, where it stayed in the shell's history.
+
 Open, most urgent first:
 
 - [ ] **Merge and tag.** The chart on `main` is still the Go one. Merge this branch, tag
@@ -77,8 +81,6 @@ Open, most urgent first:
       text unless given a certificate, no limit on connections, no timeout, the key checked
       only when a whole frame has arrived.
 - [ ] The panel sends no security headers (CSP, `frame-ancestors`, HSTS, nosniff).
-- [ ] `create-user.js` takes the password as an argument: it ends in shell history and in
-      a Job's spec. Read it from the environment or stdin.
 - [ ] The server falls back to the ClickHouse password `ninjacat` when none is set
       (`Config.fs`); the chart and `compose.prod.yaml` always set one. Fail instead.
 - [ ] `compose.prod.yaml`: the panel on every interface as plain HTTP, no health checks on

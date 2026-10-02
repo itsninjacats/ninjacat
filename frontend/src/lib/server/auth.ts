@@ -23,7 +23,7 @@ export const auth = betterAuth({
 		// does and whatever anyone posts at it directly.
 		//
 		// Accounts are created from the command line instead:
-		//     bun run user:create -- <email> <password> [name]
+		//     bun run user:create -- <email> [--name "Their Name"]
 		// See scripts/create-user.ts, which builds its own better-auth instance
 		// with sign-up enabled against this same database — the CLI is allowed to
 		// do what the public endpoint is not.
