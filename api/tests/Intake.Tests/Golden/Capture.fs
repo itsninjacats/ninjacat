@@ -1,5 +1,7 @@
 namespace NinjaCat.Api.Intake.Tests.Golden
 
+open Microsoft.Extensions.Logging
+open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 
 /// One `Sink.write`: the table, the rows as records, and each row as the
@@ -29,3 +31,16 @@ type CapturingSink() =
                   Columns = table.Columns
                   Rows = rows |> Array.map box
                   Args = rows |> Array.map table.Values }
+
+/// What a test gives the intake to work with.
+type Deps =
+    { Store: ApiKeys.Store
+      Sink: ISink
+      Log: ILogger
+      AckUnknown: bool }
+
+/// An answer as a test reads it.
+type Response =
+    { Status: int
+      Headers: (string * string) list
+      Body: byte[] }

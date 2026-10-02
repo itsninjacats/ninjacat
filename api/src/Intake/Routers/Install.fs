@@ -11,7 +11,10 @@ module NinjaCat.Api.Intake.Routers.Install
 
 open System.Globalization
 open System.Text
+open System.Threading.Tasks
 open Microsoft.Extensions.Logging
+open Microsoft.AspNetCore.Http
+open Oxpecker
 open NinjaCat.Api.Intake
 
 /// Go's strconv.Quote, which is what `%q` prints: the text in double quotes,
@@ -53,59 +56,62 @@ let goQuote (text: string) : string =
     quoted.Append('"').ToString()
 
 /// Marks an answer as coming from a Distribution API v2 registry.
-let private fromRegistry (response: Response) : Response =
-    Response.withHeader "Docker-Distribution-Api-Version" "registry/2.0" response
+let private fromRegistry: EndpointHandler =
+    setHttpHeader "Docker-Distribution-Api-Version" "registry/2.0"
 
 /// The fleet installer speaks OCI Distribution, and no packages are hosted
 /// here. The protocol's own "not found" — 404 with an OCI error body — is
 /// not a network error, so the installer fails at once with a readable
 /// message instead of retrying. go-containerregistry parses `code`.
-let private ociError (code: string) (message: string) : Response =
-    Response.jsonOf 404 {| errors = [ {| code = code; message = message |} ] |} |> fromRegistry
+let private ociError (code: string) (message: string) : EndpointHandler =
+    fromRegistry >=> setStatusCode 404 >=> json {| errors = [ {| code = code; message = message |} ] |}
 
 /// The diagnose sweep's HEAD /: any 2xx is "Success".
-let handleProbe (_: Request) : Response = Response.status 200
+let handleProbe (_: byte[]) : EndpointHandler = setStatusCode 200
+
 
 /// The API version check every registry client starts with.
-let handleVersionCheck (_: Request) : Response =
-    Response.json 200 "{}" |> fromRegistry
+let handleVersionCheck (_: byte[]) (ctx: HttpContext) : Task =
+    (fromRegistry >=> json {||}) ctx
 
-let handleManifest (repo: string) (tag: string) (_: Request) : Response =
-    ociError "MANIFEST_UNKNOWN" ("ninjacat does not host packages: " + repo + ":" + tag)
+let handleManifest (repo: string) (tag: string) (_: byte[]) (ctx: HttpContext) : Task =
+    ociError "MANIFEST_UNKNOWN" ("ninjacat does not host packages: " + repo + ":" + tag) ctx
 
-let handleBlob (repo: string) (digest: string) (_: Request) : Response =
-    ociError "BLOB_UNKNOWN" ("ninjacat does not host packages: " + repo + "@" + digest)
+let handleBlob (repo: string) (digest: string) (_: byte[]) (ctx: HttpContext) : Task =
+    ociError "BLOB_UNKNOWN" ("ninjacat does not host packages: " + repo + "@" + digest) ctx
 
 /// system-probe fetching a kernel BTF archive. Its SHA256 is checked against
 /// the BTF_DD remote config catalog, so no substitute could be served; a
 /// non-200 makes the loader fall back to its next BTF source.
-let handleBtf (_: Request) : Response =
-    Response.errors 404 [ "BTF archives are not hosted here" ]
+let handleBtf (_: byte[]) (ctx: HttpContext) : Task =
+    (setStatusCode 404 >=> json {| errors = [ "BTF archives are not hosted here" ] |}) ctx
 
 
 /// The note of a payload with no published schema: the event platform's
 /// origin headers and the Content-Type are all the context there is beside
 /// the opaque bytes.
-let private originNote (r: Request) : string =
-    let origin = goQuote (r.Header "DD-EVP-ORIGIN")
-    let version = goQuote (r.Header "DD-EVP-ORIGIN-VERSION")
-    let contentType = goQuote (r.Header "Content-Type")
+let private originNote (ctx: HttpContext) : string =
+    let origin = goQuote (Ctx.header ctx "DD-EVP-ORIGIN")
+    let version = goQuote (Ctx.header ctx "DD-EVP-ORIGIN-VERSION")
+    let contentType = goQuote (Ctx.header ctx "Content-Type")
     $"DD-EVP-ORIGIN={origin} DD-EVP-ORIGIN-VERSION={version} Content-Type={contentType}"
 
-let private accepted = Response.json 202 "{}"
+let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
 
 /// The Rust ai_prompt_logger posts through the local evp_proxy, which adds
 /// the API key; it only checks for a 2xx. The producer is not in
 /// datadog-agent and publishes no schema, so the body is kept as it arrived.
-let handleAIUsage (r: Request) : Response =
-    Raw.store r "aiusage" "no_schema" (originNote r) r.Body
-    accepted
+let handleAIUsage (body: byte[]) (ctx: HttpContext) : Task =
+    Raw.store ctx "aiusage" "no_schema" (originNote ctx) body
+    accepted ctx
 
 /// The agent never sends LLM Observability data here; the only caller is the
 /// connectivity diagnose, which posts no body and wants a 2xx.
-let handleLLMObs (r: Request) : Response =
-    if r.Body.Length > 0 && not (Diagnose.isSweep r) then
-        r.Log.LogWarning("[llmobs] unexpected payload — the agent only probes this host")
-        Raw.store r "llmobs" "no_schema" ("unexpected payload — the agent only probes this host; " + originNote r) r.Body
+let handleLLMObs (body: byte[]) (ctx: HttpContext) : Task =
+    let log = Ctx.log ctx
 
-    accepted
+    if body.Length > 0 && not (Diagnose.isSweep ctx) then
+        log.LogWarning("[llmobs] unexpected payload — the agent only probes this host")
+        Raw.store ctx "llmobs" "no_schema" ("unexpected payload — the agent only probes this host; " + originNote ctx) body
+
+    accepted ctx

@@ -30,9 +30,12 @@ open System.IO
 open System.Text
 open System.Text.Encodings.Web
 open System.Text.Json
+open System.Threading.Tasks
 open Google.Protobuf
 open Google.Protobuf.WellKnownTypes
 open Microsoft.Extensions.Logging
+open Microsoft.AspNetCore.Http
+open Oxpecker
 open Datadog.Agentdiscovery
 open Datadog.Healthplatform
 open NinjaCat.Api.Intake
@@ -40,7 +43,7 @@ open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
 
 /// Every handler here answers 202 with an empty object, whatever happened.
-let private accepted = Response.json 202 "{}"
+let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
 
 // The JSON tracks are read generically. A value is a `JsonElement option`,
 // where None is Go's nil: a key that is absent, or JSON null.
@@ -200,12 +203,16 @@ let private parseItems (body: byte[]) : Result<JsonElement list, string> =
 
 /// A batched track: each item becomes rows or is kept raw, so one bad item
 /// never takes the good ones with it.
-let private handleBatch (r: Request) (intake: string) (table: Table<'row>) (toRows: DateTime -> JsonElement -> 'row list) : Response =
-    if r.Body.Length > 0 then
-        match parseItems r.Body with
+let private handleBatch (body: byte[]) (ctx: HttpContext) (intake: string) (table: Table<'row>) (toRows: DateTime -> JsonElement -> 'row list) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    if body.Length > 0 then
+        match parseItems body with
         | Error e ->
-            r.Log.LogWarning("[{Intake}] json: {Error} ({Bytes} bytes)", intake, e, r.Body.Length)
-            Raw.store r intake "unexpected_shape" "body is not a JSON array or object" r.Body
+            log.LogWarning("[{Intake}] json: {Error} ({Bytes} bytes)", intake, e, body.Length)
+            Raw.store ctx intake "unexpected_shape" "body is not a JSON array or object" body
         | Ok items ->
             let now = DateTime.UtcNow
             let rows = ResizeArray<'row>()
@@ -213,14 +220,14 @@ let private handleBatch (r: Request) (intake: string) (table: Table<'row>) (toRo
             for item in items do
                 if not (isObjectOrNull item) then
                     let raw = Encoding.UTF8.GetBytes(item.GetRawText())
-                    r.Log.LogWarning("[{Intake}] not a JSON object ({Bytes} bytes)", intake, raw.Length)
-                    Raw.store r intake "decode_error" "item is not a JSON object" raw
-                elif r.Tenant <> "" then
+                    log.LogWarning("[{Intake}] not a JSON object ({Bytes} bytes)", intake, raw.Length)
+                    Raw.store ctx intake "decode_error" "item is not a JSON object" raw
+                elif tenant <> "" then
                     rows.AddRange(toRows now item)
 
-            Sink.write r.Sink table (rows.ToArray())
+            Sink.write sink table (rows.ToArray())
 
-    accepted
+    accepted ctx
 
 /// The enum's name as Go prints it; a number the schema does not know as digits.
 let private payloadFormatName (format: AgentDiscoveryConfigFilePayloadFormat) : string =
@@ -268,28 +275,32 @@ let agentDiscoveryRows (tenant: string) (receivedAt: DateTime) (batch: AgentDisc
 
 /// agentdiscovery-intake: which integration config files and env vars each
 /// agent runtime sees. One AgentDiscoveryPayloadBatch per request.
-let handleAgentDiscovery (r: Request) : Response =
-    if r.Body.Length > 0 then
+let handleAgentDiscovery (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    if body.Length > 0 then
         let decoded =
             try
-                Ok(AgentDiscoveryPayloadBatch.Parser.ParseFrom r.Body)
+                Ok(AgentDiscoveryPayloadBatch.Parser.ParseFrom body)
             with :? InvalidProtocolBufferException as e ->
                 Error e.Message
 
         match decoded with
         | Error e ->
-            r.Log.LogWarning("[agentdiscovery] protobuf: {Error} ({Bytes} bytes)", e, r.Body.Length)
-            Raw.store r "agentdiscovery" "decode_error" e r.Body
+            log.LogWarning("[agentdiscovery] protobuf: {Error} ({Bytes} bytes)", e, body.Length)
+            Raw.store ctx "agentdiscovery" "decode_error" e body
         | Ok batch when batch.Payloads.Count = 0 ->
             // Protobuf skips fields it does not know, so a payload meant for
             // another endpoint decodes into an empty batch. Not a decode
             // error, so it is not kept raw.
-            r.Log.LogWarning("[agentdiscovery] decoded to zero payloads ({Bytes} bytes) — wrong payload type?", r.Body.Length)
+            log.LogWarning("[agentdiscovery] decoded to zero payloads ({Bytes} bytes) — wrong payload type?", body.Length)
         | Ok batch ->
-            if r.Tenant <> "" then
-                Sink.write r.Sink AgentDiscovery.table (agentDiscoveryRows r.Tenant DateTime.UtcNow batch)
+            if tenant <> "" then
+                Sink.write sink AgentDiscovery.table (agentDiscoveryRows tenant DateTime.UtcNow batch)
 
-    accepted
+    accepted ctx
 
 
 /// Raised by the readers below; decodeHealthReport turns it into an Error.
@@ -602,22 +613,26 @@ let healthReportRows
 
 /// agenthealth-intake: issues the agent found with its own setup, one
 /// HealthReport per request. Not an event platform track.
-let handleAgentHealth (r: Request) : Response =
-    if r.Body.Length > 0 then
-        match decodeHealthReport r.Body with
+let handleAgentHealth (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    if body.Length > 0 then
+        match decodeHealthReport body with
         | Error e ->
-            r.Log.LogWarning("[agenthealth] json: {Error} ({Bytes} bytes)", e, r.Body.Length)
-            Raw.store r "agenthealth" "decode_error" e r.Body
+            log.LogWarning("[agenthealth] json: {Error} ({Bytes} bytes)", e, body.Length)
+            Raw.store ctx "agenthealth" "decode_error" e body
         | Ok report ->
-            if r.Tenant <> "" then
+            if tenant <> "" then
                 // The wire has no report id; this one joins the two tables.
                 let reportRow, issueRows =
-                    healthReportRows r.Tenant DateTime.UtcNow (Guid.NewGuid()) report (healthIssuesRaw r.Body)
+                    healthReportRows tenant DateTime.UtcNow (Guid.NewGuid()) report (healthIssuesRaw body)
 
-                Sink.write r.Sink AgentHealthReports.table [| reportRow |]
-                Sink.write r.Sink AgentHealthIssues.table issueRows
+                Sink.write sink AgentHealthReports.table [| reportRow |]
+                Sink.write sink AgentHealthIssues.table issueRows
 
-    accepted
+    accepted ctx
 
 
 /// The label in raw_payloads. Not "events": /api/v1/events on api.<site>
@@ -684,21 +699,25 @@ let eventManagementRow (tenant: string) (receivedAt: DateTime) (envelope: JsonEl
 
 /// event-management-intake: notable events, logon duration, anomaly
 /// notifications. A stream track, so one envelope per request.
-let handleEventManagement (r: Request) : Response =
-    if r.Body.Length > 0 then
-        match parseObject r.Body with
-        | None ->
-            r.Log.LogWarning("[event-management] not a JSON object ({Bytes} bytes)", r.Body.Length)
-            Raw.store r eventManagementIntake "decode_error" "body is not a JSON object" r.Body
-        | Some envelope ->
-            match eventManagementRow r.Tenant DateTime.UtcNow envelope with
-            | None ->
-                Raw.store r eventManagementIntake "unexpected_shape" "data.attributes is missing or not an object" r.Body
-            | Some row ->
-                if r.Tenant <> "" then
-                    Sink.write r.Sink EventManagement.table [| row |]
+let handleEventManagement (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
 
-    accepted
+    if body.Length > 0 then
+        match parseObject body with
+        | None ->
+            log.LogWarning("[event-management] not a JSON object ({Bytes} bytes)", body.Length)
+            Raw.store ctx eventManagementIntake "decode_error" "body is not a JSON object" body
+        | Some envelope ->
+            match eventManagementRow tenant DateTime.UtcNow envelope with
+            | None ->
+                Raw.store ctx eventManagementIntake "unexpected_shape" "data.attributes is missing or not an object" body
+            | Some row ->
+                if tenant <> "" then
+                    Sink.write sink EventManagement.table [| row |]
+
+    accepted ctx
 
 
 let private softwareEntryKeys =
@@ -744,8 +763,10 @@ let hostSoftwareRows (tenant: string) (receivedAt: DateTime) (payload: JsonEleme
     | _ -> []
 
 /// softinv-intake: installed packages per host, batched.
-let handleSoftwareInventory (r: Request) : Response =
-    handleBatch r "softinv" HostSoftware.table (hostSoftwareRows r.Tenant)
+let handleSoftwareInventory (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+
+    handleBatch body ctx "softinv" HostSoftware.table (hostSoftwareRows tenant)
 
 
 let private syntheticsKeys = set [ "test"; "location"; "result"; "_dd"; "enrichment"; "v" ]
@@ -834,8 +855,10 @@ let syntheticsResultRow (tenant: string) (receivedAt: DateTime) (item: JsonEleme
 
 /// http-synthetics: results of network tests the agent ran on the server's
 /// behalf, batched.
-let handleSynthetics (r: Request) : Response =
-    handleBatch r "synthetics" SyntheticsResults.table (fun now item -> [ syntheticsResultRow r.Tenant now item ])
+let handleSynthetics (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+
+    handleBatch body ctx "synthetics" SyntheticsResults.table (fun now item -> [ syntheticsResultRow tenant now item ])
 
 
 let private lineageKeys =
@@ -896,30 +919,34 @@ let openLineageEventRow
 
 /// OpenLineage RunEvents, forwarded as they are by the trace-agent's reverse
 /// proxy, with ?api-version=2 when the agent is told to add it. The transport
-/// posts one RunEvent per request; an array is accepted in case a client
+/// posts one RunEvent per request; an array is accepted ctx in case a client
 /// batches.
-let handleOpenLineage (r: Request) : Response =
-    let apiVersion = r.Query "api-version"
-    let via = r.Header "Via"
+let handleOpenLineage (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
 
-    handleBatch r "lineage" OpenLineage.table (fun now event ->
-        [ openLineageEventRow r.Tenant now apiVersion via event ])
+    let apiVersion = Ctx.query ctx "api-version"
+    let via = Ctx.header ctx "Via"
+
+    handleBatch body ctx "lineage" OpenLineage.table (fun now event ->
+        [ openLineageEventRow tenant now apiVersion via event ])
 
 /// Results of Data Observability query actions, batched. They come from
 /// Python integrations and no type documents them, so each entry is stored
 /// whole.
-let handleQueryActions (r: Request) : Response =
-    let origin = r.Header "Dd-Evp-Origin"
-    let originVersion = r.Header "Dd-Evp-Origin-Version"
+let handleQueryActions (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
 
-    handleBatch r "query-actions" QueryActionResults.table (fun now entry ->
+    let origin = Ctx.header ctx "Dd-Evp-Origin"
+    let originVersion = Ctx.header ctx "Dd-Evp-Origin-Version"
+
+    handleBatch body ctx "query-actions" QueryActionResults.table (fun now entry ->
         let keys =
             if entry.ValueKind = JsonValueKind.Object then
                 entry.EnumerateObject() |> Seq.map _.Name |> Seq.distinct |> Seq.sort |> Array.ofSeq
             else
                 [||]
 
-        [ { TenantID = r.Tenant
+        [ { TenantID = tenant
             ReceivedAt = now
             Result = canonicalJson entry
             Keys = keys

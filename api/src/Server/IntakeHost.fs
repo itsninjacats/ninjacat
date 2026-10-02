@@ -81,11 +81,9 @@ let run (cfg: Config.Config) (args: string[]) : int =
         .AddSingleton<ApiKeys.Store>(store)
         .AddSingleton<ClickHouseSink>(fun services ->
             ClickHouseSink(writeClient, services.GetRequiredService<ILoggerFactory>().CreateLogger "NinjaCat.Api.Storage"))
-        .AddSingleton<Deps>(fun services ->
-            { Store = store
-              Sink = services.GetRequiredService<ClickHouseSink>()
-              Log = services.GetRequiredService<ILoggerFactory>().CreateLogger "NinjaCat.Api.Intake"
-              AckUnknown = cfg.AckUnknown })
+        // What the handlers write through.
+        .AddSingleton<ISink>(fun services -> services.GetRequiredService<ClickHouseSink>() :> ISink)
+        .AddSingleton<IntakeSettings>({ AckUnknown = cfg.AckUnknown })
         // Registered first, so stopped last: the writers flush after
         // everything that feeds them has stopped.
         .AddHostedService<SinkLifetime>()
@@ -97,13 +95,15 @@ let run (cfg: Config.Config) (args: string[]) : int =
         .AddOxpecker()
     |> ignore
 
+    ApiKeyAuth.addTo builder.Services
+
     let app = builder.Build()
     app.Services.GetRequiredService<ApiKeysKeeper>().FetchNow()
 
     if cfg.Debug then
         // The capture lab: every request is dumped, the ones nothing serves
         // above all. The body is read here and put back for the handler.
-        let log = app.Services.GetRequiredService<Deps>().Log
+        let log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger "NinjaCat.Api.Intake"
 
         (app :> IApplicationBuilder).Use(fun (http: HttpContext) (next: RequestDelegate) ->
             task {

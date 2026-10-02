@@ -9,6 +9,7 @@ module NinjaCat.Api.Intake.Tests.RumTests
 open System
 open System.IO
 open System.Net
+open System.Security.Claims
 open System.Text
 open System.Text.Json
 open System.Text.Json.Nodes
@@ -69,12 +70,11 @@ let private post (sink: CapturingSink) (url: string) (headers: (string * string)
 let private header (name: string) (response: Response) : string =
     response.Headers |> List.tryFind (fun (n, _) -> n = name) |> Option.map snd |> Option.defaultValue ""
 
-let private requestOf (url: string) (headers: (string * string) list) : Request =
-    { Http = httpContext "POST" url headers
-      Body = [||]
-      Key = Some { ID = "test"; Name = "test"; TenantID = "t" }
-      Sink = CapturingSink()
-      Log = NullLogger.Instance }
+/// A request as the handlers see it once a key of tenant "t" has admitted it.
+let private requestOf (url: string) (headers: (string * string) list) : HttpContext =
+    let ctx = httpContext "POST" url headers
+    ctx.User <- ClaimsPrincipal(ClaimsIdentity([ Claim("tenant", "t") ], "test"))
+    ctx
 
 let private sender: RumRequest = Rum.requestInfo (requestOf "/api/v2/rum" [])
 

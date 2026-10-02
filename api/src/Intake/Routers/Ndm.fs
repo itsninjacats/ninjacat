@@ -22,12 +22,15 @@ open System.Net.Sockets
 open System.Text
 open System.Text.Json
 open System.Text.RegularExpressions
+open System.Threading.Tasks
 open Microsoft.Extensions.Logging
+open Microsoft.AspNetCore.Http
+open Oxpecker
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
 
-let private accepted = Response.json 202 "{}"
+let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
 
 /// One entry of a batch: its JSON text, and that text parsed.
 type Entry =
@@ -224,11 +227,15 @@ let metadataRows (tenant: string) (payload: JsonElement) : Result<MetadataRows, 
 
     if bad.Count = 0 then Ok rows else Error bad[0]
 
-let handleMetadata (r: Request) : Response =
-    match entries r.Body with
+let handleMetadata (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    match entries body with
     | Error e ->
-        r.Log.LogWarning("[ndm] not a JSON array: {Error}", e)
-        Raw.store r "ndm" "decode_error" e r.Body
+        log.LogWarning("[ndm] not a JSON array: {Error}", e)
+        Raw.store ctx "ndm" "decode_error" e body
     | Ok batch ->
         let devices = ResizeArray<NDMDeviceRow>()
         let interfaces = ResizeArray<NDMInterfaceRow>()
@@ -237,23 +244,23 @@ let handleMetadata (r: Request) : Response =
 
         batch
         |> List.iteri (fun i entry ->
-            match entry.Json |> Result.bind (metadataRows r.Tenant) with
+            match entry.Json |> Result.bind (metadataRows tenant) with
             | Error e ->
-                r.Log.LogWarning("[ndm] entry {Index}: {Error}", i, e)
-                Raw.store r "ndm" "decode_error" $"entry {i}: {e}" (Encoding.UTF8.GetBytes entry.Text)
+                log.LogWarning("[ndm] entry {Index}: {Error}", i, e)
+                Raw.store ctx "ndm" "decode_error" $"entry {i}: {e}" (Encoding.UTF8.GetBytes entry.Text)
             | Ok rows ->
-                if r.Tenant <> "" then
+                if tenant <> "" then
                     devices.AddRange rows.Devices
                     interfaces.AddRange rows.Interfaces
                     addresses.AddRange rows.Addresses
                     objects.AddRange rows.Objects)
 
-        Sink.write r.Sink NdmDevices.table (devices.ToArray())
-        Sink.write r.Sink NdmInterfaces.table (interfaces.ToArray())
-        Sink.write r.Sink NdmIpAddresses.table (addresses.ToArray())
-        Sink.write r.Sink NdmMetadataObjects.table (objects.ToArray())
+        Sink.write sink NdmDevices.table (devices.ToArray())
+        Sink.write sink NdmInterfaces.table (interfaces.ToArray())
+        Sink.write sink NdmIpAddresses.table (addresses.ToArray())
+        Sink.write sink NdmMetadataObjects.table (objects.ToArray())
 
-    accepted
+    accepted ctx
 
 /// report.NCMPayload, plus agent_hostname and inventories: both are on the
 /// wire though the agent's struct does not document them.
@@ -291,27 +298,31 @@ let configRows (tenant: string) (payload: JsonElement) : Result<NDMDeviceConfigR
 
     if bad.Count = 0 then Ok rows else Error bad[0]
 
-let handleConfig (r: Request) : Response =
-    match entries r.Body with
+let handleConfig (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    match entries body with
     | Error e ->
-        r.Log.LogWarning("[ndmconfig] not a JSON array: {Error}", e)
-        Raw.store r "ndmconfig" "decode_error" e r.Body
+        log.LogWarning("[ndmconfig] not a JSON array: {Error}", e)
+        Raw.store ctx "ndmconfig" "decode_error" e body
     | Ok batch ->
         let rows = ResizeArray<NDMDeviceConfigRow>()
 
         batch
         |> List.iteri (fun i entry ->
-            match entry.Json |> Result.bind (configRows r.Tenant) with
+            match entry.Json |> Result.bind (configRows tenant) with
             | Error e ->
-                r.Log.LogWarning("[ndmconfig] entry {Index}: {Error}", i, e)
-                Raw.store r "ndmconfig" "decode_error" $"entry {i}: {e}" (Encoding.UTF8.GetBytes entry.Text)
+                log.LogWarning("[ndmconfig] entry {Index}: {Error}", i, e)
+                Raw.store ctx "ndmconfig" "decode_error" $"entry {i}: {e}" (Encoding.UTF8.GetBytes entry.Text)
             | Ok configs ->
-                if r.Tenant <> "" then
+                if tenant <> "" then
                     rows.AddRange configs)
 
-        Sink.write r.Sink NdmDeviceConfigs.table (rows.ToArray())
+        Sink.write sink NdmDeviceConfigs.table (rows.ToArray())
 
-    accepted
+    accepted ctx
 
 /// What the formatter writes under "trap" for every trap. Any other key is
 /// an enrichment: a variable the MIB resolved to a name.
@@ -351,11 +362,15 @@ let trapRow (tenant: string) (trap: JsonElement) : Result<SNMPTrapRow, string> =
 
     if bad.Count = 0 then Ok row else Error bad[0]
 
-let handleTraps (r: Request) : Response =
-    match entries r.Body with
+let handleTraps (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    match entries body with
     | Error e ->
-        r.Log.LogWarning("[ndmtraps] not a JSON array: {Error}", e)
-        Raw.store r "ndmtraps" "decode_error" e r.Body
+        log.LogWarning("[ndmtraps] not a JSON array: {Error}", e)
+        Raw.store ctx "ndmtraps" "decode_error" e body
     | Ok batch ->
         let rows = ResizeArray<SNMPTrapRow>()
 
@@ -366,9 +381,9 @@ let handleTraps (r: Request) : Response =
 
                 // The agent's start-up probe is `{}`: not worth a warning.
                 if not (Raw.isProbe body) then
-                    r.Log.LogWarning("[ndmtraps] {Note}", note)
+                    log.LogWarning("[ndmtraps] {Note}", note)
 
-                Raw.store r "ndmtraps" reason note body
+                Raw.store ctx "ndmtraps" reason note body
 
             match entry.Json with
             | Error e -> keep "decode_error" $"entry {i}: {e}"
@@ -378,15 +393,15 @@ let handleTraps (r: Request) : Response =
                 match (GoJson.members envelope).TryFind "trap" with
                 | None -> keep "unexpected_shape" $"entry {i}: no trap object"
                 | Some trap ->
-                    match trapRow r.Tenant trap with
+                    match trapRow tenant trap with
                     | Error e -> keep "decode_error" $"entry {i}: trap: {e}"
                     | Ok row ->
-                        if r.Tenant <> "" then
+                        if tenant <> "" then
                             rows.Add row)
 
-        Sink.write r.Sink SnmpTraps.table (rows.ToArray())
+        Sink.write sink SnmpTraps.table (rows.ToArray())
 
-    accepted
+    accepted ctx
 
 /// The root keys the agent's FlowPayload writes for its own fields. Every
 /// other root key is one of the flow's additional fields.
@@ -465,16 +480,20 @@ let decodeFlows (tenant: string) (body: byte[]) : Result<NetflowFlowRow[], strin
         let rows = flows |> List.mapi (flowRow bad tenant) |> Array.ofList
         if bad.Count = 0 then Ok rows else Error bad[0]
 
-let handleFlow (r: Request) : Response =
-    match decodeFlows r.Tenant r.Body with
-    | Error e ->
-        r.Log.LogWarning("[ndmflow] not a list of flows: {Error}", e)
-        Raw.store r "ndmflow" "decode_error" e r.Body
-    | Ok rows ->
-        if r.Tenant <> "" then
-            Sink.write r.Sink NetflowFlows.table rows
+let handleFlow (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
 
-    accepted
+    match decodeFlows tenant body with
+    | Error e ->
+        log.LogWarning("[ndmflow] not a list of flows: {Error}", e)
+        Raw.store ctx "ndmflow" "decode_error" e body
+    | Ok rows ->
+        if tenant <> "" then
+            Sink.write sink NetflowFlows.table rows
+
+    accepted ctx
 
 let private ipv4Syntax =
     Regex(@"\A(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\z", RegexOptions.Compiled)
@@ -597,13 +616,17 @@ let decodePaths (tenant: string) (body: byte[]) : Result<NetworkPathRow[], strin
         let rows = paths |> List.mapi (pathRow bad tenant) |> Array.ofList
         if bad.Count = 0 then Ok rows else Error bad[0]
 
-let handleNetpath (r: Request) : Response =
-    match decodePaths r.Tenant r.Body with
-    | Error e ->
-        r.Log.LogWarning("[netpath] not a list of network paths: {Error}", e)
-        Raw.store r "netpath" "decode_error" e r.Body
-    | Ok rows ->
-        if r.Tenant <> "" then
-            Sink.write r.Sink NetworkPaths.table rows
+let handleNetpath (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
 
-    accepted
+    match decodePaths tenant body with
+    | Error e ->
+        log.LogWarning("[netpath] not a list of network paths: {Error}", e)
+        Raw.store ctx "netpath" "decode_error" e body
+    | Ok rows ->
+        if tenant <> "" then
+            Sink.write sink NetworkPaths.table rows
+
+    accepted ctx

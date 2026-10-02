@@ -4,8 +4,11 @@ open System
 open System.Text
 open System.Text.Json
 open System.Text.RegularExpressions
+open System.Threading.Tasks
 open Google.Protobuf
 open Microsoft.Extensions.Logging
+open Microsoft.AspNetCore.Http
+open Oxpecker
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
 
@@ -297,62 +300,69 @@ module Raw =
     ///   reason  "no_schema" | "decode_error" | "unexpected_shape"
     ///   note    the decoder's error, the field that was missing
     ///   body    what the handler tried to decode, already decompressed
-    let store (r: Request) (intake: string) (reason: string) (note: string) (body: byte[]) : unit =
-        if r.Tenant = "" then
-            r.Log.LogWarning("[raw] {Intake} {Path}: no tenant, payload dropped ({Bytes} B)", intake, r.Path, body.Length)
+    let store (ctx: HttpContext) (intake: string) (reason: string) (note: string) (body: byte[]) : unit =
+        let tenant = Ctx.tenant ctx
+        let log = Ctx.log ctx
+        let sink = Ctx.sink ctx
+
+        if tenant = "" then
+            log.LogWarning("[raw] {Intake} {Path}: no tenant, payload dropped ({Bytes} B)", intake, ctx.Request.Path.Value, body.Length)
         elif isProbe body then
-            r.Log.LogDebug("[raw] {Intake} {Path}: empty probe body, not stored", intake, r.Path)
+            log.LogDebug("[raw] {Intake} {Path}: empty probe body, not stored", intake, ctx.Request.Path.Value)
         else
             let headers =
                 keptHeaders
                 |> List.choose (fun name ->
-                    match r.Header name with
+                    match Ctx.header ctx name with
                     | "" -> None
                     | value -> Some(name, value))
                 |> Map.ofList
 
             let query =
-                r.Http.Request.Query
+                ctx.Request.Query
                 |> Seq.map (fun pair -> pair.Key, pair.Value.ToArray())
                 |> Map.ofSeq
 
             let row: RawPayloadRow =
-                { TenantID = r.Tenant
+                { TenantID = tenant
                   ReceivedAt = DateTime.UtcNow
                   Intake = intake
                   Reason = reason
-                  Method = r.Method
+                  Method = ctx.Request.Method
                   // The Host header is what the whole intake dispatches on.
-                  Host = r.Host
-                  Path = r.Path
+                  Host = ctx.Request.Host.Value
+                  Path = ctx.Request.Path.Value
                   Query = query
-                  ContentType = r.Header "Content-Type"
-                  ContentEncoding = r.Header "Content-Encoding"
+                  ContentType = Ctx.header ctx "Content-Type"
+                  ContentEncoding = Ctx.header ctx "Content-Encoding"
                   Headers = headers
                   Body = body
                   BodyBytes = uint64 body.Length
                   Note = note }
 
-            Sink.write r.Sink RawPayloads.table [| row |]
+            Sink.write sink RawPayloads.table [| row |]
 
 /// Counters the intake keeps about itself, stored as ordinary metrics
 /// (`ninjacat.intake.<name>`) so they can be graphed like any other.
 module SelfMetrics =
     let imagesSkipped = "images.skipped"
 
-    let count (r: Request) (host: string) (name: string) (value: float) (tags: Map<string, string[]>) : unit =
+    let count (ctx: HttpContext) (host: string) (name: string) (value: float) (tags: Map<string, string[]>) : unit =
+        let tenant = Ctx.tenant ctx
+        let sink = Ctx.sink ctx
+
         if value <> 0.0 then
             let point =
-                { Metrics.point r.Tenant DateTime.UtcNow ("ninjacat.intake." + name) value with
+                { Metrics.point tenant DateTime.UtcNow ("ninjacat.intake." + name) value with
                     Host = host
                     MetricType = "COUNT"
                     SourceType = "ninjacat"
                     Tags = tags }
 
-            Sink.write r.Sink Metrics.table [| point |]
+            Sink.write sink Metrics.table [| point |]
 
 module Diagnose =
     /// The agent's connectivity sweep at startup: an empty body or `{}`,
     /// nothing to decode.
-    let isSweep (r: Request) : bool =
-        r.Header "X-Requested-With" = "datadog-agent-diagnose"
+    let isSweep (ctx: HttpContext) : bool =
+        Ctx.header ctx "X-Requested-With" = "datadog-agent-diagnose"

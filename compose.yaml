@@ -24,6 +24,10 @@ x-server-environment: &server-environment
   DOTNET_USE_POLLING_FILE_WATCHER: "true"
   # The .NET SDK reports its own usage to Microsoft unless told not to.
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  # The image presets port 8080 for ASP.NET; the server names its own ports
+  # (NINJACAT_ADDR, NINJACAT_INTERNAL_ADDR), and would warn at every start
+  # that it overrides the preset.
+  ASPNETCORE_HTTP_PORTS: ""
 
 services:
   clickhouse:

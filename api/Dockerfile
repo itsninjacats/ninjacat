@@ -26,6 +26,10 @@ RUN mkdir /data && chown app:app /data
 WORKDIR /data
 USER app
 
+# The base image presets port 8080 for ASP.NET. The server names its own
+# ports, and would warn at every start that it overrides the preset.
+ENV ASPNETCORE_HTTP_PORTS=
+
 # `intake` listens on 8080 (and 10516, logs over TCP), `query` on 8081.
 EXPOSE 8080 8081 10516
 

@@ -33,7 +33,10 @@ open System.Globalization
 open System.Security.Cryptography
 open System.Text
 open System.Text.Json
+open System.Threading.Tasks
 open Microsoft.Extensions.Logging
+open Microsoft.AspNetCore.Http
+open Oxpecker
 open Datadog.Agentpayload
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Intake.Routers.ApiPayloads
@@ -42,9 +45,9 @@ open NinjaCat.Api.Storage.Rows
 
 /// The reply the agent expects after a batch of metrics. It reads the body:
 /// an empty object would be an API error to it.
-let private ackSeries = Response.json 202 """{"errors":[]}"""
+let private ackSeries: EndpointHandler = setStatusCode 202 >=> json {| errors = List.empty<string> |}
 
-let private statusOk = Response.json 200 """{"status":"ok"}"""
+let private statusOk: EndpointHandler = json {| status = "ok" |}
 
 /// The keys of a map for a note: sorted, the first eight, then how many more.
 let private keyList (values: Map<string, 'a>) : string =
@@ -109,22 +112,26 @@ let private wholeSeconds (value: float) : int64 =
 /// The host is a resource of type "host"; every other resource type (the
 /// agent writes one more, "device") goes into the row's resources map, so a
 /// device series stays distinguishable from a host one.
-let handleSeriesV2 (r: Request) : Response =
-    if Diagnose.isSweep r then
-        ackSeries
+let handleSeriesV2 (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    if Diagnose.isSweep ctx then
+        ackSeries ctx
     else
         let decoded =
-            if Body.isJson (r.Header "Content-Type") r.Body then
-                parseSeriesV2Json r.Body
+            if Body.isJson (Ctx.header ctx "Content-Type") body then
+                parseSeriesV2Json body
             else
-                parseSeriesV2Protobuf r.Body
+                parseSeriesV2Protobuf body
 
         match decoded with
         | Error error ->
-            r.Log.LogWarning("[v2/series] {Error}", error)
-            Raw.store r "series" "decode_error" error r.Body
+            log.LogWarning("[v2/series] {Error}", error)
+            Raw.store ctx "series" "decode_error" error body
         | Ok payload ->
-            if r.Tenant <> "" then
+            if tenant <> "" then
                 let points = ResizeArray<MetricPoint>()
 
                 for series in payload.Series do
@@ -150,7 +157,7 @@ let handleSeriesV2 (r: Request) : Response =
 
                     for point in series.Points do
                         points.Add
-                            { Metrics.point r.Tenant (wireSeconds point.Timestamp) series.Metric point.Value with
+                            { Metrics.point tenant (wireSeconds point.Timestamp) series.Metric point.Value with
                                 Host = host
                                 MetricType = Wire.metricTypeName (int series.Type)
                                 SourceType = series.SourceTypeName
@@ -162,7 +169,7 @@ let handleSeriesV2 (r: Request) : Response =
                                 OriginService = origin.OriginService
                                 Resources = resources }
 
-                if r.Log.IsEnabled LogLevel.Debug then
+                if log.IsEnabled LogLevel.Debug then
                     // The agent also writes Origin field 3 (metric_type = 9,
                     // "do not index"), which the published proto reserves. A
                     // reserved field has no name to decode into, so it is
@@ -176,11 +183,11 @@ let handleSeriesV2 (r: Request) : Response =
                         |> Seq.length
 
                     if doNotIndex > 0 then
-                        r.Log.LogDebug("[v2/series] {Count} series flagged do-not-index by the agent (Origin field 3)", doNotIndex)
+                        log.LogDebug("[v2/series] {Count} series flagged do-not-index by the agent (Origin field 3)", doNotIndex)
 
-                Sink.write r.Sink Metrics.table (points.ToArray())
+                Sink.write sink Metrics.table (points.ToArray())
 
-        ackSeries
+        ackSeries ctx
 
 /// The v1 wire's type word; an unknown word stays UNSPECIFIED rather than
 /// being guessed at.
@@ -198,35 +205,39 @@ let private additionalString (name: string) (values: Map<string, JsonElement>) :
 /// also writes device, source_type_name and unit, which the model does not
 /// declare: the last two have columns, device goes into the resources map
 /// under the name v2 uses for it, anything else undeclared into `extra`.
-let handleSeriesV1 (r: Request) : Response =
-    if Diagnose.isSweep r then
-        ackSeries
+let handleSeriesV1 (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    if Diagnose.isSweep ctx then
+        ackSeries ctx
     else
-        match parseSeriesV1 r.Body with
+        match parseSeriesV1 body with
         | Error error ->
-            r.Log.LogWarning("[v1/series] {Error}", error)
-            Raw.store r "series" "decode_error" error r.Body
+            log.LogWarning("[v1/series] {Error}", error)
+            Raw.store ctx "series" "decode_error" error body
         | Ok payload ->
             if payload.Unparsed then
-                r.Log.LogWarning("[v1/series] the payload did not fit datadogV1.MetricsPayload, kept raw")
-                Raw.store r "series" "unexpected_shape" "v1 payload did not fit datadogV1.MetricsPayload" r.Body
+                log.LogWarning("[v1/series] the payload did not fit datadogV1.MetricsPayload, kept raw")
+                Raw.store ctx "series" "unexpected_shape" "v1 payload did not fit datadogV1.MetricsPayload" body
 
             if not payload.Additional.IsEmpty then
                 // A key beside `series` belongs to the batch, not to a point:
                 // copying it onto every row would multiply it. The body is
                 // kept instead, once.
                 Raw.store
-                    r
+                    ctx
                     "series"
                     "unexpected_shape"
                     ("v1 payload carried undeclared top-level keys: " + keyList payload.Additional)
-                    r.Body
+                    body
 
             for at, item in payload.Rejected do
-                r.Log.LogWarning("[v1/series] series #{Index} is not a datadogV1.Series, kept raw", at)
-                Raw.store r "series" "unexpected_shape" $"v1 series #{at} is not a datadogV1.Series" (GoJson.rawBytes item)
+                log.LogWarning("[v1/series] series #{Index} is not a datadogV1.Series, kept raw", at)
+                Raw.store ctx "series" "unexpected_shape" $"v1 series #{at} is not a datadogV1.Series" (GoJson.rawBytes item)
 
-            if r.Tenant <> "" then
+            if tenant <> "" then
                 let points = ResizeArray<MetricPoint>()
                 let mutable badPoints = 0
 
@@ -235,8 +246,8 @@ let handleSeriesV1 (r: Request) : Response =
                     let at = payload.Positions[i]
 
                     if series.Unparsed then
-                        r.Log.LogWarning("[v1/series] series #{Index} did not fit datadogV1.Series, kept raw", at)
-                        Raw.store r "series" "unexpected_shape" $"v1 series #{at} did not fit datadogV1.Series" (GoJson.rawBytes series.Raw)
+                        log.LogWarning("[v1/series] series #{Index} did not fit datadogV1.Series, kept raw", at)
+                        Raw.store ctx "series" "unexpected_shape" $"v1 series #{at} did not fit datadogV1.Series" (GoJson.rawBytes series.Raw)
                     else
                         let interval =
                             match series.Interval with
@@ -257,7 +268,7 @@ let handleSeriesV1 (r: Request) : Response =
                             match point.Pair |> Array.truncate 2 with
                             | [| Some timestamp; Some value |] ->
                                 points.Add
-                                    { Metrics.point r.Tenant (wireSeconds (wholeSeconds timestamp)) series.Metric value with
+                                    { Metrics.point tenant (wireSeconds (wholeSeconds timestamp)) series.Metric value with
                                         Host = series.Host
                                         MetricType = normalizeTypeWord series.Type
                                         SourceType = additionalString "source_type_name" series.Additional
@@ -273,23 +284,26 @@ let handleSeriesV1 (r: Request) : Response =
                                 badPoints <- badPoints + 1
 
                                 Raw.store
-                                    r
+                                    ctx
                                     "series"
                                     "unexpected_shape"
                                     $"v1 series #{at} ({series.Metric}) point #{j} has a nil timestamp or value"
                                     (GoJson.rawBytes point.Raw)
 
                 if badPoints > 0 then
-                    r.Log.LogWarning("[v1/series] {Count} points had a nil timestamp or value, kept raw", badPoints)
+                    log.LogWarning("[v1/series] {Count} points had a nil timestamp or value, kept raw", badPoints)
 
-                Sink.write r.Sink Metrics.table (points.ToArray())
+                Sink.write sink Metrics.table (points.ToArray())
 
-        ackSeries
+        ackSeries ctx
 
 /// Who sent a batch, as opposed to what was in it: agent version, timezone,
 /// the agent's clock and both of its IPs. The api_key in the same block is a
 /// credential and is not carried over. An all-empty block is not stored.
-let private storeBatchMetadata (r: Request) (intake: string) (sender: CommonMetadata) : unit =
+let private storeBatchMetadata (ctx: HttpContext) (intake: string) (sender: CommonMetadata) : unit =
+    let tenant = Ctx.tenant ctx
+    let sink = Ctx.sink ctx
+
     let empty =
         sender.AgentVersion = ""
         && sender.Timezone = ""
@@ -297,9 +311,9 @@ let private storeBatchMetadata (r: Request) (intake: string) (sender: CommonMeta
         && sender.InternalIp = ""
         && sender.PublicIp = ""
 
-    if r.Tenant <> "" && not empty then
+    if tenant <> "" && not empty then
         let row: AgentBatchMetadataRow =
-            { TenantID = r.Tenant
+            { TenantID = tenant
               ReceivedAt = DateTime.UtcNow
               Intake = intake
               AgentVersion = sender.AgentVersion
@@ -308,7 +322,7 @@ let private storeBatchMetadata (r: Request) (intake: string) (sender: CommonMeta
               InternalIP = sender.InternalIp
               PublicIP = sender.PublicIp }
 
-        Sink.write r.Sink AgentBatchMetadata.table [| row |]
+        Sink.write sink AgentBatchMetadata.table [| row |]
 
 /// /api/beta/sketches: DDSketch histograms the agent has already built. One
 /// row per dogsketch, not per metric: each is its own point in time.
@@ -317,30 +331,34 @@ let private storeBatchMetadata (r: Request) (intake: string) (sender: CommonMeta
 /// values and ranks). The current agent never writes it and it cannot become
 /// a bucket row without inventing numbers, so such a sketch is kept raw,
 /// whole.
-let handleSketches (r: Request) : Response =
-    if Diagnose.isSweep r then
-        ackSeries
+let handleSketches (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    if Diagnose.isSweep ctx then
+        ackSeries ctx
     else
         let decoded =
-            if Body.isJson (r.Header "Content-Type") r.Body then
-                parseSketchesJson r.Body
+            if Body.isJson (Ctx.header ctx "Content-Type") body then
+                parseSketchesJson body
             else
-                parseSketchesProtobuf r.Body
+                parseSketchesProtobuf body
 
         match decoded with
         | Error error ->
-            r.Log.LogWarning("[sketches] {Error}", error)
-            Raw.store r "sketches" "decode_error" error r.Body
+            log.LogWarning("[sketches] {Error}", error)
+            Raw.store ctx "sketches" "decode_error" error body
         | Ok payload ->
-            if r.Tenant <> "" then
+            if tenant <> "" then
                 let rows = ResizeArray<SketchRow>()
 
                 for sketch in payload.Sketches do
                     if sketch.Distributions.Count > 0 then
-                        r.Log.LogWarning("[sketches] legacy Distribution for {Metric}, kept raw", sketch.Metric)
+                        log.LogWarning("[sketches] legacy Distribution for {Metric}, kept raw", sketch.Metric)
 
                         Raw.store
-                            r
+                            ctx
                             "sketches"
                             "no_schema"
                             $"legacy pre-DDSketch Distribution for {sketch.Metric} has no row shape"
@@ -356,7 +374,7 @@ let handleSketches (r: Request) : Response =
 
                     for dogsketch in sketch.Dogsketches do
                         rows.Add
-                            { TenantID = r.Tenant
+                            { TenantID = tenant
                               Timestamp = wireSeconds dogsketch.Ts
                               Metric = sketch.Metric
                               Host = sketch.Host
@@ -374,10 +392,10 @@ let handleSketches (r: Request) : Response =
                               Resources = Map.empty
                               Extra = Map.empty }
 
-                Sink.write r.Sink Sketches.table (rows.ToArray())
-                storeBatchMetadata r "sketches" (if isNull payload.Metadata then CommonMetadata() else payload.Metadata)
+                Sink.write sink Sketches.table (rows.ToArray())
+                storeBatchMetadata ctx "sketches" (if isNull payload.Metadata then CommonMetadata() else payload.Metadata)
 
-        ackSeries
+        ackSeries ctx
 
 /// A distribution point's time and values. The pair is heterogeneous: of its
 /// elements the last timestamp and the last value list count. No values, no
@@ -403,44 +421,48 @@ let distributionPoint (items: DistributionItem[]) : (DateTime * float[]) option 
 /// agent's sketches, which arrive already bucketed. What the model could not
 /// fit is kept whole: a body with no series list, a series that fit no
 /// series, a pair that could not be split.
-let handleDistributionPoints (r: Request) : Response =
-    if Diagnose.isSweep r then
-        ackSeries
+let handleDistributionPoints (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    if Diagnose.isSweep ctx then
+        ackSeries ctx
     else
-        match parseDistributionPoints r.Body with
+        match parseDistributionPoints body with
         | Error error ->
-            r.Log.LogWarning("[distribution_points] {Error}", error)
-            Raw.store r "distribution_points" "decode_error" error r.Body
+            log.LogWarning("[distribution_points] {Error}", error)
+            Raw.store ctx "distribution_points" "decode_error" error body
         | Ok payload ->
             if payload.Unparsed then
-                r.Log.LogWarning("[distribution_points] the payload did not fit the model, kept raw")
+                log.LogWarning("[distribution_points] the payload did not fit the model, kept raw")
 
                 Raw.store
-                    r
+                    ctx
                     "distribution_points"
                     "unexpected_shape"
                     "payload did not fit datadogV1.DistributionPointsPayload"
-                    r.Body
+                    body
 
             if not payload.Additional.IsEmpty then
                 Raw.store
-                    r
+                    ctx
                     "distribution_points"
                     "unexpected_shape"
                     ("payload carried undeclared top-level keys: " + keyList payload.Additional)
-                    r.Body
+                    body
 
             for at, item in payload.Rejected do
-                r.Log.LogWarning("[distribution_points] series #{Index} is not a series, kept raw", at)
+                log.LogWarning("[distribution_points] series #{Index} is not a series, kept raw", at)
 
                 Raw.store
-                    r
+                    ctx
                     "distribution_points"
                     "unexpected_shape"
                     $"series #{at} is not a datadogV1.DistributionPointsSeries"
                     (GoJson.rawBytes item)
 
-            if r.Tenant <> "" then
+            if tenant <> "" then
                 let rows = ResizeArray<SketchRow>()
                 let mutable badPairs = 0
 
@@ -452,10 +474,10 @@ let handleDistributionPoints (r: Request) : Response =
                         // When only the `type` word was wrong the points came
                         // through and still become rows: a typo there must
                         // not cost a host its distribution.
-                        r.Log.LogWarning("[distribution_points] series #{Index} did not fit the model, kept raw", at)
+                        log.LogWarning("[distribution_points] series #{Index} did not fit the model, kept raw", at)
 
                         Raw.store
-                            r
+                            ctx
                             "distribution_points"
                             "unexpected_shape"
                             $"series #{at} did not fit datadogV1.DistributionPointsSeries"
@@ -474,7 +496,7 @@ let handleDistributionPoints (r: Request) : Response =
                             let stats = sketch.Stats
 
                             rows.Add
-                                { TenantID = r.Tenant
+                                { TenantID = tenant
                                   Timestamp = timestamp
                                   Metric = series.Metric
                                   Host = series.Host
@@ -495,18 +517,18 @@ let handleDistributionPoints (r: Request) : Response =
                             badPairs <- badPairs + 1
 
                             Raw.store
-                                r
+                                ctx
                                 "distribution_points"
                                 "unexpected_shape"
                                 $"series #{at} ({series.Metric}) point #{j} is not a [timestamp, [values]] pair"
                                 (GoJson.rawBytes point.Raw)
 
                 if badPairs > 0 then
-                    r.Log.LogWarning("[distribution_points] {Count} points were not [timestamp, [values]] pairs, kept raw", badPairs)
+                    log.LogWarning("[distribution_points] {Count} points were not [timestamp, [values]] pairs, kept raw", badPairs)
 
-                Sink.write r.Sink Sketches.table (rows.ToArray())
+                Sink.write sink Sketches.table (rows.ToArray())
 
-        ackSeries
+        ackSeries ctx
 
 // ---------------------------------------------------------------------------
 // Service checks
@@ -521,39 +543,43 @@ let statusName (status: int) : string =
 
 /// /api/v1/check_run. A check answers "is this thing working", not "how much
 /// of it is there"; monitors of the "service is down" kind are built on these.
-let handleCheckRun (r: Request) : Response =
-    if Diagnose.isSweep r then
-        ackSeries
+let handleCheckRun (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    if Diagnose.isSweep ctx then
+        ackSeries ctx
     else
-        match parseCheckRuns r.Body with
+        match parseCheckRuns body with
         | Error error ->
-            r.Log.LogWarning("[check_run] {Error}", error)
-            Raw.store r "check_run" "decode_error" error r.Body
+            log.LogWarning("[check_run] {Error}", error)
+            Raw.store ctx "check_run" "decode_error" error body
         | Ok checks ->
             if not checks.Undecodable.IsEmpty then
-                r.Log.LogWarning("[check_run] {Count} checks could not be decoded, kept raw", checks.Undecodable.Length)
+                log.LogWarning("[check_run] {Count} checks could not be decoded, kept raw", checks.Undecodable.Length)
 
             checks.Undecodable
             |> List.iteri (fun i item ->
-                Raw.store r "check_run" "unexpected_shape" $"check #{i} is not a datadogV1.ServiceCheck" (GoJson.rawBytes item))
+                Raw.store ctx "check_run" "unexpected_shape" $"check #{i} is not a datadogV1.ServiceCheck" (GoJson.rawBytes item))
 
-            if r.Tenant <> "" then
+            if tenant <> "" then
                 let rows = ResizeArray<CheckRunRow>()
 
                 checks.Runs
                 |> List.iteri (fun i run ->
                     if run.Unparsed then
-                        r.Log.LogWarning("[check_run] check #{Index} did not fit datadogV1.ServiceCheck, kept raw", i)
+                        log.LogWarning("[check_run] check #{Index} did not fit datadogV1.ServiceCheck, kept raw", i)
 
                         Raw.store
-                            r
+                            ctx
                             "check_run"
                             "unexpected_shape"
                             $"check #{i} did not fit datadogV1.ServiceCheck"
                             (GoJson.rawBytes run.Raw)
                     else
                         rows.Add
-                            { TenantID = r.Tenant
+                            { TenantID = tenant
                               Timestamp = wireSeconds run.Timestamp
                               CheckName = run.Check
                               Host = run.HostName
@@ -562,9 +588,9 @@ let handleCheckRun (r: Request) : Response =
                               Tags = Tags.toMultiMap run.Tags
                               Extra = extraEncoded [] run.Additional })
 
-                Sink.write r.Sink Checks.table (rows.ToArray())
+                Sink.write sink Checks.table (rows.ToArray())
 
-        ackSeries
+        ackSeries ctx
 
 // ---------------------------------------------------------------------------
 // Events
@@ -591,16 +617,20 @@ let private newEventId () : Guid * uint64 =
 /// POST /api/v1/events. Unlike every other endpoint this one MUST return a
 /// body: the client reads the reply into EventCreateResponse and keeps the
 /// id.
-let handleEvents (r: Request) : Response =
-    if Diagnose.isSweep r then
-        Response.json 202 """{"status":"ok"}"""
+let handleEvents (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    if Diagnose.isSweep ctx then
+        (setStatusCode 202 >=> json {| status = "ok" |}) ctx
     else
-        match parseEvents r.Body with
+        match parseEvents body with
         | Error error ->
-            r.Log.LogWarning("[events] {Error}", error)
-            Raw.store r "events" "decode_error" error r.Body
-            Response.jsonOf 400 {| status = "error"; error = error |}
-        | Ok [] -> Response.jsonOf 400 {| status = "error"; error = "no event with a title" |}
+            log.LogWarning("[events] {Error}", error)
+            Raw.store ctx "events" "decode_error" error body
+            (setStatusCode 400 >=> json {| status = "error"; error = error |}) ctx
+        | Ok [] -> (setStatusCode 400 >=> json {| status = "error"; error = "no event with a title" |}) ctx
         | Ok events ->
             let rows = ResizeArray<EventRow>()
             // Every event gets an id, stored or not: the reply carries the
@@ -614,17 +644,17 @@ let handleEvents (r: Request) : Response =
                     // Nothing decoded, or an alert_type or priority outside
                     // the enum. Coercing an event whose own words could not
                     // be read would put a guess in a column.
-                    r.Log.LogWarning("[events] event #{Index} did not fit datadogV1.EventCreateRequest, kept raw", i)
+                    log.LogWarning("[events] event #{Index} did not fit datadogV1.EventCreateRequest, kept raw", i)
 
                     Raw.store
-                        r
+                        ctx
                         "events"
                         "unexpected_shape"
                         $"event #{i} did not fit datadogV1.EventCreateRequest"
                         (GoJson.rawBytes event.Raw)
                 else
                     rows.Add
-                        { TenantID = r.Tenant
+                        { TenantID = tenant
                           Timestamp = wireSeconds event.DateHappened
                           EventID = id
                           EventIDNum = number
@@ -643,13 +673,12 @@ let handleEvents (r: Request) : Response =
                           PriorityRaw = defaultArg event.Priority ""
                           Extra = extraEncoded [] event.Additional })
 
-            if r.Tenant <> "" then
-                Sink.write r.Sink Events.table (rows.ToArray())
+            if tenant <> "" then
+                Sink.write sink Events.table (rows.ToArray())
 
             let first = events.Head
 
-            Response.jsonOf
-                202
+            let reply =
                 {| status = "ok"
                    event =
                     {| id = firstId
@@ -664,6 +693,8 @@ let handleEvents (r: Request) : Response =
                        source_type_name = first.SourceTypeName
                        device_name = first.DeviceName
                        url = "" |} |}
+
+            (setStatusCode 202 >=> json reply) ctx
 
 // ---------------------------------------------------------------------------
 // /intake/: the Agent v5 endpoint
@@ -743,15 +774,19 @@ let private eventsBySource (events: JsonElement) : Result<Map<string, JsonElemen
 
 /// The events variant: {"events": {<source>: [...]}, "internalHostname"}.
 /// The rows go to the same table as /api/v1/events.
-let private intakeEvents (r: Request) (envelope: Map<string, JsonElement>) : unit =
+let private intakeEvents (ctx: HttpContext) (envelope: Map<string, JsonElement>) : unit =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
     let events = envelope["events"]
 
     match eventsBySource events with
     | Error error ->
-        r.Log.LogWarning("[intake] events: {Error}", error)
-        Raw.store r "intake" "unexpected_shape" ("events is not a source -> events map: " + error) (GoJson.rawBytes events)
+        log.LogWarning("[intake] events: {Error}", error)
+        Raw.store ctx "intake" "unexpected_shape" ("events is not a source -> events map: " + error) (GoJson.rawBytes events)
     | Ok bySource ->
-        if r.Tenant <> "" then
+        if tenant <> "" then
             let host = GoJson.lenientString (envelope.TryFind "internalHostname")
 
             // By source in sorted order, so two replays of one payload give
@@ -759,9 +794,9 @@ let private intakeEvents (r: Request) (envelope: Map<string, JsonElement>) : uni
             let rows =
                 [| for pair in bySource do
                        for event in pair.Value do
-                           intakeEventRow r.Tenant pair.Key host event |]
+                           intakeEventRow tenant pair.Key host event |]
 
-            Sink.write r.Sink Events.table rows
+            Sink.write sink Events.table rows
 
 /// One positional agent_checks entry: 0 check name, 1 source type, 2 instance
 /// id, 3 status, 4 message. A shorter array is normal, which is why Status is
@@ -802,7 +837,11 @@ let private arrayItems (value: JsonElement option) : JsonElement list =
 /// positional arrays, and external_host_tags, [[hostname, {source: [tags]}]]
 /// — tags for hosts the agent is NOT running on, which is why they get a
 /// table of their own.
-let private intakeAgentChecks (r: Request) (envelope: Map<string, JsonElement>) : unit =
+let private intakeAgentChecks (ctx: HttpContext) (envelope: Map<string, JsonElement>) : unit =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
     let checks = arrayItems (envelope.TryFind "agent_checks")
 
     let externalTags =
@@ -811,10 +850,10 @@ let private intakeAgentChecks (r: Request) (envelope: Map<string, JsonElement>) 
             if entry.ValueKind = JsonValueKind.Array && entry.GetArrayLength() = 2 then
                 Some(GoJson.lenientString (Some entry[0]), GoJson.lenientStringLists (Some entry[1]))
             else
-                r.Log.LogWarning("[intake] external_host_tags[{Index}] is not a [hostname, tags] pair", i)
+                log.LogWarning("[intake] external_host_tags[{Index}] is not a [hostname, tags] pair", i)
 
                 Raw.store
-                    r
+                    ctx
                     "intake"
                     "unexpected_shape"
                     $"external_host_tags[{i}] is not a [hostname, tags] pair"
@@ -822,7 +861,7 @@ let private intakeAgentChecks (r: Request) (envelope: Map<string, JsonElement>) 
 
                 None)
 
-    if r.Tenant <> "" then
+    if tenant <> "" then
         let now = DateTime.UtcNow
         let host = GoJson.lenientString (envelope.TryFind "internalHostname")
         let version = GoJson.lenientString (envelope.TryFind "agentVersion")
@@ -833,12 +872,12 @@ let private intakeAgentChecks (r: Request) (envelope: Map<string, JsonElement>) 
         checks
         |> List.iteri (fun i check ->
             if check.ValueKind = JsonValueKind.Array then
-                checkRows.Add(agentCheckRow r.Tenant now host version uuid meta (Array.ofSeq (check.EnumerateArray())))
+                checkRows.Add(agentCheckRow tenant now host version uuid meta (Array.ofSeq (check.EnumerateArray())))
             else
-                r.Log.LogWarning("[intake] agent_checks[{Index}] is not an array", i)
-                Raw.store r "intake" "unexpected_shape" $"agent_checks[{i}] is not a positional array" (GoJson.rawBytes check))
+                log.LogWarning("[intake] agent_checks[{Index}] is not an array", i)
+                Raw.store ctx "intake" "unexpected_shape" $"agent_checks[{i}] is not a positional array" (GoJson.rawBytes check))
 
-        Sink.write r.Sink AgentChecks.table (checkRows.ToArray())
+        Sink.write sink AgentChecks.table (checkRows.ToArray())
 
         // One row per SOURCE: a host carries several at once, and flattening
         // them would lose which of them said what.
@@ -848,13 +887,13 @@ let private intakeAgentChecks (r: Request) (envelope: Map<string, JsonElement>) 
                    | None -> ()
                    | Some(describedHost, bySource) ->
                        for pair in bySource do
-                           { TenantID = r.Tenant
+                           { TenantID = tenant
                              ReceivedAt = now
                              Host = describedHost
                              Source = pair.Key
                              Tags = Tags.toMultiMap pair.Value } |]
 
-        Sink.write r.Sink ExternalHostTags.table tagRows
+        Sink.write sink ExternalHostTags.table tagRows
 
 /// The envelope keys hostRow reads by name; the rest go to intake_extra.
 /// apiKey is in the list so that a credential cannot reach a column by way of
@@ -937,10 +976,13 @@ let hostRow
 
 /// The host metadata variant. The payload is loose and shifts between agent
 /// versions, so fields are read by name.
-let private intakeHost (r: Request) (envelope: Map<string, JsonElement>) : unit =
+let private intakeHost (ctx: HttpContext) (envelope: Map<string, JsonElement>) : unit =
+    let tenant = Ctx.tenant ctx
+    let sink = Ctx.sink ctx
+
     let hostname = GoJson.lenientString (envelope.TryFind "internalHostname")
 
-    if r.Tenant <> "" && hostname <> "" then
+    if tenant <> "" && hostname <> "" then
         let gohai =
             match GoJson.lenientString (envelope.TryFind "gohai") with
             | "" -> Map.empty
@@ -951,7 +993,7 @@ let private intakeHost (r: Request) (envelope: Map<string, JsonElement>) : unit 
 
         let row =
             hostRow
-                r.Tenant
+                tenant
                 hostname
                 (GoJson.lenientString (envelope.TryFind "agentVersion"))
                 (GoJson.lenientString (envelope.TryFind "os"))
@@ -960,7 +1002,7 @@ let private intakeHost (r: Request) (envelope: Map<string, JsonElement>) : unit 
                 gohai
                 (GoJson.lenientStringLists (envelope.TryFind "host-tags"))
 
-        Sink.write r.Sink Hosts.table [| row |]
+        Sink.write sink Hosts.table [| row |]
 
 /// One row of a resources snapshot, as gohai writes it:
 /// [usernames, cpu %, memory %, vms, rss, name, number of pids]
@@ -995,7 +1037,11 @@ let private processGroup (tenant: string) (host: string) (at: DateTime) (fields:
 /// {"meta":{"host":…},"processes":{"snaps":[[unix seconds, [row, …]], …]}}:
 /// the processes of the host grouped by name, sent with the host metadata.
 /// Whatever of it is not that shape keeps the body raw, once.
-let private intakeResources (r: Request) (resources: JsonElement) : unit =
+let private intakeResources (body: byte[]) (ctx: HttpContext) (resources: JsonElement) : unit =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
     let host =
         GoJson.field "meta" resources |> Option.bind (GoJson.field "host") |> Option.bind GoJson.asString |> Option.defaultValue ""
 
@@ -1005,7 +1051,7 @@ let private intakeResources (r: Request) (resources: JsonElement) : unit =
         | _ -> None
 
     match snaps with
-    | None -> Raw.store r "intake" "unexpected_shape" "resources without processes.snaps" r.Body
+    | None -> Raw.store ctx "intake" "unexpected_shape" "resources without processes.snaps" body
     | Some snaps ->
         let rows = ResizeArray<ProcessGroupRow>()
         let mutable unread = 0
@@ -1021,16 +1067,16 @@ let private intakeResources (r: Request) (resources: JsonElement) : unit =
             | None -> unread <- unread + 1
             | Some(at, list) ->
                 for fields in list.EnumerateArray() do
-                    match processGroup r.Tenant host at fields with
+                    match processGroup tenant host at fields with
                     | Some row -> rows.Add row
                     | None -> unread <- unread + 1
 
         if unread > 0 then
-            r.Log.LogWarning("[intake] resources: {Count} snapshots or rows not read, kept raw", unread)
-            Raw.store r "intake" "unexpected_shape" $"resources: {unread} snapshots or rows are not the resources check's shape" r.Body
+            log.LogWarning("[intake] resources: {Count} snapshots or rows not read, kept raw", unread)
+            Raw.store ctx "intake" "unexpected_shape" $"resources: {unread} snapshots or rows are not the resources check's shape" body
 
-        if r.Tenant <> "" then
-            Sink.write r.Sink ProcessGroups.table (rows.ToArray())
+        if tenant <> "" then
+            Sink.write sink ProcessGroups.table (rows.ToArray())
 
 /// Four producers share /intake/ and nothing but the path; they are told
 /// apart by their top-level keys, in this order:
@@ -1039,12 +1085,14 @@ let private intakeResources (r: Request) (resources: JsonElement) : unit =
 ///   agent_checks           the V5 collector: check statuses, external host tags
 ///   gohai or systemStats   host metadata
 ///   resources alone        the resources check's process groups
-let private decodeIntake (r: Request) : unit =
-    let undecodable (error: string) =
-        r.Log.LogWarning("[intake] JSON: {Error}", error)
-        Raw.store r "intake" "decode_error" error r.Body
+let private decodeIntake (body: byte[]) (ctx: HttpContext) : unit =
+    let log = Ctx.log ctx
 
-    match GoJson.parse r.Body with
+    let undecodable (error: string) =
+        log.LogWarning("[intake] JSON: {Error}", error)
+        Raw.store ctx "intake" "decode_error" error body
+
+    match GoJson.parse body with
     | Error error -> undecodable error
     | Ok root when root.ValueKind <> JsonValueKind.Object && root.ValueKind <> JsonValueKind.Null ->
         undecodable (GoJson.mismatch root "map[string]jsontext.Value")
@@ -1052,22 +1100,22 @@ let private decodeIntake (r: Request) : unit =
         let envelope = GoJson.members root
 
         if envelope.ContainsKey "events" then
-            intakeEvents r envelope
+            intakeEvents ctx envelope
         elif envelope.ContainsKey "agent_checks" then
-            intakeAgentChecks r envelope
+            intakeAgentChecks ctx envelope
         elif envelope.ContainsKey "gohai" || envelope.ContainsKey "systemStats" then
-            intakeHost r envelope
+            intakeHost ctx envelope
         elif envelope.ContainsKey "resources" && envelope.Count = 1 then
-            intakeResources r envelope["resources"]
+            intakeResources body ctx envelope["resources"]
         else
-            r.Log.LogWarning("[intake] unrecognised shape, keys: {Keys}", keyList envelope)
-            Raw.store r "intake" "unexpected_shape" ("no known /intake/ variant key, keys: " + keyList envelope) r.Body
+            log.LogWarning("[intake] unrecognised shape, keys: {Keys}", keyList envelope)
+            Raw.store ctx "intake" "unexpected_shape" ("no known /intake/ variant key, keys: " + keyList envelope) body
 
-let handleIntake (r: Request) : Response =
-    if not (Diagnose.isSweep r) then
-        decodeIntake r
+let handleIntake (body: byte[]) (ctx: HttpContext) : Task =
+    if not (Diagnose.isSweep ctx) then
+        decodeIntake body ctx
 
-    statusOk
+    statusOk ctx
 
 // ---------------------------------------------------------------------------
 // /api/v1/metadata
@@ -1081,12 +1129,16 @@ let private metadataVariants =
 
 let private metadataEnvelopeKeys = [ "hostname"; "clustername"; "cluster_id"; "timestamp"; "uuid" ]
 
-let private storeMetadata (r: Request) : unit =
-    let undecodable (error: string) =
-        r.Log.LogWarning("[metadata] JSON: {Error}", error)
-        Raw.store r "metadata" "decode_error" error r.Body
+let private storeMetadata (body: byte[]) (ctx: HttpContext) : unit =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
 
-    match GoJson.parse r.Body with
+    let undecodable (error: string) =
+        log.LogWarning("[metadata] JSON: {Error}", error)
+        Raw.store ctx "metadata" "decode_error" error body
+
+    match GoJson.parse body with
     | Error error -> undecodable error
     | Ok root when root.ValueKind <> JsonValueKind.Object && root.ValueKind <> JsonValueKind.Null ->
         undecodable (GoJson.mismatch root "map[string]jsontext.Value")
@@ -1097,15 +1149,15 @@ let private storeMetadata (r: Request) : unit =
         if found.IsEmpty then
             // A producer we have never seen, or a variant key renamed
             // between releases.
-            r.Log.LogWarning("[metadata] no known variant key, keys: {Keys}", keyList envelope)
+            log.LogWarning("[metadata] no known variant key, keys: {Keys}", keyList envelope)
 
             Raw.store
-                r
+                ctx
                 "metadata"
                 "no_schema"
                 ("no known /api/v1/metadata variant key, keys: " + keyList envelope)
-                r.Body
-        elif r.Tenant <> "" then
+                body
+        elif tenant <> "" then
             let timestamp = GoJson.lenientInt64 (GoJson.field "timestamp" root)
             let now = DateTime.UtcNow
             // Every key that is neither the shared envelope nor a variant of
@@ -1115,7 +1167,7 @@ let private storeMetadata (r: Request) : unit =
             // One row per variant key present: `variant` stays a real filter.
             let rows: AgentMetadataRow[] =
                 [| for variant in found ->
-                       { TenantID = r.Tenant
+                       { TenantID = tenant
                          ReceivedAt = now
                          Variant = variant
                          Hostname = GoJson.lenientString (GoJson.field "hostname" root)
@@ -1126,17 +1178,17 @@ let private storeMetadata (r: Request) : unit =
                          Payload = rawText variant envelope
                          EnvelopeExtra = extra } |]
 
-            Sink.write r.Sink AgentMetadata.table rows
+            Sink.write sink AgentMetadata.table rows
 
 /// /api/v1/metadata: the inventory payloads. Each is an envelope of hostname,
 /// timestamp and uuid plus ONE variant key; the cluster-agent's carry
 /// clustername and cluster_id instead of hostname. None of the variants has
 /// a published type, so each is stored as its JSON under its key.
-let handleMetadata (r: Request) : Response =
-    if not (Diagnose.isSweep r) then
-        storeMetadata r
+let handleMetadata (body: byte[]) (ctx: HttpContext) : Task =
+    if not (Diagnose.isSweep ctx) then
+        storeMetadata body ctx
 
-    statusOk
+    statusOk ctx
 
 // ---------------------------------------------------------------------------
 // Endpoints the agent reads from: each needs a real answer, not a 202
@@ -1149,9 +1201,11 @@ let handleMetadata (r: Request) : Response =
 /// is derived from the tenant. Two installations that both use the tenant
 /// "default" therefore share a marker. After four failures the agent leaves
 /// the marker unset for the life of the process.
-let handleOpmValidate (r: Request) : Response =
-    let digest = SHA256.HashData(Encoding.UTF8.GetBytes("ninjacat-org:" + r.Tenant))
-    Response.jsonOf 200 {| data = {| id = Guid(digest.AsSpan(0, 16)).ToString() |} |}
+let handleOpmValidate (_: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+
+    let digest = SHA256.HashData(Encoding.UTF8.GetBytes("ninjacat-org:" + tenant))
+    json {| data = {| id = Guid(digest.AsSpan(0, 16)).ToString() |} |} ctx
 
 /// The SHA-256 of a delegated-auth proof, hex. The proof never leaves here.
 let private proofFingerprint (proof: string) : string =
@@ -1166,40 +1220,45 @@ let private proofFingerprint (proof: string) : string =
 /// its side. The key that admitted the request is what it gets back,
 /// whether it came in the header or in the query. The proof IS the
 /// credential, so only its fingerprint is stored.
-let handleIntakeKey (r: Request) : Response =
-    let authorization = r.Header "Authorization"
+let handleIntakeKey (_: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let sink = Ctx.sink ctx
+
+    let authorization = Ctx.header ctx "Authorization"
 
     let scheme, proof =
         match authorization.IndexOf ' ' with
         | -1 -> authorization, ""
         | i -> authorization.Substring(0, i), authorization.Substring(i + 1)
 
-    match r.Key with
-    | Some key when key.TenantID <> "" ->
+    // The key the request was admitted with, as the authentication left it.
+    match ctx.User.FindFirst "key_id" with
+    | null -> ()
+    | keyId when tenant <> "" ->
         let row: DelegatedAuthRow =
-            { TenantID = key.TenantID
+            { TenantID = tenant
               At = DateTime.UtcNow
               Scheme = scheme
               ProofFingerprint = proofFingerprint proof
-              APIKeyID = key.ID }
+              APIKeyID = keyId.Value }
 
-        Sink.write r.Sink DelegatedAuth.table [| row |]
+        Sink.write sink DelegatedAuth.table [| row |]
     | _ -> ()
 
-    let admittedWith = Text.firstNonEmpty [ r.Header "Dd-Api-Key"; r.Query "api_key" ]
-    Response.jsonOf 200 {| data = {| attributes = {| api_key = admittedWith |} |} |}
+    let admittedWith = Text.firstNonEmpty [ Ctx.header ctx "Dd-Api-Key"; Ctx.query ctx "api_key" ]
+    json {| data = {| attributes = {| api_key = admittedWith |} |} |} ctx
 
 /// GET /api/v1/query, for the cluster-agent's External Metrics Provider.
 /// Nothing is queryable here yet, so the answer is a well-formed EMPTY
 /// result: it marks each metric invalid on the agent's side, which is the
 /// truth, where a 202 would count as an API error.
-let handleQuery (r: Request) : Response =
-    Response.jsonOf
-        200
+let handleQuery (_: byte[]) (ctx: HttpContext) : Task =
+    json
         {| status = "ok"
            res_type = "time_series"
-           query = r.Query "query"
+           query = Ctx.query ctx "query"
            series = Array.empty<string> |}
+        ctx
 
 /// A single-resource JSON:API document, {"data":{"type","id","attributes"}},
 /// read no further than the envelope: the concrete types belong to the agent.
@@ -1226,12 +1285,14 @@ let private tryJsonApi (body: byte[]) : JsonApiResource option =
 
 /// The request's JSON:API resource. A body that is not one is kept raw, with
 /// `note`, and gives None.
-let private decodeJsonApi (r: Request) (intake: string) (note: string) : JsonApiResource option =
-    match tryJsonApi r.Body with
+let private decodeJsonApi (body: byte[]) (ctx: HttpContext) (intake: string) (note: string) : JsonApiResource option =
+    let log = Ctx.log ctx
+
+    match tryJsonApi body with
     | Some resource -> Some resource
     | None ->
-        r.Log.LogWarning("[{Intake}] {Note}", intake, note)
-        Raw.store r intake "decode_error" note r.Body
+        log.LogWarning("[{Intake}] {Note}", intake, note)
+        Raw.store ctx intake "decode_error" note body
         None
 
 /// POST /api/v2/profiles/symbols/query, from the host profiler's symbol
@@ -1240,21 +1301,24 @@ let private decodeJsonApi (r: Request) (intake: string) (note: string) : JsonApi
 /// anything else stops all uploads. We hold nothing, so the array is empty.
 /// The question is kept: these build ids are the profiled binaries of the
 /// fleet.
-let handleSymbolsQuery (r: Request) : Response =
-    match decodeJsonApi r "symbols" "not a JSON:API document" with
+let handleSymbolsQuery (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let sink = Ctx.sink ctx
+
+    match decodeJsonApi body ctx "symbols" "not a JSON:API document" with
     | None -> ()
     | Some resource ->
-        if r.Tenant <> "" then
+        if tenant <> "" then
             let row: SymbolQueryRow =
-                { TenantID = r.Tenant
+                { TenantID = tenant
                   At = DateTime.UtcNow
                   Arch = resource.Text "arch"
                   BuildIDs = GoJson.lenientStrings (resource.Attributes.TryFind "buildIds") |> Option.defaultValue [||]
-                  Resource = Text.utf8 r.Body }
+                  Resource = Text.utf8 body }
 
-            Sink.write r.Sink SymbolQueries.table [| row |]
+            Sink.write sink SymbolQueries.table [| row |]
 
-    Response.json 200 """{"data":[]}"""
+    json {| data = List.empty<string> |} ctx
 
 // ---------------------------------------------------------------------------
 // Private Action Runner
@@ -1278,17 +1342,20 @@ let tenantOrgId (tenant: string) : int64 =
 /// pair, so runner_id must not contain a colon. The status must be exactly
 /// 200 (anything else is retried forever) and the reply's type must be
 /// "createRunnerResponse".
-let handleRunnerEnroll (r: Request) : Response =
-    match decodeJsonApi r "par" "enroll: not a JSON:API document" with
-    | None -> Response.status 400
+let handleRunnerEnroll (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let sink = Ctx.sink ctx
+
+    match decodeJsonApi body ctx "par" "enroll: not a JSON:API document" with
+    | None -> setStatusCode 400 ctx
     | Some resource ->
         let modes = GoJson.lenientStrings (resource.Attributes.TryFind "runner_modes")
         let runnerId = Guid.NewGuid().ToString()
-        let orgId = tenantOrgId r.Tenant
+        let orgId = tenantOrgId tenant
 
-        if r.Tenant <> "" then
+        if tenant <> "" then
             let row: RunnerEnrollmentRow =
-                { TenantID = r.Tenant
+                { TenantID = tenant
                   RunnerID = runnerId
                   EnrolledAt = DateTime.UtcNow
                   Name = resource.Text "runner_name"
@@ -1301,11 +1368,9 @@ let handleRunnerEnroll (r: Request) : Response =
                   OrgID = orgId
                   Attributes = GoJson.compactObject resource.Attributes }
 
-            Sink.write r.Sink RunnerEnrollments.table [| row |]
+            Sink.write sink RunnerEnrollments.table [| row |]
 
         let reply =
-            Response.jsonOf
-                200
                 {| data =
                     {| ``type`` = "createRunnerResponse"
                        id = runnerId
@@ -1317,39 +1382,45 @@ let handleRunnerEnroll (r: Request) : Response =
                            orch_cluster_id = resource.Text "orch_cluster_id"
                            agent_flavor = resource.Text "agent_flavor" |} |} |}
 
-        { reply with Headers = [ "Content-Type", "application/vnd.api+json" ] }
+        // JSON:API's own media type, which Oxpecker's `json` would replace.
+        (setContentType "application/vnd.api+json" >=> bytes (JsonSerializer.SerializeToUtf8Bytes reply)) ctx
 
 /// The runner's poll for work. An EMPTY 200 means "no task" and is the normal
 /// idle answer: a body would be parsed as a task, and any other status is an
 /// error on the runner's side. Every poll is also the only liveness signal a
 /// runner with no tasks produces.
-let handleRunnerDequeue (r: Request) : Response =
-    match decodeJsonApi r "par" "dequeue: not a JSON:API document" with
+let handleRunnerDequeue (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let sink = Ctx.sink ctx
+
+    match decodeJsonApi body ctx "par" "dequeue: not a JSON:API document" with
     | None -> ()
     | Some resource ->
-        if r.Tenant <> "" then
+        if tenant <> "" then
             // Both timestamps stay strings: their format is undocumented and
             // an unparseable value must not become 1970.
             let row: RunnerDequeueRow =
-                { TenantID = r.Tenant
+                { TenantID = tenant
                   At = DateTime.UtcNow
                   RunnerStartedAt = resource.Text "runner_started_at"
                   LastTaskReceivedAt = resource.Text "last_task_received_at"
-                  Version = r.Header "X-Datadog-OnPrem-Version"
-                  Modes = r.Header "X-Datadog-OnPrem-Modes" }
+                  Version = Ctx.header ctx "X-Datadog-OnPrem-Version"
+                  Modes = Ctx.header ctx "X-Datadog-OnPrem-Modes" }
 
-            Sink.write r.Sink RunnerDequeues.table [| row |]
+            Sink.write sink RunnerDequeues.table [| row |]
 
-    Response.status 200
-
+    setStatusCode 200 ctx
 /// publish-task-update: the outcome of a task. The document id is
 /// "succeed_task" or "fail_task"; `payload.outputs` is the action's own
 /// result, arbitrary JSON of any size. The runner accepts any status.
-let handleRunnerTaskUpdate (r: Request) : Response =
-    match decodeJsonApi r "par" "task-update: not a JSON:API document" with
+let handleRunnerTaskUpdate (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let sink = Ctx.sink ctx
+
+    match decodeJsonApi body ctx "par" "task-update: not a JSON:API document" with
     | None -> ()
     | Some resource ->
-        if r.Tenant <> "" then
+        if tenant <> "" then
             let payload = GoJson.lenientMembers (resource.Attributes.TryFind "payload")
 
             // A numeric enum on the runner's side, and a succeeded task sends
@@ -1361,7 +1432,7 @@ let handleRunnerTaskUpdate (r: Request) : Response =
                 | None -> None
 
             let row: RunnerTaskUpdateRow =
-                { TenantID = r.Tenant
+                { TenantID = tenant
                   At = DateTime.UtcNow
                   Outcome = resource.Id
                   TaskID = resource.Text "task_id"
@@ -1379,51 +1450,55 @@ let handleRunnerTaskUpdate (r: Request) : Response =
                         "payload."
                         (extraRaw [ "branch"; "outputs"; "error_code"; "error_details"; "api_error" ] payload) }
 
-            Sink.write r.Sink RunnerTaskUpdates.table [| row |]
+            Sink.write sink RunnerTaskUpdates.table [| row |]
 
-    Response.json 202 "{}"
-
+    (setStatusCode 202 >=> json {||}) ctx
 /// The per-task heartbeat. It must be answered with exactly 200: a 404 tells
 /// the runner the job is gone and it stops heartbeating. The rows answer
 /// "when did this job stop making progress" — a job that hangs never sends a
 /// task update.
-let handleRunnerHeartbeat (r: Request) : Response =
-    match decodeJsonApi r "par" "heartbeat: not a JSON:API document" with
+let handleRunnerHeartbeat (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let sink = Ctx.sink ctx
+
+    match decodeJsonApi body ctx "par" "heartbeat: not a JSON:API document" with
     | None -> ()
     | Some resource ->
-        if r.Tenant <> "" then
+        if tenant <> "" then
             let row: RunnerHeartbeatRow =
-                { TenantID = r.Tenant
+                { TenantID = tenant
                   At = DateTime.UtcNow
                   TaskID = resource.Text "task_id"
                   ActionFQN = resource.Text "action_fqn"
                   JobID = resource.Text "job_id"
                   Client = rawText "client" resource.Attributes }
 
-            Sink.write r.Sink RunnerHeartbeats.table [| row |]
+            Sink.write sink RunnerHeartbeats.table [| row |]
 
-    Response.json 200 "{}"
-
+    json {||} ctx
 /// GET runner/health-check. The runner ignores the body and reads
 /// X-Server-Time; with no X-Retry-After-Ms it polls at its default interval.
-let handleRunnerHealthCheck (_: Request) : Response =
-    Response.json 200 "{}"
-    |> Response.withHeader "X-Server-Time" (DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture))
+let handleRunnerHealthCheck (_: byte[]) (ctx: HttpContext) : Task =
+    let now = DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture)
+    (setHttpHeader "X-Server-Time" now >=> json {||}) ctx
 
 /// POST /api/v2/actions/connections: a connection a runner may use to reach a
 /// third-party system. SENSITIVE: `integration.credentials` holds secrets and
 /// is stored verbatim, because a connection without them cannot be used. It
 /// must never be logged.
-let handleActionConnections (r: Request) : Response =
-    match decodeJsonApi r "par" "connections: not a JSON:API document" with
+let handleActionConnections (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let sink = Ctx.sink ctx
+
+    match decodeJsonApi body ctx "par" "connections: not a JSON:API document" with
     | None -> ()
     | Some resource ->
-        if r.Tenant <> "" then
+        if tenant <> "" then
             let integration = GoJson.lenientMembers (resource.Attributes.TryFind "integration")
             let tags = GoJson.lenientStrings (resource.Attributes.TryFind "tags") |> Option.defaultValue [||]
 
             let row: ActionConnectionRow =
-                { TenantID = r.Tenant
+                { TenantID = tenant
                   At = DateTime.UtcNow
                   Name = resource.Text "name"
                   RunnerID = resource.Text "runner_id"
@@ -1436,6 +1511,6 @@ let handleActionConnections (r: Request) : Response =
                         "integration."
                         (extraRaw [ "type"; "credentials" ] integration) }
 
-            Sink.write r.Sink ActionConnections.table [| row |]
+            Sink.write sink ActionConnections.table [| row |]
 
-    Response.json 202 "{}"
+    (setStatusCode 202 >=> json {||}) ctx

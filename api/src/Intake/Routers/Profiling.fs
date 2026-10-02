@@ -20,8 +20,11 @@ open System.IO
 open System.IO.Compression
 open System.Text
 open System.Text.Json
+open System.Threading.Tasks
 open Microsoft.AspNetCore.WebUtilities
 open Microsoft.Extensions.Logging
+open Microsoft.AspNetCore.Http
+open Oxpecker
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
@@ -367,7 +370,7 @@ let profileRow
 
 /// Datadog answers these intakes with an empty object and 202, whatever
 /// happened to the body.
-let private accepted = Response.json 202 "{}"
+let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
 
 let private orUnknown (contentType: string) : string =
     if contentType = "" then "(no content-type)" else contentType
@@ -387,8 +390,10 @@ let private formName (contentDisposition: string) : string =
 ///
 /// Unlike `Multipart.parts`, a body that breaks off is an error: the request
 /// is then kept whole in raw_payloads instead of stored as half a submission.
-let private readParts (r: Request) (label: string) : Result<Map<string, byte[]>, string> =
-    let media = MediaType.parse (r.Header "Content-Type")
+let private readParts (body: byte[]) (ctx: HttpContext) (label: string) : Result<Map<string, byte[]>, string> =
+    let log = Ctx.log ctx
+
+    let media = MediaType.parse (Ctx.header ctx "Content-Type")
 
     if media.Error <> "" then
         Error media.Error
@@ -400,7 +405,7 @@ let private readParts (r: Request) (label: string) : Result<Map<string, byte[]>,
         | Some "" -> Error "content-type is multipart without boundary"
         | Some boundary ->
             try
-                let reader = MultipartReader(boundary, new MemoryStream(r.Body))
+                let reader = MultipartReader(boundary, new MemoryStream(body))
                 // The reader's defaults are for form posts; profiles and symbol files are larger.
                 reader.HeadersLengthLimit <- 1024 * 1024
                 reader.BodyLengthLimit <- Nullable()
@@ -414,7 +419,7 @@ let private readParts (r: Request) (label: string) : Result<Map<string, byte[]>,
                     let name = formName section.ContentDisposition
 
                     if parts.ContainsKey name then
-                        r.Log.LogWarning("[{Label}] part {Name} repeats, the later one replaces it", label, name)
+                        log.LogWarning("[{Label}] part {Name} repeats, the later one replaces it", label, name)
 
                     parts <- parts.Add(name, data.ToArray())
                     section <- reader.ReadNextSectionAsync().GetAwaiter().GetResult()
@@ -425,42 +430,48 @@ let private readParts (r: Request) (label: string) : Result<Map<string, byte[]>,
             | :? InvalidDataException as e -> Error e.Message
 
 /// A part that should be a JSON object, decoded; a warning when it is not.
-let private decodeObject (r: Request) (what: string) (data: byte[]) : JsonElement option =
+let private decodeObject (ctx: HttpContext) (what: string) (data: byte[]) : JsonElement option =
+    let log = Ctx.log ctx
+
     let decoded = Lenient.tryObject data
 
     if decoded.IsNone then
-        r.Log.LogWarning("[{What}] not a JSON object ({Bytes} B)", what, data.Length)
+        log.LogWarning("[{What}] not a JSON object ({Bytes} B)", what, data.Length)
 
     decoded
 
 /// POST of a profile; `label` names the path it came by and is stored as the
 /// row's variant.
-let handleProfile (label: string) : Handler =
-    fun r ->
-        match readParts r label with
+let handleProfile (label: string) : byte[] -> EndpointHandler =
+    fun body ctx ->
+        let tenant = Ctx.tenant ctx
+        let log = Ctx.log ctx
+        let sink = Ctx.sink ctx
+
+        match readParts body ctx label with
         | Error problem ->
-            let contentType = r.Header "Content-Type"
-            r.Log.LogWarning("[{Label}] not multipart ({Problem}), kept raw", label, problem)
-            Raw.store r "profiling" "decode_error" $"not multipart, content-type {orUnknown contentType}: {problem}" r.Body
+            let contentType = Ctx.header ctx "Content-Type"
+            log.LogWarning("[{Label}] not multipart ({Problem}), kept raw", label, problem)
+            Raw.store ctx "profiling" "decode_error" $"not multipart, content-type {orUnknown contentType}: {problem}" body
         | Ok parts ->
             // The event part carries the submission: which attachments
             // follow, the interval they cover, the tags of the process.
-            let event = parts.TryFind "event" |> Option.bind (decodeObject r (label + " event"))
+            let event = parts.TryFind "event" |> Option.bind (decodeObject ctx (label + " event"))
             let mutable profiles = Map.empty
 
             for part in parts do
                 if part.Key <> "event" then
                     match readPprof part.Value with
                     | Some summary -> profiles <- profiles.Add(part.Key, summary)
-                    | None -> r.Log.LogDebug("[{Label}] {Part} is not pprof ({Bytes} B)", label, part.Key, part.Value.Length)
+                    | None -> log.LogDebug("[{Label}] {Part} is not pprof ({Bytes} B)", label, part.Key, part.Value.Length)
 
-            if r.Tenant <> "" then
+            if tenant <> "" then
                 let row =
-                    profileRow r.Tenant label (r.Header "Dd-Evp-Origin") (r.Header "Dd-Evp-Origin-Version") parts event profiles
+                    profileRow tenant label (Ctx.header ctx "Dd-Evp-Origin") (Ctx.header ctx "Dd-Evp-Origin-Version") parts event profiles
 
-                Sink.write r.Sink Profiles.table [| row |]
+                Sink.write sink Profiles.table [| row |]
 
-        accepted
+        accepted ctx
 
 let private isJsonSpace (b: byte) : bool =
     b = ' 'B || b = '\t'B || b = '\r'B || b = '\n'B
@@ -639,7 +650,10 @@ let symdbUploadRow
       EnvBatchNum = envelopeText "batch_num" symdb.Envelope
       EnvFinal = envelopeText "final" symdb.Envelope }
 
-let private storeLogs (r: Request) (ddtags: string) (entries: byte[] list) : unit =
+let private storeLogs (ctx: HttpContext) (ddtags: string) (entries: byte[] list) : unit =
+    let tenant = Ctx.tenant ctx
+    let sink = Ctx.sink ctx
+
     let tags = Tags.toMultiMap (Tags.splitDDTags ddtags)
     let arrival = DateTime.UtcNow
 
@@ -650,7 +664,7 @@ let private storeLogs (r: Request) (ddtags: string) (entries: byte[] list) : uni
             // and has no columns.
             let decoded = Lenient.tryObject entry
 
-            { TenantID = r.Tenant
+            { TenantID = tenant
               ReceivedAt = arrival
               Service = asString (field "service" decoded)
               DDSource = asString (field "ddsource" decoded)
@@ -658,9 +672,13 @@ let private storeLogs (r: Request) (ddtags: string) (entries: byte[] list) : uni
               Entry = entry
               ExtraKeys = extraKeys decoded })
 
-    Sink.write r.Sink DebuggerLogs.table (Array.ofList rows)
+    Sink.write sink DebuggerLogs.table (Array.ofList rows)
 
-let private storeDiagnostics (r: Request) (ddtags: string) (messages: byte[] list) : unit =
+let private storeDiagnostics (ctx: HttpContext) (ddtags: string) (messages: byte[] list) : unit =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
     let tags = Tags.toMultiMap (Tags.splitDDTags ddtags)
     let arrival = DateTime.UtcNow
 
@@ -670,11 +688,11 @@ let private storeDiagnostics (r: Request) (ddtags: string) (messages: byte[] lis
             let decoded = Lenient.tryObject message
 
             if decoded.IsNone then
-                r.Log.LogWarning("[debugger] diagnostics: entry {Index} is not a JSON object", i)
+                log.LogWarning("[debugger] diagnostics: entry {Index} is not a JSON object", i)
 
-            diagnosticRow r.Tenant arrival tags message decoded)
+            diagnosticRow tenant arrival tags message decoded)
 
-    Sink.write r.Sink DebuggerDiagnostics.table (Array.ofList rows)
+    Sink.write sink DebuggerDiagnostics.table (Array.ofList rows)
 
 /// POST /api/v2/debugger: one path, three producers, told apart by
 /// Content-Type and part names.
@@ -684,51 +702,55 @@ let private storeDiagnostics (r: Request) (ddtags: string) (messages: byte[] lis
 ///   multipart: file+event  symbol database: gzip JSON, then its metadata
 ///
 /// Each variant has a table of its own.
-let handleDebugger: Handler =
-    fun r ->
-        let contentType = r.Header "Content-Type"
-        let ddtags = r.Query "ddtags"
+let handleDebugger: byte[] -> EndpointHandler =
+    fun body ctx ->
+        let tenant = Ctx.tenant ctx
+        let log = Ctx.log ctx
+        let sink = Ctx.sink ctx
+
+        let contentType = Ctx.header ctx "Content-Type"
+        let ddtags = Ctx.query ctx "ddtags"
 
         if (MediaType.parse contentType).Type <> "multipart/form-data" then
-            match decodeLogs r.Body with
+            match decodeLogs body with
             | None ->
-                r.Log.LogWarning("[debugger] logs: neither a JSON array nor NDJSON, kept raw")
-                Raw.store r "debugger" "decode_error" $"logs variant: not a JSON array or NDJSON, content-type {orUnknown contentType}" r.Body
+                log.LogWarning("[debugger] logs: neither a JSON array nor NDJSON, kept raw")
+                Raw.store ctx "debugger" "decode_error" $"logs variant: not a JSON array or NDJSON, content-type {orUnknown contentType}" body
             | Some entries ->
-                if r.Tenant <> "" then
-                    storeLogs r ddtags entries
+                if tenant <> "" then
+                    storeLogs ctx ddtags entries
         else
-            match readParts r "debugger" with
+            match readParts body ctx "debugger" with
             | Error problem ->
-                r.Log.LogWarning("[debugger] multipart: {Problem}, kept raw", problem)
-                Raw.store r "debugger" "decode_error" $"multipart, content-type {orUnknown contentType}: {problem}" r.Body
+                log.LogWarning("[debugger] multipart: {Problem}, kept raw", problem)
+                Raw.store ctx "debugger" "decode_error" $"multipart, content-type {orUnknown contentType}: {problem}" body
             | Ok parts ->
                 match parts.TryFind "file", parts.TryFind "event" with
                 | Some file, Some event ->
-                    let decoded = decodeObject r "debugger symdb event" event
+                    let decoded = decodeObject ctx "debugger symdb event" event
                     let symdb = decodeSymdbFile file
 
                     if symdb.Envelope.IsNone then
-                        r.Log.LogWarning("[debugger] symdb file is not a gzip-compressed JSON object ({Bytes} B)", file.Length)
+                        log.LogWarning("[debugger] symdb file is not a gzip-compressed JSON object ({Bytes} B)", file.Length)
 
-                    if r.Tenant <> "" then
-                        Sink.write r.Sink SymdbUploads.table [| symdbUploadRow r.Tenant event file ddtags decoded symdb |]
+                    if tenant <> "" then
+                        Sink.write sink SymdbUploads.table [| symdbUploadRow tenant event file ddtags decoded symdb |]
                 | None, Some event ->
                     match arrayElements event with
                     | None ->
                         // Not an array at all, unlike an empty batch: `[]`
                         // stores nothing and is not an error.
-                        r.Log.LogWarning("[debugger] diagnostics: the event part is not a JSON array, kept raw")
-                        Raw.store r "debugger" "decode_error" "diagnostics variant: event part is not a JSON array" r.Body
+                        log.LogWarning("[debugger] diagnostics: the event part is not a JSON array, kept raw")
+                        Raw.store ctx "debugger" "decode_error" "diagnostics variant: event part is not a JSON array" body
                     | Some messages ->
-                        if r.Tenant <> "" then
-                            storeDiagnostics r ddtags messages
+                        if tenant <> "" then
+                            storeDiagnostics ctx ddtags messages
                 | _ ->
                     let names = String.Join(",", parts.Keys)
-                    r.Log.LogWarning("[debugger] multipart with neither file nor event, parts: {Parts}", names)
-                    Raw.store r "debugger" "unexpected_shape" $"multipart with neither file nor event parts: {names}" r.Body
+                    log.LogWarning("[debugger] multipart with neither file nor event, parts: {Parts}", names)
+                    Raw.store ctx "debugger" "unexpected_shape" $"multipart with neither file nor event parts: {names}" body
 
-        accepted
+        accepted ctx
 
 /// The class and byte order from the ELF ident bytes, without parsing the
 /// file. Both "" when the bytes are not ELF.
@@ -784,16 +806,20 @@ let symbolUploadRow (tenant: string) (parts: Map<string, byte[]>) (meta: JsonEle
 /// POST /api/v2/srcmap: an ELF symbol file (elf_symbol_file) and its
 /// metadata (event), usually zstd-compressed as a whole. The agent sends it
 /// only after /api/v2/profiles/symbols/query said the symbols are missing.
-let handleSourcemap (r: Request) : Response =
-    match readParts r "srcmap" with
+let handleSourcemap (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    match readParts body ctx "srcmap" with
     | Error problem ->
-        let contentType = r.Header "Content-Type"
-        r.Log.LogWarning("[srcmap] multipart: {Problem}, kept raw", problem)
-        Raw.store r "srcmap" "decode_error" $"multipart, content-type {orUnknown contentType}: {problem}" r.Body
+        let contentType = Ctx.header ctx "Content-Type"
+        log.LogWarning("[srcmap] multipart: {Problem}, kept raw", problem)
+        Raw.store ctx "srcmap" "decode_error" $"multipart, content-type {orUnknown contentType}: {problem}" body
     | Ok parts ->
-        let meta = parts.TryFind "event" |> Option.bind (decodeObject r "srcmap event")
+        let meta = parts.TryFind "event" |> Option.bind (decodeObject ctx "srcmap event")
 
-        if r.Tenant <> "" then
-            Sink.write r.Sink SymbolUploads.table [| symbolUploadRow r.Tenant parts meta |]
+        if tenant <> "" then
+            Sink.write sink SymbolUploads.table [| symbolUploadRow tenant parts meta |]
 
-    accepted
+    accepted ctx

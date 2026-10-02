@@ -28,10 +28,13 @@ open System.Text.Encodings.Web
 open System.Text.Json
 open System.Text.RegularExpressions
 open System.Text.Unicode
+open System.Threading.Tasks
 open MessagePack
 open Microsoft.AspNetCore.WebUtilities
 open Microsoft.Extensions.Logging
 open Microsoft.Net.Http.Headers
+open Microsoft.AspNetCore.Http
+open Oxpecker
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
@@ -437,7 +440,7 @@ module private GoStruct =
         | Some value -> value.GetRawText()
         | None -> ""
 
-let private accepted = Response.json 202 "{}"
+let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
 
 let private orUnknown (contentType: string) : string =
     if contentType = "" then "(no content-type)" else contentType
@@ -460,8 +463,8 @@ type AgentHeaders =
 /// X-Datadog-AgentVersion are sent by no agent; they are read in case a proxy
 /// invented them. The proxy consumes X-Datadog-EVP-Subdomain, so a value
 /// there means something other than a datadog-agent sent the request.
-let agentHeaders (r: Request) : AgentHeaders =
-    let via = r.Header "Via"
+let agentHeaders (ctx: HttpContext) : AgentHeaders =
+    let via = Ctx.header ctx "Via"
 
     let viaVersion =
         if via.StartsWith("trace-agent ", StringComparison.Ordinal) then
@@ -469,10 +472,10 @@ let agentHeaders (r: Request) : AgentHeaders =
         else
             ""
 
-    { Subdomain = r.Header "X-Datadog-EVP-Subdomain"
-      ContainerID = Text.firstNonEmpty [ r.Header "Datadog-Container-Id"; r.Header "X-Datadog-Container-Id" ]
-      Hostname = r.Header "X-Datadog-Hostname"
-      AgentVersion = Text.firstNonEmpty [ r.Header "X-Datadog-Agentversion"; viaVersion ] }
+    { Subdomain = Ctx.header ctx "X-Datadog-EVP-Subdomain"
+      ContainerID = Text.firstNonEmpty [ Ctx.header ctx "Datadog-Container-Id"; Ctx.header ctx "X-Datadog-Container-Id" ]
+      Hostname = Ctx.header ctx "X-Datadog-Hostname"
+      AgentVersion = Text.firstNonEmpty [ Ctx.header ctx "X-Datadog-Agentversion"; viaVersion ] }
 
 let private looksJson (body: byte[]) : bool =
     let first = body |> Array.tryFind (fun b -> b <> ' 'B && b <> '\t'B && b <> '\r'B && b <> '\n'B)
@@ -640,26 +643,30 @@ let testEventRow
       // tracer's own documentation uses for an event.
       Content = Value.toJson content }
 
-let private storeTestCycle (r: Request) : unit =
-    let contentType = r.Header "Content-Type"
-    let format, decoded = decodeAny contentType r.Body
+let private storeTestCycle (body: byte[]) (ctx: HttpContext) : unit =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    let contentType = Ctx.header ctx "Content-Type"
+    let format, decoded = decodeAny contentType body
 
     match decoded with
     | Error e ->
-        r.Log.LogWarning("[citestcycle] {Format} decode: {Error} ({Bytes} bytes)", format, e, r.Body.Length)
-        Raw.store r "citestcycle" "decode_error" $"{format} envelope, content-type {orUnknown contentType}: {e}" r.Body
+        log.LogWarning("[citestcycle] {Format} decode: {Error} ({Bytes} bytes)", format, e, body.Length)
+        Raw.store ctx "citestcycle" "decode_error" $"{format} envelope, content-type {orUnknown contentType}: {e}" body
     | Ok(Value.Object _ as envelope) ->
         let events = Value.items (Value.field "events" envelope)
 
         if events.IsEmpty then
             // Not an error — the encoder emits one when a flush finds nothing —
             // but not a shape with a published meaning either, so it is kept.
-            Raw.store r "citestcycle" "unexpected_shape" "envelope carries no events" r.Body
+            Raw.store ctx "citestcycle" "unexpected_shape" "envelope carries no events" body
         else
             let payloadVersion = int32 (Value.toInt64 (Value.field "version" envelope))
             let metadata = cycleMetadata (Value.field "metadata" envelope)
             let now = DateTime.UtcNow
-            let headers = agentHeaders r
+            let headers = agentHeaders ctx
             let rows = ResizeArray<CITestEventRow>()
 
             let notMaps = ResizeArray<int>()
@@ -668,18 +675,18 @@ let private storeTestCycle (r: Request) : unit =
             |> List.iteri (fun i event ->
                 match event with
                 | Value.Object _ ->
-                    if r.Tenant <> "" then
-                        rows.Add(testEventRow r.Tenant now headers payloadVersion metadata event)
+                    if tenant <> "" then
+                        rows.Add(testEventRow tenant now headers payloadVersion metadata event)
                 | _ -> notMaps.Add i)
 
             // The body is kept once, however many of its events are bad.
             if notMaps.Count > 0 then
                 let places = notMaps |> Seq.truncate 8 |> Seq.map string |> String.concat ", "
                 let more = if notMaps.Count > 8 then ", …" else ""
-                Raw.store r "citestcycle" "decode_error" $"{notMaps.Count} of {events.Length} events are not maps: {places}{more}" r.Body
+                Raw.store ctx "citestcycle" "decode_error" $"{notMaps.Count} of {events.Length} events are not maps: {places}{more}" body
 
-            Sink.write r.Sink CITestEvents.table (rows.ToArray())
-    | Ok _ -> Raw.store r "citestcycle" "unexpected_shape" $"payload is not a {format} map" r.Body
+            Sink.write sink CITestEvents.table (rows.ToArray())
+    | Ok _ -> Raw.store ctx "citestcycle" "unexpected_shape" $"payload is not a {format} map" body
 
 /// A test-cycle payload: {version, metadata, events[]}, whose events are the
 /// tests, suites, modules and sessions of a CI run.
@@ -687,11 +694,11 @@ let private storeTestCycle (r: Request) : unit =
 /// The tracer's transport treats any status below 400 as success and never
 /// retries, so a payload refused here is simply gone. A body that does not
 /// decode is therefore answered 202 and kept raw.
-let handleTestCycle (r: Request) : Response =
-    if r.Body.Length > 0 then
-        storeTestCycle r
+let handleTestCycle (body: byte[]) (ctx: HttpContext) : Task =
+    if body.Length > 0 then
+        storeTestCycle body ctx
 
-    accepted
+    accepted ctx
 
 /// Like `Multipart.parts`, with two differences the Go server had. A body
 /// that breaks off is an error, so the upload is kept raw whole instead of
@@ -905,49 +912,53 @@ let coverageRow
 let private partNames (parts: MultipartPart list) : string =
     if parts.IsEmpty then "none" else String.Join(", ", parts |> List.map _.Name)
 
-let private storeCoverage (r: Request) : unit =
-    let contentType = r.Header "Content-Type"
+let private storeCoverage (body: byte[]) (ctx: HttpContext) : unit =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
 
-    match readParts contentType r.Body with
+    let contentType = Ctx.header ctx "Content-Type"
+
+    match readParts contentType body with
     | Error e ->
-        r.Log.LogWarning("[citestcov] multipart: {Error}", e)
-        Raw.store r "citestcov" "decode_error" $"multipart, content-type {orUnknown contentType}: {e}" r.Body
+        log.LogWarning("[citestcov] multipart: {Error}", e)
+        Raw.store ctx "citestcov" "decode_error" $"multipart, content-type {orUnknown contentType}: {e}" body
     | Ok parts ->
         // The coverage part is "coveragex" to dd-trace-go and "coverage1" to
         // dd-trace-py, so it cannot be found by name: it is the first part
         // that is not the event.
         match parts |> List.tryFind (fun p -> p.Name <> "event") with
         | None ->
-            Raw.store r "citestcov" "unexpected_shape" $"multipart carries no coverage part (only {partNames parts})" r.Body
+            Raw.store ctx "citestcov" "unexpected_shape" $"multipart carries no coverage part (only {partNames parts})" body
         | Some coverage ->
             let format, entries = coverageEntries coverage.ContentType coverage.Data
 
             match entries with
             | Error e ->
-                r.Log.LogWarning("[citestcov] {Format} coverage payload: {Error} ({Bytes} bytes)", format, e, coverage.Data.Length)
-                Raw.store r "citestcov" "decode_error" $"coverage part ({orUnknown coverage.ContentType}): {e}" r.Body
+                log.LogWarning("[citestcov] {Format} coverage payload: {Error} ({Bytes} bytes)", format, e, coverage.Data.Length)
+                Raw.store ctx "citestcov" "decode_error" $"coverage part ({orUnknown coverage.ContentType}): {e}" body
             | Ok(payloadVersion, entries) ->
-                if r.Tenant <> "" then
+                if tenant <> "" then
                     let event =
                         match parts |> List.tryFindBack (fun p -> p.Name = "event") with
                         | Some part -> part.Data
                         | None -> [||]
 
                     let now = DateTime.UtcNow
-                    let headers = agentHeaders r
-                    let rows = entries |> List.map (coverageRow r.Tenant now headers event payloadVersion format)
-                    Sink.write r.Sink CICoverage.table (Array.ofList rows)
+                    let headers = agentHeaders ctx
+                    let rows = entries |> List.map (coverageRow tenant now headers event payloadVersion format)
+                    Sink.write sink CICoverage.table (Array.ofList rows)
 
 /// A code-coverage upload: multipart with a dummy JSON "event" part and the
 /// coverage payload, msgpack or JSON:
 ///
 ///   {"version": 2, "coverages": [{"test_session_id", "test_suite_id",
 ///     "span_id", "files": [{"filename", "bitmap"}]}]}
-let handleTestCov (r: Request) : Response =
-    if r.Body.Length > 0 then
-        storeCoverage r
+let handleTestCov (body: byte[]) (ctx: HttpContext) : Task =
+    if body.Length > 0 then
+        storeCoverage body ctx
 
-    accepted
+    accepted ctx
 
 /// A tracer's question: the JSON:API envelope {"data": {"id", "type",
 /// "attributes"}} and the attributes the five configuration endpoints send.
@@ -1031,22 +1042,26 @@ let readConfigRequest (body: byte[]) : ConfigRequest * (string * string) option 
 /// answer. A body that does not parse still gets a row and a well-formed
 /// answer: "a tracer sends something we cannot read" is what the table is
 /// for, and a 4xx here is terminal for the client.
-let answerConfig (endpoint: string) (answer: ConfigRequest -> string) (r: Request) : Response =
-    let request, problem = readConfigRequest r.Body
+let answerConfig (endpoint: string) (answer: ConfigRequest -> string) (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    let request, problem = readConfigRequest body
 
     match problem with
     | Some(part, error) ->
-        r.Log.LogWarning("[cisettings] {Endpoint}: {Part}: {Error} ({Bytes} bytes)", endpoint, part, error, r.Body.Length)
-        Raw.store r "cisettings" "decode_error" $"{endpoint} {part}: {error}" r.Body
+        log.LogWarning("[cisettings] {Endpoint}: {Part}: {Error} ({Bytes} bytes)", endpoint, part, error, body.Length)
+        Raw.store ctx "cisettings" "decode_error" $"{endpoint} {part}: {error}" body
     | None -> ()
 
     let response = answer request
 
-    if r.Tenant <> "" then
+    if tenant <> "" then
         Sink.write
-            r.Sink
+            sink
             CISettingsRequests.table
-            [| { TenantID = r.Tenant
+            [| { TenantID = tenant
                  ReceivedAt = DateTime.UtcNow
                  Endpoint = endpoint
                  RequestID = request.ID
@@ -1061,10 +1076,11 @@ let answerConfig (endpoint: string) (answer: ConfigRequest -> string) (r: Reques
                  CommitMessage = request.CommitMessage
                  PageState = request.PageState
                  Configurations = request.Configurations
-                 RequestBody = r.Body
+                 RequestBody = body
                  ResponseBody = response } |]
 
-    Response.json 200 response
+    // The answer was built as JSON text, so that the row keeps exactly what was sent.
+    (setContentType "application/json; charset=utf-8" >=> bytes (Encoding.UTF8.GetBytes response)) ctx
 
 /// Which Test Optimization features are on: none, on purpose. Each flag
 /// gates one of the other configuration endpoints in the tracer, so with all
@@ -1141,21 +1157,25 @@ let private readSearchCommits (body: byte[]) : Result<string * string list, stri
 ///
 /// The answer is JSON even for a request that does not decode: the client
 /// retries a 200 of any other content type, and a 4xx is terminal.
-let handleSearchCommits (r: Request) : Response =
-    match readSearchCommits r.Body with
+let handleSearchCommits (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    match readSearchCommits body with
     | Error e ->
-        r.Log.LogWarning("[gitmeta] search_commits: {Error} ({Bytes} bytes)", e, r.Body.Length)
-        Raw.store r "gitmeta" "decode_error" $"search_commits: {e}" r.Body
-        Response.json 200 """{"data":[],"meta":{"repository_url":""}}"""
+        log.LogWarning("[gitmeta] search_commits: {Error} ({Bytes} bytes)", e, body.Length)
+        Raw.store ctx "gitmeta" "decode_error" $"search_commits: {e}" body
+        json {| data = List.empty<string>; meta = {| repository_url = "" |} |} ctx
     | Ok(repository, shas) ->
-        if r.Tenant <> "" then
+        if tenant <> "" then
             let now = DateTime.UtcNow
 
             let rows: GitCommitRow list =
                 shas
                 |> List.filter (fun sha -> sha <> "")
                 |> List.map (fun sha ->
-                    { TenantID = r.Tenant
+                    { TenantID = tenant
                       RepositoryURL = repository
                       SHA = sha
                       SeenAt = now
@@ -1164,9 +1184,9 @@ let handleSearchCommits (r: Request) : Response =
                       PackfileID = None
                       Source = "search_commits" })
 
-            Sink.write r.Sink GitCommits.table (Array.ofList rows)
+            Sink.write sink GitCommits.table (Array.ofList rows)
 
-        Response.json 200 ("""{"data":[],"meta":{"repository_url":""" + quoted repository + "}}")
+        json {| data = List.empty<string>; meta = {| repository_url = repository |} |} ctx
 
 /// The JSON part of a packfile upload: {"data": {"id", "type"}, "meta":
 /// {"repository_url"}}. The sha and the repository are None when the part
@@ -1195,14 +1215,18 @@ let private readPushedSha (data: byte[]) : PushedSha =
 ///
 /// The answer is 204 with no body: dd-trace-go accepts any 2xx, dd-trace-py
 /// checks for exactly 204, so 204 is the one status both call success.
-let handlePackfile (r: Request) : Response =
-    let contentType = r.Header "Content-Type"
+let handlePackfile (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
 
-    match readParts contentType r.Body with
+    let contentType = Ctx.header ctx "Content-Type"
+
+    match readParts contentType body with
     | Error e ->
-        r.Log.LogWarning("[gitmeta] packfile multipart: {Error}", e)
-        Raw.store r "gitmeta" "decode_error" $"packfile multipart, content-type {orUnknown contentType}: {e}" r.Body
-        Response.status 204
+        log.LogWarning("[gitmeta] packfile multipart: {Error}", e)
+        Raw.store ctx "gitmeta" "decode_error" $"packfile multipart, content-type {orUnknown contentType}: {e}" body
+        setStatusCode 204 ctx
     | Ok parts ->
         let mutable sha = ""
         let mutable repository = ""
@@ -1220,7 +1244,7 @@ let handlePackfile (r: Request) : Response =
                 repository <- defaultArg pushed.Repository repository
 
                 if not pushed.Decoded then
-                    r.Log.LogWarning("[gitmeta] packfile pushedSha did not decode")
+                    log.LogWarning("[gitmeta] packfile pushedSha did not decode")
                     other <- other.Add("pushedSha.undecodable", part.Data)
             | "packfile" ->
                 pack <- Some part.Data
@@ -1229,16 +1253,16 @@ let handlePackfile (r: Request) : Response =
 
         match pack with
         | None ->
-            r.Log.LogWarning("[gitmeta] packfile upload without a packfile part")
-            Raw.store r "gitmeta" "unexpected_shape" "packfile upload without a packfile part" r.Body
-        | Some pack when r.Tenant <> "" ->
+            log.LogWarning("[gitmeta] packfile upload without a packfile part")
+            Raw.store ctx "gitmeta" "unexpected_shape" "packfile upload without a packfile part" body
+        | Some pack when tenant <> "" ->
             let packfileID = Convert.ToHexStringLower(SHA256.HashData pack)
             let now = DateTime.UtcNow
 
             Sink.write
-                r.Sink
+                sink
                 GitPackfiles.table
-                [| { TenantID = r.Tenant
+                [| { TenantID = tenant
                      ReceivedAt = now
                      RepositoryURL = repository
                      PushedSHA = sha
@@ -1254,9 +1278,9 @@ let handlePackfile (r: Request) : Response =
             // sighting left behind.
             if sha <> "" then
                 Sink.write
-                    r.Sink
+                    sink
                     GitCommits.table
-                    [| { TenantID = r.Tenant
+                    [| { TenantID = tenant
                          RepositoryURL = repository
                          SHA = sha
                          SeenAt = now
@@ -1264,16 +1288,19 @@ let handlePackfile (r: Request) : Response =
                          Source = "packfile" } |]
         | Some _ -> ()
 
-        Response.status 204
-
+        setStatusCode 204 ctx
 let private pipelineKnownKeys =
     set [ "ci_env"; "ci_level"; "provider"; "tags"; "metrics"; "measures"; "name"; "start_time"; "end_time" ]
 
-let private storePipelineEvent (kind: string) (r: Request) : unit =
+let private storePipelineEvent (kind: string) (body: byte[]) (ctx: HttpContext) : unit =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
     let problems = ResizeArray<string>()
 
     let data =
-        match GoJson.parse r.Body with
+        match GoJson.parse body with
         | Error e ->
             problems.Add e
             []
@@ -1282,9 +1309,9 @@ let private storePipelineEvent (kind: string) (r: Request) : unit =
     let dataType = GoStruct.text problems "data." "type" data
 
     if problems.Count > 0 then
-        r.Log.LogWarning("[cipipeline] {Kind}: {Error} ({Bytes} bytes)", kind, problems[0], r.Body.Length)
-        Raw.store r "cipipeline" "decode_error" $"{kind} envelope: {problems[0]}" r.Body
-    elif r.Tenant <> "" then
+        log.LogWarning("[cipipeline] {Kind}: {Error} ({Bytes} bytes)", kind, problems[0], body.Length)
+        Raw.store ctx "cipipeline" "decode_error" $"{kind} envelope: {problems[0]}" body
+    elif tenant <> "" then
         let attributes =
             match GoStruct.last "attributes" data with
             | Some written -> Value.ofJson written
@@ -1295,9 +1322,9 @@ let private storePipelineEvent (kind: string) (r: Request) : unit =
         let metrics = Value.floatMap (Value.field "metrics" attributes)
 
         Sink.write
-            r.Sink
+            sink
             CIPipelineEvents.table
-            [| { TenantID = r.Tenant
+            [| { TenantID = tenant
                  ReceivedAt = DateTime.UtcNow
                  Kind = kind
                  DataType = dataType
@@ -1310,7 +1337,7 @@ let private storePipelineEvent (kind: string) (r: Request) : unit =
                  SpanStartRaw = Value.fieldText "start_time" attributes
                  SpanEndRaw = Value.fieldText "end_time" attributes
                  Attributes = GoStruct.raw "attributes" data
-                 Body = r.Body
+                 Body = body
                  Extra = Value.unknown pipelineKnownKeys attributes } |]
 
 /// One datadog-ci call: `tag`, `measure` or `trace`. All three share the
@@ -1320,8 +1347,8 @@ let private storePipelineEvent (kind: string) (r: Request) : unit =
 ///
 /// 202 whatever happened: the CLI retries five times on an error, so a 5xx
 /// would stall somebody's CI job for half a minute.
-let handlePipelineEvent (kind: string) (r: Request) : Response =
-    if r.Body.Length > 0 then
-        storePipelineEvent kind r
+let handlePipelineEvent (kind: string) (body: byte[]) (ctx: HttpContext) : Task =
+    if body.Length > 0 then
+        storePipelineEvent kind body ctx
 
-    accepted
+    accepted ctx

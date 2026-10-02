@@ -21,8 +21,11 @@ module NinjaCat.Api.Intake.Routers.App
 
 open System
 open System.Text
+open System.Threading.Tasks
 open Google.Protobuf
 open Microsoft.Extensions.Logging
+open Microsoft.AspNetCore.Http
+open Oxpecker
 open Datadoghq.Api.Metrics.V3
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
@@ -625,11 +628,15 @@ let private parse (body: byte[]) : Result<Payload, string> =
         Error e.Message
 
 /// `label` names the route in raw_payloads and in the log.
-let handle (label: string) (r: Request) : Response =
-    match parse r.Body with
+let handle (label: string) (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    match parse body with
     | Error message ->
-        r.Log.LogWarning("[{Label}] protobuf: {Error} ({Bytes} bytes)", label, message, r.Body.Length)
-        Raw.store r label "decode_error" message r.Body
+        log.LogWarning("[{Label}] protobuf: {Error} ({Bytes} bytes)", label, message, body.Length)
+        Raw.store ctx label "decode_error" message body
     | Ok payload ->
         let series = if isNull payload.MetricData then 0 else payload.MetricData.Types_.Count
 
@@ -641,42 +648,42 @@ let handle (label: string) (r: Request) : Response =
             let tags = if isNull payload.Metadata then 0 else payload.Metadata.Tags.Count
             let resources = if isNull payload.Metadata then 0 else payload.Metadata.Resources.Count
 
-            r.Log.LogWarning(
+            log.LogWarning(
                 "[{Label}] decoded to zero series ({Bytes} bytes) — wrong payload type or still compressed?",
                 label,
-                r.Body.Length
+                body.Length
             )
 
             Raw.store
-                r
+                ctx
                 label
                 "unexpected_shape"
                 $"protobuf decoded but MetricData carries no series; metadata tags={tags} resources={resources}"
-                r.Body
-        elif r.Tenant <> "" then
-            let decoded = decode r.Tenant payload
-            Sink.write r.Sink Metrics.table decoded.Points
-            Sink.write r.Sink Sketches.table decoded.Sketches
+                body
+        elif tenant <> "" then
+            let decoded = decode tenant payload
+            Sink.write sink Metrics.table decoded.Points
+            Sink.write sink Sketches.table decoded.Sketches
 
             // The rows above are what the walk could read; the two notes
             // below keep what it could not. A payload that decodes cleanly is
             // never mirrored into raw_payloads.
             match decoded.Problem with
             | Some problem ->
-                r.Log.LogWarning("[{Label}] columnar walk: {Problem} — payload kept raw", label, problem)
-                Raw.store r label "unexpected_shape" problem r.Body
+                log.LogWarning("[{Label}] columnar walk: {Problem} — payload kept raw", label, problem)
+                Raw.store ctx label "unexpected_shape" problem body
             | None -> ()
 
             if decoded.WideInts > 0 then
                 // The row is still written (a rounded value beats no value)
                 // and the payload is kept, so the exact integer stays
                 // recoverable.
-                r.Log.LogWarning(
+                log.LogWarning(
                     "[{Label}] {Count} sint64 values beyond 2^53 — stored rounded, payload kept raw",
                     label,
                     decoded.WideInts
                 )
 
-                Raw.store r label "int64_precision" $"{decoded.WideInts} sint64 values beyond 2^53 widened to Float64" r.Body
+                Raw.store ctx label "int64_precision" $"{decoded.WideInts} sint64 values beyond 2^53 widened to Float64" body
 
-    Response.json 202 "{}"
+    (setStatusCode 202 >=> json {||}) ctx

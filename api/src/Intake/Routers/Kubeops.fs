@@ -24,10 +24,13 @@ open System.Text
 open System.Text.Encodings.Web
 open System.Text.Json
 open System.Text.Unicode
+open System.Threading.Tasks
 open Google.Protobuf
 open Google.Protobuf.Collections
 open Google.Protobuf.Reflection
 open Microsoft.Extensions.Logging
+open Microsoft.AspNetCore.Http
+open Oxpecker
 open Datadog.ProcessAgent
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
@@ -829,40 +832,44 @@ let ecsTaskRows (tenant: string) (now: DateTime) (frame: FrameColumns) (collecto
 
 // ---- the orchestrator handlers ----
 
-let private accepted = Response.json 202 "{}"
+let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
 
-let private handleFrame (label: string) (r: Request) : Response =
-    match ProcessFrame.decode r.Body with
+let private handleFrame (label: string) (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    match ProcessFrame.decode body with
     | Error e ->
-        r.Log.LogWarning("[{Label}] process frame: {Error} ({Bytes} bytes)", label, e, r.Body.Length)
-        Raw.store r "orchestrator" "decode_error" (label + ": " + e) r.Body
+        log.LogWarning("[{Label}] process frame: {Error} ({Bytes} bytes)", label, e, body.Length)
+        Raw.store ctx "orchestrator" "decode_error" (label + ": " + e) body
     | Ok decoded ->
         if Environment.GetEnvironmentVariable "NINJACAT_DUMP_K8S" = "true" then
             // The whole message: how to find out what a real cluster sends.
-            r.Log.LogInformation("[{Label}] {Body}", label, decoded.Body)
+            log.LogInformation("[{Label}] {Body}", label, decoded.Body)
 
         let frame = frameColumns decoded.Header
         let now = DateTime.UtcNow
-        let hasTenant = r.Tenant <> ""
+        let hasTenant = tenant <> ""
 
         match decoded.Body with
         | :? CollectorCluster as collector ->
             if hasTenant then
-                Sink.write r.Sink K8sCluster.table (clusterRows r.Tenant now frame collector)
+                Sink.write sink K8sCluster.table (clusterRows tenant now frame collector)
         | :? CollectorManifest as collector ->
             if hasTenant then
-                Sink.write r.Sink K8sManifests.table (manifestRows r.Tenant now frame collector [])
+                Sink.write sink K8sManifests.table (manifestRows tenant now frame collector [])
         // The CRD and CR wrappers hold an inner CollectorManifest that may be
         // missing, and tags of their own beside the inner one's.
         | :? CollectorManifestCRD as wrapper ->
             if hasTenant then
-                Sink.write r.Sink K8sManifests.table (manifestRows r.Tenant now frame wrapper.Manifest wrapper.Tags)
+                Sink.write sink K8sManifests.table (manifestRows tenant now frame wrapper.Manifest wrapper.Tags)
         | :? CollectorManifestCR as wrapper ->
             if hasTenant then
-                Sink.write r.Sink K8sManifests.table (manifestRows r.Tenant now frame wrapper.Manifest wrapper.Tags)
+                Sink.write sink K8sManifests.table (manifestRows tenant now frame wrapper.Manifest wrapper.Tags)
         | :? CollectorECSTask as collector ->
             if hasTenant then
-                Sink.write r.Sink ECSTasks.table (ecsTaskRows r.Tenant now frame collector)
+                Sink.write sink ECSTasks.table (ecsTaskRows tenant now frame collector)
         | :? CollectorPod
         | :? CollectorReplicaSet
         | :? CollectorDeployment
@@ -888,24 +895,26 @@ let private handleFrame (label: string) (r: Request) : Response =
         | :? CollectorStorageClass
         | :? CollectorPodDisruptionBudget ->
             if hasTenant then
-                Sink.write r.Sink K8sResources.table (resourceRows r.Tenant now frame decoded.Body)
+                Sink.write sink K8sResources.table (resourceRows tenant now frame decoded.Body)
         | other ->
             // The process agent's own messages belong on /api/v1/collector.
             // Here they mean a misconfigured agent: the frame decoded, but
             // this router has nowhere to put it.
             let goType = "*process." + other.Descriptor.Name
-            r.Log.LogWarning("[{Label}] {Type} is not an orchestrator message; kept as is", label, goType)
-            Raw.store r "orchestrator" "unexpected_shape" $"{label}: {goType} on an orchestrator intake" r.Body
+            log.LogWarning("[{Label}] {Type} is not an orchestrator message; kept as is", label, goType)
+            Raw.store ctx "orchestrator" "unexpected_shape" $"{label}: {goType} on an orchestrator intake" body
 
-    accepted
+    accepted ctx
 
 /// Kubernetes resource collections; /api/v1/orchestrator is the same under
 /// orchestrator_explorer.use_legacy_endpoint.
-let handleOrchestrator (r: Request) : Response = handleFrame "orch" r
+let handleOrchestrator (body: byte[]) : EndpointHandler = handleFrame "orch" body
+
 
 /// Raw manifests (types 80-82): the object's own YAML or JSON, "exactly what
 /// kubectl would show". Same frame, same decoder.
-let handleManifests (r: Request) : Response = handleFrame "orchmanif" r
+let handleManifests (body: byte[]) : EndpointHandler = handleFrame "orchmanif" body
+
 
 // ---- kubeactions → k8s_actions ----
 
@@ -1116,16 +1125,20 @@ let actionRow (tenant: string) (arrival: DateTime) (event: ActionEvent) : K8sAct
 /// The cluster agent's reports on the actions it ran: the other half of
 /// remote configuration. One event when an action is received, one when it
 /// is executed. Event platform track "kubeactions": a JSON array of events.
-let handleActions (r: Request) : Response =
-    match Json.tryParse r.Body with
+let handleActions (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    match Json.tryParse body with
     | Error e ->
-        r.Log.LogWarning("[kubeactions] not JSON: {Error}", e)
-        Raw.store r "kubeactions" "decode_error" e r.Body
+        log.LogWarning("[kubeactions] not JSON: {Error}", e)
+        Raw.store ctx "kubeactions" "decode_error" e body
     | Ok root when root.ValueKind = JsonValueKind.Null -> ()
     | Ok root when root.ValueKind <> JsonValueKind.Array ->
         let note = $"the body must be a JSON array of events, this is {kindName root}"
-        r.Log.LogWarning("[kubeactions] {Problem}", note)
-        Raw.store r "kubeactions" "decode_error" note r.Body
+        log.LogWarning("[kubeactions] {Problem}", note)
+        Raw.store ctx "kubeactions" "decode_error" note body
     | Ok root ->
         let events = ResizeArray<ActionEvent>()
 
@@ -1136,11 +1149,11 @@ let handleActions (r: Request) : Response =
             | Error e ->
                 // One bad element must not cost the batch, nor itself: its
                 // own JSON is kept while the rest become rows.
-                r.Log.LogWarning("[kubeactions] event {Index}: {Error}", i, e)
-                Raw.store r "kubeactions" "decode_error" $"batch element {i}: {e}" (Encoding.UTF8.GetBytes(raw.GetRawText())))
+                log.LogWarning("[kubeactions] event {Index}: {Error}", i, e)
+                Raw.store ctx "kubeactions" "decode_error" $"batch element {i}: {e}" (Encoding.UTF8.GetBytes(raw.GetRawText())))
 
-        if r.Tenant <> "" then
+        if tenant <> "" then
             let arrival = DateTime.UtcNow
-            Sink.write r.Sink K8sActions.table (events |> Seq.map (actionRow r.Tenant arrival) |> Array.ofSeq)
+            Sink.write sink K8sActions.table (events |> Seq.map (actionRow tenant arrival) |> Array.ofSeq)
 
-    accepted
+    accepted ctx

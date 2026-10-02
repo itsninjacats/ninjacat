@@ -12,7 +12,10 @@ open System.IO
 open System.Text
 open System.Text.Encodings.Web
 open System.Text.Json
+open System.Threading.Tasks
 open Microsoft.Extensions.Logging
+open Microsoft.AspNetCore.Http
+open Oxpecker
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
@@ -225,26 +228,30 @@ let toRow (tenant: string) (item: LogItem) (arrival: DateTime) (defaults: BatchD
       TimestampSource = time.Source }
 
 /// Datadog answers logs with an empty object and 202, whatever happened.
-let private accepted = Response.json 202 "{}"
+let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
 
-let handle (r: Request) : Response =
-    if Diagnose.isSweep r || r.Body.Length = 0 then
-        accepted
+let handle (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    if Diagnose.isSweep ctx || body.Length = 0 then
+        accepted ctx
     else
-        match parseItems r.Body with
+        match parseItems body with
         | Error e ->
-            r.Log.LogWarning("[logs] {Error}", e)
-            Raw.store r "logs" "decode_error" e r.Body
-            accepted
+            log.LogWarning("[logs] {Error}", e)
+            Raw.store ctx "logs" "decode_error" e body
+            accepted ctx
         | Ok items ->
             // Four fields may also arrive as query parameters, so a sender
             // that cannot shape its body can still say what it is. The body
             // wins, except for tags, which merge.
             let defaults =
-                { Source = r.Query "ddsource"
-                  Service = r.Query "service"
-                  Host = Text.firstNonEmpty [ r.Query "hostname"; r.Query "host" ]
-                  Tags = Tags.splitDDTags (r.Query "ddtags") }
+                { Source = Ctx.query ctx "ddsource"
+                  Service = Ctx.query ctx "service"
+                  Host = Text.firstNonEmpty [ Ctx.query ctx "hostname"; Ctx.query ctx "host" ]
+                  Tags = Tags.splitDDTags (Ctx.query ctx "ddtags") }
 
             let arrival = DateTime.UtcNow
             let rows = ResizeArray<LogRow>()
@@ -255,16 +262,16 @@ let handle (r: Request) : Response =
 
                 match decodeItem raw with
                 | Error(NotALog keys) ->
-                    r.Log.LogWarning("[logs] item #{Index} is not shaped like a log, kept raw, keys: {Keys}", i, keys)
-                    Raw.store r "logs" "unexpected_shape" $"item #{i} did not fit datadogV2.HTTPLogItem" rawBytes
+                    log.LogWarning("[logs] item #{Index} is not shaped like a log, kept raw, keys: {Keys}", i, keys)
+                    Raw.store ctx "logs" "unexpected_shape" $"item #{i} did not fit datadogV2.HTTPLogItem" rawBytes
                 | Error(Undecodable error) ->
-                    r.Log.LogWarning("[logs] item #{Index}: {Error}", i, error)
-                    Raw.store r "logs" "decode_error" $"item #{i}: {error}" rawBytes
+                    log.LogWarning("[logs] item #{Index}: {Error}", i, error)
+                    Raw.store ctx "logs" "decode_error" $"item #{i}: {error}" rawBytes
                 // `{}` says nothing: a probe, not a log.
                 | Ok item when item.Message = "" && item.Attributes.IsEmpty && item.Source = "" && item.Service = "" -> ()
                 | Ok item ->
-                    if r.Tenant <> "" then
-                        rows.Add(toRow r.Tenant item arrival defaults))
+                    if tenant <> "" then
+                        rows.Add(toRow tenant item arrival defaults))
 
-            Sink.write r.Sink Logs.table (rows.ToArray())
-            accepted
+            Sink.write sink Logs.table (rows.ToArray())
+            accepted ctx

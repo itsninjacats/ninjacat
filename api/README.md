@@ -34,8 +34,9 @@ Grafana's Datadog plugin can all point at it unchanged.
   `schema/migrations/*.sql`, which are embedded in the binary.
 - `src/Intake` — the agent-facing side. `Routes.fs` is the whole map: every
   host, and every path on it as an Oxpecker route (ASP.NET's router does the
-  matching); `Auth.fs` finds the key; `Routers/*.fs` hold the handlers, which
-  turn a payload into rows.
+  matching); `Auth.fs` is the API key as an ASP.NET authentication scheme;
+  `Routers/*.fs` hold the handlers, Oxpecker's own, which turn a payload into
+  rows.
 - `src/Server` — the host: configuration, the two HTTP surfaces, the API key
   keeper, self-monitoring. `ClickHouse.fs` and `Postgres.fs` are the only
   files that open a database connection.
@@ -85,7 +86,8 @@ SHA-256 of a key.
 1. Rows: a record and a `Table` in `src/Storage/Rows/<X>.fs` (columns in
    INSERT order), and a migration in `schema/migrations/` if the table is new.
    A migration that has been applied anywhere is never edited; add the next one.
-2. Handlers (`Request -> Response`) in `src/Intake/Routers/<X>.fs`.
+2. Handlers (`byte[] -> EndpointHandler`, bound with `bindBody`) in
+   `src/Intake/Routers/<X>.fs`.
 3. In `Routes.fs`: the host's routes, and a line for the host in `configure`.
 4. Tests in `tests/Intake.Tests/<X>Tests.fs`.
 

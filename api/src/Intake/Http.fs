@@ -4,101 +4,42 @@ open System
 open System.IO
 open System.IO.Compression
 open System.Text
-open System.Text.Encodings.Web
 open System.Text.Json
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.WebUtilities
 open Microsoft.Extensions.Logging
 open Microsoft.Net.Http.Headers
+open Oxpecker
 open NinjaCat.Api.Storage
 
-/// What a handler answers with. Handlers return it; `Response.write` sends it.
-type Response =
-    { Status: int
-      Headers: (string * string) list
-      Body: byte[] }
+/// What a handler reads from the request's context. Each is one line over
+/// ASP.NET's own API, named so that a handler reads plainly.
+module Ctx =
+    /// The intake's logger.
+    let log (ctx: HttpContext) : ILogger = ctx.GetLogger "NinjaCat.Api.Intake"
 
-module Response =
-    let private jsonOptions =
-        JsonSerializerOptions(Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping)
+    /// Where rows are written.
+    let sink (ctx: HttpContext) : ISink = ctx.GetService<ISink>()
 
-    let status (code: int) : Response = { Status = code; Headers = []; Body = [||] }
-
-    let bytes (code: int) (contentType: string) (body: byte[]) : Response =
-        { Status = code
-          Headers = [ "Content-Type", contentType ]
-          Body = body }
-
-    /// JSON given as text, e.g. `Response.json 202 "{}"`.
-    let json (code: int) (text: string) : Response =
-        bytes code "application/json; charset=utf-8" (Encoding.UTF8.GetBytes text)
-
-    /// JSON from a value, e.g. an anonymous record.
-    let jsonOf (code: int) (value: 'a) : Response =
-        bytes code "application/json; charset=utf-8" (JsonSerializer.SerializeToUtf8Bytes(value, jsonOptions))
-
-    /// The error envelope Datadog's own intake uses.
-    let errors (code: int) (messages: string list) : Response = jsonOf code {| errors = messages |}
-
-    let withHeader (name: string) (value: string) (response: Response) : Response =
-        { response with Headers = response.Headers @ [ name, value ] }
-
-    let write (http: HttpContext) (response: Response) : Task =
-        task {
-            http.Response.StatusCode <- response.Status
-
-            for name, value in response.Headers do
-                http.Response.Headers[name] <- value
-
-            if response.Body.Length > 0 && http.Request.Method <> "HEAD" then
-                http.Response.ContentLength <- int64 response.Body.Length
-                do! http.Response.Body.WriteAsync(response.Body, 0, response.Body.Length)
-        }
-
-module Query =
-    /// A query parameter's first value, or "", with the name matched exactly.
-    /// ASP.NET's own lookup ignores case; Go's did not.
-    let first (http: HttpContext) (name: string) : string =
-        let mutable found = ""
-
-        for pair in http.Request.Query do
-            if found = "" && pair.Key = name && pair.Value.Count > 0 then
-                found <- pair.Value[0]
-
-        found
-
-/// One request as a handler sees it. The body is already read and
-/// decompressed.
-type Request =
-    { Http: HttpContext
-      Body: byte[]
-      /// The API key the request was admitted with; None on public routes.
-      Key: ApiKeys.Key option
-      Sink: ISink
-      Log: ILogger }
-
-    /// The tenant the request's data belongs to, or "" on a public route.
-    member r.Tenant: string =
-        match r.Key with
-        | Some key -> key.TenantID
-        | None -> ""
-
-    member r.Method: string = r.Http.Request.Method
-    member r.Path: string = r.Http.Request.Path.Value
-    member r.Host: string = r.Http.Request.Host.Value
+    /// The tenant of the API key the request was admitted with, or "" on a
+    /// route that asks for none.
+    let tenant (ctx: HttpContext) : string =
+        match ctx.User.FindFirst "tenant" with
+        | null -> ""
+        | claim -> claim.Value
 
     /// The header's first value, or "".
-    member r.Header(name: string) : string =
-        match r.Http.Request.Headers.TryGetValue name with
+    let header (ctx: HttpContext) (name: string) : string =
+        match ctx.Request.Headers.TryGetValue name with
         | true, values when values.Count > 0 -> values[0]
         | _ -> ""
 
-    /// The query parameter's first value, or "". The name is matched exactly,
-    /// as Go matched it: `?DDSOURCE=` is not `ddsource`.
-    member r.Query(name: string) : string = Query.first r.Http name
-
-type Handler = Request -> Response
+    /// The query parameter's first value, or "".
+    let query (ctx: HttpContext) (name: string) : string =
+        match ctx.Request.Query.TryGetValue name with
+        | true, values when values.Count > 0 -> values[0]
+        | _ -> ""
 
 /// Request bodies arrive compressed three ways, one per agent subsystem: zstd
 /// for metrics, gzip for traces, deflate for distribution points. No proxy
@@ -152,6 +93,19 @@ module Body =
         else
             let first = body |> Array.tryFind (fun b -> b <> ' 'B && b <> '\t'B && b <> '\r'B && b <> '\n'B)
             first = Some '{'B || first = Some '['B
+
+/// Oxpecker's bindJson, for a body that is not JSON to bind: reads the body
+/// whole, undoes its Content-Encoding, and runs the handler with the bytes.
+[<AutoOpen>]
+module BindBody =
+    let bindBody (handler: byte[] -> EndpointHandler) : EndpointHandler =
+        fun ctx ->
+            task {
+                let! raw = Body.read ctx
+                let encoding = ctx.Request.Headers.ContentEncoding.ToString()
+                let body = if encoding = "" then raw else Body.decompress (Ctx.log ctx) encoding raw
+                return! handler body ctx
+            }
 
 type MultipartPart =
     { /// The form field's name, or "".

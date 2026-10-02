@@ -342,13 +342,10 @@ let ``a string Python could not encode is stored with U+FFFD, not answered with 
 let ``without a tenant nothing is stored and the answer is still 202`` () =
     let sink = CapturingSink()
 
-    let request: Request =
-        { Http = DefaultHttpContext()
-          Body = Encoding.UTF8.GetBytes """{"host":"db1","database_instance":"db1/orcl"}"""
-          Key = None
-          Sink = sink
-          Log = NullLogger.Instance }
-
-    let response = Dbm.handle "dbmmetrics" request
+    // The handler itself, with no key behind the request.
+    let deps: Deps = { Store = Replay.testStore (); Sink = sink; Log = NullLogger.Instance; AckUnknown = false }
+    let ctx = Replay.contextFor deps ""
+    (Dbm.handle "dbmmetrics" (Encoding.UTF8.GetBytes """{"host":"db1","database_instance":"db1/orcl"}""") ctx).Wait()
+    let response = Replay.answerOf ctx
     Assert.Equal(202, response.Status)
     Assert.Empty sink.Writes

@@ -184,7 +184,14 @@ let takeFrames (framing: Framing) (buffer: ReadOnlySpan<byte>) : Result<byte[] l
 
 /// Owns one connection: decides its framing, then reads frames and stores
 /// what they give, in batches, until the peer leaves or a key is unknown.
-let private handleConnection (deps: Deps) (remote: string) (input: PipeReader) (serverStopping: CancellationToken) : Task =
+let private handleConnection
+    (store: ApiKeys.Store)
+    (sink: ISink)
+    (log: ILogger)
+    (remote: string)
+    (input: PipeReader)
+    (serverStopping: CancellationToken)
+    : Task =
     task {
         let gate = obj ()
         let logs = ResizeArray<LogRow>()
@@ -194,8 +201,8 @@ let private handleConnection (deps: Deps) (remote: string) (input: PipeReader) (
         // single-row batches.
         let flush () =
             lock gate (fun () ->
-                Sink.write deps.Sink Logs.table (logs.ToArray())
-                Sink.write deps.Sink RawPayloads.table (raws.ToArray())
+                Sink.write sink Logs.table (logs.ToArray())
+                Sink.write sink RawPayloads.table (raws.ToArray())
                 logs.Clear()
                 raws.Clear())
 
@@ -224,14 +231,14 @@ let private handleConnection (deps: Deps) (remote: string) (input: PipeReader) (
                     | Some framing ->
                         match takeFrames framing (ReadOnlySpan received) with
                         | Error e ->
-                            deps.Log.LogWarning("[logs-tcp] {Remote}: closing connection: {Error}", remote, e)
+                            log.LogWarning("[logs-tcp] {Remote}: closing connection: {Error}", remote, e)
                             opened <- false
                         | Ok(frames, taken) ->
                             consumed <- taken
 
                             for frame in frames do
                                 if opened then
-                                    match handleFrame deps.Store deps.Log remote framing frame with
+                                    match handleFrame store log remote framing frame with
                                     | Nothing -> ()
                                     | LogLine row -> lock gate (fun () -> logs.Add row)
                                     | Undecodable row -> lock gate (fun () -> raws.Add row)
@@ -247,7 +254,7 @@ let private handleConnection (deps: Deps) (remote: string) (input: PipeReader) (
                         opened <- false
             with
             | :? OperationCanceledException -> ()
-            | :? IOException as e -> deps.Log.LogDebug("[logs-tcp] {Remote}: connection ended: {Error}", remote, e.Message)
+            | :? IOException as e -> log.LogDebug("[logs-tcp] {Remote}: connection ended: {Error}", remote, e.Message)
         finally
             // Rows already decoded are kept, whatever ended the connection.
             flush ()
@@ -255,8 +262,10 @@ let private handleConnection (deps: Deps) (remote: string) (input: PipeReader) (
 
 /// One connection, as Kestrel hands it over: Kestrel listens, accepts and,
 /// when the endpoint has a certificate, speaks TLS.
-type Connection(deps: Deps) =
+type Connection(store: ApiKeys.Store, sink: ISink, loggers: ILoggerFactory) =
     inherit ConnectionHandler()
+
+    let log = loggers.CreateLogger "NinjaCat.Api.Intake"
 
     override _.OnConnectedAsync(connection: ConnectionContext) : Task =
         // An agent holds its connection open for good, so a stopping server
@@ -265,4 +274,4 @@ type Connection(deps: Deps) =
         // which can be before its last bytes were read.
         let lifetime = connection.Features.Get<IConnectionLifetimeNotificationFeature>()
 
-        handleConnection deps (string connection.RemoteEndPoint) connection.Transport.Input lifetime.ConnectionClosedRequested
+        handleConnection store sink log (string connection.RemoteEndPoint) connection.Transport.Input lifetime.ConnectionClosedRequested

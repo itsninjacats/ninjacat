@@ -23,19 +23,22 @@ open System.IO
 open System.Text
 open System.Text.Encodings.Web
 open System.Text.Json
+open System.Threading.Tasks
 open Cyclonedx.V14
 open Datadog.Cws.Dumpsv1
 open Datadog.Sbom
 open Datadog.Sds
 open Google.Protobuf
 open Microsoft.Extensions.Logging
+open Microsoft.AspNetCore.Http
+open Oxpecker
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
 
 /// Datadog answers these intakes with an empty object and 202, whatever
 /// happened to the body.
-let private accepted = Response.json 202 "{}"
+let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
 
 /// A member of a JSON object, exactly as it was written. None when the
 /// value is not an object or has no such member.
@@ -335,17 +338,21 @@ let flattenTree (tenant: string) (receivedAt: DateTime) (dumpId: Guid) (tree: Pr
 ///
 /// The parts are decoded independently: a broken "event" does not lose the
 /// "dump", and the other way round.
-let handleSecDump (r: Request) : Response =
-    match Multipart.boundary (r.Header "Content-Type") with
+let handleSecDump (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    match Multipart.boundary (Ctx.header ctx "Content-Type") with
     | None ->
-        r.Log.LogWarning("[secdump] not multipart: content-type {ContentType}", r.Header "Content-Type")
-        Raw.store r "secdump" "decode_error" "content-type is not multipart/form-data" r.Body
+        log.LogWarning("[secdump] not multipart: content-type {ContentType}", Ctx.header ctx "Content-Type")
+        Raw.store ctx "secdump" "decode_error" "content-type is not multipart/form-data" body
     | Some boundary ->
-        let parts = Multipart.parts boundary r.Body
+        let parts = Multipart.parts boundary body
 
         for part in parts do
             if part.Name <> "event" && part.Name <> "dump" then
-                r.Log.LogWarning("[secdump] unexpected part {Name} ({Bytes} B)", part.Name, part.Data.Length)
+                log.LogWarning("[secdump] unexpected part {Name} ({Bytes} B)", part.Name, part.Data.Length)
 
         let partData (name: string) =
             parts |> List.tryFindBack (fun p -> p.Name = name) |> Option.map _.Data
@@ -356,27 +363,27 @@ let handleSecDump (r: Request) : Response =
         let dump = dumpBytes |> Option.bind decodeDump
 
         if headerBytes.IsSome && header.IsNone then
-            r.Log.LogWarning("[secdump] the event part is not a JSON object ({Bytes} B)", headerBytes.Value.Length)
+            log.LogWarning("[secdump] the event part is not a JSON object ({Bytes} B)", headerBytes.Value.Length)
 
         if dumpBytes.IsSome && dump.IsNone then
-            r.Log.LogWarning("[secdump] the dump part did not decode ({Bytes} B)", dumpBytes.Value.Length)
+            log.LogWarning("[secdump] the dump part did not decode ({Bytes} B)", dumpBytes.Value.Length)
 
         if header.IsNone && dump.IsNone then
-            Raw.store r "secdump" "decode_error" "neither multipart part decoded" r.Body
-        elif r.Tenant <> "" then
+            Raw.store ctx "secdump" "decode_error" "neither multipart part decoded" body
+        elif tenant <> "" then
             let receivedAt = DateTime.UtcNow
             let dumpId = Guid.NewGuid()
 
             let row =
-                dumpRow r.Tenant receivedAt dumpId header (defaultArg headerBytes [||]) dump (defaultArg dumpBytes [||])
+                dumpRow tenant receivedAt dumpId header (defaultArg headerBytes [||]) dump (defaultArg dumpBytes [||])
 
-            Sink.write r.Sink CwsActivityDumps.table [| row |]
+            Sink.write sink CwsActivityDumps.table [| row |]
 
             match dump with
-            | Some d -> Sink.write r.Sink CwsDumpNodes.table (flattenTree r.Tenant receivedAt dumpId d.Tree)
+            | Some d -> Sink.write sink CwsDumpNodes.table (flattenTree tenant receivedAt dumpId d.Tree)
             | None -> ()
 
-    accepted
+    accepted ctx
 
 /// Envelope keys with a column of their own; the rest go to extra.
 let private knownEnvelopeKeys =
@@ -472,17 +479,21 @@ let eventRows (tenant: string) (receivedAt: DateTime) (track: string) (envelopes
 
 /// A logs-pipeline batch: a JSON array of envelopes. One handler serves
 /// three tracks; the rows share a table and carry the track.
-let handleTrack (track: string) : Handler =
-    fun r ->
-        match decodeEnvelopes r.Body with
-        | Error problem ->
-            r.Log.LogWarning("[{Track}] not a JSON array of envelopes: {Problem}", track, problem)
-            Raw.store r track "unexpected_shape" $"top-level body is not a JSON array: {problem}" r.Body
-        | Ok envelopes ->
-            if r.Tenant <> "" then
-                Sink.write r.Sink SecurityEvents.table (eventRows r.Tenant DateTime.UtcNow track envelopes)
+let handleTrack (track: string) : byte[] -> EndpointHandler =
+    fun body ctx ->
+        let tenant = Ctx.tenant ctx
+        let log = Ctx.log ctx
+        let sink = Ctx.sink ctx
 
-        accepted
+        match decodeEnvelopes body with
+        | Error problem ->
+            log.LogWarning("[{Track}] not a JSON array of envelopes: {Problem}", track, problem)
+            Raw.store ctx track "unexpected_shape" $"top-level body is not a JSON array: {problem}" body
+        | Ok envelopes ->
+            if tenant <> "" then
+                Sink.write sink SecurityEvents.table (eventRows tenant DateTime.UtcNow track envelopes)
+
+        accepted ctx
 
 /// A property list as a multiset: CycloneDX allows a name to repeat, and
 /// real scanners do repeat them.
@@ -667,29 +678,33 @@ let sbomRows
     entities.ToArray(), components.ToArray(), vulnerabilities.ToArray()
 
 /// POST /api/v2/sbom: one SBOMPayload per request, protobuf.
-let handleSbom (r: Request) : Response =
+let handleSbom (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
     let payload =
         try
-            Ok(SBOMPayload.Parser.ParseFrom r.Body)
+            Ok(SBOMPayload.Parser.ParseFrom body)
         with :? InvalidProtocolBufferException as e ->
             Error e.Message
 
     match payload with
     | Error problem ->
-        r.Log.LogWarning("[sbom] protobuf: {Problem} ({Bytes} B)", problem, r.Body.Length)
-        Raw.store r "sbom" "decode_error" problem r.Body
+        log.LogWarning("[sbom] protobuf: {Problem} ({Bytes} B)", problem, body.Length)
+        Raw.store ctx "sbom" "decode_error" problem body
     | Ok payload when payload.Entities.Count = 0 ->
         // Protobuf reads almost any bytes as some message.
-        r.Log.LogWarning("[sbom] decoded to zero entities ({Bytes} B), wrong payload type?", r.Body.Length)
-        Raw.store r "sbom" "unexpected_shape" "decoded to zero entities" r.Body
+        log.LogWarning("[sbom] decoded to zero entities ({Bytes} B), wrong payload type?", body.Length)
+        Raw.store ctx "sbom" "unexpected_shape" "decoded to zero entities" body
     | Ok payload ->
-        if r.Tenant <> "" then
-            let entities, components, vulnerabilities = sbomRows r.Tenant DateTime.UtcNow payload
-            Sink.write r.Sink SbomEntities.table entities
-            Sink.write r.Sink SbomComponents.table components
-            Sink.write r.Sink SbomVulnerabilities.table vulnerabilities
+        if tenant <> "" then
+            let entities, components, vulnerabilities = sbomRows tenant DateTime.UtcNow payload
+            Sink.write sink SbomEntities.table entities
+            Sink.write sink SbomComponents.table components
+            Sink.write sink SbomVulnerabilities.table vulnerabilities
 
-    accepted
+    accepted ctx
 
 /// A protobuf tag: the field's number and wire type, and how many bytes the
 /// tag itself took.
@@ -1066,30 +1081,34 @@ let private sdsIsBlank (payload: SdsResultPayload) : bool =
 /// into a message with nothing in it. A payload that names no resource and
 /// has no result is therefore kept raw, its wire layout in the note, instead
 /// of becoming an empty scan.
-let handleSdsResult (r: Request) : Response =
+let handleSdsResult (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
     let layout () =
-        match wireLayout r.Body with
+        match wireLayout body with
         | None -> "protobuf did not parse as a sequence of top-level fields"
         | Some "" -> "no fields (empty or wrong payload type?)"
         | Some layout -> layout
 
     let parsed =
         try
-            Ok(SdsResultPayload.Parser.ParseFrom r.Body)
+            Ok(SdsResultPayload.Parser.ParseFrom body)
         with :? InvalidProtocolBufferException as e ->
             Error e.Message
 
     match parsed with
     | Error problem ->
-        r.Log.LogWarning("[sds] protobuf: {Error} ({Bytes} bytes)", problem, r.Body.Length)
-        Raw.store r "sds" "decode_error" $"protobuf SdsResultPayload: {problem}; {layout ()}" r.Body
+        log.LogWarning("[sds] protobuf: {Error} ({Bytes} bytes)", problem, body.Length)
+        Raw.store ctx "sds" "decode_error" $"protobuf SdsResultPayload: {problem}; {layout ()}" body
     | Ok payload when sdsIsBlank payload ->
-        Raw.store r "sds" "unexpected_shape" $"not an SdsResultPayload: no resource and no results; {layout ()}" r.Body
+        Raw.store ctx "sds" "unexpected_shape" $"not an SdsResultPayload: no resource and no results; {layout ()}" body
     | Ok payload ->
-        if r.Tenant <> "" then
-            let rows = sdsRows r.Tenant DateTime.UtcNow (Guid.NewGuid()) payload
-            Sink.write r.Sink SdsScans.table [| rows.Scan |]
-            Sink.write r.Sink SdsResults.table (Array.ofList rows.Results)
-            Sink.write r.Sink SdsMatches.table (Array.ofList rows.Matches)
+        if tenant <> "" then
+            let rows = sdsRows tenant DateTime.UtcNow (Guid.NewGuid()) payload
+            Sink.write sink SdsScans.table [| rows.Scan |]
+            Sink.write sink SdsResults.table (Array.ofList rows.Results)
+            Sink.write sink SdsMatches.table (Array.ofList rows.Matches)
 
-    accepted
+    accepted ctx

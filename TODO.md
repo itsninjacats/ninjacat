@@ -116,10 +116,11 @@ referenced library provides. Done on 2026-10-02 unless ticked otherwise:
 - [x] Small: `parseHex64`, `isSpace`, `formatIPv6`, `median`, `movingAverage`, `dist` use
       the library; FNV-1a is one function (`Storage/Fnv.fs`); varints are read by
       `CodedInputStream` (`Varint` in `Common.fs`, `Capture.fs`); `wrongWireType` is gone.
-- [ ] **Native handlers**: the intake's handlers are `Request -> Response` over records of
-      our own, run through an adapter (`Routes.keyed`), with the key checked by `Auth.fs`.
-      Next: Oxpecker's own `EndpointHandler`s writing through `ctx`, and ASP.NET
-      authentication for the key; `Request`, `Response` and `keyed` go.
+- [x] **Native handlers**: the intake's handlers are Oxpecker's (`byte[] ->
+      EndpointHandler`, bound with `bindBody`), they answer with Oxpecker's own handlers,
+      and the key is an ASP.NET authentication scheme. `Request`, `Response`, `Deps` and
+      the adapter are gone. Query parameter names are matched as ASP.NET matches them,
+      without regard to case.
 - [ ] **ClickHouse inserts**: the driver already gets the rows (`InsertBinaryAsync` with
       `object[]`); nothing is hand-built there. Inserting records instead is possible
       (`InsertBinaryAsync<T>`, a `ClickHouseColumn` attribute per field) and would remove
@@ -187,7 +188,10 @@ far found something, so expect findings. How to record: `lab/README.md`.
       producers share the path and are told apart by `request_type`; they do not follow
       `dd_url`, which is why the labs never saw them:
   - `compose.self.yaml` already sets `apm_config.telemetry.dd_url`; the .NET tracer's
-    telemetry arrives through it as `apm_telemetry` rows. The labs do not yet:
+    telemetry arrives through it as `apm_telemetry` rows. Seen there on 2026-10-02 and not
+    looked into: the trace-agent also posts to the same host over https and logs "server
+    gave HTTP response to HTTPS client", and the agent's own telemetry
+    (`agent_telemetry`) is not redirected at all. The labs do not redirect either yet:
   - [ ] redirect them in `compose.lab.yaml` and `lab/`: `agent_telemetry.dd_url` (the agent's
         own metrics, logs and message batches, zstd) and `apm_config.telemetry.dd_url` (the
         tracers' proxy, trace-agent onboarding, the cluster agent's patch events), and add

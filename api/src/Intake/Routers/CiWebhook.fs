@@ -21,7 +21,10 @@ module NinjaCat.Api.Intake.Routers.CiWebhook
 open System
 open System.Text
 open System.Text.Json
+open System.Threading.Tasks
 open Microsoft.Extensions.Logging
+open Microsoft.AspNetCore.Http
+open Oxpecker
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Intake.Routers.CiVisibility
 open NinjaCat.Api.Storage
@@ -151,11 +154,15 @@ let webhookRow (tenant: string) (receivedAt: DateTime) (delivery: Delivery) (bod
       Extra = Value.unknown knownKeys element
       Body = body }
 
-let private store (r: Request) : unit =
-    match GoJson.parse r.Body with
+let private store (body: byte[]) (ctx: HttpContext) : unit =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    match GoJson.parse body with
     | Error e ->
-        r.Log.LogWarning("[ciwebhook] json: {Error} ({Bytes} bytes)", e, r.Body.Length)
-        Raw.store r "webhook" "decode_error" $"batch: {e}" r.Body
+        log.LogWarning("[ciwebhook] json: {Error} ({Bytes} bytes)", e, body.Length)
+        Raw.store ctx "webhook" "decode_error" $"batch: {e}" body
     | Ok root ->
         // A batch is an array; a provider that skipped the batcher sends one
         // object. A bare null is an empty batch.
@@ -166,13 +173,13 @@ let private store (r: Request) : unit =
             | _ -> [ root ]
 
         let delivery: Delivery =
-            { Provider = (r.Header "Dd-Ci-Provider-Name").Trim().ToLowerInvariant()
-              Service = r.Query "service"
-              ID = Text.firstNonEmpty [ r.Header "X-Gitlab-Event-Uuid"; r.Header "X-Github-Delivery"; r.Header "Dd-Request-Id" ]
+            { Provider = (Ctx.header ctx "Dd-Ci-Provider-Name").Trim().ToLowerInvariant()
+              Service = Ctx.query ctx "service"
+              ID = Text.firstNonEmpty [ Ctx.header ctx "X-Gitlab-Event-Uuid"; Ctx.header ctx "X-Github-Delivery"; Ctx.header ctx "Dd-Request-Id" ]
               Headers =
                 keptHeaders
                 |> List.choose (fun name ->
-                    match r.Header name with
+                    match Ctx.header ctx name with
                     | "" -> None
                     | value -> Some(name, value))
                 |> Map.ofList }
@@ -185,22 +192,21 @@ let private store (r: Request) : unit =
 
             match Value.ofJson written with
             | Value.Object _ as element ->
-                if r.Tenant <> "" then
-                    rows.Add(webhookRow r.Tenant now delivery body element)
-            | _ -> Raw.store r "webhook" "unexpected_shape" "element is not a JSON object" (Encoding.UTF8.GetBytes body)
+                if tenant <> "" then
+                    rows.Add(webhookRow tenant now delivery body element)
+            | _ -> Raw.store ctx "webhook" "unexpected_shape" "element is not a JSON object" (Encoding.UTF8.GetBytes body)
 
-        Sink.write r.Sink CIWebhookEvents.table (rows.ToArray())
+        Sink.write sink CIWebhookEvents.table (rows.ToArray())
 
 /// A batch of CI pipeline, stage and job events.
 ///
 /// The Jenkins plugin only tells 2xx from everything else, so 202 with an
 /// empty object is the whole contract.
-let handle (r: Request) : Response =
-    if r.Body.Length > 0 then
-        store r
+let handle (body: byte[]) (ctx: HttpContext) : Task =
+    if body.Length > 0 then
+        store body ctx
 
-    Response.json 202 "{}"
-
+    (setStatusCode 202 >=> json {||}) ctx
 /// intake.synthetics.<site> — the agent's synthetics test poller
 /// (synthetics.collector.enabled).
 ///
@@ -217,4 +223,5 @@ let handle (r: Request) : Response =
 /// Serving real tests from synthetics_test_configs needs a read path the
 /// intake does not have; until then the empty list is the honest answer.
 /// Nothing is stored: the poll carries no telemetry.
-let handleSyntheticsAgentTests (_: Request) : Response = Response.json 200 """{"tests":[]}"""
+let handleSyntheticsAgentTests (_: byte[]) : EndpointHandler = json {| tests = List.empty<string> |}
+

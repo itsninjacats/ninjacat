@@ -551,18 +551,13 @@ let private seriesPath = "/api/intake/metrics/v3/series"
 [<Fact>]
 let ``without a tenant nothing is stored and the answer is the same`` () =
     let sink = CapturingSink()
-    let http = DefaultHttpContext()
-    http.Request.Method <- "POST"
-    http.Request.Path <- PathString seriesPath
-
-    let request: Request =
-        { Http = http
-          Body = (examplePayload ()).ToByteArray()
-          Key = None
-          Sink = sink
-          Log = NullLogger.Instance }
-
-    let response = App.handle "v3series" request
+    // The handler itself, with no key behind the request.
+    let deps: Deps = { Store = Replay.testStore (); Sink = sink; Log = NullLogger.Instance; AckUnknown = false }
+    let ctx = Replay.contextFor deps ""
+    ctx.Request.Method <- "POST"
+    ctx.Request.Path <- PathString seriesPath
+    (App.handle "v3series" ((examplePayload ()).ToByteArray()) ctx).Wait()
+    let response = Replay.answerOf ctx
 
     Assert.Equal(202, response.Status)
     Assert.Equal("{}", Encoding.UTF8.GetString response.Body)

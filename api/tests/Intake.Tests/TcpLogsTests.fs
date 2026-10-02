@@ -14,6 +14,7 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Logging.Abstractions
 open Xunit
 open NinjaCat.Api.Intake
+open NinjaCat.Api.Storage
 open NinjaCat.Api.Intake.Tests.Golden
 open NinjaCat.Api.Storage.Rows
 
@@ -122,11 +123,10 @@ let ``an unknown key closes the connection, a frame without a key is dropped`` (
 /// Sends bytes to a real Kestrel endpoint and waits for the rows.
 let private overTcp (payload: byte[]) (expectedRows: int) : CapturingSink =
     let sink = CapturingSink()
-    let deps: Deps = { Store = store; Sink = sink; Log = NullLogger.Instance; AckUnknown = false }
-
     let builder = WebApplication.CreateEmptyBuilder(WebApplicationOptions())
     builder.WebHost.UseKestrelCore() |> ignore
-    builder.Services.AddSingleton<Deps>(deps) |> ignore
+    // What the connection handler asks the container for.
+    builder.Services.AddLogging().AddSingleton<ApiKeys.Store>(store).AddSingleton<ISink>(sink) |> ignore
 
     builder.WebHost.ConfigureKestrel(fun options ->
         options.Listen(IPAddress.Loopback, 0, (fun endpoint -> endpoint.UseConnectionHandler<TcpLogs.Connection>() |> ignore)))

@@ -4,6 +4,7 @@
 module NinjaCat.Api.Intake.Tests.IntakeCoreTests
 
 open System.Text
+open System.Text.Json
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Logging.Abstractions
 open Microsoft.Extensions.Primitives
@@ -39,21 +40,27 @@ let private request (method: string) (host: string) (target: string) (headers: (
 
     http
 
-let private ok: Handler = fun _ -> Response.status 200
+let private ok (_: byte[]) : EndpointHandler = setStatusCode 200
+
+/// The scheme of the agent's hosts, and the one of the host that also takes
+/// a Bearer credential.
+let private agent = Some ApiKeyAuth.agent
+let private lineage = Some ApiKeyAuth.lineage
 
 /// One host's router with the given endpoints, as the server mounts it.
-let private send (sink: CapturingSink) (auth: Auth) (endpoints: Endpoint list) (http: HttpContext) : Response =
-    Replay.through (deps sink) (fun app -> Routes.mount app (Routes.keyed auth) endpoints) http [||]
+/// `scheme` is the authentication its routes ask for; None for none.
+let private send (sink: CapturingSink) (scheme: string option) (endpoints: Endpoint list) (http: HttpContext) : Response =
+    Replay.through (deps sink) (fun app -> Routes.mount app scheme endpoints) http [||]
 
-let private statusOf (auth: Auth) (endpoints: Endpoint list) (method: string) (target: string) (headers: (string * string) list) : int =
-    (send (CapturingSink()) auth endpoints (request method "example.com" target headers)).Status
+let private statusOf (scheme: string option) (endpoints: Endpoint list) (method: string) (target: string) (headers: (string * string) list) : int =
+    (send (CapturingSink()) scheme endpoints (request method "example.com" target headers)).Status
 
 // --- the key guard -------------------------------------------------------------------
 
 [<Fact>]
 let ``the standard guard takes the header, then the api_key query parameter`` () =
     let status target headers =
-        statusOf Auth.standard [ GET [ route "/x" (Routes.keyed Auth.standard ok) ] ] "GET" target headers
+        statusOf agent [ GET [ route "/x" (bindBody ok) ] ] "GET" target headers
 
     Assert.Equal(200, status "/x" [ "Dd-Api-Key", key ])
     Assert.Equal(200, status ("/x?api_key=" + key) [])
@@ -64,8 +71,7 @@ let ``the standard guard takes the header, then the api_key query parameter`` ()
 
 [<Fact>]
 let ``key sources are tried in order, and a non-bearer credential is not a key`` () =
-    let all = Auth.fromSources [ KeyFromHeader "Dd-Api-Key"; KeyFromBearer; KeyFromQuery "api_key" ]
-    let status target headers = statusOf all [ GET [ route "/x" (Routes.keyed all ok) ] ] "GET" target headers
+    let status target headers = statusOf lineage [ GET [ route "/x" (bindBody ok) ] ] "GET" target headers
     Assert.Equal(200, status "/x" [ "Dd-Api-Key", key ])
     Assert.Equal(200, status "/x" [ "DD-API-KEY", key ])
     Assert.Equal(200, status "/x" [ "Authorization", "Bearer " + key ])
@@ -77,7 +83,7 @@ let ``key sources are tried in order, and a non-bearer credential is not a key``
 [<Fact>]
 let ``the probes need no key, an unknown path is answered before the guard`` () =
     let status method target =
-        statusOf Auth.standard [ POST [ route "/x" (Routes.keyed Auth.standard ok) ] ] method target []
+        statusOf agent [ POST [ route "/x" (bindBody ok) ] ] method target []
 
     Assert.Equal(200, status "GET" "/ping")
     Assert.Equal(200, status "GET" "/_health")
@@ -135,7 +141,7 @@ let ``a timestamp beyond year 9999 is kept at the limit, not an error`` () =
 
 [<Fact>]
 let ``a handler that throws is a 500, not a crash`` () =
-    Assert.Equal(500, statusOf Auth.none [ GET [ route "/x" (Routes.keyed Auth.none (fun _ -> failwith "boom")) ] ] "GET" "/x" [])
+    Assert.Equal(500, statusOf None [ GET [ route "/x" (bindBody (fun _ _ -> failwith "boom")) ] ] "GET" "/x" [])
 
 // --- the host dispatch -------------------------------------------------------------------
 
@@ -148,8 +154,9 @@ let ``a host no intake serves is refused by name`` (host: string) =
     let intake = Replay.wholeIntake (deps (CapturingSink()))
     let response = intake (request "POST" host "/api/v2/sbom" [ "Dd-Api-Key", key ]) [||]
     Assert.Equal(404, response.Status)
-    Assert.Equal("{\"errors\":[\"no intake for host \\\"" + host + "\\\"\"]}\n", Encoding.UTF8.GetString response.Body)
-    Assert.Equal<(string * string) list>([ "Content-Type", "application/json" ], response.Headers)
+    let errors = JsonDocument.Parse(response.Body).RootElement.GetProperty "errors"
+    Assert.Equal("no intake for host \"" + host + "\"", (Assert.Single(errors.EnumerateArray())).GetString())
+    Assert.Equal<(string * string) list>([ "Content-Type", "application/json; charset=utf-8" ], response.Headers)
 
 [<Fact>]
 let ``an unknown host is refused even for the probes, port or not`` () =
@@ -160,13 +167,13 @@ let ``an unknown host is refused even for the probes, port or not`` () =
 
 // --- raw payloads ----------------------------------------------------------------------
 
-let private storing (auth: Auth) (body: string) : Endpoint list =
-    let store: Handler =
-        fun r ->
-            Raw.store r "dbm" "no_schema" "no decoder for this track yet" (Encoding.UTF8.GetBytes body)
-            Response.status 202
+let private storing (body: string) : Endpoint list =
+    let store (_: byte[]) : EndpointHandler =
+        fun ctx ->
+            Raw.store ctx "dbm" "no_schema" "no decoder for this track yet" (Encoding.UTF8.GetBytes body)
+            setStatusCode 202 ctx
 
-    [ POST [ route "/api/v2/databasequery" (Routes.keyed auth store) ] ]
+    [ POST [ route "/api/v2/databasequery" (bindBody store) ] ]
 
 [<Fact>]
 let ``a raw payload keeps what identifies the request, and no credentials`` () =
@@ -183,7 +190,7 @@ let ``a raw payload keeps what identifies the request, and no credentials`` () =
               "User-Agent", "datadog-agent/7.58.2"
               "Authorization", "Bearer secret-value" ]
 
-    Assert.Equal(202, (send sink Auth.standard (storing Auth.standard """{"x":1}""") http).Status)
+    Assert.Equal(202, (send sink agent (storing """{"x":1}""") http).Status)
     let row = Assert.Single(sink.Rows<RawPayloadRow>())
     Assert.Equal("t1", row.TenantID)
     Assert.Equal("dbm", row.Intake)
@@ -202,7 +209,7 @@ let ``a raw payload keeps what identifies the request, and no credentials`` () =
 [<Fact>]
 let ``nothing is stored without a tenant`` () =
     let sink = CapturingSink()
-    send sink Auth.none (storing Auth.none "body") (request "POST" "example.com" "/api/v2/databasequery" []) |> ignore
+    send sink None (storing "body") (request "POST" "example.com" "/api/v2/databasequery" []) |> ignore
     Assert.Empty sink.Writes
 
 [<Theory>]
@@ -212,7 +219,7 @@ let ``nothing is stored without a tenant`` () =
 [<InlineData(" {} \n")>]
 let ``the agent's empty probes are not stored`` (body: string) =
     let sink = CapturingSink()
-    send sink Auth.standard (storing Auth.standard body) (request "POST" "example.com" "/api/v2/databasequery" [ "Dd-Api-Key", key ])
+    send sink agent (storing body) (request "POST" "example.com" "/api/v2/databasequery" [ "Dd-Api-Key", key ])
     |> ignore
     Assert.Empty sink.Writes
     Assert.False(Raw.isProbe (Encoding.UTF8.GetBytes """{"a":1}"""))

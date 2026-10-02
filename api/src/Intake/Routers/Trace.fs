@@ -22,9 +22,12 @@ open System.IO
 open System.Text
 open System.Text.Encodings.Web
 open System.Text.Json
+open System.Threading.Tasks
 open Google.Protobuf
 open Google.Protobuf.Collections
 open Microsoft.Extensions.Logging
+open Microsoft.AspNetCore.Http
+open Oxpecker
 open Datadog.Trace
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
@@ -568,33 +571,37 @@ let spanRows (tenant: string) (receivedAt: DateTime) (payload: AgentPayload) : S
 /// What arrives is a sample: the agent runs its samplers before this writer.
 /// The complete counts are in the stats endpoint. The agent parses the answer
 /// (rate_by_service feeds its priority sampler), so it keeps exactly this shape.
-let handleTraces (r: Request) : Response =
-    let answer = Response.json 200 """{"rate_by_service":{}}"""
+let handleTraces (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
 
-    if Diagnose.isSweep r then
-        answer
+    let answer: EndpointHandler = json {| rate_by_service = {||} |}
+
+    if Diagnose.isSweep ctx then
+        answer ctx
     else
         let parsed =
             try
-                Ok(AgentPayload.Parser.ParseFrom r.Body)
+                Ok(AgentPayload.Parser.ParseFrom body)
             with :? InvalidProtocolBufferException as e ->
                 Error e.Message
 
         match parsed with
         | Error problem ->
-            r.Log.LogWarning("[traces] protobuf AgentPayload: {Error} ({Bytes} bytes)", problem, r.Body.Length)
-            Raw.store r intake "decode_error" $"protobuf AgentPayload: {problem}" r.Body
+            log.LogWarning("[traces] protobuf AgentPayload: {Error} ({Bytes} bytes)", problem, body.Length)
+            Raw.store ctx intake "decode_error" $"protobuf AgentPayload: {problem}" body
         | Ok payload when payload.TracerPayloads.Count = 0 && payload.IdxTracerPayloads.Count = 0 ->
             // Protobuf carries no type marker and skips unknown fields, so a
             // body meant for another endpoint decodes "successfully" into an
             // empty payload. Neither list being filled is the one signal.
-            r.Log.LogWarning("[traces] protobuf decoded to zero tracer payloads ({Bytes} bytes), wrong payload type?", r.Body.Length)
-            Raw.store r intake "unexpected_shape" "AgentPayload decoded with no TracerPayloads and no IdxTracerPayloads" r.Body
+            log.LogWarning("[traces] protobuf decoded to zero tracer payloads ({Bytes} bytes), wrong payload type?", body.Length)
+            Raw.store ctx intake "unexpected_shape" "AgentPayload decoded with no TracerPayloads and no IdxTracerPayloads" body
         | Ok payload ->
-            if r.Tenant <> "" then
-                Sink.write r.Sink Spans.table (spanRows r.Tenant DateTime.UtcNow payload)
+            if tenant <> "" then
+                Sink.write sink Spans.table (spanRows tenant DateTime.UtcNow payload)
 
-        answer
+        answer ctx
 
 // --- /api/v0.2/stats -> apm_stats ---
 
@@ -776,18 +783,21 @@ let statRows (log: ILogger) (tenant: string) (receivedAt: DateTime) (payload: St
 ///
 /// The Android SDK from 3.14 may post msgpack here that is not a
 /// StatsPayload; it fails the decode and goes to raw_payloads.
-let handleStats (r: Request) : Response =
-    if not (Diagnose.isSweep r) then
-        match decodeStatsPayload r.Body with
+let handleStats (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    if not (Diagnose.isSweep ctx) then
+        match decodeStatsPayload body with
         | Error problem ->
-            r.Log.LogWarning("[apm-stats] msgpack StatsPayload: {Error} ({Bytes} bytes)", problem, r.Body.Length)
-            Raw.store r intake "decode_error" $"msgpack StatsPayload: {problem}" r.Body
+            log.LogWarning("[apm-stats] msgpack StatsPayload: {Error} ({Bytes} bytes)", problem, body.Length)
+            Raw.store ctx intake "decode_error" $"msgpack StatsPayload: {problem}" body
         | Ok payload ->
-            if r.Tenant <> "" then
-                Sink.write r.Sink ApmStats.table (statRows r.Log r.Tenant DateTime.UtcNow payload)
+            if tenant <> "" then
+                Sink.write sink ApmStats.table (statRows log tenant DateTime.UtcNow payload)
 
-    Response.json 200 "{}"
-
+    json {||} ctx
 // --- /api/v0.1/pipeline_stats -> dsm_pipeline_stats, dsm_backlogs, dsm_bucket_transactions ---
 //
 // The schema is dd-trace-go's, not the agent's: the trace-agent only proxies
@@ -995,29 +1005,32 @@ let dsmRows
 /// the tracer. The trace-agent is a reverse proxy here: it adds Via,
 /// X-Datadog-Additional-Tags and X-Datadog-Container-Tags and forwards the
 /// body untouched.
-let handlePipelineStats (r: Request) : Response =
-    if not (Diagnose.isSweep r) then
-        match decodeDsmPayload r.Body with
+let handlePipelineStats (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    if not (Diagnose.isSweep ctx) then
+        match decodeDsmPayload body with
         | Error problem ->
-            r.Log.LogWarning("[pipeline-stats] msgpack datastreams.StatsPayload: {Error} ({Bytes} bytes)", problem, r.Body.Length)
-            Raw.store r intake "decode_error" $"msgpack datastreams.StatsPayload: {problem}" r.Body
+            log.LogWarning("[pipeline-stats] msgpack datastreams.StatsPayload: {Error} ({Bytes} bytes)", problem, body.Length)
+            Raw.store ctx intake "decode_error" $"msgpack datastreams.StatsPayload: {problem}" body
         | Ok payload ->
-            if r.Tenant <> "" then
+            if tenant <> "" then
                 let headers =
-                    { Via = r.Header "Via"
-                      AdditionalTags = r.Header "X-Datadog-Additional-Tags"
-                      ContainerTags = r.Header "X-Datadog-Container-Tags"
+                    { Via = Ctx.header ctx "Via"
+                      AdditionalTags = Ctx.header ctx "X-Datadog-Additional-Tags"
+                      ContainerTags = Ctx.header ctx "X-Datadog-Container-Tags"
                       // The engine decompresses the body and leaves the
                       // header, so this is what the tracer put on the wire.
-                      ContentEncoding = r.Header "Content-Encoding" }
+                      ContentEncoding = Ctx.header ctx "Content-Encoding" }
 
-                let points, backlogs, blobs = dsmRows r.Tenant DateTime.UtcNow payload headers
-                Sink.write r.Sink DsmPipelineStats.table points
-                Sink.write r.Sink DsmBacklogs.table backlogs
-                Sink.write r.Sink DsmBucketTransactions.table blobs
+                let points, backlogs, blobs = dsmRows tenant DateTime.UtcNow payload headers
+                Sink.write sink DsmPipelineStats.table points
+                Sink.write sink DsmBacklogs.table backlogs
+                Sink.write sink DsmBucketTransactions.table blobs
 
-    Response.json 202 "{}"
-
+    (setStatusCode 202 >=> json {||}) ctx
 // --- /api/v2/data_streams_messages -> dsm_messages ---
 
 /// Go's JSON depth limit; .NET's default of 64 would refuse what Go took.
@@ -1108,22 +1121,26 @@ let dsmMessageRows
 /// POST /api/v2/data_streams_messages. Not the trace-agent at all: an Event
 /// Platform track that happens to live on this host. JSON, batched by the
 /// forwarder into one array.
-let handleDataStreamsMessages (r: Request) : Response =
-    match parseMessages r.Body with
+let handleDataStreamsMessages (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    match parseMessages body with
     | Error problem ->
-        r.Log.LogWarning("[data-streams] JSON array: {Error} ({Bytes} bytes)", problem, r.Body.Length)
-        Raw.store r intake "unexpected_shape" $"body is not the JSON array the forwarder sends: {problem}" r.Body
+        log.LogWarning("[data-streams] JSON array: {Error} ({Bytes} bytes)", problem, body.Length)
+        Raw.store ctx intake "unexpected_shape" $"body is not the JSON array the forwarder sends: {problem}" body
     | Ok messages ->
-        if r.Tenant <> "" then
+        if tenant <> "" then
             let rows =
                 dsmMessageRows
-                    r.Tenant
+                    tenant
                     DateTime.UtcNow
                     messages
-                    (r.Header "Dd-Evp-Origin")
-                    (r.Header "Dd-Evp-Origin-Version")
-                    (r.Header "Content-Encoding")
+                    (Ctx.header ctx "Dd-Evp-Origin")
+                    (Ctx.header ctx "Dd-Evp-Origin-Version")
+                    (Ctx.header ctx "Content-Encoding")
 
-            Sink.write r.Sink DsmMessages.table rows
+            Sink.write sink DsmMessages.table rows
 
-    Response.json 202 "{}"
+    (setStatusCode 202 >=> json {||}) ctx

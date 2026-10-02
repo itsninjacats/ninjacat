@@ -14,7 +14,10 @@ open System.Collections.Generic
 open System.Globalization
 open System.Text
 open System.Text.Json
+open System.Threading.Tasks
 open Microsoft.Extensions.Logging
+open Microsoft.AspNetCore.Http
+open Oxpecker
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
@@ -260,13 +263,17 @@ let toRow (tenant: string) (track: string) (receivedAt: DateTime) (event: string
 
 /// Stores one track's batch. `track` is the route's name, and what the rows
 /// say they arrived on.
-let handle (track: string) (r: Request) : Response =
-    match splitEvents r.Body with
+let handle (track: string) (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    match splitEvents body with
     // The agent's start-up probe: a row of it would be an event with nothing in it.
-    | _ when Raw.isProbe r.Body -> ()
+    | _ when Raw.isProbe body -> ()
     | Error e ->
-        r.Log.LogWarning("[{Track}] not a JSON array: {Error}", track, e)
-        Raw.store r "dbm" "decode_error" $"[{track}] not a JSON array or object: {e}" r.Body
+        log.LogWarning("[{Track}] not a JSON array: {Error}", track, e)
+        Raw.store ctx "dbm" "decode_error" $"[{track}] not a JSON array or object: {e}" body
     | Ok events ->
         let receivedAt = DateTime.UtcNow
         let rows = ResizeArray<DBMEventRow>()
@@ -275,12 +282,12 @@ let handle (track: string) (r: Request) : Response =
         |> List.iteri (fun i event ->
             match decodeEnvelope event.Json with
             | Error e ->
-                r.Log.LogWarning("[{Track}] event {Index}: not an object ({Error}), kept raw", track, i, e)
-                Raw.store r "dbm" "decode_error" $"[{track}] event {i}: not an object: {e}" (Encoding.UTF8.GetBytes event.Text)
+                log.LogWarning("[{Track}] event {Index}: not an object ({Error}), kept raw", track, i, e)
+                Raw.store ctx "dbm" "decode_error" $"[{track}] event {i}: not an object: {e}" (Encoding.UTF8.GetBytes event.Text)
             | Ok envelope ->
-                if r.Tenant <> "" then
-                    rows.Add(toRow r.Tenant track receivedAt event.Text envelope))
+                if tenant <> "" then
+                    rows.Add(toRow tenant track receivedAt event.Text envelope))
 
-        Sink.write r.Sink DbmEvents.table (rows.ToArray())
+        Sink.write sink DbmEvents.table (rows.ToArray())
 
-    Response.json 202 "{}"
+    (setStatusCode 202 >=> json {||}) ctx

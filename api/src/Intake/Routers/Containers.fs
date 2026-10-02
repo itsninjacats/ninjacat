@@ -12,10 +12,13 @@ module NinjaCat.Api.Intake.Routers.Containers
 
 open System
 open System.Reflection
+open System.Threading.Tasks
 open Google.Protobuf
 open Google.Protobuf.Reflection
 open Google.Protobuf.WellKnownTypes
 open Microsoft.Extensions.Logging
+open Microsoft.AspNetCore.Http
+open Oxpecker
 open Datadog.Contimage
 open Datadog.Contlcycle
 open NinjaCat.Api.Intake
@@ -339,7 +342,7 @@ let imageRows (payload: ContainerImagePayload) (tenant: string) (now: DateTime) 
 
 // ---- handlers ----
 
-let private accepted = Response.json 202 "{}"
+let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
 
 // Protobuf carries no type marker and skips fields it does not know, so a
 // payload meant for another endpoint decodes "successfully" into nothing. An
@@ -348,35 +351,43 @@ let private accepted = Response.json 202 "{}"
 
 /// Container, pod and task start/stop/OOM events. One payload covers one
 /// kind of object, named by ObjectKind.
-let handleLifecycle (r: Request) : Response =
-    match tryParse EventsPayload.Parser r.Body with
-    | Error e ->
-        r.Log.LogWarning("[contlcycle] protobuf: {Error} ({Bytes} bytes)", e, r.Body.Length)
-        Raw.store r "contlcycle" "decode_error" e r.Body
-    | Ok payload when payload.Events.Count = 0 ->
-        r.Log.LogWarning("[contlcycle] decoded to zero events ({Bytes} bytes), wrong payload type?", r.Body.Length)
-        Raw.store r "contlcycle" "unexpected_shape" "EventsPayload decoded with no events" r.Body
-    | Ok payload ->
-        if r.Tenant <> "" then
-            Sink.write r.Sink ContainerEvents.table (eventRows payload r.Tenant DateTime.UtcNow)
+let handleLifecycle (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
 
-    accepted
+    match tryParse EventsPayload.Parser body with
+    | Error e ->
+        log.LogWarning("[contlcycle] protobuf: {Error} ({Bytes} bytes)", e, body.Length)
+        Raw.store ctx "contlcycle" "decode_error" e body
+    | Ok payload when payload.Events.Count = 0 ->
+        log.LogWarning("[contlcycle] decoded to zero events ({Bytes} bytes), wrong payload type?", body.Length)
+        Raw.store ctx "contlcycle" "unexpected_shape" "EventsPayload decoded with no events" body
+    | Ok payload ->
+        if tenant <> "" then
+            Sink.write sink ContainerEvents.table (eventRows payload tenant DateTime.UtcNow)
+
+    accepted ctx
 
 /// The container image inventory.
-let handleImages (r: Request) : Response =
-    match tryParse ContainerImagePayload.Parser r.Body with
+let handleImages (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    match tryParse ContainerImagePayload.Parser body with
     | Error e ->
-        r.Log.LogWarning("[contimage] protobuf: {Error} ({Bytes} bytes)", e, r.Body.Length)
-        Raw.store r "contimage" "decode_error" e r.Body
+        log.LogWarning("[contimage] protobuf: {Error} ({Bytes} bytes)", e, body.Length)
+        Raw.store ctx "contimage" "decode_error" e body
     | Ok payload when payload.Images.Count = 0 ->
-        r.Log.LogWarning("[contimage] decoded to zero images ({Bytes} bytes), wrong payload type?", r.Body.Length)
-        Raw.store r "contimage" "unexpected_shape" "ContainerImagePayload decoded with no images" r.Body
+        log.LogWarning("[contimage] decoded to zero images ({Bytes} bytes), wrong payload type?", body.Length)
+        Raw.store ctx "contimage" "unexpected_shape" "ContainerImagePayload decoded with no images" body
     | Ok payload ->
-        if r.Tenant <> "" then
-            let rows, skipped = imageRows payload r.Tenant DateTime.UtcNow
+        if tenant <> "" then
+            let rows, skipped = imageRows payload tenant DateTime.UtcNow
 
             if skipped > 0 then
-                r.Log.LogWarning(
+                log.LogWarning(
                     "[contimage] {Skipped} of {Total} images skipped: neither digest nor image id, so nothing to key on",
                     skipped,
                     payload.Images.Count
@@ -384,8 +395,8 @@ let handleImages (r: Request) : Response =
 
                 // The metric is what makes an incomplete inventory noticeable
                 // without going looking for a log line.
-                SelfMetrics.count r payload.Host SelfMetrics.imagesSkipped (float skipped) (Map [ "reason", [| "no_identity" |] ])
+                SelfMetrics.count ctx payload.Host SelfMetrics.imagesSkipped (float skipped) (Map [ "reason", [| "no_identity" |] ])
 
-            Sink.write r.Sink ContainerImages.table rows
+            Sink.write sink ContainerImages.table rows
 
-    accepted
+    accepted ctx

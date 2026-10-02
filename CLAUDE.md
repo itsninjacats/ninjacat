@@ -175,10 +175,16 @@ hosts are refused by name so a misconfigured `DD_SITE` fails loudly.
 one: where the framework's behaviour differs from the old Go server's (case, trailing
 slashes, 405), the framework's stands.
 
-**Handlers are functions `Request -> Response`.** `Routes.keyed` runs one as an Oxpecker
-handler: it checks the key (`Intake/Auth.fs`), reads and decompresses the body, calls the
-handler and writes the answer. An unknown path is answered before any key is asked for. A
-handler touches neither the response nor the driver, which keeps it testable on its own.
+**Handlers are Oxpecker's own.** Each is `byte[] -> EndpointHandler`, bound with `bindBody`
+(`Intake/Http.fs`), which reads and decompresses the body the way Oxpecker's `bindJson` binds
+JSON. A handler reads the request from `HttpContext` (the few one-line accessors are in
+`Ctx`) and answers with Oxpecker's handlers (`setStatusCode`, `json`, `bytes`). There is no
+request or response type of our own; do not add one.
+
+**The API key is ASP.NET authentication.** `Intake/Auth.fs` registers four schemes (where
+each looks for the key) over one `AuthenticationHandler`; a host asks for its scheme where it
+is mounted in `Routes.fs`, and the key's tenant is a claim on `ctx.User`. An unknown path is
+answered before any key is asked for.
 
 **Writes are asynchronous, reads are not.** A handler turns the Datadog wire format into the
 plain records in `Storage/Rows/*.fs` and hands them to the sink — the agent gets its 202

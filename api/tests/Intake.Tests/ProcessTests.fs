@@ -700,18 +700,13 @@ let ``a DNS buffer cut short is an error or fewer names, never an exception`` ()
 [<Fact>]
 let ``without a tenant nothing is stored, and the agent still gets its reply`` () =
     let sink = CapturingSink()
-    let http = DefaultHttpContext()
-    http.Request.Method <- "POST"
-    http.Request.Path <- PathString "/api/v1/collector"
-
-    let request: Request =
-        { Http = http
-          Body = ProcessFrame.encode 12uy 0L (fullCollectorProc ())
-          Key = None
-          Sink = sink
-          Log = NullLogger.Instance }
-
-    let response = handleCollector request
+    // The handler itself, with no key behind the request.
+    let deps: Deps = { Store = Replay.testStore (); Sink = sink; Log = NullLogger.Instance; AckUnknown = false }
+    let ctx = Replay.contextFor deps ""
+    ctx.Request.Method <- "POST"
+    ctx.Request.Path <- PathString "/api/v1/collector"
+    (handleCollector (ProcessFrame.encode 12uy 0L (fullCollectorProc ())) ctx).Wait()
+    let response = Replay.answerOf ctx
     Assert.Equal(200, response.Status)
     Assert.Equal<byte[]>(replyFrame, response.Body)
     Assert.Empty(sink.Writes)

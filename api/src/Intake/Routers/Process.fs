@@ -36,6 +36,9 @@ open NinjaCat.Api.Intake
 open NinjaCat.Api.Intake.Routers.ProcessBuffers
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
+open System.Threading.Tasks
+open Microsoft.AspNetCore.Http
+open Oxpecker
 
 /// The agent omits every sub-message it could not read. An empty one in its
 /// place leaves the columns it feeds at zero.
@@ -87,17 +90,19 @@ type FrameInfo =
       Bytes: int
       Agent: AgentIdentity }
 
-let private frameInfo (r: Request) : FrameInfo =
-    { Tenant = r.Tenant
+let private frameInfo (body: byte[]) (ctx: HttpContext) : FrameInfo =
+    let tenant = Ctx.tenant ctx
+
+    { Tenant = tenant
       SnapshotID = Guid.NewGuid()
       At = DateTime.UtcNow
-      Path = r.Path
-      Bytes = r.Body.Length
+      Path = ctx.Request.Path.Value
+      Bytes = body.Length
       Agent =
-        { Hostname = r.Header "X-Dd-Hostname"
-          Version = r.Header "X-Dd-Processagentversion"
-          ContainerCount = r.Header "X-Dd-ContainerCount"
-          RequestID = r.Header "X-DD-Request-ID" } }
+        { Hostname = Ctx.header ctx "X-Dd-Hostname"
+          Version = Ctx.header ctx "X-Dd-Processagentversion"
+          ContainerCount = Ctx.header ctx "X-Dd-ContainerCount"
+          RequestID = Ctx.header ctx "X-DD-Request-ID" } }
 
 /// The number is the contract and is stored too; the name is what a human reads.
 let private messageTypeName (messageType: uint8) : string =
@@ -863,77 +868,86 @@ let replyFrame: byte[] =
     body.Status <- status
     ProcessFrame.encode 23uy 0L body
 
-let private reply: Response = Response.bytes 200 "application/x-protobuf" replyFrame
+let private reply: EndpointHandler = setContentType "application/x-protobuf" >=> bytes replyFrame
 
 /// The frame of a request. One that cannot be read is kept whole: it is
 /// exactly the payload that would explain why, and it arrives once.
-let private decode (r: Request) (label: string) : Frame option =
-    match ProcessFrame.decode r.Body with
+let private decode (body: byte[]) (ctx: HttpContext) (label: string) : Frame option =
+    let log = Ctx.log ctx
+
+    match ProcessFrame.decode body with
     | Ok frame -> Some frame
     | Error error ->
-        r.Log.LogWarning("[{Label}] process-agent frame: {Error} ({Bytes} bytes)", label, error, r.Body.Length)
-        Raw.store r "process" "decode_error" (label + ": " + error) r.Body
+        log.LogWarning("[{Label}] process-agent frame: {Error} ({Bytes} bytes)", label, error, body.Length)
+        Raw.store ctx "process" "decode_error" (label + ": " + error) body
         None
 
 /// The frame's type byte decides the body, not the path, so the two can
 /// disagree: a misconfigured agent, or a type not met before.
-let private unexpected (r: Request) (label: string) (frame: Frame) : unit =
+let private unexpected (body: byte[]) (ctx: HttpContext) (label: string) (frame: Frame) : unit =
+    let log = Ctx.log ctx
+
     let goType = "*process." + frame.Body.Descriptor.Name
-    r.Log.LogWarning("[{Label}] type={Type} {GoType} - not handled", label, frame.Header.Type, goType)
-    Raw.store r "process" "unexpected_shape" $"/api/v1/{label} decoded to {goType} (frame type {frame.Header.Type})" r.Body
+    log.LogWarning("[{Label}] type={Type} {GoType} - not handled", label, frame.Header.Type, goType)
+    Raw.store ctx "process" "unexpected_shape" $"/api/v1/{label} decoded to {goType} (frame type {frame.Header.Type})" body
 
 /// Without a tenant there is nowhere to put a row: tenant_id leads every
 /// table's ORDER BY. The agent still gets its reply.
-let private write (r: Request) (table: Table<'row>) (rows: 'row[]) : unit =
-    if r.Tenant <> "" then
-        Sink.write r.Sink table rows
+let private write (ctx: HttpContext) (table: Table<'row>) (rows: 'row[]) : unit =
+    let tenant = Ctx.tenant ctx
+    let sink = Ctx.sink ctx
+
+    if tenant <> "" then
+        Sink.write sink table rows
 
 /// The process check. One path, two message types: 12 (CollectorProc, the
 /// full snapshot every 10 s) and 27 (CollectorRealTime, stats only, every
 /// 2 s).
-let handleCollector (r: Request) : Response =
-    match decode r "collector" with
+let handleCollector (body: byte[]) (ctx: HttpContext) : Task =
+    match decode body ctx "collector" with
     | None -> ()
     | Some frame ->
-        let info = frameInfo r
+        let info = frameInfo body ctx
 
         match frame.Body with
         | :? CollectorProc as proc ->
-            write r ProcessSnapshots.table [| snapshotRow info frame |]
-            write r Processes.table (proc.Processes |> Seq.map (processRow info proc) |> Array.ofSeq)
-            write r Containers.table (procContainerRows info proc)
+            write ctx ProcessSnapshots.table [| snapshotRow info frame |]
+            write ctx Processes.table (proc.Processes |> Seq.map (processRow info proc) |> Array.ofSeq)
+            write ctx Containers.table (procContainerRows info proc)
         | :? CollectorRealTime as realTime ->
-            write r ProcessSnapshots.table [| snapshotRow info frame |]
-            write r ProcessStats.table (realTime.Stats |> Seq.map (processStatRow info realTime) |> Array.ofSeq)
-            write r ContainerStats.table (realTimeContainerStatRows info realTime)
-        | _ -> unexpected r "collector" frame
+            write ctx ProcessSnapshots.table [| snapshotRow info frame |]
+            write ctx ProcessStats.table (realTime.Stats |> Seq.map (processStatRow info realTime) |> Array.ofSeq)
+            write ctx ContainerStats.table (realTimeContainerStatRows info realTime)
+        | _ -> unexpected body ctx "collector" frame
 
-    reply
+    reply ctx
 
 /// The container check. One path, two message types: 39 (CollectorContainer,
 /// the full inventory every 10 s) and 40 (CollectorContainerRealTime, stats
 /// only, every 2 s).
-let handleContainer (r: Request) : Response =
-    match decode r "container" with
+let handleContainer (body: byte[]) (ctx: HttpContext) : Task =
+    match decode body ctx "container" with
     | None -> ()
     | Some frame ->
-        let info = frameInfo r
+        let info = frameInfo body ctx
 
         match frame.Body with
         | :? CollectorContainer as inventory ->
-            write r ProcessSnapshots.table [| snapshotRow info frame |]
-            write r Containers.table (inventoryContainerRows info inventory)
+            write ctx ProcessSnapshots.table [| snapshotRow info frame |]
+            write ctx Containers.table (inventoryContainerRows info inventory)
         | :? CollectorContainerRealTime as realTime ->
-            write r ProcessSnapshots.table [| snapshotRow info frame |]
-            write r ContainerStats.table (containerRealTimeStatRows info realTime)
-        | _ -> unexpected r "container" frame
+            write ctx ProcessSnapshots.table [| snapshotRow info frame |]
+            write ctx ContainerStats.table (containerRealTimeStatRows info realTime)
+        | _ -> unexpected body ctx "container" frame
 
-    reply
+    reply ctx
 
 /// What system-probe saw inside each connection, per HTTP endpoint, Kafka
 /// topic and database operation. A message that does not parse is logged and
 /// gives no rows; its bytes are on the connection's own row.
-let private storeUsm (r: Request) (info: FrameInfo) (conns: CollectorConnections) : unit =
+let private storeUsm (ctx: HttpContext) (info: FrameInfo) (conns: CollectorConnections) : unit =
+    let log = Ctx.log ctx
+
     let http = ResizeArray<ConnectionHttpStatRow>()
     let kafka = ResizeArray<ConnectionKafkaStatRow>()
     let database = ResizeArray<ConnectionDatabaseStatRow>()
@@ -941,7 +955,7 @@ let private storeUsm (r: Request) (info: FrameInfo) (conns: CollectorConnections
     let take (target: ResizeArray<'row>) (decoded: Result<'row list, string>) : unit =
         match decoded with
         | Ok rows -> target.AddRange rows
-        | Error error -> r.Log.LogWarning("[connections] {Error}", error)
+        | Error error -> log.LogWarning("[connections] {Error}", error)
 
     for c in conns.Connections do
         let local = orEmpty c.Laddr
@@ -963,56 +977,58 @@ let private storeUsm (r: Request) (info: FrameInfo) (conns: CollectorConnections
         take kafka (Usm.kafka key c.DataStreamsAggregations)
         take database (Usm.database key c.DatabaseAggregations)
 
-    write r ConnectionHttpStats.table (http.ToArray())
-    write r ConnectionKafkaStats.table (kafka.ToArray())
-    write r ConnectionDatabaseStats.table (database.ToArray())
+    write ctx ConnectionHttpStats.table (http.ToArray())
+    write ctx ConnectionKafkaStats.table (kafka.ToArray())
+    write ctx ConnectionDatabaseStats.table (database.ToArray())
 
 /// The network check (type 22): the system-probe's connection table, with
 /// DNS, routes and eBPF telemetry. The payload row goes first, then one row
 /// per connection.
-let handleConnections (r: Request) : Response =
-    match decode r "connections" with
+let handleConnections (body: byte[]) (ctx: HttpContext) : Task =
+    let log = Ctx.log ctx
+
+    match decode body ctx "connections" with
     | None -> ()
     | Some frame ->
         match frame.Body with
         | :? CollectorConnections as conns ->
-            let info = frameInfo r
+            let info = frameInfo body ctx
 
             let dnsNames =
                 match DnsBuffer.names (conns.EncodedDNS.ToByteArray()) (conns.EncodedDomainDatabase.ToByteArray()) with
                 | Ok names -> names
                 | Error error ->
                     // The buffers are stored either way.
-                    r.Log.LogWarning("[connections] DNS names not read: {Error}", error)
+                    log.LogWarning("[connections] DNS names not read: {Error}", error)
                     [||]
 
             let encodedTags = conns.EncodedTags.ToByteArray()
             let connectionTags = conns.EncodedConnectionsTags.ToByteArray()
 
-            write r ProcessSnapshots.table [| snapshotRow info frame |]
-            write r ConnectionsPayloads.table [| connectionsPayloadRow info conns dnsNames |]
+            write ctx ProcessSnapshots.table [| snapshotRow info frame |]
+            write ctx ConnectionsPayloads.table [| connectionsPayloadRow info conns dnsNames |]
 
             write
-                r
+                ctx
                 Connections.table
                 (conns.Connections |> Seq.map (connectionRow info conns.HostName encodedTags connectionTags) |> Array.ofSeq)
 
-            storeUsm r info conns
-        | _ -> unexpected r "connections" frame
+            storeUsm ctx info conns
+        | _ -> unexpected body ctx "connections" frame
 
-    reply
+    reply ctx
 
 /// The lightweight process discovery check (type 53): pid, command and user
 /// only, no resource usage.
-let handleDiscovery (r: Request) : Response =
-    match decode r "discovery" with
+let handleDiscovery (body: byte[]) (ctx: HttpContext) : Task =
+    match decode body ctx "discovery" with
     | None -> ()
     | Some frame ->
         match frame.Body with
         | :? CollectorProcDiscovery as discoveries ->
-            let info = frameInfo r
-            write r ProcessSnapshots.table [| snapshotRow info frame |]
-            write r ProcessDiscoveries.table (discoveries.ProcessDiscoveries |> Seq.map (discoveryRow info discoveries) |> Array.ofSeq)
-        | _ -> unexpected r "discovery" frame
+            let info = frameInfo body ctx
+            write ctx ProcessSnapshots.table [| snapshotRow info frame |]
+            write ctx ProcessDiscoveries.table (discoveries.ProcessDiscoveries |> Seq.map (discoveryRow info discoveries) |> Array.ofSeq)
+        | _ -> unexpected body ctx "discovery" frame
 
-    reply
+    reply ctx

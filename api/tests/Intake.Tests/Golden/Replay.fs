@@ -14,6 +14,9 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Logging.Abstractions
 open Microsoft.Extensions.Primitives
 open Oxpecker
+open NinjaCat.Api.Storage
+open Microsoft.Extensions.Logging
+open System.Security.Claims
 open NinjaCat.Api.Intake
 
 /// The keys the Go tests used: one for handler tests, one for the tests of
@@ -50,21 +53,33 @@ let all: Fixture list =
           RouteSets = json["routes"].AsArray() |> Seq.map (fun n -> n.GetValue<string>()) |> List.ofSeq })
     |> List.ofArray
 
-/// Sends one request through an in-memory server with the given pipeline
-/// and returns the answer. `http` describes the request; `body` is its body.
-let through (deps: Deps) (configure: IApplicationBuilder -> unit) (http: HttpContext) (body: byte[]) : Response =
-    let builder = WebApplication.CreateEmptyBuilder(WebApplicationOptions())
-    builder.WebHost.UseTestServer() |> ignore
-    builder.Services.AddSingleton<Deps>(deps).AddRouting().AddCors().AddOxpecker() |> ignore
+/// The services the intake's handlers ask for, as the server registers them.
+let private addServices (services: IServiceCollection) (deps: Deps) : unit =
+    services
+        .AddSingleton<ApiKeys.Store>(deps.Store)
+        .AddSingleton<ISink>(deps.Sink)
+        .AddSingleton<IntakeSettings>({ AckUnknown = deps.AckUnknown })
+        .AddRouting()
+        .AddCors()
+        .AddOxpecker()
+    |> ignore
+
+    ApiKeyAuth.addTo services
 
     // The peer every recorded request comes from is a proxy the server
     // trusts, as an operator would name theirs.
-    builder.Services.Configure<ForwardedHeadersOptions>(fun (options: ForwardedHeadersOptions) ->
+    services.Configure<ForwardedHeadersOptions>(fun (options: ForwardedHeadersOptions) ->
         options.ForwardedHeaders <- ForwardedHeaders.XForwardedFor
         options.ForwardLimit <- Nullable()
         options.KnownProxies.Add(Net.IPAddress.Parse "192.0.2.1"))
     |> ignore
 
+/// Sends one request through an in-memory server with the given pipeline
+/// and returns the answer. `http` describes the request; `body` is its body.
+let through (deps: Deps) (configure: IApplicationBuilder -> unit) (http: HttpContext) (body: byte[]) : Response =
+    let builder = WebApplication.CreateEmptyBuilder(WebApplicationOptions())
+    builder.WebHost.UseTestServer() |> ignore
+    addServices builder.Services deps
     use app = builder.Build()
     configure app
     app.StartAsync().GetAwaiter().GetResult()
@@ -97,45 +112,72 @@ let through (deps: Deps) (configure: IApplicationBuilder -> unit) (http: HttpCon
                   header.Key, header.Value.ToString() ]
       Body = received.ToArray() }
 
+/// A context for calling one handler directly, with no server around it:
+/// the services it asks for, and the tenant its key would have given it.
+let contextFor (deps: Deps) (tenant: string) : HttpContext =
+    let services = ServiceCollection()
+    services.AddLogging() |> ignore
+    addServices services deps
+    let ctx = DefaultHttpContext()
+    ctx.RequestServices <- services.BuildServiceProvider()
+    ctx.Response.Body <- new MemoryStream()
+
+    if tenant <> "" then
+        ctx.User <- ClaimsPrincipal(ClaimsIdentity([ Claim("tenant", tenant); Claim("key_id", "test") ], "test"))
+
+    ctx
+
+/// What a handler called directly wrote into its context.
+let answerOf (ctx: HttpContext) : Response =
+    { Status = ctx.Response.StatusCode
+      Headers =
+        [ for header in ctx.Response.Headers do
+              if header.Key <> "Content-Length" then
+                  header.Key, header.Value.ToString() ]
+      Body = (ctx.Response.Body :?> MemoryStream).ToArray() }
+
 /// The Go server's name for each group of routes. The fixtures recorded
 /// which groups served a request under these names; nothing else uses them.
-let private goRouteSets: Map<string, (Handler -> EndpointHandler) * Endpoint list> =
+/// Beside each: the authentication scheme its host asks for.
+let private goRouteSets: Map<string, string option * Endpoint list> =
+    let agent = Some ApiKeyAuth.agent
+
     Map
-        [ "routeAPI", (Routes.agent, Routes.metricsAndChecks)
-          "routeCIVisibilityAPI", (Routes.agent, Routes.ciVisibilityApi)
-          "routeApp", (Routes.agent, Routes.metricsV3)
-          "routeTrace", (Routes.agent, Routes.trace)
-          "routeLogs", (Routes.agent, Routes.logs)
-          "routeProcess", (Routes.agent, Routes.processes)
-          "routeKubeops", (Routes.agent, Routes.kubeops)
-          "routeConfig", (Routes.agent, Routes.remoteConfig)
-          "routeContainers", (Routes.agent, Routes.containers)
-          "routeDBM", (Routes.agent, Routes.dbm)
-          "routeNDM", (Routes.agent, Routes.ndm)
-          "routeResources", (Routes.agent, Routes.resources)
-          "routeTelemetry", (Routes.agent, Routes.telemetry)
-          "routeProfile", (Routes.agent, Routes.profile)
-          "routeDebugger", (Routes.agent, Routes.debugger)
-          "routeSourcemap", (Routes.agent, Routes.sourcemap)
-          "routeCWS", (Routes.agent, Routes.cws)
-          "routeRuntimeSecurity", (Routes.agent, Routes.runtimeSecurity)
-          "routeCSPM", (Routes.agent, Routes.cspm)
-          "routeSBOM", (Routes.agent, Routes.sbom)
-          "routeSDS", (Routes.agent, Routes.sds)
-          "routeAgentDiscovery", (Routes.agent, Routes.agentDiscovery)
-          "routeAgentHealth", (Routes.agent, Routes.agentHealth)
-          "routeEventManagement", (Routes.agent, Routes.eventManagement)
-          "routeSoftwareInventory", (Routes.agent, Routes.softwareInventory)
-          "routeSynthetics", (Routes.agent, Routes.syntheticsResults)
-          "routeCITestCycle", (Routes.agent, Routes.ciTestCycle)
-          "routeCITestCov", (Routes.agent, Routes.ciTestCoverage)
-          "routeCIWebhook", (Routes.ciWebhookKey, Routes.ciWebhook)
-          "routeSyntheticsAgent", (Routes.agent, Routes.syntheticsPoller)
-          "routeDataObs", (Routes.lineageKey, Routes.dataObs)
-          "routeRUM", (Routes.browserKey, Routes.rum)
-          "routeAIUsage", (Routes.agent, Routes.aiUsage)
-          "routeLLMObs", (Routes.agent, Routes.llmObs)
-          "routeInstall", (Routes.anonymous, Routes.install) ]
+        [ "routeAPI", (agent, Routes.metricsAndChecks)
+          "routeCIVisibilityAPI", (agent, Routes.ciVisibilityApi)
+          "routeApp", (agent, Routes.metricsV3)
+          "routeTrace", (agent, Routes.trace)
+          "routeLogs", (agent, Routes.logs)
+          "routeProcess", (agent, Routes.processes)
+          "routeKubeops", (agent, Routes.kubeops)
+          "routeConfig", (agent, Routes.remoteConfig)
+          "routeContainers", (agent, Routes.containers)
+          "routeDBM", (agent, Routes.dbm)
+          "routeNDM", (agent, Routes.ndm)
+          "routeResources", (agent, Routes.resources)
+          "routeTelemetry", (agent, Routes.telemetry)
+          "routeProfile", (agent, Routes.profile)
+          "routeDebugger", (agent, Routes.debugger)
+          "routeSourcemap", (agent, Routes.sourcemap)
+          "routeCWS", (agent, Routes.cws)
+          "routeRuntimeSecurity", (agent, Routes.runtimeSecurity)
+          "routeCSPM", (agent, Routes.cspm)
+          "routeSBOM", (agent, Routes.sbom)
+          "routeSDS", (agent, Routes.sds)
+          "routeAgentDiscovery", (agent, Routes.agentDiscovery)
+          "routeAgentHealth", (agent, Routes.agentHealth)
+          "routeEventManagement", (agent, Routes.eventManagement)
+          "routeSoftwareInventory", (agent, Routes.softwareInventory)
+          "routeSynthetics", (agent, Routes.syntheticsResults)
+          "routeCITestCycle", (agent, Routes.ciTestCycle)
+          "routeCITestCov", (agent, Routes.ciTestCoverage)
+          "routeCIWebhook", (Some ApiKeyAuth.ciWebhook, Routes.ciWebhook)
+          "routeSyntheticsAgent", (agent, Routes.syntheticsPoller)
+          "routeDataObs", (Some ApiKeyAuth.lineage, Routes.dataObs)
+          "routeRUM", (Some ApiKeyAuth.browser, Routes.rum)
+          "routeAIUsage", (agent, Routes.aiUsage)
+          "routeLLMObs", (agent, Routes.llmObs)
+          "routeInstall", (None, Routes.install) ]
 
 /// The intake made of the named Go route sets, guarded as the first one is.
 let byGoNames (deps: Deps) (names: string list) : HttpContext -> byte[] -> Response =
@@ -146,7 +188,7 @@ let byGoNames (deps: Deps) (names: string list) : HttpContext -> byte[] -> Respo
 let browserIntake (deps: Deps) (allowedOrigins: string list) : HttpContext -> byte[] -> Response =
     through deps (fun app ->
         app.UseForwardedHeaders() |> ignore
-        Routes.mountBrowser app NullLogger.Instance allowedOrigins)
+        Routes.mountBrowser app allowedOrigins)
 
 /// Every host, as the server mounts them.
 let wholeIntake (deps: Deps) : HttpContext -> byte[] -> Response = through deps Routes.configure

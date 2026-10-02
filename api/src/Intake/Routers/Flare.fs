@@ -7,6 +7,9 @@ module NinjaCat.Api.Intake.Routers.Flare
 
 open System
 open System.Buffers.Binary
+open System.Threading.Tasks
+open Microsoft.AspNetCore.Http
+open Oxpecker
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
@@ -19,9 +22,8 @@ let private knownFields = set [ "case_id"; "email"; "source"; "agent_version"; "
 
 /// What the agent's uploader parses the answer into. It needs all three keys
 /// and a 200, or it reports "could not deserialize response body" and retries.
-let private answer (caseId: int64) (error: string) : Response =
-    Response.jsonOf
-        200
+let private answer (caseId: int64) (error: string) : EndpointHandler =
+    json
         {| case_id = caseId
            error = error
            request_uuid = Guid.NewGuid().ToString() |}
@@ -34,26 +36,29 @@ let private caseNumber (caseId: string) : int64 =
     | false, _ -> int64 (BinaryPrimitives.ReadUInt64BigEndian(ReadOnlySpan(Guid.NewGuid().ToByteArray(true))) >>> 1)
 
 /// `pathCaseId` is the case id from the path, "" for a new flare.
-let handle (pathCaseId: string) (r: Request) : Response =
-    if r.Method = "HEAD" then
+let handle (pathCaseId: string) (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let sink = Ctx.sink ctx
+
+    if ctx.Request.Method = "HEAD" then
         // The uploader's redirect probe: 200 means reachable.
-        Response.status 200
+        setStatusCode 200 ctx
     else
-        match Multipart.boundary (r.Header "Content-Type") with
+        match Multipart.boundary (Ctx.header ctx "Content-Type") with
         | None ->
             // Refusing would only make the agent retry the same upload, so
             // the answer keeps its shape and carries the error.
-            Raw.store r intake "decode_error" "content-type is not multipart/form-data" r.Body
-            answer 0L "content-type is not multipart/form-data"
+            Raw.store ctx intake "decode_error" "content-type is not multipart/form-data" body
+            answer 0L "content-type is not multipart/form-data" ctx
         | Some boundary ->
-            let parts = Multipart.parts boundary r.Body
+            let parts = Multipart.parts boundary body
 
             // The agent writes agent_version and hostname AFTER the archive,
             // so nothing here may depend on the order of parts.
             match parts |> List.tryFindBack (fun p -> p.Name = "flare_file") with
             | None ->
-                Raw.store r intake "decode_error" "no flare_file part in the multipart body" r.Body
-                answer 0L "no flare archive in the request"
+                Raw.store ctx intake "decode_error" "no flare_file part in the multipart body" body
+                answer 0L "no flare archive in the request" ctx
             | Some archive ->
                 let field (name: string) =
                     parts
@@ -71,11 +76,11 @@ let handle (pathCaseId: string) (r: Request) : Response =
                 // in the form; the form wins if they ever disagree.
                 let caseId = Text.firstNonEmpty [ field "case_id"; pathCaseId ]
 
-                if r.Tenant <> "" then
+                if tenant <> "" then
                     Sink.write
-                        r.Sink
+                        sink
                         AgentFlares.table
-                        [| { TenantID = r.Tenant
+                        [| { TenantID = tenant
                              ReceivedAt = DateTime.UtcNow
                              Hostname = field "hostname"
                              CaseID = caseId
@@ -87,4 +92,4 @@ let handle (pathCaseId: string) (r: Request) : Response =
                              Fields = otherFields
                              Archive = archive.Data } |]
 
-                answer (caseNumber caseId) ""
+                answer (caseNumber caseId) "" ctx

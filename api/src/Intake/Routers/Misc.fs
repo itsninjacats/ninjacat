@@ -11,12 +11,15 @@ open System
 open System.Globalization
 open System.Text
 open System.Text.Json
+open System.Threading.Tasks
 open Microsoft.Extensions.Logging
+open Microsoft.AspNetCore.Http
+open Oxpecker
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
 
-let private accepted = Response.json 202 "{}"
+let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
 
 /// A string as Go's %q prints it.
 let private quoted (text: string) : string =
@@ -38,14 +41,14 @@ let private quoted (text: string) : string =
 /// an integration hands it bytes, and no schema for them is published
 /// anywhere. So the bytes are kept as they are, with the sender's identity,
 /// which the event platform carries in headers, in the note.
-let handleGenResources (r: Request) : Response =
-    let header (name: string) = quoted (r.Header name)
+let handleGenResources (body: byte[]) (ctx: HttpContext) : Task =
+    let header (name: string) = quoted (Ctx.header ctx name)
 
     let note =
         $"""DD-EVP-ORIGIN={header "DD-EVP-ORIGIN"} DD-EVP-ORIGIN-VERSION={header "DD-EVP-ORIGIN-VERSION"} Content-Type={header "Content-Type"}"""
 
-    Raw.store r "genresources" "no_schema" note r.Body
-    accepted
+    Raw.store ctx "genresources" "no_schema" note body
+    accepted ctx
 
 
 // instrumentation-telemetry-intake: one path, five producers, one envelope
@@ -203,7 +206,9 @@ let producer (envelope: Map<string, JsonElement>) (requestType: string) : string
         else "unknown"
 
 /// The row of the request itself, whoever sent it.
-let private requestRow (r: Request) (envelope: Map<string, JsonElement>) (requestType: string) : APMTelemetryRow =
+let private requestRow (ctx: HttpContext) (envelope: Map<string, JsonElement>) (requestType: string) : APMTelemetryRow =
+    let tenant = Ctx.tenant ctx
+
     let app = application (envelope.TryFind "application")
     let sender = host (envelope.TryFind "host")
 
@@ -232,7 +237,7 @@ let private requestRow (r: Request) (envelope: Map<string, JsonElement>) (reques
               Architecture = ""
               Extra = Map.empty }
 
-    { TenantID = r.Tenant
+    { TenantID = tenant
       ReceivedAt = DateTime.UtcNow
       RequestType = requestType
       Producer = producer envelope requestType
@@ -256,11 +261,11 @@ let private requestRow (r: Request) (envelope: Map<string, JsonElement>) (reques
       Payload = rawText (envelope.TryFind "payload")
       Debug = rawText (envelope.TryFind "debug")
       Origin = text (envelope.TryFind "origin")
-      Via = r.Header "Via"
-      DDAgentHostname = r.Header "DD-Agent-Hostname"
-      DDAgentEnv = r.Header "DD-Agent-Env"
-      DatadogContainerID = r.Header "Datadog-Container-Id"
-      XDatadogContainerTags = r.Header "X-Datadog-Container-Tags"
+      Via = Ctx.header ctx "Via"
+      DDAgentHostname = Ctx.header ctx "DD-Agent-Hostname"
+      DDAgentEnv = Ctx.header ctx "DD-Agent-Env"
+      DatadogContainerID = Ctx.header ctx "Datadog-Container-Id"
+      XDatadogContainerTags = Ctx.header ctx "X-Datadog-Container-Tags"
       Extra = extra
       BatchIndex = None
       ParentRequestType = "" }
@@ -282,20 +287,24 @@ let private batchEntries (payload: JsonElement option) : Map<string, JsonElement
 /// One row for the request, whoever sent it. A message-batch, whose payload
 /// is [{request_type, payload}, …], adds one row per entry on top of that
 /// row, which keeps the whole batch.
-let handleTelemetry (r: Request) : Response =
-    let refuse (error: string) =
-        r.Log.LogWarning("[apmtelemetry] not a JSON object: {Error}", error)
-        Raw.store r "apmtelemetry" "decode_error" error r.Body
+let handleTelemetry (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
 
-    match GoJson.parse r.Body with
+    let refuse (error: string) =
+        log.LogWarning("[apmtelemetry] not a JSON object: {Error}", error)
+        Raw.store ctx "apmtelemetry" "decode_error" error body
+
+    match GoJson.parse body with
     | Error e -> refuse e
     | Ok root when root.ValueKind <> JsonValueKind.Object && root.ValueKind <> JsonValueKind.Null ->
         refuse $"expected a JSON object, got {GoJson.kind root}"
     | Ok root ->
-        if r.Tenant <> "" then
+        if tenant <> "" then
             let envelope = GoJson.members root
             let requestType = text (envelope.TryFind "request_type")
-            let parent = requestRow r envelope requestType
+            let parent = requestRow ctx envelope requestType
 
             let children =
                 if requestType <> "message-batch" then
@@ -303,7 +312,7 @@ let handleTelemetry (r: Request) : Response =
                 else
                     match batchEntries (envelope.TryFind "payload") with
                     | None ->
-                        r.Log.LogWarning "[apmtelemetry] batch payload is not a list of objects; kept only on the request's row"
+                        log.LogWarning "[apmtelemetry] batch payload is not a list of objects; kept only on the request's row"
                         []
                     | Some entries ->
                         // Entries carry no envelope of their own: they
@@ -319,6 +328,6 @@ let handleTelemetry (r: Request) : Response =
                                 BatchIndex = Some(uint32 i)
                                 ParentRequestType = requestType })
 
-            Sink.write r.Sink ApmTelemetry.table (Array.ofList (parent :: children))
+            Sink.write sink ApmTelemetry.table (Array.ofList (parent :: children))
 
-    accepted
+    accepted ctx

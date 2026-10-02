@@ -38,6 +38,7 @@ open Microsoft.AspNetCore.WebUtilities
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Logging.Abstractions
 open Microsoft.Net.Http.Headers
+open Oxpecker
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
@@ -45,16 +46,7 @@ open NinjaCat.Api.Storage.Rows
 /// The label of this intake in raw_payloads.
 let private intake = "rum"
 
-let private accepted = Response.json 202 "{}"
-
-/// The key guard of browser-intake: the header (iOS, Android) or the query
-/// string (browser). The browser has no choice: its fetch sets no headers at
-/// all, to stay a "simple request" and interchangeable with sendBeacon. A key
-/// in a URL lands in every proxy's access log, which is why only this intake
-/// accepts it. The one request the browser SDK does put a header on, the
-/// profiler's quota check, names it DD-CLIENT-TOKEN.
-let gate: Auth =
-    Auth.fromSources [ KeyFromHeader "Dd-Api-Key"; KeyFromQuery "dd-api-key"; KeyFromHeader "Dd-Client-Token" ]
+let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
 
 /// What a preflight is told it may send. DD-API-KEY and DD-EVP-* are for the
 /// mobile SDKs and for a browser deployment that chose headers over the query
@@ -302,9 +294,9 @@ let private requestColumns =
 
 /// The query parameters without a column as JSON, or "". Values stay arrays:
 /// a parameter may legally repeat.
-let private queryExtra (r: Request) : string =
+let private queryExtra (ctx: HttpContext) : string =
     let extra =
-        r.Http.Request.Query
+        ctx.Request.Query
         |> Seq.filter (fun pair -> not (requestColumns.Contains(pair.Key.ToLowerInvariant())))
         |> List.ofSeq
 
@@ -332,8 +324,8 @@ let private tryParseInt64 (text: string) : int64 option =
 /// The sender's address. Behind a proxy the operator has named
 /// (NINJACAT_TRUSTED_PROXIES), ASP.NET's forwarded-headers middleware has
 /// already replaced the peer with the address from X-Forwarded-For.
-let private clientIP (r: Request) : string =
-    let peer = r.Http.Connection.RemoteIpAddress
+let private clientIP (ctx: HttpContext) : string =
+    let peer = ctx.Connection.RemoteIpAddress
 
     if isNull peer then ""
     elif peer.IsIPv4MappedToIPv6 then peer.MapToIPv4().ToString()
@@ -342,43 +334,47 @@ let private clientIP (r: Request) : string =
 /// The sender columns shared by every RUM table. The browser puts its
 /// identity in the query string (it sets no headers at all), iOS and Android
 /// put theirs in headers, so each field is looked for in both places.
-let requestInfo (r: Request) : RumRequest =
+let requestInfo (ctx: HttpContext) : RumRequest =
+    let tenant = Ctx.tenant ctx
+
     // The browser spells a retry as _dd.retry_count / _dd.retry_after, iOS
     // and Android as ddtags=retry_count:N,retry_after:CODE. retry_after is
     // stored as sent: a delay in milliseconds from the browser, the HTTP
     // status that caused the retry from the mobile SDKs.
-    let retryTags = Tags.toMap (Tags.splitDDTags (r.Query "ddtags"))
+    let retryTags = Tags.toMap (Tags.splitDDTags (Ctx.query ctx "ddtags"))
 
     let retry (name: string) : int64 option =
-        tryParseInt64 (Text.firstNonEmpty [ r.Query("_dd." + name); retryTags.TryFind name |> Option.defaultValue "" ])
+        tryParseInt64 (Text.firstNonEmpty [ Ctx.query ctx ("_dd." + name); retryTags.TryFind name |> Option.defaultValue "" ])
 
-    { TenantID = r.Tenant
+    { TenantID = tenant
       ReceivedAt = DateTime.UtcNow
-      DDSource = r.Query "ddsource"
-      EVPOrigin = Text.firstNonEmpty [ r.Query "dd-evp-origin"; r.Header "Dd-Evp-Origin" ]
-      EVPOriginVersion = Text.firstNonEmpty [ r.Query "dd-evp-origin-version"; r.Header "Dd-Evp-Origin-Version" ]
+      DDSource = Ctx.query ctx "ddsource"
+      EVPOrigin = Text.firstNonEmpty [ Ctx.query ctx "dd-evp-origin"; Ctx.header ctx "Dd-Evp-Origin" ]
+      EVPOriginVersion = Text.firstNonEmpty [ Ctx.query ctx "dd-evp-origin-version"; Ctx.header ctx "Dd-Evp-Origin-Version" ]
       // The only record that the batch was compressed: an SDK release that
       // silently stops compressing would otherwise be visible nowhere.
-      EVPEncoding = Text.firstNonEmpty [ r.Query "dd-evp-encoding"; r.Header "Content-Encoding" ]
-      RequestID = Text.firstNonEmpty [ r.Query "dd-request-id"; r.Header "Dd-Request-Id" ]
-      IdempotencyKey = r.Header "Dd-Idempotency-Key"
-      DDAPI = r.Query "_dd.api"
-      BatchTime = tryParseInt64 (r.Query "batch_time") |> Option.map fromMillis
+      EVPEncoding = Text.firstNonEmpty [ Ctx.query ctx "dd-evp-encoding"; Ctx.header ctx "Content-Encoding" ]
+      RequestID = Text.firstNonEmpty [ Ctx.query ctx "dd-request-id"; Ctx.header ctx "Dd-Request-Id" ]
+      IdempotencyKey = Ctx.header ctx "Dd-Idempotency-Key"
+      DDAPI = Ctx.query ctx "_dd.api"
+      BatchTime = tryParseInt64 (Ctx.query ctx "batch_time") |> Option.map fromMillis
       RetryCount = retry "retry_count" |> Option.filter (fun n -> n >= 0L) |> Option.map uint32
       RetryAfter = retry "retry_after"
-      RemoteAddr = clientIP r
-      UserAgent = r.Header "User-Agent"
-      QueryExtra = queryExtra r }
+      RemoteAddr = clientIP ctx
+      UserAgent = Ctx.header ctx "User-Agent"
+      QueryExtra = queryExtra ctx }
 
 /// The body, inflated when the browser said so in the query string. The
 /// browser sends no Content-Encoding header — ?dd-evp-encoding=deflate is its
-/// only signal — so the engine has passed the body through untouched. A body
+/// only signal — so bindBody has passed the body through untouched. A body
 /// that does not inflate comes back as it was.
-let private inflated (r: Request) : byte[] =
-    if r.Body.Length > 0 && (r.Query "dd-evp-encoding").Equals("deflate", StringComparison.OrdinalIgnoreCase) then
-        Body.decompress r.Log "deflate" r.Body
+let private inflated (body: byte[]) (ctx: HttpContext) : byte[] =
+    let log = Ctx.log ctx
+
+    if body.Length > 0 && (Ctx.query ctx "dd-evp-encoding").Equals("deflate", StringComparison.OrdinalIgnoreCase) then
+        Body.decompress log "deflate" body
     else
-        r.Body
+        body
 
 /// A batch as its non-empty lines. The SDKs write no trailing newline and no
 /// \r, but a proxy that rewrote the body might, and a blank line is not an
@@ -672,18 +668,21 @@ let timeseriesRow (request: RumRequest) (o: JsonElement) (raw: string) : RumTime
       Event = raw }
 
 /// POST /api/v2/rum: NDJSON, one event per line, from every SDK.
-let handleRum (r: Request) : Response =
-    if Diagnose.isSweep r then
-        accepted
-    else
-        let body = inflated r
+let handleRum (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let sink = Ctx.sink ctx
 
-        // No tenant means no key, which the gate already refused: nothing is
+    if Diagnose.isSweep ctx then
+        accepted ctx
+    else
+        let body = inflated body ctx
+
+        // No tenant means no key, which authentication already refused: nothing is
         // stored, because a guessed tenant puts rows where no query looks.
-        if body.Length = 0 || r.Tenant = "" then
-            accepted
+        if body.Length = 0 || tenant = "" then
+            accepted ctx
         else
-            let request = requestInfo r
+            let request = requestInfo ctx
             let views = ResizeArray<RumViewRow>()
             let events = ResizeArray<RumEventRow>()
             let telemetry = ResizeArray<RumTelemetryRow>()
@@ -691,9 +690,9 @@ let handleRum (r: Request) : Response =
 
             for line in ndjsonLines body do
                 match parseJson line with
-                | Error problem -> Raw.store r intake "decode_error" $"not a JSON object: {problem}" line
+                | Error problem -> Raw.store ctx intake "decode_error" $"not a JSON object: {problem}" line
                 | Ok event when event.ValueKind <> JsonValueKind.Object ->
-                    Raw.store r intake "decode_error" "not a JSON object" line
+                    Raw.store ctx intake "decode_error" "not a JSON object" line
                 | Ok event ->
                     let raw = Text.utf8 line
 
@@ -701,17 +700,17 @@ let handleRum (r: Request) : Response =
                     // SDKs ship on schema snapshots months apart, so a newer
                     // one sends event types this build has never seen. That
                     // line is kept raw and the rest of the batch is stored.
-                    | Error unknownType -> Raw.store r intake "unknown_event" unknownType line
+                    | Error unknownType -> Raw.store ctx intake "unknown_event" unknownType line
                     | Ok(View eventType) -> views.Add(viewRow request eventType event raw)
                     | Ok(Plain eventType) -> events.Add(eventRow request eventType event raw)
                     | Ok Telemetry -> telemetry.Add(telemetryRow request event raw)
                     | Ok Timeseries -> series.Add(timeseriesRow request event raw)
 
-            Sink.write r.Sink RumViews.table (views.ToArray())
-            Sink.write r.Sink RumEvents.table (events.ToArray())
-            Sink.write r.Sink RumTelemetry.table (telemetry.ToArray())
-            Sink.write r.Sink RumTimeseries.table (series.ToArray())
-            accepted
+            Sink.write sink RumViews.table (views.ToArray())
+            Sink.write sink RumEvents.table (events.ToArray())
+            Sink.write sink RumTelemetry.table (telemetry.ToArray())
+            Sink.write sink RumTimeseries.table (series.ToArray())
+            accepted ctx
 
 /// A multipart body as its parts, in order and with repeats; an error when
 /// the content type is not multipart or the body breaks off.
@@ -831,23 +830,27 @@ let replayRow (request: RumRequest) (part: MultipartPart) (meta: JsonElement) (m
 /// The blobs are not decoded, by design: Datadog's own intake stores segments
 /// unprocessed, and the SDK emits zlib streams meant to be concatenated
 /// later, which inflating and re-deflating would throw away.
-let handleReplay (r: Request) : Response =
-    if Diagnose.isSweep r then
-        accepted
+let handleReplay (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let log = Ctx.log ctx
+    let sink = Ctx.sink ctx
+
+    if Diagnose.isSweep ctx then
+        accepted ctx
     else
-        let body = inflated r
+        let body = inflated body ctx
 
         if body.Length = 0 then
-            accepted
+            accepted ctx
         else
-            match replayParts (r.Header "Content-Type") body with
+            match replayParts (Ctx.header ctx "Content-Type") body with
             | Error problem ->
-                r.Log.LogWarning("[rum-replay] not multipart ({Problem}), kept raw", problem)
-                Raw.store r intake "unexpected_shape" $"replay body is not multipart: {problem}" body
-                accepted
-            | Ok _ when r.Tenant = "" -> accepted
+                log.LogWarning("[rum-replay] not multipart ({Problem}), kept raw", problem)
+                Raw.store ctx intake "unexpected_shape" $"replay body is not multipart: {problem}" body
+                accepted ctx
+            | Ok _ when tenant = "" -> accepted ctx
             | Ok parts ->
-                let request = requestInfo r
+                let request = requestInfo ctx
                 let mutable metadata: (JsonElement * string) list = []
 
                 for part in parts do
@@ -856,7 +859,7 @@ let handleReplay (r: Request) : Response =
                         | Some entries -> metadata <- entries
                         | None ->
                             metadata <- []
-                            Raw.store r intake "decode_error" "replay event part is neither an object nor an array" part.Data
+                            Raw.store ctx intake "decode_error" "replay event part is neither an object nor an array" part.Data
 
                 // Entry i describes blob i, in wire order.
                 let rows =
@@ -870,14 +873,14 @@ let handleReplay (r: Request) : Response =
                 if not metadata.IsEmpty && rows.Length <> metadata.Length then
                     // Every blob is still stored, but some got the wrong
                     // metadata, and that is worth seeing.
-                    r.Log.LogWarning(
+                    log.LogWarning(
                         "[rum-replay] {Blobs} blob parts against {Entries} metadata entries: the pairing is by position and they disagree",
                         rows.Length,
                         metadata.Length
                     )
 
-                Sink.write r.Sink RumReplaySegments.table (Array.ofList rows)
-                accepted
+                Sink.write sink RumReplaySegments.table (Array.ofList rows)
+                accepted ctx
 
 /// The span's meta as a flat map with dotted keys. meta.device and meta.os
 /// arrive as nested objects among flat keys, and flattening is what keeps
@@ -955,33 +958,36 @@ let private envelopeExtra (envelope: JsonElement) : string =
 /// Not the agent's /v0.4/traces: NDJSON of {"spans":[...],"env":"..."}
 /// envelopes with a flat, hand-rolled span shape that only dd-sdk-ios and
 /// dd-sdk-android produce, with no published schema.
-let handleSpans (r: Request) : Response =
-    if Diagnose.isSweep r then
-        accepted
-    else
-        let body = inflated r
+let handleSpans (body: byte[]) (ctx: HttpContext) : Task =
+    let tenant = Ctx.tenant ctx
+    let sink = Ctx.sink ctx
 
-        if body.Length = 0 || r.Tenant = "" then
-            accepted
+    if Diagnose.isSweep ctx then
+        accepted ctx
+    else
+        let body = inflated body ctx
+
+        if body.Length = 0 || tenant = "" then
+            accepted ctx
         else
-            let request = requestInfo r
+            let request = requestInfo ctx
             let rows = ResizeArray<RumSpanRow>()
 
             for line in ndjsonLines body do
                 match parseJson line with
-                | Error problem -> Raw.store r intake "decode_error" problem line
+                | Error problem -> Raw.store ctx intake "decode_error" problem line
                 | Ok envelope when envelope.ValueKind <> JsonValueKind.Object && envelope.ValueKind <> JsonValueKind.Null ->
-                    Raw.store r intake "decode_error" "span envelope is not an object" line
+                    Raw.store ctx intake "decode_error" "span envelope is not an object" line
                 | Ok envelope ->
                     // Go decoded a `null` envelope, a `null` spans array and
                     // a `null` span without complaint: as empty.
                     let envelope = if envelope.ValueKind = JsonValueKind.Null then emptyObject else envelope
 
                     match envelope.TryGetProperty "spans" with
-                    | false, _ -> Raw.store r intake "unexpected_shape" "span envelope without a spans array" line
+                    | false, _ -> Raw.store ctx intake "unexpected_shape" "span envelope without a spans array" line
                     | true, spans when spans.ValueKind = JsonValueKind.Null -> ()
                     | true, spans when spans.ValueKind <> JsonValueKind.Array ->
-                        Raw.store r intake "decode_error" "spans is not an array" line
+                        Raw.store ctx intake "decode_error" "spans is not an array" line
                     | true, spans ->
                         let env = Json.string "env" envelope
                         let extra = envelopeExtra envelope
@@ -995,14 +1001,14 @@ let handleSpans (r: Request) : Response =
                             elif span.ValueKind = JsonValueKind.Null then
                                 rows.Add(spanRow request env extra emptyObject raw)
                             else
-                                Raw.store r intake "decode_error" "span is not an object" (Encoding.UTF8.GetBytes raw)
+                                Raw.store ctx intake "decode_error" "span is not an object" (Encoding.UTF8.GetBytes raw)
 
-            Sink.write r.Sink RumSpans.table (rows.ToArray())
-            accepted
+            Sink.write sink RumSpans.table (rows.ToArray())
+            accepted ctx
 
 /// GET /api/v2/profiling/quota?session_id=… — the browser profiler asks
 /// before it starts whether this session may be profiled. There is no quota
 /// here, so every session is admitted. Without an answer the SDK profiles
 /// anyway, but marks the session's events with the reason "api-error".
-let handleProfilingQuota (_: Request) : Response =
-    Response.json 200 """{"data":{"attributes":{"admitted":true,"reason":"quota_ok"}}}"""
+let handleProfilingQuota (_: byte[]) (ctx: HttpContext) : Task =
+    json {| data = {| attributes = {| admitted = true; reason = "quota_ok" |} |} |} ctx
