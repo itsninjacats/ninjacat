@@ -1,0 +1,58 @@
+# NinjaCat — capture lab: a real Datadog Agent pointed at the dev stack.
+#
+#   DD_API_KEY=<key> docker compose -f compose.yaml -f compose.lab.yaml up
+#
+# The key is one created in the panel (http://localhost:5173, Settings → API
+# keys); the intake answers 403 to anything else. Requests are dumped to
+# api/captures/ (DEBUG=true in compose.yaml).
+#
+# The `lab` network is internal: containers on it have NO route out. That is
+# the one guarantee that nothing reaches Datadog — it does not depend on the
+# agent's flags or on what its next version adds.
+
+services:
+  intake:
+    networks:
+      default: {}
+      # The intake routes on the Host header, so the agent needs Datadog-shaped
+      # hostnames: one alias per product it is pointed at below.
+      lab:
+        aliases:
+          - app.ninjacat.lab
+          - trace.agent.ninjacat.lab
+          - process.ninjacat.lab
+          - agent-http-intake.logs.ninjacat.lab
+
+  agent:
+    image: datadog/agent:7
+    container_name: ninjacat-lab-agent
+    depends_on: [intake]
+    networks: [lab]
+    environment:
+      DD_API_KEY: ${DD_API_KEY:?create a key in the panel and pass it as DD_API_KEY}
+      DD_HOSTNAME: ninjacat-lab
+      DD_LOG_LEVEL: info
+
+      # Everything that has its own URL, pointed at the intake.
+      DD_DD_URL: http://app.ninjacat.lab:8080
+      DD_APM_DD_URL: http://trace.agent.ninjacat.lab:8080
+      DD_PROCESS_CONFIG_PROCESS_DD_URL: http://process.ninjacat.lab:8080
+      DD_LOGS_CONFIG_LOGS_DD_URL: agent-http-intake.logs.ninjacat.lab:8080
+      DD_LOGS_CONFIG_USE_HTTP: "true"
+      DD_LOGS_CONFIG_LOGS_NO_SSL: "true"
+
+      # What we want to watch.
+      DD_LOGS_ENABLED: "true"
+      DD_APM_ENABLED: "true"
+      DD_APM_NON_LOCAL_TRAFFIC: "true"
+      DD_DOGSTATSD_NON_LOCAL_TRAFFIC: "true"
+      DD_PROCESS_CONFIG_PROCESS_COLLECTION_ENABLED: "true"
+      DD_PROCESS_CONFIG_CONTAINER_COLLECTION_ENABLED: "true"
+
+      # What cannot be redirected. This only keeps the agent's log quiet —
+      # the network lets nothing through either way.
+      DD_REMOTE_CONFIGURATION_ENABLED: "false"
+
+networks:
+  lab:
+    internal: true

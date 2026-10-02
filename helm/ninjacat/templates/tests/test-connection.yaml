@@ -9,13 +9,32 @@ metadata:
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 spec:
   restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
   containers:
     # The intake answers only on a known Host, so send one.
     - name: intake
-      image: busybox
-      command: ["wget", "-qO-", "--header", "Host: api.{{ .Values.domainRoot }}",
-                "http://{{ include "ninjacat.fullname" . }}-server:{{ .Values.server.intakeService.port }}/ping"]
-    - name: panel-api
-      image: busybox
-      command: ["wget", "-qO-",
-                "http://{{ include "ninjacat.fullname" . }}-server-internal:{{ .Values.server.internalService.port }}/ping"]
+      image: busybox:1.37
+      command: ["wget", "-qO-", "--header", "Host: api.{{ include "ninjacat.domainRoot" . }}",
+                "http://{{ include "ninjacat.fullname" . }}-intake:{{ .Values.intake.service.port }}/ping"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+    # The panel, which answers a visitor with its sign-in page. The query
+    # process is not asked: only the panel's pods may reach it.
+    - name: panel
+      image: busybox:1.37
+      command: ["wget", "-qO", "/dev/null",
+                "http://{{ include "ninjacat.fullname" . }}-frontend:{{ .Values.frontend.service.port }}/login"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]

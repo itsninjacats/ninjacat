@@ -1,17 +1,33 @@
 # NinjaCat — development stack.
 #
-#   docker compose up            everything, with hot reload on both sides
-#   docker compose up -d db      just the databases, if you run the apps on the host
+#   docker compose up            everything, with hot reload
+#   docker compose up -d postgres clickhouse   just the databases, if you run the apps on the host
 #
-# Both application services rebuild themselves on save: the Go server through
-# Air (see server/.air.toml), the panel through Vite's dev server. Source is
-# bind-mounted, so an edit on the host is an edit in the container.
+# The application services rebuild themselves on save: the server's two
+# processes through `dotnet watch`, the panel through Vite's dev server. Source is bind-mounted,
+# so an edit on the host is an edit in the container.
 #
-# Databases publish on 127.0.0.1 only. They have passwords, but exposing a
-# development database on 0.0.0.0 is a separate decision — drop the prefix if
-# you mean to make it.
+# Databases and the query process publish on 127.0.0.1 only. The databases
+# have passwords, the query process asks for nothing at all; exposing either
+# on 0.0.0.0 is a separate decision — drop the prefix if you mean to make it.
 
 name: ninjacat
+
+x-server-environment: &server-environment
+  DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
+  CLICKHOUSE_HTTP_ADDR: clickhouse:8123
+  CLICKHOUSE_DB: ninjacat
+  CLICKHOUSE_USER: ninjacat
+  CLICKHOUSE_PASSWORD: ninjacat
+  NINJACAT_ARTIFACTS_PATH: /artifacts
+  # Polling, because inotify events do not cross the bind mount everywhere.
+  DOTNET_USE_POLLING_FILE_WATCHER: "true"
+  # The .NET SDK reports its own usage to Microsoft unless told not to.
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  # The image presets port 8080 for ASP.NET; the server names its own ports
+  # (NINJACAT_ADDR, NINJACAT_INTERNAL_ADDR), and would warn at every start
+  # that it overrides the preset.
+  ASPNETCORE_HTTP_PORTS: ""
 
 services:
   clickhouse:
@@ -27,7 +43,7 @@ services:
       CLICKHOUSE_PASSWORD: ninjacat
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     # No docker-entrypoint-initdb.d mount: the server owns the schema and
-    # applies its embedded migrations at startup (server/schema). The
+    # applies its embedded migrations at startup (api/schema). The
     # entrypoint mechanism only ever fired on an empty data directory anyway.
     # CLICKHOUSE_DB above still creates the (empty) database itself.
     volumes:
@@ -81,36 +97,56 @@ services:
       postgres: { condition: service_healthy }
     restart: "no"
 
-  server:
-    build:
-      context: ./server
-      dockerfile: Dockerfile.dev
-    container_name: ninjacat-server
+  # The server is one program run as two processes, so that what agents can
+  # reach and what the panel reads from share neither a port nor a container.
+  # Both rebuild on save through `dotnet watch`, each into its own volume:
+  # two builds of the same tree must not write the same files.
+
+  # What agents send to. It owns every write to ClickHouse and its schema.
+  intake:
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    container_name: ninjacat-intake
     restart: unless-stopped
+    working_dir: /app
+    command: ["dotnet", "watch", "--project", "src/Server", "run", "--non-interactive", "--", "intake"]
     ports:
-      - "8080:8080"   # agent intake — reachable from agent machines
-      - "8081:8081"   # panel API — internal
-      - "9911:9911"   # Ergo observer
+      - "8080:8080"     # reachable from agent machines
+      - "10516:10516"   # logs over TCP, for agents with force_use_tcp
     environment:
-      DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
-      CLICKHOUSE_ADDR: clickhouse:9000
-      CLICKHOUSE_DB: ninjacat
-      CLICKHOUSE_USER: ninjacat
-      CLICKHOUSE_PASSWORD: ninjacat
+      <<: *server-environment
       NINJACAT_ADDR: ":8080"
-      NINJACAT_INTERNAL_ADDR: ":8081"
-      # The observer binds this address. 0.0.0.0 is what makes it reachable
-      # from the host at http://localhost:9911.
-      NINJACAT_OBSERVER_HOST: 0.0.0.0
       NINJACAT_CAPTURE_DIR: /data/captures
       DEBUG: "true"
     volumes:
-      - ./server:/app
-      - ./server/captures:/data/captures
-      # Module and build caches live in volumes, not in the bind mount, so a
-      # rebuild after an edit is seconds rather than a full download.
-      - go-mod-cache:/go/pkg/mod
-      - go-build-cache:/root/.cache/go-build
+      - ./api:/app
+      - ./api/captures:/data/captures
+      # Build output lives here, not in the bind mount (see NINJACAT_ARTIFACTS_PATH),
+      # so host and container builds never collide.
+      - intake-artifacts:/artifacts
+      - nuget-cache:/root/.nuget/packages
+    depends_on:
+      clickhouse: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+
+  # What the panel reads from: the panel's and the query API. It only reads.
+  # Nothing on its port asks for a key, so it is published on the loopback
+  # alone; the panel's container reaches it over the compose network.
+  query:
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    container_name: ninjacat-query
+    restart: unless-stopped
+    working_dir: /app
+    command: ["dotnet", "watch", "--project", "src/Server", "run", "--non-interactive", "--", "query"]
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      <<: *server-environment
+      NINJACAT_INTERNAL_ADDR: ":8081"
+    volumes:
+      - ./api:/app
+      - query-artifacts:/artifacts
+      - nuget-cache:/root/.nuget/packages
     depends_on:
       clickhouse: { condition: service_healthy }
       postgres: { condition: service_healthy }
@@ -126,8 +162,8 @@ services:
       - "5173:5173"
     environment:
       DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
-      # The panel talks to :8081, never to the agent intake on :8080.
-      NINJACAT_INTERNAL_URL: http://server:8081
+      # The panel talks to the query process, never to the agent intake.
+      NINJACAT_INTERNAL_URL: http://query:8081
       ORIGIN: http://localhost:5173
       BETTER_AUTH_SECRET: dev-only-secret-change-me-in-production-32ch
     volumes:
@@ -144,7 +180,8 @@ volumes:
   clickhouse-data:
   clickhouse-logs:
   pgdata:
-  go-mod-cache:
-  go-build-cache:
   frontend-node-modules:
   frontend-svelte-kit:
+  intake-artifacts:
+  query-artifacts:
+  nuget-cache:

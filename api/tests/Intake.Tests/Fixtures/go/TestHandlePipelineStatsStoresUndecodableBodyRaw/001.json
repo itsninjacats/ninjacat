@@ -1,0 +1,100 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.664637322Z",
+ "request": {
+  "body_b64": "H4sIAAAAAAAA/wAbAOT/bm90IGEgbXNncGFjayBzdGF0cyBwYXlsb2FkAwCAKw2pGwAAAA==",
+  "headers": {
+   "Content-Encoding": [
+    "gzip"
+   ],
+   "Content-Type": [
+    "application/msgpack"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v0.1/pipeline_stats"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeTrace"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:37.664632653Z",
+     "trace",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/api/v0.1/pipeline_stats",
+     {},
+     "application/msgpack",
+     "gzip",
+     {},
+     "not a msgpack stats payload",
+     27,
+     "msgpack datastreams.StatsPayload: msgp: attempted to decode type \"int\" with method for \"map\""
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "not a msgpack stats payload",
+     "BodyBytes": 27,
+     "ContentEncoding": "gzip",
+     "ContentType": "application/msgpack",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "trace",
+     "Method": "POST",
+     "Note": "msgpack datastreams.StatsPayload: msgp: attempted to decode type \"int\" with method for \"map\"",
+     "Path": "/api/v0.1/pipeline_stats",
+     "Query": {},
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T15:21:37.664632653Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandlePipelineStatsStoresUndecodableBodyRaw",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

@@ -1,0 +1,348 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.474349387Z",
+ "request": {
+  "body_b64": "AgBQCZIQAAAKAnMyEgxzNCA8Jj4gIsOpIgoYBiD4//////////8BKogBEg1zMTIgPCY+ICLDqSIKIg5raW5kOiBUaGluZzE1CjIDczE4QAFKA3MyMlINczI0IDwmPiAiw6kiCmJMCJ2AgICAgIAQEB4yB2szMzp2MzMyFWszMzpvdGhlcjp3aXRoOmNvbG9uczIGYmFyZTMzMgh6MzM6bGFzdEClgICAgICAEFCn4s+qBipuCCoaA3M0NSoNczQ4IDwmPiAiw6kiCjoHazUxOnY1MToVazUxOm90aGVyOndpdGg6Y29sb25zOgZiYXJlNTE6CHo1MTpsYXN0SgNzNTRaA3M1N2oMCgVrZXk2MhIDczYzagwKBWtleTYwEgNzNjEyB2s2NTp2NjUyFWs2NTpvdGhlcjp3aXRoOmNvbG9uczIGYmFyZTY1Mgh6NjU6bGFzdDoDczY3QhsIuv//////////ARDI4s+qBiIDczc1MgNzNzhIAVJgEg8KA3M4NRIDczg3IgNzOTAaJwheEg1zOTYgPCY+ICLDqSIKIgNzOTkyBHMxMDJAl///////////ARokCJT//////////wEaBHMxMTEqBHMxMTQ4dUiI//////////8B",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orchmanif"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint8",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "string",
+     "map[string]string",
+     "uint8",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint8",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "string",
+     "map[string]string",
+     "uint8",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.474321886Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     "",
+     "",
+     "s22",
+     "s12 <&> \"é\"\n",
+     "kind: Thing15\n",
+     "",
+     1,
+     4242,
+     9,
+     null,
+     "protobuf",
+     6,
+     -8,
+     "s67",
+     "-70.1700000072.0-s75",
+     "datadogAgent",
+     {
+      "bare65": [
+       ""
+      ],
+      "k65": [
+       "v65",
+       "other:with:colons"
+      ],
+      "z65": [
+       "last"
+      ]
+     },
+     {
+      "envelope": [
+       "k65:v65",
+       "k65:other:with:colons",
+       "bare65",
+       "z65:last"
+      ]
+     },
+     "s24 <&> \"é\"\n",
+     0,
+     "s18",
+     {},
+     1,
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k65:v65\", \"k65:other:with:colons\", \"bare65\", \"z65:last\" ], \"hostName\": \"s67\", \"agentVersion\": { \"Major\": \"-70\", \"Minor\": \"1700000072\", \"Pre\": \"s75\", \"Commit\": \"s78\" }, \"originCollector\": \"datadogAgent\", \"systemInfo\": { \"os\": { \"name\": \"s85\", \"platform\": \"s87\", \"version\": \"s90\" }, \"cpus\": [ { \"number\": 94, \"vendor\": \"s96 \\u003c&\\u003e \\\"é\\\"\\n\", \"model\": \"s99\", \"coreId\": \"s102\", \"mhz\": \"-105\" }, { \"number\": -108, \"family\": \"s111\", \"physicalId\": \"s114\", \"cores\": 117, \"cacheSize\": -120 } ] } }",
+     "{ \"id\": \"9007199254741021\", \"orgId\": 30, \"allTags\": [ \"k33:v33\", \"k33:other:with:colons\", \"bare33\", \"z33:last\" ], \"totalMemory\": \"9007199254741029\", \"tagsModified\": \"1700000039\" }"
+    ],
+    [
+     "test",
+     "2026-10-01T16:08:42.474321886Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     "s45",
+     "s57",
+     "s54",
+     "",
+     "",
+     "s48 <&> \"é\"\n",
+     0,
+     4242,
+     9,
+     null,
+     "protobuf",
+     6,
+     -8,
+     "s67",
+     "-70.1700000072.0-s75",
+     "datadogAgent",
+     {
+      "bare51": [
+       ""
+      ],
+      "bare65": [
+       ""
+      ],
+      "k51": [
+       "v51",
+       "other:with:colons"
+      ],
+      "k65": [
+       "v65",
+       "other:with:colons"
+      ],
+      "z51": [
+       "last"
+      ],
+      "z65": [
+       "last"
+      ]
+     },
+     {
+      "envelope": [
+       "k65:v65",
+       "k65:other:with:colons",
+       "bare65",
+       "z65:last"
+      ],
+      "manifest": [
+       "k51:v51",
+       "k51:other:with:colons",
+       "bare51",
+       "z51:last"
+      ]
+     },
+     "",
+     42,
+     "",
+     {
+      "key60": "s61",
+      "key62": "s63"
+     },
+     1,
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k65:v65\", \"k65:other:with:colons\", \"bare65\", \"z65:last\" ], \"hostName\": \"s67\", \"agentVersion\": { \"Major\": \"-70\", \"Minor\": \"1700000072\", \"Pre\": \"s75\", \"Commit\": \"s78\" }, \"originCollector\": \"datadogAgent\", \"systemInfo\": { \"os\": { \"name\": \"s85\", \"platform\": \"s87\", \"version\": \"s90\" }, \"cpus\": [ { \"number\": 94, \"vendor\": \"s96 \\u003c&\\u003e \\\"é\\\"\\n\", \"model\": \"s99\", \"coreId\": \"s102\", \"mhz\": \"-105\" }, { \"number\": -108, \"family\": \"s111\", \"physicalId\": \"s114\", \"cores\": 117, \"cacheSize\": -120 } ] } }",
+     ""
+    ]
+   ],
+   "insert": "INSERT INTO k8s_manifests\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, uid, kind, api_version,\n\t\t\t resource_version, content, content_type, is_terminated,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t group_id, group_size, host_name, agent_version, origin_collector,\n\t\t\t tags, tag_sources, node_name, type, version, extra_attributes,\n\t\t\t content_is_utf8, envelope, manifest_host)",
+   "rows": [
+    {
+     "APIVersion": "s22",
+     "AgentVersion": "-70.1700000072.0-s75",
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterName": "s2",
+     "CollectedAt": "2026-10-01T16:08:42.474321886Z",
+     "Content": "kind: Thing15\n",
+     "ContentIsUTF8": 1,
+     "ContentType": "",
+     "Encoding": "protobuf",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k65:v65\", \"k65:other:with:colons\", \"bare65\", \"z65:last\" ], \"hostName\": \"s67\", \"agentVersion\": { \"Major\": \"-70\", \"Minor\": \"1700000072\", \"Pre\": \"s75\", \"Commit\": \"s78\" }, \"originCollector\": \"datadogAgent\", \"systemInfo\": { \"os\": { \"name\": \"s85\", \"platform\": \"s87\", \"version\": \"s90\" }, \"cpus\": [ { \"number\": 94, \"vendor\": \"s96 \\u003c&\\u003e \\\"é\\\"\\n\", \"model\": \"s99\", \"coreId\": \"s102\", \"mhz\": \"-105\" }, { \"number\": -108, \"family\": \"s111\", \"physicalId\": \"s114\", \"cores\": 117, \"cacheSize\": -120 } ] } }",
+     "ExtraAttributes": {},
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": null,
+     "HostName": "s67",
+     "IsTerminated": 1,
+     "Kind": "",
+     "ManifestHost": "{ \"id\": \"9007199254741021\", \"orgId\": 30, \"allTags\": [ \"k33:v33\", \"k33:other:with:colons\", \"bare33\", \"z33:last\" ], \"totalMemory\": \"9007199254741029\", \"tagsModified\": \"1700000039\" }",
+     "NodeName": "s24 <&> \"é\"\n",
+     "OrgID": 4242,
+     "OriginCollector": "datadogAgent",
+     "ResourceVersion": "s12 <&> \"é\"\n",
+     "SubscriptionID": 9,
+     "TagSources": {
+      "envelope": [
+       "k65:v65",
+       "k65:other:with:colons",
+       "bare65",
+       "z65:last"
+      ]
+     },
+     "Tags": {
+      "bare65": [
+       ""
+      ],
+      "k65": [
+       "v65",
+       "other:with:colons"
+      ],
+      "z65": [
+       "last"
+      ]
+     },
+     "TenantID": "test",
+     "Type": 0,
+     "UID": "",
+     "Version": "s18"
+    },
+    {
+     "APIVersion": "s54",
+     "AgentVersion": "-70.1700000072.0-s75",
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterName": "s2",
+     "CollectedAt": "2026-10-01T16:08:42.474321886Z",
+     "Content": "",
+     "ContentIsUTF8": 1,
+     "ContentType": "s48 <&> \"é\"\n",
+     "Encoding": "protobuf",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k65:v65\", \"k65:other:with:colons\", \"bare65\", \"z65:last\" ], \"hostName\": \"s67\", \"agentVersion\": { \"Major\": \"-70\", \"Minor\": \"1700000072\", \"Pre\": \"s75\", \"Commit\": \"s78\" }, \"originCollector\": \"datadogAgent\", \"systemInfo\": { \"os\": { \"name\": \"s85\", \"platform\": \"s87\", \"version\": \"s90\" }, \"cpus\": [ { \"number\": 94, \"vendor\": \"s96 \\u003c&\\u003e \\\"é\\\"\\n\", \"model\": \"s99\", \"coreId\": \"s102\", \"mhz\": \"-105\" }, { \"number\": -108, \"family\": \"s111\", \"physicalId\": \"s114\", \"cores\": 117, \"cacheSize\": -120 } ] } }",
+     "ExtraAttributes": {
+      "key60": "s61",
+      "key62": "s63"
+     },
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": null,
+     "HostName": "s67",
+     "IsTerminated": 0,
+     "Kind": "s57",
+     "ManifestHost": "",
+     "NodeName": "",
+     "OrgID": 4242,
+     "OriginCollector": "datadogAgent",
+     "ResourceVersion": "",
+     "SubscriptionID": 9,
+     "TagSources": {
+      "envelope": [
+       "k65:v65",
+       "k65:other:with:colons",
+       "bare65",
+       "z65:last"
+      ],
+      "manifest": [
+       "k51:v51",
+       "k51:other:with:colons",
+       "bare51",
+       "z51:last"
+      ]
+     },
+     "Tags": {
+      "bare51": [
+       ""
+      ],
+      "bare65": [
+       ""
+      ],
+      "k51": [
+       "v51",
+       "other:with:colons"
+      ],
+      "k65": [
+       "v65",
+       "other:with:colons"
+      ],
+      "z51": [
+       "last"
+      ],
+      "z65": [
+       "last"
+      ]
+     },
+     "TenantID": "test",
+     "Type": 42,
+     "UID": "s45",
+     "Version": ""
+    }
+   ],
+   "to": "storage_k8s_manifests",
+   "type": "storage.WriteK8sManifests"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorManifest_2",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/CollectedAt",
+  "/sends/0/rows/1/CollectedAt"
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
+}

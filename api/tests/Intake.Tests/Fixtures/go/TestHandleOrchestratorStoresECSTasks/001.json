@@ -1,0 +1,176 @@
+{
+ "recorded_at": "2026-10-01T15:21:21.400850902Z",
+ "request": {
+  "body_b64": "AwDIA00AAAAA8VNlAAAAABIIZWNzLXByb2QiCWV1LXdlc3QtMToWCgphcm46dGFzay8xMghjaGVja291dA==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "int64",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string]float64",
+     "map[string]int64",
+     "*time.Time",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "uint32",
+     "map[string][]string",
+     "map[string][]string",
+     "map[string][]string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:21.400845212Z",
+     77,
+     3,
+     1700000000,
+     "protobuf",
+     0,
+     "",
+     "ecs-prod",
+     "eu-west-1",
+     0,
+     0,
+     "",
+     "",
+     {},
+     "arn:task/1",
+     "",
+     "",
+     "",
+     "",
+     "checkout",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     {},
+     {},
+     null,
+     null,
+     null,
+     "",
+     0,
+     {},
+     {},
+     {},
+     "{\"clusterName\":\"ecs-prod\",\"region\":\"eu-west-1\"}",
+     ""
+    ]
+   ],
+   "insert": "INSERT INTO ecs_tasks\n\t\t\t(tenant_id, collected_at, org_id, subscription_id, header_timestamp, encoding,\n\t\t\t aws_account_id, cluster_id, cluster_name, region, group_id, group_size,\n\t\t\t host_name, agent_version, envelope_tags,\n\t\t\t arn, resource_version, launch_type, desired_status, known_status,\n\t\t\t family, version, availability_zone, service_name, vpc_id,\n\t\t\t container_instance_arn, daemon_name, task_host_name,\n\t\t\t limits, ephemeral_storage_metrics,\n\t\t\t pull_started_at, pull_stopped_at, execution_stopped_at,\n\t\t\t containers, container_count,\n\t\t\t tags, ecs_tags, container_instance_tags,\n\t\t\t envelope, task_host)",
+   "rows": [
+    {
+     "ARN": "arn:task/1",
+     "AWSAccountID": 0,
+     "AgentVersion": "",
+     "AvailabilityZone": "",
+     "ClusterID": "",
+     "ClusterName": "ecs-prod",
+     "CollectedAt": "2026-10-01T15:21:21.400845212Z",
+     "ContainerCount": 0,
+     "ContainerInstanceARN": "",
+     "ContainerInstanceTags": {},
+     "Containers": "",
+     "DaemonName": "",
+     "DesiredStatus": "",
+     "ECSTags": {},
+     "Encoding": "protobuf",
+     "Envelope": "{\"clusterName\":\"ecs-prod\",\"region\":\"eu-west-1\"}",
+     "EnvelopeTags": {},
+     "EphemeralStorageMetrics": {},
+     "ExecutionStoppedAt": null,
+     "Family": "checkout",
+     "GroupID": 0,
+     "GroupSize": 0,
+     "HeaderTimestamp": 1700000000,
+     "HostName": "",
+     "KnownStatus": "",
+     "LaunchType": "",
+     "Limits": {},
+     "OrgID": 77,
+     "PullStartedAt": null,
+     "PullStoppedAt": null,
+     "Region": "eu-west-1",
+     "ResourceVersion": "",
+     "ServiceName": "",
+     "SubscriptionID": 3,
+     "Tags": {},
+     "TaskHost": "",
+     "TaskHostName": "",
+     "TenantID": "test",
+     "Version": "",
+     "VpcID": ""
+    }
+   ],
+   "to": "storage_ecs_tasks",
+   "type": "storage.WriteECSTasks"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleOrchestratorStoresECSTasks",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/CollectedAt"
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
+}

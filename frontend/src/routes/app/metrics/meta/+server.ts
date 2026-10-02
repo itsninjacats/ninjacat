@@ -9,7 +9,7 @@ import type { RequestHandler } from './$types';
 
 // Lookup proxy for the explorer's pickers: metric names, tag keys and tag
 // values. Same reasoning as data/+server.ts: the browser asks this route,
-// this route asks the Go panel API, and :8081 stays internal.
+// this route asks the panel API, and :8081 stays internal.
 //
 // The session check is repeated on purpose — +layout.server.ts guards the
 // /app branch for pages, but its load never runs for a +server.ts route.

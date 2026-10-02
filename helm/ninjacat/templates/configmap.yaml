@@ -1,16 +1,45 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "ninjacat.fullname" . }}-server
+  name: {{ include "ninjacat.fullname" . }}-intake
   labels:
-    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "server") | nindent 4 }}
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "intake") | nindent 4 }}
 data:
-  CLICKHOUSE_ADDR: {{ .Values.clickhouse.addr | quote }}
+  CLICKHOUSE_HTTP_ADDR: {{ .Values.clickhouse.httpAddr | quote }}
   CLICKHOUSE_DB: {{ .Values.clickhouse.database | quote }}
   CLICKHOUSE_USER: {{ .Values.clickhouse.user | quote }}
-  NINJACAT_ADDR: {{ printf ":%v" .Values.server.intakeService.port | quote }}
-  NINJACAT_INTERNAL_ADDR: {{ printf ":%v" .Values.server.internalService.port | quote }}
-  {{- range $k, $v := .Values.server.env }}
+  NINJACAT_ADDR: {{ printf ":%v" .Values.intake.service.port | quote }}
+  # One JSON object per line: what a request put in a path or a header
+  # cannot then pass for a log line of its own.
+  Logging__Console__FormatterName: json
+  # The agent's TCP transport for logs is plain TCP unless it is given a
+  # certificate, and an Ingress cannot carry it: off unless turned on in
+  # intake.env, with a Service of your own in front of it.
+  NINJACAT_LOGS_TCP_ADDR: "off"
+  {{- if .Values.migrations.enabled }}
+  # The hook Job has already applied the ClickHouse migrations.
+  NINJACAT_AUTO_MIGRATE: "false"
+  {{- end }}
+  {{- with .Values.trustedProxies }}
+  NINJACAT_TRUSTED_PROXIES: {{ join "," . | quote }}
+  {{- end }}
+  {{- range $k, $v := .Values.intake.env }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ninjacat.fullname" . }}-query
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "query") | nindent 4 }}
+data:
+  CLICKHOUSE_HTTP_ADDR: {{ .Values.clickhouse.httpAddr | quote }}
+  CLICKHOUSE_DB: {{ .Values.clickhouse.database | quote }}
+  CLICKHOUSE_USER: {{ .Values.clickhouse.queryUser | default .Values.clickhouse.user | quote }}
+  NINJACAT_INTERNAL_ADDR: {{ printf ":%v" .Values.query.service.port | quote }}
+  Logging__Console__FormatterName: json
+  {{- range $k, $v := .Values.query.env }}
   {{ $k }}: {{ $v | quote }}
   {{- end }}
 ---
@@ -24,7 +53,11 @@ data:
   ORIGIN: {{ include "ninjacat.origin" . | quote }}
   PORT: {{ .Values.frontend.service.port | quote }}
   # Cluster-internal; the browser never learns this address exists.
-  NINJACAT_INTERNAL_URL: {{ printf "http://%s-server-internal:%v" (include "ninjacat.fullname" .) .Values.server.internalService.port | quote }}
+  {{- with .Values.trustedProxies }}
+  # The sign-in limiter counts attempts per client address.
+  NINJACAT_TRUSTED_PROXIES: {{ join "," . | quote }}
+  {{- end }}
+  NINJACAT_INTERNAL_URL: {{ printf "http://%s-query:%v" (include "ninjacat.fullname" .) .Values.query.service.port | quote }}
   {{- range $k, $v := .Values.frontend.env }}
   {{ $k }}: {{ $v | quote }}
   {{- end }}

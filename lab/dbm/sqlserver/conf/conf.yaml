@@ -1,0 +1,20 @@
+init_config:
+instances:
+  - dbm: true
+    host: "dbmlab-db,1433"
+    username: datadog
+    password: "Lab-Monitor-9x!"
+    connector: odbc
+    driver: "ODBC Driver 18 for SQL Server"
+    connection_string: "TrustServerCertificate=yes;"
+    tags: ["team:core"]
+    include_ao_metrics: false
+    query_metrics: { collection_interval: 10 }
+    query_activity: { collection_interval: 10 }
+    procedure_metrics: { enabled: true, collection_interval: 10 }
+    collect_settings: { enabled: true, collection_interval: 30 }
+    schemas_collection: { enabled: true, collection_interval: 30 }
+    collect_schemas: { enabled: true, collection_interval: 30 }
+    deadlocks_collection: { enabled: true, collection_interval: 15 }
+    xe_collection: { query_completions: { enabled: true }, query_errors: { enabled: true } }
+    agent_jobs: { enabled: true, collection_interval: 15 }

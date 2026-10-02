@@ -1,0 +1,70 @@
+{{- if and .Values.ingress.enabled (include "ninjacat.traefikRedirect" .) }}
+{{- $fullname := include "ninjacat.fullname" . -}}
+{{- $intakeHosts := include "ninjacat.intakeHosts" . | trim | splitList "\n" -}}
+{{- $redirect := printf "%s-%s-https-redirect@kubernetescrd" .Release.Namespace $fullname -}}
+# Traefik serves an Ingress that has TLS only over HTTPS and answers 404 on
+# its HTTP entry point. These put a router there for the same hosts, whose
+# one job is to redirect; nothing on it reaches a backend.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ $fullname }}-https-redirect
+  labels:
+    {{- include "ninjacat.labels" . | nindent 4 }}
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullname }}-frontend-http
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "frontend") | nindent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: {{ .Values.ingress.traefik.entryPoints.http }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ $redirect }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  rules:
+    - host: {{ include "ninjacat.domainRoot" . | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullname }}-frontend
+                port:
+                  name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullname }}-intake-http
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "intake") | nindent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: {{ .Values.ingress.traefik.entryPoints.http }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ $redirect }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  rules:
+    {{- range $intakeHosts }}
+    - host: {{ . | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullname }}-intake
+                port:
+                  name: intake
+    {{- end }}
+{{- end }}

@@ -1,0 +1,139 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.669764385Z",
+ "request": {
+  "body_b64": "WwoJCXsibWVzc2FnZSI6ImZpcnN0IiwgICJob3N0bmFtZSI6ImgxIiwgInNlcnZpY2UiOiJzdmMiLCAiZGRzb3VyY2UiOiJnbyIsICJkZHRhZ3MiOiJlbnY6cHJvZCJ9LAoJCXsibWVzc2FnZSI6InNlY29uZCIsICJob3N0bmFtZSI6ImgyIiwgInNlcnZpY2UiOiJzdmMiLCAiZGRzb3VyY2UiOiJnbyIsICJkZHRhZ3MiOiJlbnY6cHJvZCJ9Cgld",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/logs"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeLogs"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:37.66975045Z",
+     "h1",
+     "svc",
+     "go",
+     "",
+     "first",
+     {
+      "env": [
+       "prod"
+      ]
+     },
+     "{}",
+     "arrival"
+    ],
+    [
+     "test",
+     "2026-10-01T15:21:37.66975045Z",
+     "h2",
+     "svc",
+     "go",
+     "",
+     "second",
+     {
+      "env": [
+       "prod"
+      ]
+     },
+     "{}",
+     "arrival"
+    ]
+   ],
+   "insert": "INSERT INTO logs\n\t\t\t(tenant_id, timestamp, host, service, source, status, message, tags,\n\t\t\t attributes, timestamp_source)",
+   "rows": [
+    {
+     "Attributes": "",
+     "Host": "h1",
+     "Message": "first",
+     "Service": "svc",
+     "Source": "go",
+     "Status": "",
+     "Tags": {
+      "env": [
+       "prod"
+      ]
+     },
+     "TenantID": "test",
+     "Timestamp": "2026-10-01T15:21:37.66975045Z",
+     "TimestampSource": "arrival"
+    },
+    {
+     "Attributes": "",
+     "Host": "h2",
+     "Message": "second",
+     "Service": "svc",
+     "Source": "go",
+     "Status": "",
+     "Tags": {
+      "env": [
+       "prod"
+      ]
+     },
+     "TenantID": "test",
+     "Timestamp": "2026-10-01T15:21:37.66975045Z",
+     "TimestampSource": "arrival"
+    }
+   ],
+   "to": "storage_logs",
+   "type": "storage.WriteLogs"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleLogsStoresEveryItem",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/Timestamp",
+  "/sends/0/rows/1/Timestamp"
+ ]
+}

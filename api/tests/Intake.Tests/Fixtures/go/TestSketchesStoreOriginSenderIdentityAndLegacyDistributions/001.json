@@ -1,0 +1,231 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.030205176Z",
+ "request": {
+  "body_b64": "eyJza2V0Y2hlcyI6W3sibWV0cmljIjoiaHR0cC5yZXF1ZXN0LmR1cmF0aW9uIiwiaG9zdCI6ImgxIiwiZGlzdHJpYnV0aW9ucyI6W3sidHMiOjE3OTAxNTEzMzAsImNudCI6MiwidiI6WzEsMl0sImciOlsxLDFdfV0sInRhZ3MiOlsiZW52OnByb2QiXSwiZG9nc2tldGNoZXMiOlt7InRzIjoxNzkwMTUxMzMwLCJjbnQiOjMsIm1pbiI6MSwibWF4Ijo5LCJhdmciOjQsInN1bSI6MTIsImsiOlsxLDJdLCJuIjpbMiwxXX1dLCJtZXRhZGF0YSI6eyJvcmlnaW4iOnsib3JpZ2luX3Byb2R1Y3QiOjEwLCJvcmlnaW5fY2F0ZWdvcnkiOjEwLCJvcmlnaW5fc2VydmljZSI6N319fV0sIm1ldGFkYXRhIjp7ImFnZW50X3ZlcnNpb24iOiI3LjU4LjIiLCJ0aW1lem9uZSI6IlVUQyIsImN1cnJlbnRfZXBvY2giOjE3OTAxNTEzMzAsImludGVybmFsX2lwIjoiMTAuMC4wLjQiLCJwdWJsaWNfaXAiOiIyMDMuMC4xMTMuNyIsImFwaV9rZXkiOiJtdXN0LW5ldmVyLWJlLXN0b3JlZCJ9fQ==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/beta/sketches"
+ },
+ "response": {
+  "body_b64": "eyJlcnJvcnMiOltdfQ==",
+  "body_json": {
+   "errors": []
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.030193585Z",
+     "sketches",
+     "no_schema",
+     "POST",
+     "example.com",
+     "/api/beta/sketches",
+     {},
+     "application/json",
+     "",
+     {},
+     "{ \"metric\": \"http.request.duration\", \"host\": \"h1\", \"distributions\": [ { \"ts\": \"1790151330\", \"cnt\": \"2\", \"v\": [ 1, 2 ], \"g\": [ 1, 1 ] } ], \"tags\": [ \"env:prod\" ], \"dogsketches\": [ { \"ts\": \"1790151330\", \"cnt\": \"3\", \"min\": 1, \"max\": 9, \"avg\": 4, \"sum\": 12, \"k\": [ 1, 2 ], \"n\": [ 2, 1 ] } ], \"metadata\": { \"origin\": { \"originProduct\": 10, \"originCategory\": 10, \"originService\": 7 } } }",
+     381,
+     "legacy pre-DDSketch Distribution for http.request.duration has no row shape"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "{ \"metric\": \"http.request.duration\", \"host\": \"h1\", \"distributions\": [ { \"ts\": \"1790151330\", \"cnt\": \"2\", \"v\": [ 1, 2 ], \"g\": [ 1, 1 ] } ], \"tags\": [ \"env:prod\" ], \"dogsketches\": [ { \"ts\": \"1790151330\", \"cnt\": \"3\", \"min\": 1, \"max\": 9, \"avg\": 4, \"sum\": 12, \"k\": [ 1, 2 ], \"n\": [ 2, 1 ] } ], \"metadata\": { \"origin\": { \"originProduct\": 10, \"originCategory\": 10, \"originService\": 7 } } }",
+     "BodyBytes": 381,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "sketches",
+     "Method": "POST",
+     "Note": "legacy pre-DDSketch Distribution for http.request.duration has no row shape",
+     "Path": "/api/beta/sketches",
+     "Query": {},
+     "Reason": "no_schema",
+     "ReceivedAt": "2026-10-01T15:21:14.030193585Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "map[string][]string",
+     "uint64",
+     "float64",
+     "float64",
+     "float64",
+     "float64",
+     "[]int32",
+     "[]uint32",
+     "uint32",
+     "uint32",
+     "uint32",
+     "map[string]string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-09-23T08:15:30Z",
+     "http.request.duration",
+     "h1",
+     {
+      "env": [
+       "prod"
+      ]
+     },
+     3,
+     1,
+     9,
+     4,
+     12,
+     [
+      1,
+      2
+     ],
+     [
+      2,
+      1
+     ],
+     10,
+     10,
+     7,
+     {},
+     {}
+    ]
+   ],
+   "insert": "INSERT INTO sketches\n\t\t\t(tenant_id, timestamp, metric, host, tags, count, min, max, avg, sum, bucket_keys, bucket_counts,\n\t\t\t origin_product, origin_category, origin_service, resources, extra)",
+   "rows": [
+    {
+     "Avg": 4,
+     "BucketCounts": [
+      2,
+      1
+     ],
+     "BucketKeys": [
+      1,
+      2
+     ],
+     "Count": 3,
+     "Extra": {},
+     "Host": "h1",
+     "Max": 9,
+     "Metric": "http.request.duration",
+     "Min": 1,
+     "OriginCategory": 10,
+     "OriginProduct": 10,
+     "OriginService": 7,
+     "Resources": {},
+     "Sum": 12,
+     "Tags": {
+      "env": [
+       "prod"
+      ]
+     },
+     "TenantID": "test",
+     "Timestamp": "2026-09-23T08:15:30Z"
+    }
+   ],
+   "to": "storage_sketches",
+   "type": "storage.WriteSketches"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "float64",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.03020184Z",
+     "sketches",
+     "7.58.2",
+     "UTC",
+     1790151330,
+     "10.0.0.4",
+     "203.0.113.7"
+    ]
+   ],
+   "insert": "INSERT INTO agent_batch_metadata\n\t\t\t(tenant_id, received_at, intake, agent_version, timezone, current_epoch,\n\t\t\t internal_ip, public_ip)",
+   "rows": [
+    {
+     "AgentVersion": "7.58.2",
+     "CurrentEpoch": 1790151330,
+     "Intake": "sketches",
+     "InternalIP": "10.0.0.4",
+     "PublicIP": "203.0.113.7",
+     "ReceivedAt": "2026-10-01T15:21:14.03020184Z",
+     "TenantID": "test",
+     "Timezone": "UTC"
+    }
+   ],
+   "to": "storage_agent_batch_metadata",
+   "type": "storage.WriteAgentBatchMetadata"
+  }
+ ],
+ "seq": 1,
+ "test": "TestSketchesStoreOriginSenderIdentityAndLegacyDistributions",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt",
+  "/sends/2/args/0/1",
+  "/sends/2/rows/0/ReceivedAt"
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
+}

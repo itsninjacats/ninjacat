@@ -1,0 +1,101 @@
+{
+ "recorded_at": "2026-10-01T15:21:18.999833802Z",
+ "request": {
+  "body_b64": "gqd2ZXJzaW9uAaZldmVudHPd/////g==",
+  "headers": {
+   "Content-Type": [
+    "application/msgpack"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/citestcycle"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeCITestCycle"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:18.999831358Z",
+     "citestcycle",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/api/v2/citestcycle",
+     {},
+     "application/msgpack",
+     "",
+     {},
+     {
+      "$b64": "gqd2ZXJzaW9uAaZldmVudHPd/////g=="
+     },
+     22,
+     "msgpack envelope, content-type application/msgpack: msgp: configured reader limit exceeded"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": {
+      "$b64": "gqd2ZXJzaW9uAaZldmVudHPd/////g=="
+     },
+     "BodyBytes": 22,
+     "ContentEncoding": "",
+     "ContentType": "application/msgpack",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "citestcycle",
+     "Method": "POST",
+     "Note": "msgpack envelope, content-type application/msgpack: msgp: configured reader limit exceeded",
+     "Path": "/api/v2/citestcycle",
+     "Query": {},
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T15:21:18.999831358Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCIVisibilityRefusesForgedArrayHeaders/citestcycle",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

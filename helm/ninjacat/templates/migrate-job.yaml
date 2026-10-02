@@ -1,11 +1,13 @@
 {{- if .Values.migrations.enabled }}
 {{- $fullname := include "ninjacat.fullname" . -}}
+{{- $hookSecret := .Values.secrets.existingSecret | default (printf "%s-migrate" $fullname) -}}
 {{- /*
 A pre-install hook runs before any ordinary release resource exists, the
-chart's Secret included. So when the chart owns the credentials, the Job gets
-its own hook Secret carrying just DATABASE_URL. Both are deleted once the
-migration succeeds; on failure they stay for inspection and are replaced on
-the next attempt.
+chart's Secret and ConfigMaps included. So when the chart owns the
+credentials, the Jobs get a hook Secret of their own, and their settings are
+written out here rather than taken from the ConfigMaps. Everything is deleted
+once the migrations succeed; on failure it stays for inspection and is
+replaced on the next attempt.
 */ -}}
 {{- if not .Values.secrets.existingSecret }}
 apiVersion: v1
@@ -21,14 +23,15 @@ metadata:
 type: Opaque
 stringData:
   DATABASE_URL: {{ required "secrets.databaseUrl is required (or set secrets.existingSecret)" .Values.secrets.databaseUrl | quote }}
+  CLICKHOUSE_PASSWORD: {{ required "secrets.clickhousePassword is required (or set secrets.existingSecret)" .Values.secrets.clickhousePassword | quote }}
 ---
 {{- end }}
-# Runs before the new pods start: the server refuses to boot without the
-# api_key table, so the schema has to be in place first.
+# Postgres: users, sessions, API keys. Before the new pods start, because the
+# intake reads the api_key table as soon as it is up.
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ $fullname }}-migrate
+  name: {{ $fullname }}-migrate-pg
   labels:
     {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "migrate") | nindent 4 }}
   annotations:
@@ -51,6 +54,8 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
         runAsUser: 1000
         runAsGroup: 1000
       containers:
@@ -60,16 +65,99 @@ spec:
           command: ["node", "migrate.js"]
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           env:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.existingSecret | default (printf "%s-migrate" $fullname) }}
+                  name: {{ $hookSecret }}
                   key: DATABASE_URL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           {{- with .Values.migrations.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+# ClickHouse: the telemetry tables. `ninjacat-api migrate` applies the
+# migrations embedded in the server and exits. Doing it here, once, is what
+# lets the intake run as several replicas without racing at start-up.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $fullname }}-migrate-ch
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "migrate") | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "1"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "migrate") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 1654
+        runAsGroup: 1654
+      containers:
+        - name: migrate
+          image: {{ include "ninjacat.apiImage" . | quote }}
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          args: ["migrate"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CLICKHOUSE_HTTP_ADDR
+              value: {{ .Values.clickhouse.httpAddr | quote }}
+            - name: CLICKHOUSE_DB
+              value: {{ .Values.clickhouse.database | quote }}
+            - name: CLICKHOUSE_USER
+              value: {{ .Values.clickhouse.user | quote }}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $hookSecret }}
+                  key: CLICKHOUSE_PASSWORD
+            # The server reads its whole configuration at start, this too.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $hookSecret }}
+                  key: DATABASE_URL
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+          {{- with .Values.migrations.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
 {{- end }}

@@ -1,0 +1,376 @@
+{
+ "recorded_at": "2026-10-01T15:21:25.862411113Z",
+ "request": {
+  "body_b64": "W3sKCQkibmFtZXNwYWNlIjogImRlZmF1bHQiLAoJCSJzdWJuZXQiOiAiMTAuMC4wLjAvMjQiLAoJCSJpbnRlZ3JhdGlvbiI6ICJzbm1wIiwKCQkiY29sbGVjdF90aW1lc3RhbXAiOiAxNzAwMDAwMDAwLAoJCSJkZXZpY2VzIjogW3sKCQkJImlkIjogImRlZmF1bHQ6MTAuMC4wLjEiLAoJCQkiaWRfdGFncyI6IFsiZGV2aWNlX2lwOjEwLjAuMC4xIiwgImRldmljZV9pcDoxMC4wLjAuMS1hbHQiXSwKCQkJImlwX2FkZHJlc3MiOiAiMTAuMC4wLjEiLAoJCQkic3RhdHVzIjogMSwKCQkJInBpbmdfc3RhdHVzIjogMiwKCQkJIm5hbWUiOiAicm91dGVyMSIsCgkJCSJ2ZW5kb3IiOiAiY2lzY28iLAoJCQkiZGV2aWNlX3R5cGUiOiAicm91dGVyIgoJCX1dLAoJCSJpbnRlcmZhY2VzIjogW3sKCQkJImRldmljZV9pZCI6ICJkZWZhdWx0OjEwLjAuMC4xIiwKCQkJImluZGV4IjogMSwKCQkJIm5hbWUiOiAiR2lnYWJpdEV0aGVybmV0MC8xIiwKCQkJImFkbWluX3N0YXR1cyI6IDEsCgkJCSJvcGVyX3N0YXR1cyI6IDEsCgkJCSJpc19waHlzaWNhbCI6IHRydWUsCgkJCSJtZXJha2lfZW5hYmxlZCI6IGZhbHNlCgkJfV0sCgkJImlwX2FkZHJlc3NlcyI6IFt7CgkJCSJpbnRlcmZhY2VfaWQiOiAiZGVmYXVsdDoxMC4wLjAuMToxIiwKCQkJImlwX2FkZHJlc3MiOiAiMTAuMC4wLjEiLAoJCQkicHJlZml4bGVuIjogMjQKCQl9XSwKCQkidnBuX3R1bm5lbHMiOiBbeyJkZXZpY2VfaWQiOiJkZWZhdWx0OjEwLjAuMC4xIiwiaW50ZXJmYWNlX2lkIjoiZGVmYXVsdDoxMC4wLjAuMToxIiwic3RhdHVzIjoidXAifV0sCgkJImxpbmtzIjogW3siaWQiOiJsaW5rMSIsInNvdXJjZV90eXBlIjoibGxkcCJ9XSwKCQkiY3VzdG9tX2V4cGVyaW1lbnRhbF9maWVsZCI6ICJub3QteWV0LWRvY3VtZW50ZWQiCgl9XQ==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/ndm"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeNDM"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "string",
+     "string",
+     "string",
+     "time.Time",
+     "map[string]string",
+     "string",
+     "map[string][]string",
+     "map[string][]string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "default",
+     "10.0.0.0/24",
+     "snmp",
+     "2023-11-14T22:13:20Z",
+     {
+      "custom_experimental_field": "\"not-yet-documented\""
+     },
+     "default:10.0.0.1",
+     {
+      "device_ip": [
+       "10.0.0.1",
+       "10.0.0.1-alt"
+      ]
+     },
+     {},
+     "10.0.0.1",
+     "reachable",
+     "unreachable",
+     "router1",
+     "",
+     "",
+     "",
+     "",
+     0,
+     "cisco",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "router"
+    ]
+   ],
+   "insert": "INSERT INTO ndm_devices\n\t\t\t(tenant_id, namespace, subnet, integration, collect_timestamp, extra,\n\t\t\t device_id, id_tags, tags, ip_address, status, ping_status,\n\t\t\t name, description, sys_object_id, location, profile, profile_version, vendor,\n\t\t\t device_subnet, serial_number, version, product_name, model,\n\t\t\t os_name, os_version, os_hostname, device_integration, device_type)",
+   "rows": [
+    {
+     "CollectTimestamp": "2023-11-14T22:13:20Z",
+     "Description": "",
+     "DeviceID": "default:10.0.0.1",
+     "DeviceIntegration": "",
+     "DeviceSubnet": "",
+     "DeviceType": "router",
+     "Extra": {
+      "custom_experimental_field": "\"not-yet-documented\""
+     },
+     "IDTags": {
+      "device_ip": [
+       "10.0.0.1",
+       "10.0.0.1-alt"
+      ]
+     },
+     "IPAddress": "10.0.0.1",
+     "Integration": "snmp",
+     "Location": "",
+     "Model": "",
+     "Name": "router1",
+     "Namespace": "default",
+     "OSHostname": "",
+     "OSName": "",
+     "OSVersion": "",
+     "PingStatus": "unreachable",
+     "ProductName": "",
+     "Profile": "",
+     "ProfileVersion": 0,
+     "SerialNumber": "",
+     "Status": "reachable",
+     "Subnet": "10.0.0.0/24",
+     "SysObjectID": "",
+     "Tags": {},
+     "TenantID": "test",
+     "Vendor": "cisco",
+     "Version": ""
+    }
+   ],
+   "to": "storage_ndm_devices",
+   "type": "storage.WriteNDMDevices"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "string",
+     "string",
+     "string",
+     "time.Time",
+     "map[string]string",
+     "string",
+     "map[string][]string",
+     "int32",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint8",
+     "uint8",
+     "uint32",
+     "*uint8",
+     "*uint8",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "default",
+     "10.0.0.0/24",
+     "snmp",
+     "2023-11-14T22:13:20Z",
+     {
+      "custom_experimental_field": "\"not-yet-documented\""
+     },
+     "default:10.0.0.1",
+     {},
+     1,
+     "",
+     "",
+     "GigabitEthernet0/1",
+     "",
+     "",
+     "",
+     1,
+     1,
+     0,
+     1,
+     0,
+     ""
+    ]
+   ],
+   "insert": "INSERT INTO ndm_interfaces\n\t\t\t(tenant_id, namespace, subnet, integration, collect_timestamp, extra,\n\t\t\t device_id, id_tags, if_index, raw_id, raw_id_type, name, alias, description, mac_address,\n\t\t\t admin_status, oper_status, type, is_physical, meraki_enabled, meraki_status)",
+   "rows": [
+    {
+     "AdminStatus": 1,
+     "Alias": "",
+     "CollectTimestamp": "2023-11-14T22:13:20Z",
+     "Description": "",
+     "DeviceID": "default:10.0.0.1",
+     "Extra": {
+      "custom_experimental_field": "\"not-yet-documented\""
+     },
+     "IDTags": {},
+     "Index": 1,
+     "Integration": "snmp",
+     "IsPhysical": 1,
+     "MacAddress": "",
+     "MerakiEnabled": 0,
+     "MerakiStatus": "",
+     "Name": "GigabitEthernet0/1",
+     "Namespace": "default",
+     "OperStatus": 1,
+     "RawID": "",
+     "RawIDType": "",
+     "Subnet": "10.0.0.0/24",
+     "TenantID": "test",
+     "Type": 0
+    }
+   ],
+   "to": "storage_ndm_interfaces",
+   "type": "storage.WriteNDMInterfaces"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "string",
+     "string",
+     "string",
+     "time.Time",
+     "map[string]string",
+     "string",
+     "string",
+     "int32"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "default",
+     "10.0.0.0/24",
+     "snmp",
+     "2023-11-14T22:13:20Z",
+     {
+      "custom_experimental_field": "\"not-yet-documented\""
+     },
+     "default:10.0.0.1:1",
+     "10.0.0.1",
+     24
+    ]
+   ],
+   "insert": "INSERT INTO ndm_ip_addresses\n\t\t\t(tenant_id, namespace, subnet, integration, collect_timestamp, extra,\n\t\t\t interface_id, ip_address, prefixlen)",
+   "rows": [
+    {
+     "CollectTimestamp": "2023-11-14T22:13:20Z",
+     "Extra": {
+      "custom_experimental_field": "\"not-yet-documented\""
+     },
+     "IPAddress": "10.0.0.1",
+     "Integration": "snmp",
+     "InterfaceID": "default:10.0.0.1:1",
+     "Namespace": "default",
+     "Prefixlen": 24,
+     "Subnet": "10.0.0.0/24",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_ndm_ip_addresses",
+   "type": "storage.WriteNDMIPAddresses"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "string",
+     "string",
+     "string",
+     "time.Time",
+     "map[string]string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "string",
+     "string",
+     "string",
+     "time.Time",
+     "map[string]string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "default",
+     "10.0.0.0/24",
+     "snmp",
+     "2023-11-14T22:13:20Z",
+     {
+      "custom_experimental_field": "\"not-yet-documented\""
+     },
+     "link",
+     "",
+     "",
+     "{\"id\":\"link1\",\"source_type\":\"lldp\"}"
+    ],
+    [
+     "test",
+     "default",
+     "10.0.0.0/24",
+     "snmp",
+     "2023-11-14T22:13:20Z",
+     {
+      "custom_experimental_field": "\"not-yet-documented\""
+     },
+     "vpn_tunnel",
+     "default:10.0.0.1",
+     "default:10.0.0.1:1",
+     "{\"device_id\":\"default:10.0.0.1\",\"interface_id\":\"default:10.0.0.1:1\",\"status\":\"up\"}"
+    ]
+   ],
+   "insert": "INSERT INTO ndm_metadata_objects\n\t\t\t(tenant_id, namespace, subnet, integration, collect_timestamp, extra,\n\t\t\t kind, device_id, interface_id, object)",
+   "rows": [
+    {
+     "CollectTimestamp": "2023-11-14T22:13:20Z",
+     "DeviceID": "",
+     "Extra": {
+      "custom_experimental_field": "\"not-yet-documented\""
+     },
+     "Integration": "snmp",
+     "InterfaceID": "",
+     "Kind": "link",
+     "Namespace": "default",
+     "Object": "{\"id\":\"link1\",\"source_type\":\"lldp\"}",
+     "Subnet": "10.0.0.0/24",
+     "TenantID": "test"
+    },
+    {
+     "CollectTimestamp": "2023-11-14T22:13:20Z",
+     "DeviceID": "default:10.0.0.1",
+     "Extra": {
+      "custom_experimental_field": "\"not-yet-documented\""
+     },
+     "Integration": "snmp",
+     "InterfaceID": "default:10.0.0.1:1",
+     "Kind": "vpn_tunnel",
+     "Namespace": "default",
+     "Object": "{\"device_id\":\"default:10.0.0.1\",\"interface_id\":\"default:10.0.0.1:1\",\"status\":\"up\"}",
+     "Subnet": "10.0.0.0/24",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_ndm_metadata_objects",
+   "type": "storage.WriteNDMMetadataObjects"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleNDMMetadataStoresDevicesInterfacesIPsAndObjects",
+ "volatile": []
+}

@@ -7,7 +7,7 @@ metadata:
   name: {{ $fullname }}-frontend
   labels:
     {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "frontend") | nindent 4 }}
-  {{- with (merge (dict) .Values.ingress.frontend.annotations .Values.ingress.annotations) }}
+  {{- with (merge (dict) .Values.ingress.frontend.annotations .Values.ingress.annotations (include "ninjacat.tlsAnnotations" . | fromYaml)) }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
@@ -18,11 +18,11 @@ spec:
   {{- if .Values.ingress.tls.enabled }}
   tls:
     - hosts:
-        - {{ .Values.domainRoot | quote }}
+        - {{ (include "ninjacat.domainRoot" .) | quote }}
       secretName: {{ .Values.ingress.frontend.tlsSecretName | default (printf "%s-frontend-tls" $fullname) }}
   {{- end }}
   rules:
-    - host: {{ .Values.domainRoot | quote }}
+    - host: {{ (include "ninjacat.domainRoot" .) | quote }}
       http:
         paths:
           - path: /
@@ -33,16 +33,16 @@ spec:
                 port:
                   name: http
 ---
-# Agent intake: every product host lands on the same Service. The server
-# itself picks the decoder from the Host header, so this Ingress only has to
+# Agent intake: every product host lands on the same Service. The intake
+# itself picks the product from the Host header, so this Ingress only has to
 # let the name through unchanged.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ $fullname }}-intake
   labels:
-    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "server") | nindent 4 }}
-  {{- with (merge (dict) .Values.ingress.intake.annotations .Values.ingress.annotations) }}
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "intake") | nindent 4 }}
+  {{- with (merge (dict) .Values.ingress.intake.annotations .Values.ingress.annotations (include "ninjacat.tlsAnnotations" . | fromYaml)) }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
@@ -67,7 +67,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ $fullname }}-server
+                name: {{ $fullname }}-intake
                 port:
                   name: intake
     {{- end }}

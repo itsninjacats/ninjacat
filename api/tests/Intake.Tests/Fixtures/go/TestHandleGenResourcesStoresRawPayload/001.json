@@ -1,0 +1,113 @@
+{
+ "recorded_at": "2026-10-01T15:21:23.619382568Z",
+ "request": {
+  "body_b64": "CgR0ZXN0/wA=",
+  "headers": {
+   "Content-Type": [
+    "application/x-protobuf"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ],
+   "Dd-Evp-Origin": [
+    "agent"
+   ],
+   "Dd-Evp-Origin-Version": [
+    "7.58.2"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/genresources"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeResources"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:23.619380264Z",
+     "genresources",
+     "no_schema",
+     "POST",
+     "example.com",
+     "/api/v2/genresources",
+     {},
+     "application/x-protobuf",
+     "",
+     {
+      "Dd-Evp-Origin": "agent",
+      "Dd-Evp-Origin-Version": "7.58.2"
+     },
+     {
+      "$b64": "CgR0ZXN0/wA="
+     },
+     8,
+     "DD-EVP-ORIGIN=\"agent\" DD-EVP-ORIGIN-VERSION=\"7.58.2\" Content-Type=\"application/x-protobuf\""
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": {
+      "$b64": "CgR0ZXN0/wA="
+     },
+     "BodyBytes": 8,
+     "ContentEncoding": "",
+     "ContentType": "application/x-protobuf",
+     "Headers": {
+      "Dd-Evp-Origin": "agent",
+      "Dd-Evp-Origin-Version": "7.58.2"
+     },
+     "Host": "example.com",
+     "Intake": "genresources",
+     "Method": "POST",
+     "Note": "DD-EVP-ORIGIN=\"agent\" DD-EVP-ORIGIN-VERSION=\"7.58.2\" Content-Type=\"application/x-protobuf\"",
+     "Path": "/api/v2/genresources",
+     "Query": {},
+     "Reason": "no_schema",
+     "ReceivedAt": "2026-10-01T15:21:23.619380264Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleGenResourcesStoresRawPayload",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

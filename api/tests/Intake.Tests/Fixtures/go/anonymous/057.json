@@ -1,0 +1,30 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.667682353Z",
+ "request": {
+  "body_b64": "",
+  "headers": {},
+  "host": "install.datad0g.com",
+  "method": "GET",
+  "url": "/v2/"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ],
+   "Docker-Distribution-Api-Version": [
+    "registry/2.0"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeInstall"
+ ],
+ "sends": null,
+ "seq": 57,
+ "test": "anonymous",
+ "volatile": []
+}

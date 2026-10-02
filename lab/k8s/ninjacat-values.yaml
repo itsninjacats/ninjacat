@@ -1,0 +1,55 @@
+# NinjaCat itself, installed from the chart in helm/ninjacat — the same chart
+# a real deployment uses, so a lab run is also the chart's test.
+#
+# Only what differs from the chart's defaults. up.sh adds the one value that
+# must not be in git (secrets.betterAuthSecret).
+
+domainRoot: ninjacat.lab
+
+# The Deployments and Services become ninjacat-intake, ninjacat-query and
+# ninjacat-frontend. The names are load-bearing: up.sh waits on all three and
+# creates the TLS Secrets the chart looks for under these names.
+fullnameOverride: ninjacat
+
+# Credentials match compose.yaml and the two data-store manifests.
+clickhouse:
+  httpAddr: clickhouse:8123
+secrets:
+  databaseUrl: postgres://root:mysecretpassword@postgres:5432/local
+  clickhousePassword: ninjacat
+
+# Built on the host and side-loaded with `kind load docker-image`; the images
+# exist in no registry, and IfNotPresent (the chart's default) is what keeps
+# the kubelet from trying to pull them.
+api:
+  image:
+    repository: ninjacat/api
+    tag: lab
+
+# Traefik's pods are somewhere in kind's pod network.
+trustedProxies:
+  - 10.244.0.0/16
+
+intake:
+  env:
+    # Dump every request, to see what a real agent sends:
+    #   kubectl --context kind-ninjacat-lab -n ninjacat-lab exec deploy/ninjacat-intake -- ls captures
+    DEBUG: "true"
+
+frontend:
+  image:
+    repository: ninjacat/frontend
+    tag: lab
+  # What the BROWSER on the host sees: NodePort 30000 is mapped by kind to
+  # host port 8888. SvelteKit and Better Auth reject a request whose Origin
+  # does not match this, so the panel is used through that port and not
+  # through the Ingress, which is here for the agents.
+  origin: http://localhost:8888
+
+# The front door is the chart's own Ingress, served by Traefik (up.sh
+# installs it), with the lab's certificate in the two Secrets the chart
+# names by default. The chart sees Traefik's CRDs and adds the redirect from
+# HTTP by itself.
+ingress:
+  enabled: true
+  className: traefik

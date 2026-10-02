@@ -1,0 +1,101 @@
+{
+ "recorded_at": "2026-10-01T15:21:18.996884056Z",
+ "request": {
+  "body_b64": "LS1lYTVkYjI4NTE4ZjAyODdkOTg5ZTBmYThkN2QzZWRjNjVhODBkNjFhNTE0ZGVmOTVhM2NmMGEwMTM5YjkNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZXZlbnQiDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL2pzb24NCg0KeyJkdW1teSI6IHRydWV9DQotLWVhNWRiMjg1MThmMDI4N2Q5ODllMGZhOGQ3ZDNlZGM2NWE4MGQ2MWE1MTRkZWY5NWEzY2YwYTAxMzliOQ0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJjb3ZlcmFnZXgiDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL21zZ3BhY2sNCg0Kbm90IG1zZ3BhY2sgYXQgYWxsDQotLWVhNWRiMjg1MThmMDI4N2Q5ODllMGZhOGQ3ZDNlZGM2NWE4MGQ2MWE1MTRkZWY5NWEzY2YwYTAxMzliOS0tDQo=",
+  "headers": {
+   "Content-Type": [
+    "multipart/form-data; boundary=ea5db28518f0287d989e0fa8d7d3edc65a80d61a514def95a3cf0a0139b9"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/citestcov"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeCITestCov"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:18.996881131Z",
+     "citestcov",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/api/v2/citestcov",
+     {},
+     "multipart/form-data; boundary=ea5db28518f0287d989e0fa8d7d3edc65a80d61a514def95a3cf0a0139b9",
+     "",
+     {},
+     "--ea5db28518f0287d989e0fa8d7d3edc65a80d61a514def95a3cf0a0139b9\r\nContent-Disposition: form-data; name=\"event\"\r\nContent-Type: application/json\r\n\r\n{\"dummy\": true}\r\n--ea5db28518f0287d989e0fa8d7d3edc65a80d61a514def95a3cf0a0139b9\r\nContent-Disposition: form-data; name=\"coveragex\"\r\nContent-Type: application/msgpack\r\n\r\nnot msgpack at all\r\n--ea5db28518f0287d989e0fa8d7d3edc65a80d61a514def95a3cf0a0139b9--\r\n",
+     398,
+     "coverage part (application/msgpack): envelope map header: msgp: attempted to decode type \"int\" with method for \"map\""
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "--ea5db28518f0287d989e0fa8d7d3edc65a80d61a514def95a3cf0a0139b9\r\nContent-Disposition: form-data; name=\"event\"\r\nContent-Type: application/json\r\n\r\n{\"dummy\": true}\r\n--ea5db28518f0287d989e0fa8d7d3edc65a80d61a514def95a3cf0a0139b9\r\nContent-Disposition: form-data; name=\"coveragex\"\r\nContent-Type: application/msgpack\r\n\r\nnot msgpack at all\r\n--ea5db28518f0287d989e0fa8d7d3edc65a80d61a514def95a3cf0a0139b9--\r\n",
+     "BodyBytes": 398,
+     "ContentEncoding": "",
+     "ContentType": "multipart/form-data; boundary=ea5db28518f0287d989e0fa8d7d3edc65a80d61a514def95a3cf0a0139b9",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "citestcov",
+     "Method": "POST",
+     "Note": "coverage part (application/msgpack): envelope map header: msgp: attempted to decode type \"int\" with method for \"map\"",
+     "Path": "/api/v2/citestcov",
+     "Query": {},
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T15:21:18.996881131Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCITestCovStoresUndecodablePayloadsRaw/coverage_part_is_garbage",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/0/8",
+  "/sends/0/args/0/11",
+  "/sends/0/rows/0/Body",
+  "/sends/0/rows/0/ContentType",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

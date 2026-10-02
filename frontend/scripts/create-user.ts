@@ -16,34 +16,123 @@
  * Deliberately not importing anything from $lib or $env: those are SvelteKit
  * aliases and this runs as a plain process, exactly like scripts/migrate.ts.
  *
- *   bun run user:create -- someone@example.com 'a good password' 'Their Name'
+ *   bun run user:create -- someone@example.com --name 'Their Name'
+ *
+ * The password is asked for, twice and without echo, as createsuperuser does.
+ * It is never an argument: an argument stays in the shell's history, in the
+ * process list and in a Job's spec. Where nobody is there to type (a Job, a
+ * script), it is read from NINJACAT_USER_PASSWORD instead.
  */
+import { parseArgs } from 'node:util';
 import { betterAuth } from 'better-auth/minimal';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../src/lib/server/db/schema';
 
-const [email, password, ...rest] = process.argv.slice(2);
-const name = rest.join(' ').trim();
+const usage = 'usage: bun run user:create -- <email> [--name "Their Name"]';
 
-if (!email || !password) {
-	console.error('usage: bun run user:create -- <email> <password> [name]');
+function fail(message: string): never {
+	console.error(`create-user: ${message}`);
 	process.exit(1);
+}
+
+// What was typed past the end of a line: both passwords pasted at once
+// arrive together.
+let typedAhead = '';
+
+/** One line typed at the terminal, not echoed. */
+function readHidden(prompt: string): Promise<string> {
+	return new Promise((resolve) => {
+		const stdin = process.stdin;
+		let typed = '';
+
+		const finish = () => {
+			stdin.setRawMode(false);
+			stdin.pause();
+			stdin.off('data', onData);
+			process.stdout.write('\n');
+		};
+
+		const onData = (chunk: string) => {
+			const keys = [...chunk];
+
+			for (const [at, key] of keys.entries()) {
+				if (key === '\r' || key === '\n') {
+					typedAhead = keys.slice(at + 1).join('');
+					finish();
+					resolve(typed);
+					return;
+				}
+				if (key === '\u0003') {
+					// Ctrl-C: raw mode hands it to us instead of ending the process.
+					finish();
+					process.exit(130);
+				}
+				if (key === '\u007f' || key === '\b') {
+					typed = typed.slice(0, -1);
+				} else {
+					typed += key;
+				}
+			}
+		};
+
+		process.stdout.write(prompt);
+		stdin.setRawMode(true);
+		stdin.setEncoding('utf8');
+		stdin.resume();
+		stdin.on('data', onData);
+
+		if (typedAhead !== '') {
+			const ahead = typedAhead;
+			typedAhead = '';
+			onData(ahead);
+		}
+	});
+}
+
+async function askPassword(): Promise<string> {
+	const fromEnvironment = process.env.NINJACAT_USER_PASSWORD;
+	if (fromEnvironment) {
+		return fromEnvironment;
+	}
+	if (!process.stdin.isTTY) {
+		fail('no terminal to ask for the password at; set NINJACAT_USER_PASSWORD');
+	}
+
+	const password = await readHidden('Password: ');
+	const again = await readHidden('Password (again): ');
+	if (password !== again) {
+		fail('the two passwords are not the same');
+	}
+	return password;
+}
+
+const { values, positionals } = parseArgs({
+	args: process.argv.slice(2),
+	options: { name: { type: 'string' } },
+	allowPositionals: true
+});
+const [email, ...unexpected] = positionals;
+
+if (!email) {
+	fail(usage);
+}
+if (unexpected.length > 0) {
+	fail(`the password is not an argument, and the name goes after --name\n${usage}`);
 }
 if (!email.includes('@')) {
-	console.error(`create-user: ${email} does not look like an email address`);
-	process.exit(1);
-}
-if (password.length < 8) {
-	console.error('create-user: password must be at least 8 characters');
-	process.exit(1);
+	fail(`${email} does not look like an email address`);
 }
 
 const url = process.env.DATABASE_URL;
 if (!url) {
-	console.error('create-user: DATABASE_URL is not set');
-	process.exit(1);
+	fail('DATABASE_URL is not set');
+}
+
+const password = await askPassword();
+if (password.length < 8) {
+	fail('the password must be at least 8 characters');
 }
 
 // max: 1 — this is a one-shot script, not a server.
@@ -66,7 +155,7 @@ const auth = betterAuth({
 
 try {
 	await auth.api.signUpEmail({
-		body: { email, password, name: name || email }
+		body: { email, password, name: values.name?.trim() || email }
 	});
 	console.log(`create-user: created ${email}`);
 } catch (e) {

@@ -1,0 +1,27 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.66547541Z",
+ "request": {
+  "body_b64": "",
+  "headers": {
+   "Dd-Api-Key": [
+    "routes-test-key"
+   ]
+  },
+  "host": "7-60-0-flare.agent.example.test",
+  "method": "HEAD",
+  "url": "/support/flare"
+ },
+ "response": {
+  "body_b64": "",
+  "headers": {},
+  "status": 200
+ },
+ "routes": [
+  "routeAPI",
+  "routeCIVisibilityAPI"
+ ],
+ "sends": null,
+ "seq": 8,
+ "test": "anonymous",
+ "volatile": []
+}

@@ -1,0 +1,273 @@
+{
+ "recorded_at": "2026-10-01T15:21:25.863747637Z",
+ "request": {
+  "body_b64": "W3sidGltZXN0YW1wIjoxNzU4MzI2NDAwMTIzLCJhZ2VudF92ZXJzaW9uIjoiIiwibmFtZXNwYWNlIjoiZGVmYXVsdCIsInRlc3RfY29uZmlnX2lkIjoiY2ZnMSIsInRlc3RfcmVzdWx0X2lkIjoiIiwidGVzdF9ydW5faWQiOiIiLCJvcmlnaW4iOiJuZXR3b3JrX3RyYWZmaWMiLCJ0ZXN0X3J1bl90eXBlIjoiIiwic291cmNlX3Byb2R1Y3QiOiIiLCJjb2xsZWN0b3JfdHlwZSI6IiIsInByb3RvY29sIjoiVENQIiwic291cmNlIjp7Im5hbWUiOiIiLCJkaXNwbGF5X25hbWUiOiIiLCJob3N0bmFtZSI6ImgxIn0sImRlc3RpbmF0aW9uIjp7Imhvc3RuYW1lIjoiaDIiLCJwb3J0Ijo0NDN9LCJ0cmFjZXJvdXRlIjp7InJ1bnMiOlt7InJ1bl9pZCI6InJ1bjEiLCJzb3VyY2UiOnsiaXBfYWRkcmVzcyI6IjEwLjAuMC4xIiwicG9ydCI6MTIzNH0sImRlc3RpbmF0aW9uIjp7ImlwX2FkZHJlc3MiOiIiLCJwb3J0IjowfSwiaG9wcyI6W3sidHRsIjoxLCJpcF9hZGRyZXNzIjoiMTAuMC4wLjI1NCIsInJ0dCI6MS4yLCJyZWFjaGFibGUiOnRydWV9XX1dLCJob3BfY291bnQiOnsiYXZnIjoxLCJtaW4iOjEsIm1heCI6MX19LCJlMmVfcHJvYmUiOnsicnR0cyI6WzEuMSwxLjNdLCJwYWNrZXRzX3NlbnQiOjIsInBhY2tldHNfcmVjZWl2ZWQiOjIsInBhY2tldF9sb3NzX3BlcmNlbnRhZ2UiOjAsImppdHRlciI6MCwicnR0Ijp7ImF2ZyI6MCwibWluIjowLCJtYXgiOjB9fSwidGFncyI6WyJlbnY6cHJvZCJdfV0=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/netpath"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeNDM"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*string",
+     "*string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint16",
+     "string",
+     "float64",
+     "int32",
+     "int32",
+     "[]string",
+     "[]string",
+     "[]uint16",
+     "[]string",
+     "[]uint16",
+     "[][]string",
+     "[][]int32",
+     "[][]string",
+     "[][][]string",
+     "[][]float64",
+     "[][]uint8",
+     "[]float64",
+     "int32",
+     "int32",
+     "float32",
+     "float64",
+     "float64",
+     "float64",
+     "float64",
+     "map[string][]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2025-09-20T00:00:00.123Z",
+     "",
+     "default",
+     "cfg1",
+     "",
+     "",
+     "",
+     "network_traffic",
+     "",
+     "",
+     "",
+     "",
+     "TCP",
+     "",
+     "",
+     "h1",
+     null,
+     null,
+     "",
+     "",
+     "",
+     "",
+     "h2",
+     443,
+     "",
+     1,
+     1,
+     1,
+     [
+      "run1"
+     ],
+     [
+      "10.0.0.1"
+     ],
+     [
+      1234
+     ],
+     [
+      ""
+     ],
+     [
+      0
+     ],
+     [
+      []
+     ],
+     [
+      [
+       1
+      ]
+     ],
+     [
+      [
+       "10.0.0.254"
+      ]
+     ],
+     [
+      [
+       []
+      ]
+     ],
+     [
+      [
+       1.2
+      ]
+     ],
+     [
+      "\u0001"
+     ],
+     [
+      1.1,
+      1.3
+     ],
+     2,
+     2,
+     0,
+     0,
+     0,
+     0,
+     0,
+     {
+      "env": [
+       "prod"
+      ]
+     }
+    ]
+   ],
+   "insert": "INSERT INTO network_paths\n\t\t\t(tenant_id, timestamp, agent_version, namespace,\n\t\t\t test_config_id, test_config_name, test_result_id, test_run_id,\n\t\t\t origin, test_run_type, test_config_source, source_product, collector_type, protocol,\n\t\t\t source_name, source_display_name, source_hostname,\n\t\t\t source_via_subnet_alias, source_via_interface_hardware_addr,\n\t\t\t source_network_id, source_service, source_container_id, source_public_ip,\n\t\t\t destination_hostname, destination_port, destination_service,\n\t\t\t hop_count_avg, hop_count_min, hop_count_max,\n\t\t\t run_ids, run_source_ips, run_source_ports,\n\t\t\t run_destination_ips, run_destination_ports, run_destination_reverse_dns,\n\t\t\t hop_ttls, hop_ips, hop_reverse_dns, hop_rtts, hop_reachable,\n\t\t\t e2e_rtts, e2e_packets_sent, e2e_packets_received, e2e_packet_loss_percentage,\n\t\t\t e2e_jitter, e2e_rtt_avg, e2e_rtt_min, e2e_rtt_max,\n\t\t\t tags)",
+   "rows": [
+    {
+     "AgentVersion": "",
+     "CollectorType": "",
+     "DestinationHostname": "h2",
+     "DestinationPort": 443,
+     "DestinationService": "",
+     "E2eJitter": 0,
+     "E2ePacketLossPercentage": 0,
+     "E2ePacketsReceived": 2,
+     "E2ePacketsSent": 2,
+     "E2eRTTAvg": 0,
+     "E2eRTTMax": 0,
+     "E2eRTTMin": 0,
+     "E2eRTTs": [
+      1.1,
+      1.3
+     ],
+     "HopCountAvg": 1,
+     "HopCountMax": 1,
+     "HopCountMin": 1,
+     "HopIPs": [
+      [
+       "10.0.0.254"
+      ]
+     ],
+     "HopRTTs": [
+      [
+       1.2
+      ]
+     ],
+     "HopReachable": [
+      "\u0001"
+     ],
+     "HopReverseDNS": [
+      [
+       []
+      ]
+     ],
+     "HopTTLs": [
+      [
+       1
+      ]
+     ],
+     "Namespace": "default",
+     "Origin": "network_traffic",
+     "Protocol": "TCP",
+     "RunDestinationIPs": [
+      ""
+     ],
+     "RunDestinationPorts": [
+      0
+     ],
+     "RunDestinationReverseDNS": [
+      []
+     ],
+     "RunIDs": [
+      "run1"
+     ],
+     "RunSourceIPs": [
+      "10.0.0.1"
+     ],
+     "RunSourcePorts": [
+      1234
+     ],
+     "SourceContainerID": "",
+     "SourceDisplayName": "",
+     "SourceHostname": "h1",
+     "SourceName": "",
+     "SourceNetworkID": "",
+     "SourceProduct": "",
+     "SourcePublicIP": "",
+     "SourceService": "",
+     "SourceViaInterfaceHardwareAddr": null,
+     "SourceViaSubnetAlias": null,
+     "Tags": {
+      "env": [
+       "prod"
+      ]
+     },
+     "TenantID": "test",
+     "TestConfigID": "cfg1",
+     "TestConfigName": "",
+     "TestConfigSource": "",
+     "TestResultID": "",
+     "TestRunID": "",
+     "TestRunType": "",
+     "Timestamp": "2025-09-20T00:00:00.123Z"
+    }
+   ],
+   "to": "storage_network_paths",
+   "type": "storage.WriteNetworkPaths"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleNetpathStoresRunsAndE2eProbe",
+ "volatile": []
+}

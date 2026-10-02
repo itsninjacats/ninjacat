@@ -1,0 +1,105 @@
+{
+ "recorded_at": "2026-10-01T16:19:49.947940874Z",
+ "request": {
+  "body_b64": "CgtpcC0xMC0wLTAtMRIEcHJvZCrvBwoGYWJjMTIzEgZweXRob24aBjMuMTIuMSIFMi45LjAqDDBmNGMtcnVudGltZTLkBgj///////////8BEgZsYW1iZGEasAQKCGNoZWNrb3V0Eg1mbGFzay5yZXF1ZXN0Gg5HRVQgL3BheSA8YSZiPiD///////////8BKN4BOPuAqLHjn+fLF0DAlrECUhAKBcO8bsOvEgfDp8O2ZMOpUh0KCV9kZC5wLnRpZBIQNjc4OTBhYmNkZWYwMTIzNFITCglzcGFuLmtpbmQSBnNlcnZlclogChVfc2FtcGxpbmdfcHJpb3JpdHlfdjERAAAAAAAA8D9aEAoFcmF0aW8RmpmZmZmZuT9iA3dlYmoNCgR0ZXh0EgVwbGFpbmoRCgZhcHBzZWMSB4Gja2V5AP9yLAgKEGMYCyIGCgFhEgFiIg4KA3JlbBIHZm9sbG93cyoGZGQ9czoxMIGAgIAIcgQIFBgVesoBCQEAKjb+nJcXEglleGNlcHRpb24aCQoDb2RkEgIICRoNCgVyZXRyeRIECAEYARoSCgNiaWcSCwgDKZx1AIg85Dd+GhQKBXJhdGlvEgsIAykAAAAAAADgPxoaCgdtZXNzYWdlEg8SDWJvb20gInF1b3RlZCIaFQoEY29kZRINCAIggICAgICAgICAARoNCgdub2FycmF5EgIIBBouCgZmcmFtZXMSJAgEMiAKAxIB",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v0.2/traces"
+ },
+ "response": {
+  "body_b64": "eyJyYXRlX2J5X3NlcnZpY2UiOnt9fQ==",
+  "body_json": {
+   "rate_by_service": {}
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeTrace"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:19:49.947931647Z",
+     "trace",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/api/v0.2/traces",
+     {},
+     "application/json",
+     "",
+     {},
+     {
+      "$b64": "CgtpcC0xMC0wLTAtMRIEcHJvZCrvBwoGYWJjMTIzEgZweXRob24aBjMuMTIuMSIFMi45LjAqDDBmNGMtcnVudGltZTLkBgj///////////8BEgZsYW1iZGEasAQKCGNoZWNrb3V0Eg1mbGFzay5yZXF1ZXN0Gg5HRVQgL3BheSA8YSZiPiD///////////8BKN4BOPuAqLHjn+fLF0DAlrECUhAKBcO8bsOvEgfDp8O2ZMOpUh0KCV9kZC5wLnRpZBIQNjc4OTBhYmNkZWYwMTIzNFITCglzcGFuLmtpbmQSBnNlcnZlclogChVfc2FtcGxpbmdfcHJpb3JpdHlfdjERAAAAAAAA8D9aEAoFcmF0aW8RmpmZmZmZuT9iA3dlYmoNCgR0ZXh0EgVwbGFpbmoRCgZhcHBzZWMSB4Gja2V5AP9yLAgKEGMYCyIGCgFhEgFiIg4KA3JlbBIHZm9sbG93cyoGZGQ9czoxMIGAgIAIcgQIFBgVesoBCQEAKjb+nJcXEglleGNlcHRpb24aCQoDb2RkEgIICRoNCgVyZXRyeRIECAEYARoSCgNiaWcSCwgDKZx1AIg85Dd+GhQKBXJhdGlvEgsIAykAAAAAAADgPxoaCgdtZXNzYWdlEg8SDWJvb20gInF1b3RlZCIaFQoEY29kZRINCAIggICAgICAgICAARoNCgdub2FycmF5EgIIBBouCgZmcmFtZXMSJAgEMiAKAxIB"
+     },
+     552,
+     "protobuf AgentPayload: unexpected EOF"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": {
+      "$b64": "CgtpcC0xMC0wLTAtMRIEcHJvZCrvBwoGYWJjMTIzEgZweXRob24aBjMuMTIuMSIFMi45LjAqDDBmNGMtcnVudGltZTLkBgj///////////8BEgZsYW1iZGEasAQKCGNoZWNrb3V0Eg1mbGFzay5yZXF1ZXN0Gg5HRVQgL3BheSA8YSZiPiD///////////8BKN4BOPuAqLHjn+fLF0DAlrECUhAKBcO8bsOvEgfDp8O2ZMOpUh0KCV9kZC5wLnRpZBIQNjc4OTBhYmNkZWYwMTIzNFITCglzcGFuLmtpbmQSBnNlcnZlclogChVfc2FtcGxpbmdfcHJpb3JpdHlfdjERAAAAAAAA8D9aEAoFcmF0aW8RmpmZmZmZuT9iA3dlYmoNCgR0ZXh0EgVwbGFpbmoRCgZhcHBzZWMSB4Gja2V5AP9yLAgKEGMYCyIGCgFhEgFiIg4KA3JlbBIHZm9sbG93cyoGZGQ9czoxMIGAgIAIcgQIFBgVesoBCQEAKjb+nJcXEglleGNlcHRpb24aCQoDb2RkEgIICRoNCgVyZXRyeRIECAEYARoSCgNiaWcSCwgDKZx1AIg85Dd+GhQKBXJhdGlvEgsIAykAAAAAAADgPxoaCgdtZXNzYWdlEg8SDWJvb20gInF1b3RlZCIaFQoEY29kZRINCAIggICAgICAgICAARoNCgdub2FycmF5EgIIBBouCgZmcmFtZXMSJAgEMiAKAxIB"
+     },
+     "BodyBytes": 552,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "trace",
+     "Method": "POST",
+     "Note": "protobuf AgentPayload: unexpected EOF",
+     "Path": "/api/v0.2/traces",
+     "Query": {},
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T16:19:49.947931647Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 5,
+ "test": "TestPortTraces",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/0/11/$b64",
+  "/sends/0/rows/0/Body/$b64",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

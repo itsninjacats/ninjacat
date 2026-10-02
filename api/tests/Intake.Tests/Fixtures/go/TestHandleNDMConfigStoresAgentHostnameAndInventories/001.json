@@ -1,0 +1,105 @@
+{
+ "recorded_at": "2026-10-01T15:21:25.862844979Z",
+ "request": {
+  "body_b64": "W3sKCQkibmFtZXNwYWNlIjogImRlZmF1bHQiLAoJCSJjb2xsZWN0X3RpbWVzdGFtcCI6IDE3MDAwMDAwMDAsCgkJImFnZW50X2hvc3RuYW1lIjogImFnZW50MDEiLAoJCSJpbnZlbnRvcmllcyI6IFt7ImZvbyI6ImJhciJ9XSwKCQkiY29uZmlncyI6IFt7CgkJCSJkZXZpY2VfaWQiOiAiZGVmYXVsdDoxMC4wLjAuMSIsCgkJCSJkZXZpY2VfaXAiOiAiMTAuMC4wLjEiLAoJCQkiY29uZmlnX3R5cGUiOiAicnVubmluZyIsCgkJCSJjb25maWdfc291cmNlIjogImNsaSIsCgkJCSJ0aW1lc3RhbXAiOiAxNzAwMDAwMTAwLAoJCQkidGFncyI6IFsiZW52OnByb2QiLCAiZW52OnN0YWdpbmciXSwKCQkJImNvbnRlbnQiOiAiaW50ZXJmYWNlIEdpMC8xXG4gbm8gc2h1dGRvd25cbiIKCQl9XSwKCQkiZXh0cmFfdW5kb2N1bWVudGVkX2tleSI6ICJ4IgoJfV0=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/ndmconfig"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeNDM"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "time.Time",
+     "map[string][]string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "default",
+     "2023-11-14T22:13:20Z",
+     "agent01",
+     "[{\"foo\":\"bar\"}]",
+     {
+      "extra_undocumented_key": "\"x\""
+     },
+     "default:10.0.0.1",
+     "10.0.0.1",
+     "running",
+     "cli",
+     "2023-11-14T22:15:00Z",
+     {
+      "env": [
+       "prod",
+       "staging"
+      ]
+     },
+     "interface Gi0/1\n no shutdown\n"
+    ]
+   ],
+   "insert": "INSERT INTO ndm_device_configs\n\t\t\t(tenant_id, namespace, collect_timestamp, agent_hostname, inventories, extra,\n\t\t\t device_id, device_ip, config_type, config_source, timestamp, tags, content)",
+   "rows": [
+    {
+     "AgentHostname": "agent01",
+     "CollectTimestamp": "2023-11-14T22:13:20Z",
+     "ConfigSource": "cli",
+     "ConfigType": "running",
+     "Content": "interface Gi0/1\n no shutdown\n",
+     "DeviceID": "default:10.0.0.1",
+     "DeviceIP": "10.0.0.1",
+     "Extra": {
+      "extra_undocumented_key": "\"x\""
+     },
+     "Inventories": "[{\"foo\":\"bar\"}]",
+     "Namespace": "default",
+     "Tags": {
+      "env": [
+       "prod",
+       "staging"
+      ]
+     },
+     "TenantID": "test",
+     "Timestamp": "2023-11-14T22:15:00Z"
+    }
+   ],
+   "to": "storage_ndm_device_configs",
+   "type": "storage.WriteNDMDeviceConfigs"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleNDMConfigStoresAgentHostnameAndInventories",
+ "volatile": []
+}

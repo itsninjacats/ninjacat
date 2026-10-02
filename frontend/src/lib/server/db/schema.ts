@@ -1,11 +1,5 @@
-import { pgTable, serial, integer, text, uuid, timestamp, index } from 'drizzle-orm/pg-core';
+import { pgTable, text, uuid, timestamp, index } from 'drizzle-orm/pg-core';
 import { user } from './auth.schema';
-
-export const task = pgTable('task', {
-	id: serial('id').primaryKey(),
-	title: text('title').notNull(),
-	priority: integer('priority').notNull().default(1)
-});
 
 // Klucze API dla agentow. Agent wysyla klucz w naglowku Dd-Api-Key przy
 // KAZDYM zadaniu, wiec odbiornik musi go szybko odnalezc.

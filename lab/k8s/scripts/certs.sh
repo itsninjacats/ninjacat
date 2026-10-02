@@ -31,7 +31,7 @@ openssl req -newkey rsa:2048 -nodes \
 # (app.ninjacat.lab, kubeops-intake.ninjacat.lab, ...), so a single wildcard
 # covers them. The bare apex is listed too because some probes use it.
 cat > "$OUT/san.cnf" <<'SAN'
-subjectAltName = DNS:*.ninjacat.lab, DNS:ninjacat.lab, DNS:*.logs.ninjacat.lab, DNS:*.agent.ninjacat.lab
+subjectAltName = DNS:*.ninjacat.lab, DNS:ninjacat.lab, DNS:*.logs.ninjacat.lab, DNS:*.agent.ninjacat.lab, DNS:*.profile.ninjacat.lab, DNS:*.synthetics.ninjacat.lab
 extendedKeyUsage = serverAuth
 SAN
 

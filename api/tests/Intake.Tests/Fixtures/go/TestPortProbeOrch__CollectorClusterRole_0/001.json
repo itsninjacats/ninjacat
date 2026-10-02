@@ -1,0 +1,770 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.46028845Z",
+ "request": {
+  "body_b64": "AwA4CZIQAAB78VNlAAAAAAoCczISDHM0IDwmPiAiw6kiChgGIPj//////////wEq2AcK9wEKDXMxMiA8Jj4gIsOpIgoSA3MxNBoNczE2IDwmPiAiw6kiCiCS4s+qBijs//////////8BMgdrMjI6djIyMhVrMjI6b3RoZXI6d2l0aDpjb2xvbnMyBmJhcmUyMjIIejIyOmxhc3Q6B2syNDp2MjQ6FWsyNDpvdGhlcjp3aXRoOmNvbG9uczoGYmFyZTI0Ogh6MjQ6bGFzdEIPCgNzMjcSA3MyORoDczMxQg8KA3MzMxIDczM1GgNzMzdKA3MzOVIHazQxOnY0MVIVazQxOm90aGVyOndpdGg6Y29sb25zUgZiYXJlNDFSCHo0MTpsYXN0WKviz6oGEvoBCgdrNDY6djQ2ChVrNDY6b3RoZXI6d2l0aDpjb2xvbnMKBmJhcmU0NgoIejQ2Omxhc3QSB2s0ODp2NDgSFWs0ODpvdGhlcjp3aXRoOmNvbG9ucxIGYmFyZTQ4Egh6NDg6bGFzdBoHazUwOnY1MBoVazUwOm90aGVyOndpdGg6Y29sb25zGgZiYXJlNTAaCHo1MDpsYXN0IgdrNTI6djUyIhVrNTI6b3RoZXI6d2l0aDpjb2xvbnMiBmJhcmU1MiIIejUyOmxhc3QqB2s1NDp2NTQqFWs1NDpvdGhlcjp3aXRoOmNvbG9ucyoGYmFyZTU0Kgh6NTQ6bGFzdBL6AQoHazU2OnY1NgoVazU2Om90aGVyOndpdGg6Y29sb25zCgZiYXJlNTYKCHo1NjpsYXN0EgdrNTg6djU4EhVrNTg6b3RoZXI6d2l0aDpjb2xvbnMSBmJhcmU1OBIIejU4Omxhc3QaB2s2MDp2NjAaFWs2MDpvdGhlcjp3aXRoOmNvbG9ucxoGYmFyZTYwGgh6NjA6bGFzdCIHazYyOnY2MiIVazYyOm90aGVyOndpdGg6Y29sb25zIgZiYXJlNjIiCHo2MjpsYXN0KgdrNjQ6djY0KhVrNjQ6b3RoZXI6d2l0aDpjb2xvbnMqBmJhcmU2NCoIejY0Omxhc3QaPAoDczY3EgNzNjkaB2s3MTp2NzEaFWs3MTpvdGhlcjp3aXRoOmNvbG9ucxoGYmFyZTcxGgh6NzE6bGFzdBo8CgNzNzMSA3M3NRoHazc3OnY3NxoVazc3Om90aGVyOndpdGg6Y29sb25zGgZiYXJlNzcaCHo3NzpsYXN0Ig5raW5kOiBUaGluZzc5CioHazgxOnY4MSoVazgxOm90aGVyOndpdGg6Y29sb25zKgZiYXJlODEqCHo4MTpsYXN0MiQKEAoFa2V5ODYRWc5Nt+bHVUAKEAoFa2V5ODQRWc5Nt+ZHVUAqpwgK/gEKA3M5MBINczkyIDwmPiAiw6kiChoDczk0IOCumaQPKOLiz6oGMglrMTAwOnYxMDAyFmsxMDA6b3RoZXI6d2l0aDpjb2xvbnMyB2JhcmUxMDAyCXoxMDA6bGFzdDoJazEwMjp2MTAyOhZrMTAyOm90aGVyOndpdGg6Y29sb25zOgdiYXJlMTAyOgl6MTAyOmxhc3RCEgoEczEwNRIEczEwNxoEczEwOUISCgRzMTExEgRzMTEzGgRzMTE1SgRzMTE3UglrMTE5OnYxMTlSFmsxMTk6b3RoZXI6d2l0aDpjb2xvbnNSB2JhcmUxMTlSCXoxMTk6bGFzdFj5rpmkDxKTAgoJazEyNDp2MTI0ChZrMTI0Om90aGVyOndpdGg6Y29sb25zCgdiYXJlMTI0Cgl6MTI0Omxhc3QSCWsxMjY6djEyNhIWazEyNjpvdGhlcjp3aXRoOmNvbG9ucxIHYmFyZTEyNhIJejEyNjpsYXN0GglrMTI4OnYxMjgaFmsxMjg6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmUxMjgaCXoxMjg6bGFzdCIJazEzMDp2MTMwIhZrMTMwOm90aGVyOndpdGg6Y29sb25zIgdiYXJlMTMwIgl6MTMwOmxhc3QqCWsxMzI6djEzMioWazEzMjpvdGhlcjp3aXRoOmNvbG9ucyoHYmFyZTEzMioJejEzMjpsYXN0EpMCCglrMTM0OnYxMzQKFmsxMzQ6b3RoZXI6d2l0aDpjb2xvbnMKB2JhcmUxMzQKCXoxMzQ6bGFzdBIJazEzNjp2MTM2EhZrMTM2Om90aGVyOndpdGg6Y29sb25zEgdiYXJlMTM2Egl6MTM2Omxhc3QaCWsxMzg6djEzOBoWazEzODpvdGhlcjp3aXRoOmNvbG9ucxoHYmFyZTEzOBoJejEzODpsYXN0IglrMTQwOnYxNDAiFmsxNDA6b3RoZXI6d2l0aDpjb2xvbnMiB2JhcmUxNDAiCXoxNDA6bGFzdCoJazE0Mjp2MTQyKhZrMTQyOm90aGVyOndpdGg6Y29sb25zKgdiYXJlMTQyKgl6MTQyOmxhc3QaQwoEczE0NRIEczE0NxoJazE0OTp2MTQ5GhZrMTQ5Om90aGVyOndpdGg6Y29sb25zGgdiYXJlMTQ5Ggl6MTQ5Omxhc3QaQwoEczE1MRIEczE1MxoJazE1NTp2MTU1GhZrMTU1Om90aGVyOndpdGg6Y29sb25zGgdiYXJlMTU1Ggl6MTU1Omxhc3QiD2tpbmQ6IFRoaW5nMTU3CioJazE1OTp2MTU5KhZrMTU5Om90aGVyOndpdGg6Y29sb25zKgdiYXJlMTU5Kgl6MTU5Omxhc3QyJgoRCgZrZXkxNjQRLOemW/OjZEAKEQoGa2V5MTYyESznplvzY2RAMglrMTY3OnYxNjcyFmsxNjc6b3RoZXI6d2l0aDpjb2xvbnMyB2JhcmUxNjcyCXoxNjc6bGFzdDo9CNb+/////////wEQrOPPqgYYruPPqgYiDnMxNzYgPCY+ICLDqSIKKgRzMTc4Mg5zMTgwIDwmPiAiw6kiCg==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.460196991Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     "ClusterRole",
+     "s14",
+     "s12 <&> \"é\"\n",
+     "s16 <&> \"é\"\n",
+     "s39",
+     "s31",
+     "s27",
+     "",
+     "",
+     "",
+     0,
+     0,
+     0,
+     {
+      "aggregation_rules": 2,
+      "rules": 2
+     },
+     {
+      "bare22": "",
+      "k22": "other:with:colons",
+      "z22": "last"
+     },
+     {
+      "bare24": "",
+      "k24": "other:with:colons",
+      "z24": "last"
+     },
+     {
+      "bare167": [
+       ""
+      ],
+      "bare81": [
+       ""
+      ],
+      "k167": [
+       "v167",
+       "other:with:colons"
+      ],
+      "k81": [
+       "v81",
+       "other:with:colons"
+      ],
+      "z167": [
+       "last"
+      ],
+      "z81": [
+       "last"
+      ]
+     },
+     "-170.1700000172.1700000174-s176 <&> \"é\"\n",
+     6,
+     -8,
+     4242,
+     9,
+     1700000123,
+     "protobuf",
+     "2023-11-14T22:13:38Z",
+     null,
+     1700000043,
+     [
+      "k41:v41",
+      "k41:other:with:colons",
+      "bare41",
+      "z41:last"
+     ],
+     [
+      "s31",
+      "s37"
+     ],
+     [
+      "s27",
+      "s33"
+     ],
+     [
+      "s29",
+      "s35"
+     ],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     {
+      "key84": 85.123456789,
+      "key86": 87.123456789
+     },
+     "{ \"metadata\": { \"name\": \"s12 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s14\", \"uid\": \"s16 \\u003c&\\u003e \\\"é\\\"\\n\", \"creationTimestamp\": \"1700000018\", \"deletionTimestamp\": \"-20\", \"labels\": [ \"k22:v22\", \"k22:other:with:colons\", \"bare22\", \"z22:last\" ], \"annotations\": [ \"k24:v24\", \"k24:other:with:colons\", \"bare24\", \"z24:last\" ], \"ownerReferences\": [ { \"name\": \"s27\", \"uid\": \"s29\", \"kind\": \"s31\" }, { \"name\": \"s33\", \"uid\": \"s35\", \"kind\": \"s37\" } ], \"resourceVersion\": \"s39\", \"finalizers\": [ \"k41:v41\", \"k41:other:with:colons\", \"bare41\", \"z41:last\" ], \"deletionGracePeriodSeconds\": \"1700000043\" }, \"rules\": [ { \"verbs\": [ \"k46:v46\", \"k46:other:with:colons\", \"bare46\", \"z46:last\" ], \"apiGroups\": [ \"k48:v48\", \"k48:other:with:colons\", \"bare48\", \"z48:last\" ], \"resources\": [ \"k50:v50\", \"k50:other:with:colons\", \"bare50\", \"z50:last\" ], \"resourceNames\": [ \"k52:v52\", \"k52:other:with:colons\", \"bare52\", \"z52:last\" ], \"nonResourceURLs\": [ \"k54:v54\", \"k54:other:with:colons\", \"bare54\", \"z54:last\" ] }, { \"verbs\": [ \"k56:v56\", \"k56:other:with:colons\", \"bare56\", \"z56:last\" ], \"apiGroups\": [ \"k58:v58\", \"k58:other:with:colons\", \"bare58\", \"z58:last\" ], \"resources\": [ \"k60:v60\", \"k60:other:with:colons\", \"bare60\", \"z60:last\" ], \"resourceNames\": [ \"k62:v62\", \"k62:other:with:colons\", \"bare62\", \"z62:last\" ], \"nonResourceURLs\": [ \"k64:v64\", \"k64:other:with:colons\", \"bare64\", \"z64:last\" ] } ], \"aggregationRules\": [ { \"key\": \"s67\", \"operator\": \"s69\", \"values\": [ \"k71:v71\", \"k71:other:with:colons\", \"bare71\", \"z71:last\" ] }, { \"key\": \"s73\", \"operator\": \"s75\", \"values\": [ \"k77:v77\", \"k77:other:with:colons\", \"bare77\", \"z77:last\" ] } ], \"yaml\": \"a2luZDogVGhpbmc3OQo=\", \"tags\": [ \"k81:v81\", \"k81:other:with:colons\", \"bare81\", \"z81:last\" ], \"metrics\": { \"metricValues\": { \"key86\": 87.123456789, \"key84\": 85.123456789 } } }",
+     "",
+     "",
+     "",
+     "",
+     null,
+     null,
+     "",
+     [],
+     [],
+     "",
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     [],
+     0,
+     "",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "[{\"verbs\":[\"k46:v46\",\"k46:other:with:colons\",\"bare46\",\"z46:last\"],\"apiGroups\":[\"k48:v48\",\"k48:other:with:colons\",\"bare48\",\"z48:last\"],\"resources\":[\"k50:v50\",\"k50:other:with:colons\",\"bare50\",\"z50:last\"],\"resourceNames\":[\"k52:v52\",\"k52:other:with:colons\",\"bare52\",\"z52:last\"],\"nonResourceURLs\":[\"k54:v54\",\"k54:other:with:colons\",\"bare54\",\"z54:last\"]},{\"verbs\":[\"k56:v56\",\"k56:other:with:colons\",\"bare56\",\"z56:last\"],\"apiGroups\":[\"k58:v58\",\"k58:other:with:colons\",\"bare58\",\"z58:last\"],\"resources\":[\"k60:v60\",\"k60:other:with:colons\",\"bare60\",\"z60:last\"],\"resourceNames\":[\"k62:v62\",\"k62:other:with:colons\",\"bare62\",\"z62:last\"],\"nonResourceURLs\":[\"k64:v64\",\"k64:other:with:colons\",\"bare64\",\"z64:last\"]}]",
+     "",
+     "",
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k167:v167\", \"k167:other:with:colons\", \"bare167\", \"z167:last\" ], \"agentVersion\": { \"Major\": \"-170\", \"Minor\": \"1700000172\", \"Patch\": \"1700000174\", \"Pre\": \"s176 \\u003c&\\u003e \\\"é\\\"\\n\", \"Meta\": \"s178\", \"Commit\": \"s180 \\u003c&\\u003e \\\"é\\\"\\n\" } }"
+    ],
+    [
+     "test",
+     "2026-10-01T16:08:42.460196991Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     "ClusterRole",
+     "s92 <&> \"é\"\n",
+     "s90",
+     "s94",
+     "s117",
+     "s109",
+     "s105",
+     "",
+     "",
+     "",
+     0,
+     0,
+     0,
+     {
+      "aggregation_rules": 2,
+      "rules": 2
+     },
+     {
+      "bare100": "",
+      "k100": "other:with:colons",
+      "z100": "last"
+     },
+     {
+      "bare102": "",
+      "k102": "other:with:colons",
+      "z102": "last"
+     },
+     {
+      "bare159": [
+       ""
+      ],
+      "bare167": [
+       ""
+      ],
+      "k159": [
+       "v159",
+       "other:with:colons"
+      ],
+      "k167": [
+       "v167",
+       "other:with:colons"
+      ],
+      "z159": [
+       "last"
+      ],
+      "z167": [
+       "last"
+      ]
+     },
+     "-170.1700000172.1700000174-s176 <&> \"é\"\n",
+     6,
+     -8,
+     4242,
+     9,
+     1700000123,
+     "protobuf",
+     "2100-01-01T00:01:36Z",
+     "2023-11-14T22:14:58Z",
+     4102444921,
+     [
+      "k119:v119",
+      "k119:other:with:colons",
+      "bare119",
+      "z119:last"
+     ],
+     [
+      "s109",
+      "s115"
+     ],
+     [
+      "s105",
+      "s111"
+     ],
+     [
+      "s107",
+      "s113"
+     ],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     {
+      "key162": 163.123456789,
+      "key164": 165.123456789
+     },
+     "{ \"metadata\": { \"name\": \"s90\", \"namespace\": \"s92 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s94\", \"creationTimestamp\": \"4102444896\", \"deletionTimestamp\": \"1700000098\", \"labels\": [ \"k100:v100\", \"k100:other:with:colons\", \"bare100\", \"z100:last\" ], \"annotations\": [ \"k102:v102\", \"k102:other:with:colons\", \"bare102\", \"z102:last\" ], \"ownerReferences\": [ { \"name\": \"s105\", \"uid\": \"s107\", \"kind\": \"s109\" }, { \"name\": \"s111\", \"uid\": \"s113\", \"kind\": \"s115\" } ], \"resourceVersion\": \"s117\", \"finalizers\": [ \"k119:v119\", \"k119:other:with:colons\", \"bare119\", \"z119:last\" ], \"deletionGracePeriodSeconds\": \"4102444921\" }, \"rules\": [ { \"verbs\": [ \"k124:v124\", \"k124:other:with:colons\", \"bare124\", \"z124:last\" ], \"apiGroups\": [ \"k126:v126\", \"k126:other:with:colons\", \"bare126\", \"z126:last\" ], \"resources\": [ \"k128:v128\", \"k128:other:with:colons\", \"bare128\", \"z128:last\" ], \"resourceNames\": [ \"k130:v130\", \"k130:other:with:colons\", \"bare130\", \"z130:last\" ], \"nonResourceURLs\": [ \"k132:v132\", \"k132:other:with:colons\", \"bare132\", \"z132:last\" ] }, { \"verbs\": [ \"k134:v134\", \"k134:other:with:colons\", \"bare134\", \"z134:last\" ], \"apiGroups\": [ \"k136:v136\", \"k136:other:with:colons\", \"bare136\", \"z136:last\" ], \"resources\": [ \"k138:v138\", \"k138:other:with:colons\", \"bare138\", \"z138:last\" ], \"resourceNames\": [ \"k140:v140\", \"k140:other:with:colons\", \"bare140\", \"z140:last\" ], \"nonResourceURLs\": [ \"k142:v142\", \"k142:other:with:colons\", \"bare142\", \"z142:last\" ] } ], \"aggregationRules\": [ { \"key\": \"s145\", \"operator\": \"s147\", \"values\": [ \"k149:v149\", \"k149:other:with:colons\", \"bare149\", \"z149:last\" ] }, { \"key\": \"s151\", \"operator\": \"s153\", \"values\": [ \"k155:v155\", \"k155:other:with:colons\", \"bare155\", \"z155:last\" ] } ], \"yaml\": \"a2luZDogVGhpbmcxNTcK\", \"tags\": [ \"k159:v159\", \"k159:other:with:colons\", \"bare159\", \"z159:last\" ], \"metrics\": { \"metricValues\": { \"key164\": 165.123456789, \"key162\": 163.123456789 } } }",
+     "",
+     "",
+     "",
+     "",
+     null,
+     null,
+     "",
+     [],
+     [],
+     "",
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     [],
+     0,
+     "",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "[{\"verbs\":[\"k124:v124\",\"k124:other:with:colons\",\"bare124\",\"z124:last\"],\"apiGroups\":[\"k126:v126\",\"k126:other:with:colons\",\"bare126\",\"z126:last\"],\"resources\":[\"k128:v128\",\"k128:other:with:colons\",\"bare128\",\"z128:last\"],\"resourceNames\":[\"k130:v130\",\"k130:other:with:colons\",\"bare130\",\"z130:last\"],\"nonResourceURLs\":[\"k132:v132\",\"k132:other:with:colons\",\"bare132\",\"z132:last\"]},{\"verbs\":[\"k134:v134\",\"k134:other:with:colons\",\"bare134\",\"z134:last\"],\"apiGroups\":[\"k136:v136\",\"k136:other:with:colons\",\"bare136\",\"z136:last\"],\"resources\":[\"k138:v138\",\"k138:other:with:colons\",\"bare138\",\"z138:last\"],\"resourceNames\":[\"k140:v140\",\"k140:other:with:colons\",\"bare140\",\"z140:last\"],\"nonResourceURLs\":[\"k142:v142\",\"k142:other:with:colons\",\"bare142\",\"z142:last\"]}]",
+     "",
+     "",
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k167:v167\", \"k167:other:with:colons\", \"bare167\", \"z167:last\" ], \"agentVersion\": { \"Major\": \"-170\", \"Minor\": \"1700000172\", \"Patch\": \"1700000174\", \"Pre\": \"s176 \\u003c&\\u003e \\\"é\\\"\\n\", \"Meta\": \"s178\", \"Commit\": \"s180 \\u003c&\\u003e \\\"é\\\"\\n\" } }"
+    ]
+   ],
+   "insert": "INSERT INTO k8s_resources\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,\n\t\t\t uid, resource_version, owner_kind, owner_name, node_name, phase, status,\n\t\t\t ready, desired, available, counts, labels, annotations, tags,\n\t\t\t agent_version, group_id, group_size,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t creation_timestamp, deletion_timestamp, deletion_grace_period_seconds,\n\t\t\t finalizers, owner_kinds, owner_names, owner_uids,\n\t\t\t condition_types, condition_statuses, condition_reasons, condition_messages,\n\t\t\t condition_last_transition, condition_last_update, condition_last_probe,\n\t\t\t condition_message, resource_requirements, metrics, object,\n\t\t\t pod_ip, nominated_node_name, qos_class, priority_class,\n\t\t\t start_time, scheduled_time, host_name,\n\t\t\t container_names, container_ids, container_ready, container_restarts,\n\t\t\t container_states, container_messages, container_images,\n\t\t\t container_image_ids, container_is_init,\n\t\t\t pod_cidr, pod_cidrs, unschedulable, taints, provider_id, node_roles,\n\t\t\t capacity, allocatable, node_addresses,\n\t\t\t kubelet_version, kube_proxy_version, operating_system, architecture,\n\t\t\t kernel_version, os_image, container_runtime_version,\n\t\t\t service_type, cluster_ip, service_ports,\n\t\t\t rbac_rules, rbac_subjects, rbac_role_ref, envelope)",
+   "rows": [
+    {
+     "AgentVersion": "-170.1700000172.1700000174-s176 <&> \"é\"\n",
+     "Allocatable": {},
+     "Annotations": {
+      "bare24": "",
+      "k24": "other:with:colons",
+      "z24": "last"
+     },
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterIP": "",
+     "ClusterName": "s2",
+     "CollectedAt": "2026-10-01T16:08:42.460196991Z",
+     "ConditionLastProbe": [],
+     "ConditionLastTransition": [],
+     "ConditionLastUpdate": [],
+     "ConditionMessage": "",
+     "ConditionMessages": [],
+     "ConditionReasons": [],
+     "ConditionStatuses": [],
+     "ConditionTypes": [],
+     "ContainerIDs": [],
+     "ContainerImageIDs": [],
+     "ContainerImages": [],
+     "ContainerIsInit": "",
+     "ContainerMessages": [],
+     "ContainerNames": [],
+     "ContainerReady": "",
+     "ContainerRestarts": [],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [],
+     "Counts": {
+      "aggregation_rules": 2,
+      "rules": 2
+     },
+     "CreationTimestamp": "2023-11-14T22:13:38Z",
+     "DeletionGracePeriodSeconds": 1700000043,
+     "DeletionTimestamp": null,
+     "Desired": 0,
+     "Encoding": "protobuf",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k167:v167\", \"k167:other:with:colons\", \"bare167\", \"z167:last\" ], \"agentVersion\": { \"Major\": \"-170\", \"Minor\": \"1700000172\", \"Patch\": \"1700000174\", \"Pre\": \"s176 \\u003c&\\u003e \\\"é\\\"\\n\", \"Meta\": \"s178\", \"Commit\": \"s180 \\u003c&\\u003e \\\"é\\\"\\n\" } }",
+     "Finalizers": [
+      "k41:v41",
+      "k41:other:with:colons",
+      "bare41",
+      "z41:last"
+     ],
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": 1700000123,
+     "HostName": "",
+     "KernelVersion": "",
+     "Kind": "ClusterRole",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare22": "",
+      "k22": "other:with:colons",
+      "z22": "last"
+     },
+     "Metrics": {
+      "key84": 85.123456789,
+      "key86": 87.123456789
+     },
+     "Name": "s12 <&> \"é\"\n",
+     "Namespace": "s14",
+     "NodeAddresses": "",
+     "NodeName": "",
+     "NodeRoles": [],
+     "NominatedNodeName": "",
+     "OSImage": "",
+     "Object": "{ \"metadata\": { \"name\": \"s12 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s14\", \"uid\": \"s16 \\u003c&\\u003e \\\"é\\\"\\n\", \"creationTimestamp\": \"1700000018\", \"deletionTimestamp\": \"-20\", \"labels\": [ \"k22:v22\", \"k22:other:with:colons\", \"bare22\", \"z22:last\" ], \"annotations\": [ \"k24:v24\", \"k24:other:with:colons\", \"bare24\", \"z24:last\" ], \"ownerReferences\": [ { \"name\": \"s27\", \"uid\": \"s29\", \"kind\": \"s31\" }, { \"name\": \"s33\", \"uid\": \"s35\", \"kind\": \"s37\" } ], \"resourceVersion\": \"s39\", \"finalizers\": [ \"k41:v41\", \"k41:other:with:colons\", \"bare41\", \"z41:last\" ], \"deletionGracePeriodSeconds\": \"1700000043\" }, \"rules\": [ { \"verbs\": [ \"k46:v46\", \"k46:other:with:colons\", \"bare46\", \"z46:last\" ], \"apiGroups\": [ \"k48:v48\", \"k48:other:with:colons\", \"bare48\", \"z48:last\" ], \"resources\": [ \"k50:v50\", \"k50:other:with:colons\", \"bare50\", \"z50:last\" ], \"resourceNames\": [ \"k52:v52\", \"k52:other:with:colons\", \"bare52\", \"z52:last\" ], \"nonResourceURLs\": [ \"k54:v54\", \"k54:other:with:colons\", \"bare54\", \"z54:last\" ] }, { \"verbs\": [ \"k56:v56\", \"k56:other:with:colons\", \"bare56\", \"z56:last\" ], \"apiGroups\": [ \"k58:v58\", \"k58:other:with:colons\", \"bare58\", \"z58:last\" ], \"resources\": [ \"k60:v60\", \"k60:other:with:colons\", \"bare60\", \"z60:last\" ], \"resourceNames\": [ \"k62:v62\", \"k62:other:with:colons\", \"bare62\", \"z62:last\" ], \"nonResourceURLs\": [ \"k64:v64\", \"k64:other:with:colons\", \"bare64\", \"z64:last\" ] } ], \"aggregationRules\": [ { \"key\": \"s67\", \"operator\": \"s69\", \"values\": [ \"k71:v71\", \"k71:other:with:colons\", \"bare71\", \"z71:last\" ] }, { \"key\": \"s73\", \"operator\": \"s75\", \"values\": [ \"k77:v77\", \"k77:other:with:colons\", \"bare77\", \"z77:last\" ] } ], \"yaml\": \"a2luZDogVGhpbmc3OQo=\", \"tags\": [ \"k81:v81\", \"k81:other:with:colons\", \"bare81\", \"z81:last\" ], \"metrics\": { \"metricValues\": { \"key86\": 87.123456789, \"key84\": 85.123456789 } } }",
+     "OperatingSystem": "",
+     "OrgID": 4242,
+     "OwnerKind": "s31",
+     "OwnerKinds": [
+      "s31",
+      "s37"
+     ],
+     "OwnerName": "s27",
+     "OwnerNames": [
+      "s27",
+      "s33"
+     ],
+     "OwnerUIDs": [
+      "s29",
+      "s35"
+     ],
+     "Phase": "",
+     "PodCIDR": "",
+     "PodCIDRs": [],
+     "PodIP": "",
+     "PriorityClass": "",
+     "ProviderID": "",
+     "QOSClass": "",
+     "RBACRoleRef": "",
+     "RBACRules": "[{\"verbs\":[\"k46:v46\",\"k46:other:with:colons\",\"bare46\",\"z46:last\"],\"apiGroups\":[\"k48:v48\",\"k48:other:with:colons\",\"bare48\",\"z48:last\"],\"resources\":[\"k50:v50\",\"k50:other:with:colons\",\"bare50\",\"z50:last\"],\"resourceNames\":[\"k52:v52\",\"k52:other:with:colons\",\"bare52\",\"z52:last\"],\"nonResourceURLs\":[\"k54:v54\",\"k54:other:with:colons\",\"bare54\",\"z54:last\"]},{\"verbs\":[\"k56:v56\",\"k56:other:with:colons\",\"bare56\",\"z56:last\"],\"apiGroups\":[\"k58:v58\",\"k58:other:with:colons\",\"bare58\",\"z58:last\"],\"resources\":[\"k60:v60\",\"k60:other:with:colons\",\"bare60\",\"z60:last\"],\"resourceNames\":[\"k62:v62\",\"k62:other:with:colons\",\"bare62\",\"z62:last\"],\"nonResourceURLs\":[\"k64:v64\",\"k64:other:with:colons\",\"bare64\",\"z64:last\"]}]",
+     "RBACSubjects": "",
+     "Ready": 0,
+     "ResourceRequirements": "",
+     "ResourceVersion": "s39",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": null,
+     "Status": "",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare167": [
+       ""
+      ],
+      "bare81": [
+       ""
+      ],
+      "k167": [
+       "v167",
+       "other:with:colons"
+      ],
+      "k81": [
+       "v81",
+       "other:with:colons"
+      ],
+      "z167": [
+       "last"
+      ],
+      "z81": [
+       "last"
+      ]
+     },
+     "Taints": "",
+     "TenantID": "test",
+     "UID": "s16 <&> \"é\"\n",
+     "Unschedulable": 0
+    },
+    {
+     "AgentVersion": "-170.1700000172.1700000174-s176 <&> \"é\"\n",
+     "Allocatable": {},
+     "Annotations": {
+      "bare102": "",
+      "k102": "other:with:colons",
+      "z102": "last"
+     },
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterIP": "",
+     "ClusterName": "s2",
+     "CollectedAt": "2026-10-01T16:08:42.460196991Z",
+     "ConditionLastProbe": [],
+     "ConditionLastTransition": [],
+     "ConditionLastUpdate": [],
+     "ConditionMessage": "",
+     "ConditionMessages": [],
+     "ConditionReasons": [],
+     "ConditionStatuses": [],
+     "ConditionTypes": [],
+     "ContainerIDs": [],
+     "ContainerImageIDs": [],
+     "ContainerImages": [],
+     "ContainerIsInit": "",
+     "ContainerMessages": [],
+     "ContainerNames": [],
+     "ContainerReady": "",
+     "ContainerRestarts": [],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [],
+     "Counts": {
+      "aggregation_rules": 2,
+      "rules": 2
+     },
+     "CreationTimestamp": "2100-01-01T00:01:36Z",
+     "DeletionGracePeriodSeconds": 4102444921,
+     "DeletionTimestamp": "2023-11-14T22:14:58Z",
+     "Desired": 0,
+     "Encoding": "protobuf",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k167:v167\", \"k167:other:with:colons\", \"bare167\", \"z167:last\" ], \"agentVersion\": { \"Major\": \"-170\", \"Minor\": \"1700000172\", \"Patch\": \"1700000174\", \"Pre\": \"s176 \\u003c&\\u003e \\\"é\\\"\\n\", \"Meta\": \"s178\", \"Commit\": \"s180 \\u003c&\\u003e \\\"é\\\"\\n\" } }",
+     "Finalizers": [
+      "k119:v119",
+      "k119:other:with:colons",
+      "bare119",
+      "z119:last"
+     ],
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": 1700000123,
+     "HostName": "",
+     "KernelVersion": "",
+     "Kind": "ClusterRole",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare100": "",
+      "k100": "other:with:colons",
+      "z100": "last"
+     },
+     "Metrics": {
+      "key162": 163.123456789,
+      "key164": 165.123456789
+     },
+     "Name": "s90",
+     "Namespace": "s92 <&> \"é\"\n",
+     "NodeAddresses": "",
+     "NodeName": "",
+     "NodeRoles": [],
+     "NominatedNodeName": "",
+     "OSImage": "",
+     "Object": "{ \"metadata\": { \"name\": \"s90\", \"namespace\": \"s92 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s94\", \"creationTimestamp\": \"4102444896\", \"deletionTimestamp\": \"1700000098\", \"labels\": [ \"k100:v100\", \"k100:other:with:colons\", \"bare100\", \"z100:last\" ], \"annotations\": [ \"k102:v102\", \"k102:other:with:colons\", \"bare102\", \"z102:last\" ], \"ownerReferences\": [ { \"name\": \"s105\", \"uid\": \"s107\", \"kind\": \"s109\" }, { \"name\": \"s111\", \"uid\": \"s113\", \"kind\": \"s115\" } ], \"resourceVersion\": \"s117\", \"finalizers\": [ \"k119:v119\", \"k119:other:with:colons\", \"bare119\", \"z119:last\" ], \"deletionGracePeriodSeconds\": \"4102444921\" }, \"rules\": [ { \"verbs\": [ \"k124:v124\", \"k124:other:with:colons\", \"bare124\", \"z124:last\" ], \"apiGroups\": [ \"k126:v126\", \"k126:other:with:colons\", \"bare126\", \"z126:last\" ], \"resources\": [ \"k128:v128\", \"k128:other:with:colons\", \"bare128\", \"z128:last\" ], \"resourceNames\": [ \"k130:v130\", \"k130:other:with:colons\", \"bare130\", \"z130:last\" ], \"nonResourceURLs\": [ \"k132:v132\", \"k132:other:with:colons\", \"bare132\", \"z132:last\" ] }, { \"verbs\": [ \"k134:v134\", \"k134:other:with:colons\", \"bare134\", \"z134:last\" ], \"apiGroups\": [ \"k136:v136\", \"k136:other:with:colons\", \"bare136\", \"z136:last\" ], \"resources\": [ \"k138:v138\", \"k138:other:with:colons\", \"bare138\", \"z138:last\" ], \"resourceNames\": [ \"k140:v140\", \"k140:other:with:colons\", \"bare140\", \"z140:last\" ], \"nonResourceURLs\": [ \"k142:v142\", \"k142:other:with:colons\", \"bare142\", \"z142:last\" ] } ], \"aggregationRules\": [ { \"key\": \"s145\", \"operator\": \"s147\", \"values\": [ \"k149:v149\", \"k149:other:with:colons\", \"bare149\", \"z149:last\" ] }, { \"key\": \"s151\", \"operator\": \"s153\", \"values\": [ \"k155:v155\", \"k155:other:with:colons\", \"bare155\", \"z155:last\" ] } ], \"yaml\": \"a2luZDogVGhpbmcxNTcK\", \"tags\": [ \"k159:v159\", \"k159:other:with:colons\", \"bare159\", \"z159:last\" ], \"metrics\": { \"metricValues\": { \"key164\": 165.123456789, \"key162\": 163.123456789 } } }",
+     "OperatingSystem": "",
+     "OrgID": 4242,
+     "OwnerKind": "s109",
+     "OwnerKinds": [
+      "s109",
+      "s115"
+     ],
+     "OwnerName": "s105",
+     "OwnerNames": [
+      "s105",
+      "s111"
+     ],
+     "OwnerUIDs": [
+      "s107",
+      "s113"
+     ],
+     "Phase": "",
+     "PodCIDR": "",
+     "PodCIDRs": [],
+     "PodIP": "",
+     "PriorityClass": "",
+     "ProviderID": "",
+     "QOSClass": "",
+     "RBACRoleRef": "",
+     "RBACRules": "[{\"verbs\":[\"k124:v124\",\"k124:other:with:colons\",\"bare124\",\"z124:last\"],\"apiGroups\":[\"k126:v126\",\"k126:other:with:colons\",\"bare126\",\"z126:last\"],\"resources\":[\"k128:v128\",\"k128:other:with:colons\",\"bare128\",\"z128:last\"],\"resourceNames\":[\"k130:v130\",\"k130:other:with:colons\",\"bare130\",\"z130:last\"],\"nonResourceURLs\":[\"k132:v132\",\"k132:other:with:colons\",\"bare132\",\"z132:last\"]},{\"verbs\":[\"k134:v134\",\"k134:other:with:colons\",\"bare134\",\"z134:last\"],\"apiGroups\":[\"k136:v136\",\"k136:other:with:colons\",\"bare136\",\"z136:last\"],\"resources\":[\"k138:v138\",\"k138:other:with:colons\",\"bare138\",\"z138:last\"],\"resourceNames\":[\"k140:v140\",\"k140:other:with:colons\",\"bare140\",\"z140:last\"],\"nonResourceURLs\":[\"k142:v142\",\"k142:other:with:colons\",\"bare142\",\"z142:last\"]}]",
+     "RBACSubjects": "",
+     "Ready": 0,
+     "ResourceRequirements": "",
+     "ResourceVersion": "s117",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": null,
+     "Status": "",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare159": [
+       ""
+      ],
+      "bare167": [
+       ""
+      ],
+      "k159": [
+       "v159",
+       "other:with:colons"
+      ],
+      "k167": [
+       "v167",
+       "other:with:colons"
+      ],
+      "z159": [
+       "last"
+      ],
+      "z167": [
+       "last"
+      ]
+     },
+     "Taints": "",
+     "TenantID": "test",
+     "UID": "s94",
+     "Unschedulable": 0
+    }
+   ],
+   "to": "storage_k8s_resources",
+   "type": "storage.WriteK8sResources"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorClusterRole_0",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/CollectedAt",
+  "/sends/0/rows/1/CollectedAt"
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
+}

@@ -4,7 +4,7 @@
 
 {{/*
 Fully qualified app name. Truncated to 63 chars (DNS label limit), leaving
-room for the longest component suffix we append ("-server-internal").
+room for the longest component suffix we append ("-test-connection").
 */}}
 {{- define "ninjacat.fullname" -}}
 {{- if .Values.fullnameOverride }}
@@ -32,7 +32,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
 {{/*
-Selector labels for one component. Call with (dict "ctx" $ "component" "server").
+Selector labels for one component. Call with (dict "ctx" $ "component" "intake").
 */}}
 {{- define "ninjacat.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "ninjacat.name" .ctx }}
@@ -45,8 +45,8 @@ app.kubernetes.io/component: {{ .component }}
 app.kubernetes.io/component: {{ .component }}
 {{- end }}
 
-{{- define "ninjacat.serverImage" -}}
-{{- printf "%s:%s" .Values.server.image.repository (.Values.server.image.tag | default .Chart.AppVersion) }}
+{{- define "ninjacat.apiImage" -}}
+{{- printf "%s:%s" .Values.api.image.repository (.Values.api.image.tag | default .Chart.AppVersion) }}
 {{- end }}
 
 {{- define "ninjacat.frontendImage" -}}
@@ -57,11 +57,40 @@ app.kubernetes.io/component: {{ .component }}
 {{- .Values.secrets.existingSecret | default (printf "%s-secrets" (include "ninjacat.fullname" .)) }}
 {{- end }}
 
+{{- define "ninjacat.domainRoot" -}}
+{{- required "domainRoot is required: the name the panel is reached at, and what agents are given as DD_SITE" .Values.domainRoot }}
+{{- end }}
+
+{{/*
+"true" when the chart makes Traefik redirect HTTP to HTTPS (values.yaml,
+ingress.traefik).
+*/}}
+{{- define "ninjacat.traefikRedirect" -}}
+{{- $mode := toString .Values.ingress.traefik.redirect -}}
+{{- if and .Values.ingress.tls.enabled (or (eq $mode "true") (and (eq $mode "auto") (.Capabilities.APIVersions.Has "traefik.io/v1alpha1"))) -}}
+true
+{{- end -}}
+{{- end }}
+
+{{/*
+Annotations every Ingress of the chart gets when TLS is on: the ones that make
+the controller refuse plain HTTP. A controller ignores the ones not its own.
+*/}}
+{{- define "ninjacat.tlsAnnotations" -}}
+{{- if .Values.ingress.tls.enabled }}
+nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+{{- if include "ninjacat.traefikRedirect" . }}
+traefik.ingress.kubernetes.io/router.entrypoints: {{ .Values.ingress.traefik.entryPoints.https }}
+traefik.ingress.kubernetes.io/router.tls: "true"
+{{- end }}
+{{- end }}
+{{- end }}
+
 {{- define "ninjacat.origin" -}}
 {{- if .Values.frontend.origin }}
 {{- .Values.frontend.origin }}
 {{- else }}
-{{- printf "%s://%s" (ternary "https" "http" .Values.ingress.tls.enabled) .Values.domainRoot }}
+{{- printf "%s://%s" (ternary "https" "http" .Values.ingress.tls.enabled) (include "ninjacat.domainRoot" .) }}
 {{- end }}
 {{- end }}
 
@@ -70,7 +99,7 @@ Every intake hostname, one per line.
 */}}
 {{- define "ninjacat.intakeHosts" -}}
 {{- range .Values.ingress.intake.hostPrefixes }}
-{{ printf "%s.%s" . $.Values.domainRoot }}
+{{ printf "%s.%s" . (include "ninjacat.domainRoot" $) }}
 {{- end }}
 {{- range .Values.ingress.intake.extraHosts }}
 {{ . }}

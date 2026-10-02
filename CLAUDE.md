@@ -8,8 +8,7 @@ NinjaCat is an open-source, drop-in replacement for Datadog: it speaks the Datad
 wire protocol, so an existing agent can be pointed at it by changing `DD_SITE`/`DD_*_DD_URL`
 and nothing else. Telemetry lands in ClickHouse; the panel is a SvelteKit app.
 
-Licence: **AGPL**. The repo is public. No `LICENSE` file exists yet — add one before the
-first public push.
+Licence: **AGPL-3.0** (`LICENSE` at the root). The repo is public.
 
 ## Language policy
 
@@ -27,43 +26,45 @@ Message keys and the `en` values are authored first; `es`/`pl` follow.
 **Existing violations are migration debt, not precedent.** Large parts of the tree are still
 Polish and should be converted to English when touched, not extended:
 
-- `server/docs/**` and `frontend/docs/**` — Polish prose.
-- `server/schema/migrations/0001_initial.sql`, `server/Dockerfile`, both compose files — Polish comments.
+- `api/docs/**` and `frontend/docs/**` — Polish prose.
+- `api/schema/migrations/0001_initial.sql` — Polish comments (an applied migration is never edited, so these stay).
 - `frontend/src/lib/server/api-keys.ts` — Polish identifiers (`nowyKlucz`, `skrotKlucza`, `prefiks`).
-- Polish route segments and payload keys: `/zadania`, `/app/ustawienia/klucze`, `uzytkownik`,
-  `zadania`, form action `?/dodaj`. Renaming a route changes a URL — batch those deliberately.
+- Polish route segments and form fields: `/app/ustawienia/klucze`, `?/utworz`, `?/usun`,
+  `blad`, `nazwa`. Renaming a route changes a URL — batch those deliberately.
 - Some Go/Svelte comments (e.g. `vite.config.ts`, `frontend/src/routes/app/+layout.server.ts`).
 
-The Go server under `server/apps/`, `server/intake/`, `server/panelapi/` is already English —
-match that register: comments explain *why* a decision was made, not what the line does.
+The F# server under `api/src/` is already English — match that register: comments explain
+*why* a decision was made, not what the line does, and there are few of them.
 
 ## Repository layout
 
-Three independent units, no shared build:
+Independent units, no shared build:
 
-- `server/` — the Go backend. Its own module, `github.com/itsninjacats/server`.
+- `api/` — **the server**, in F# (.NET 10): one program run as two processes. `intake`
+  takes what agents send and owns the write path and the ClickHouse migrations; `query`
+  serves the panel API and Datadog's query API. `api/README.md` is the detailed guide.
+  `api/docs/` holds the protocol notes. They were written beside the Go server this one
+  replaced (removed on 2026-10-02), so the Go files they name no longer exist.
 - `frontend/` — SvelteKit 5 panel + Postgres (Better Auth, Drizzle). Bun.
 - `experiments/goja-sandbox/` — a standalone spike on sandboxed user JS. Own module, not wired in.
-
-The root `go.mod` (`github.com/itsninjacats/ninjacat`) holds no code; **all Go commands run
-from `server/`**.
 
 ## Commands
 
 ### Everything at once (repo root)
 
 ```bash
-docker compose up                # full dev stack, hot reload on both sides
+docker compose up                # full dev stack, hot reload
 docker compose up -d postgres clickhouse   # just the databases
-docker compose logs -f server
+docker compose logs -f intake query
 docker compose down -v           # also drops the volumes
+DD_API_KEY=<key> docker compose -f compose.yaml -f compose.lab.yaml up   # capture lab, see below
+NINJACAT_SELF_KEY=<key> docker compose -f compose.yaml -f compose.self.yaml up   # NinjaCat watching itself
 ```
 
-The dev stack bind-mounts both source trees and reloads on save: the Go server
-through **Air** (`server/.air.toml`, `server/Dockerfile.dev`), the panel through Vite.
-`migrate` is a one-shot service that applies the Drizzle migrations and exits, so a
-fresh clone comes up with a working schema. `compose.prod.yaml` builds the shipping
-images instead and takes its secrets from `.env`.
+The dev stack bind-mounts both source trees and reloads on save: the server through
+`dotnet watch`, the panel through Vite. `migrate` is a one-shot service that applies the
+Drizzle migrations and exits, so a fresh clone comes up with a working schema.
+`compose.prod.yaml` builds the shipping images instead and takes its secrets from `.env`.
 
 **Migrations have two paths, and they are not interchangeable.** `drizzle-kit`
 (`bun run db:generate`, `db:push`, `db:studio`) is a development tool that *creates*
@@ -74,42 +75,44 @@ has two entrypoints: `node build` serves, `node migrate.js` migrates and exits. 
 is what lets Kubernetes run migrations as a pre-upgrade hook Job without shipping
 drizzle-kit anywhere near production.
 
-**The ClickHouse schema follows the same shape, owned by the Go server.** Migrations
-live embedded in the binary (`server/schema/migrations/*.sql`, tracked in a
-`schema_migrations` table) and are applied by the storage app at startup — a fresh
-ClickHouse needs no init scripts, and compose no longer mounts any. The binary's
-second entrypoint is `ninjacat migrate`: apply and exit, for deployments with
-replicas > 1 where startup races are real — there, set `NINJACAT_AUTO_MIGRATE=false`
-and run the subcommand as a pre-upgrade Job, mirroring the frontend's.
+**The ClickHouse schema follows the same shape, owned by the server.** Migrations
+live embedded in the binary (`api/schema/migrations/*.sql`, tracked in a
+`schema_migrations` table with a checksum per file) and are applied when the intake
+process starts — a fresh ClickHouse needs no init scripts. `ninjacat-api migrate` does only that:
+apply and exit, for deployments with replicas > 1 where startup races are real — there,
+set `NINJACAT_AUTO_MIGRATE=false` and run the subcommand as a pre-upgrade Job, mirroring
+the frontend's.
 
-Ports: 8080 agent intake, 8081 panel API, 9911 Ergo observer, 5173 panel (dev),
-5433 Postgres, 8123/9000 ClickHouse.
+**An applied migration is immutable.** Its checksum is in the ledger; an edit makes the
+server refuse to start. In the dev stack the migrations are embedded resources that
+`dotnet watch` rebuilds on, so treat a saved migration as already applied. Fix a mistake with the next
+migration, never by editing the file or the ledger.
+
+Ports: 8080 agent intake, 8081 panel and query API (internal; the dev stack publishes it
+on 127.0.0.1 only), 10516 logs over TCP, 5173 panel (dev), 5433 Postgres, 8123/9000 ClickHouse.
 
 Note the intake routes on the `Host` header, so `curl localhost:8080/ping` returns 404
 by design. Use `curl -H 'Host: api.ninjacat.local' localhost:8080/ping`.
 
-### Server (`cd server`)
+### Server (`cd api`, .NET 10)
 
 ```bash
-go run ./cmd/ninjacat            # start the node (needs ClickHouse + DATABASE_URL)
-go build ./...
-go test ./...
-go test ./intake -run TestRouteHosts -v   # single test
-docker compose -f docker-compose.datadog-lab.yml up --build   # capture lab, see below
+dotnet build
+dotnet test                      # xunit v3 on Microsoft.Testing.Platform (opted in via global.json)
+dotnet run --project src/Server -- intake   # :8080 (needs ClickHouse + DATABASE_URL)
+dotnet run --project src/Server -- query    # :8081
+dotnet run --project src/Server -- migrate
+cd tests/Intake.Tests && NINJACAT_GOLDEN_ROUTES=routeLogs dotnet test   # one route set's fixtures
 ```
 
-Requires CGO (`CGO_ENABLED=1`) — `agent-payload/process` pulls in `DataDog/zstd_0` for legacy
-process-agent frames.
+`src/Engine` must stay free of ASP.NET, Oxpecker and the ClickHouse driver — it compiles
+to `Sql` (text with `{name:Type}` placeholders + typed values) and the server executes it.
+Package versions are pinned only in `Directory.Packages.props`.
+The compose container builds into `NINJACAT_ARTIFACTS_PATH` (a volume), never into the
+bind-mounted `bin/`/`obj/`.
 
-Regenerating the RUM types needs the upstream schemas checked out:
-
-```bash
-RUM_EVENTS_FORMAT=/path/to/DataDog/rum-events-format go generate ./rumevents/...
-```
-
-`*_gen.go` in `rumevents/` and `rumevents/replay/` are generated by `rumevents/internal/gen`
-— edit the generator, never the output. Ergo's own `*_gen.go` files (`ergo generate`,
-`ergo add`) are likewise off-limits.
+`src/Proto` is generated C# from the agent's `.proto` files (`protos/README.md` lists their
+origin) — edit a schema or the project, never the output.
 
 ### Frontend (`cd frontend`, Bun)
 
@@ -135,89 +138,132 @@ Copy `.env.example` to `.env`: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ORIGIN`, a
 
 ## Server architecture
 
-Everything runs inside a single **Ergo** (actor model) node started in `cmd/ninjacat/main.go`.
-Every component enters as an *application*, so it is supervised and visible in the observer
-(`http://localhost:9911`). Nothing lives outside the supervision tree.
+One program (`api/src/Server`, `ninjacat-api`) run as two processes, five projects:
 
 ```
-ninjacat@localhost
-├── apikeys   keeper actor + lock-free Store
-├── storage   one BatchWriter actor per ClickHouse table
-├── query     pool of read Workers
-├── httpapi   gateway actor → two HTTP servers as meta-processes
-├── selfmon   samples ninjacat's own metrics into storage
-└── observer  (external)
+src/Proto     agent protobuf schemas → generated C#
+src/Engine    query language → SQL text + typed parameters; the panel's queries
+src/Storage   rows, one writer per table, the sink, migrations
+src/Intake    host dispatch, route matching, auth, one router per Datadog product
+src/Server    the program: config, the two hosts, key keeper, self-monitoring, logs over TCP
 ```
 
-Two HTTP surfaces, deliberately split by port:
+Two processes, deliberately not one (`Program.fs` picks by the first argument; there is no
+mode that serves both ports):
 
-- **:8080 agent intake** (`NINJACAT_ADDR`) — `intake.Server`, reachable from agent machines.
-- **:8081 panel API** (`NINJACAT_INTERNAL_ADDR`) — `panelapi.Server`, internal-only.
+- **`ninjacat-api intake`, :8080** (`NINJACAT_ADDR`, `IntakeHost.fs`) — reachable from agent
+  machines; every route asks for an API key. Owns every write: the table writers, the
+  schema, the key keeper, self-monitoring, logs over TCP.
+- **`ninjacat-api query`, :8081** (`NINJACAT_INTERNAL_ADDR`, `QueryHost.fs`) — `/internal/*`
+  for the panel and Datadog's query API (`/api/v1/metrics`, `/api/v2/query/*`). It only
+  reads. No key is asked for, so it must stay on a network only the panel reaches.
 
-Neither server runs itself: both hand a `http.Handler` to `apps/httpapi`, which runs them as
-supervised meta-processes.
+They share ClickHouse and Postgres and nothing else. The panel tells the intake that a key
+changed through Postgres (`NOTIFY ninjacat_api_keys`), so the intake has no port for the panel.
 
 ### The rules that shape this code
 
-**Host-based routing mirrors Datadog.** `intake/routes.go` dispatches on the `Host` header,
+**Host-based routing mirrors Datadog.** `Intake/Routes.fs` dispatches on the `Host` header,
 because Datadog puts every product on its own hostname (`app.<site>`, `trace.agent.<site>`,
-`http-intake.logs.<site>`, ~40 more). That single comment block is the map from Datadog host
-→ agent config key → `router_*.go` file; keep it in sync when adding a router. Unknown hosts
-are refused by name so a misconfigured `DD_SITE` fails loudly. Multi-Region Failover hosts
-(`app.mrf.<site>`) land on the same intake via prefix match.
+`http-intake.logs.<site>`, ~40 more). The router cannot match the START of a host name, so
+`configure` there is a plain list of host prefixes, each given a router of its own. Unknown
+hosts are refused by name so a misconfigured `DD_SITE` fails loudly.
 
-**Writes are asynchronous, reads are not.** Handlers translate the Datadog wire format into
-the plain structs in `apps/storage/messages.go` and `Send` them — the agent gets its 202
-immediately. `storage` knows nothing about Gin or Datadog; that is what lets a second source
+**Paths are the framework's.** Every path of the intake is an Oxpecker route in
+`Intake/Routes.fs`, matched by ASP.NET's router; there is no matcher of our own. Do not write
+one: where the framework's behaviour differs from the old Go server's (case, trailing
+slashes, 405), the framework's stands.
+
+**Handlers are Oxpecker's own.** Each is `byte[] -> EndpointHandler`, bound with `bindBody`
+(`Intake/Http.fs`), which reads and decompresses the body the way Oxpecker's `bindJson` binds
+JSON. A handler reads the request from `HttpContext` (the few one-line accessors are in
+`Ctx`) and answers with Oxpecker's handlers (`setStatusCode`, `json`, `bytes`). There is no
+request or response type of our own; do not add one.
+
+**One helper of each kind.** JSON is parsed, read and written through `Json` in
+`Intake/Common.fs`; an object is read field by field with `JsonFields.Fields` (exact names,
+the last of a repeated name, null the same as absent, mismatches noted); JSON of a protobuf
+message goes through protobuf's own parser (`ProtoJson`). `Multipart.tryParts`,
+`Time.ofTimestamp`, `ProtoEnum.name`, `accepted` and `Ctx.write` (writes nothing without a
+tenant) are the others. A router does not grow a private copy of any of them, and
+`Raw.store` alone logs a kept payload.
+
+**The API key is ASP.NET authentication.** `Intake/Auth.fs` registers four schemes (where
+each looks for the key) over one `AuthenticationHandler`; a host asks for its scheme where it
+is mounted in `Routes.fs`, and the key's tenant is a claim on `ctx.User`. An unknown path is
+answered before any key is asked for.
+
+**Writes are asynchronous, reads are not.** A handler turns the Datadog wire format into the
+plain records in `Storage/Rows/*.fs` and hands them to the sink — the agent gets its 202
+immediately. `Storage` knows nothing about HTTP or Datadog; that is what lets a second source
 (OTLP) be added without touching the write path.
 
-**One writer actor per table, never a pool.** Separate mailboxes stop a burst of logs from
+**One writer per table, never a pool.** Separate buffers stop a burst of logs from
 delaying metrics; a pool for the *same* table would shrink batches and recreate ClickHouse's
-"Too many parts" problem. A slow flush is handled by handing the buffer to a goroutine, not
-by adding writers.
+"Too many parts" problem. A slow flush is handled by flushing in the background (up to
+`MaxInFlight`), not by adding writers.
 
-**API key lookup bypasses the actor on purpose.** `apps/apikeys/store.go` publishes an
-immutable snapshot through an `atomic.Pointer`; the HTTP middleware reads it with no lock
-(~56ns vs ~7.3µs for an Ergo Call). The keeper actor still owns the data — it alone writes.
-This is the deliberate inverse of the storage path; read both comments before changing either.
+**API key lookup takes no lock.** `Intake/ApiKeys.fs` publishes an immutable snapshot; the
+keeper (`Server/ApiKeysKeeper.fs`) alone replaces it, every 30s and when the panel asks.
 
-**Messages must stay serializable.** Ergo message types carry concrete slices, not `[]Row`
-interfaces, because the encoder cannot resolve an interface once roles are split across nodes
-(`RegisterTypes: unresolvable types`). Every new message type gets registered in the
-`RegisterTypes` loop in `main.go`. Never reorder or remove registered EDF types.
-
-**`query` is separate from `storage` even though both hit ClickHouse.** Reads and writes fail
-and scale differently, and a slow query must never stall ingest. `panelapi` contains no SQL —
-it turns HTTP into a message and a message into JSON.
+**What cannot be decoded is kept, not dropped.** `Raw.store` puts the whole payload in
+`raw_payloads` with a reason, so an unhandled endpoint loses nothing.
 
 **Multi-tenancy is in from day one.** `tenant_id` is the first `ORDER BY` column everywhere;
 it is cheap to carry and expensive to add later. It flows Postgres `api_key.tenant_id` →
-`apikeys.Key.TenantID` → every ClickHouse row. Today it is always `"default"`.
+`ApiKeys.Key.TenantID` → every ClickHouse row. Today it is always `"default"`.
+
+**Plain F#.** `match`, `if`, small named functions. No custom operators, no home-made DSLs
+or computation expressions.
+
+### Tests
+
+`tests/Intake.Tests/Fixtures/go/` are **golden fixtures**: requests recorded from the Go
+server, each with its answer and the rows it stored. `GoldenTests.fs` replays every one
+against the F# intake, through an in-memory server (`Golden/Replay.fs`) so the real router is
+in the path, and compares field by field; `Fixtures/overrides.json` lists the
+accepted differences, each with a reason, and is not a place to hide a change in behaviour.
+A deliberate change to what a route stores means updating its fixture by hand and saying why
+in an `edited` key inside it. `ClickHouseRoundTripTests.fs` inserts every fixture's rows through the real
+sink into a scratch database built from the migrations (skipped when ClickHouse is not
+running).
+
+`Fixtures/real/` are payloads recorded from **real senders** against this server: the browser
+SDK, the agent's DBM integrations (seven databases), its network checks, its data security
+check, system-probe. Where a decoder was written from Datadog's source alone, a real payload
+is the better authority — record one before trusting the reading (`lab/README.md`).
 
 ### Capture lab
 
-`capture/` dumps incoming requests to disk — decompressed, JSON pretty-printed, protobuf
-walked field by field, hexdump as fallback. This is how the protocol was reverse-engineered
-and remains the tool for the ~40 unhandled endpoints. `docker-compose.datadog-lab.yml` runs a
-real `datadog/agent:7` against ninjacat on an `internal: true` network, so nothing can reach
-Datadog regardless of agent flags. Dumps land in `server/captures/` (gitignored).
+With `DEBUG=true` (the dev compose sets it) every intake request is dumped to
+`api/captures/` (gitignored) — decompressed, JSON pretty-printed, protobuf walked field by
+field, hexdump as fallback. This is how the protocol was reverse-engineered and remains the
+tool for the unhandled endpoints. `compose.lab.yaml` adds a real `datadog/agent:7` on an
+`internal: true` network, so nothing can reach Datadog regardless of agent flags; it needs
+a key created in the panel. `lab/` holds the single-purpose runs (one database with DBM, an
+SNMP device with traps and NetFlow, system-probe) and a kind cluster.
 
 ### Environment
 
-Connections: `CLICKHOUSE_ADDR` (default `localhost:9000`), `CLICKHOUSE_DB`,
-`CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` (all default to `ninjacat`), and
-`DATABASE_URL` for Postgres. Note these are read through a local `envOr` helper, not
-`os.Getenv` — grepping for the latter misses them.
+Connections: `CLICKHOUSE_HTTP_ADDR` (default `localhost:8123` — HTTP, not the native port),
+`CLICKHOUSE_DB`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` (all default to `ninjacat`), and
+`DATABASE_URL` for Postgres. All are read in `Server/Config.fs`.
 
 Listeners: `NINJACAT_ADDR` (`:8080`), `NINJACAT_INTERNAL_ADDR` (`:8081`),
-`NINJACAT_OBSERVER_HOST`.
+`NINJACAT_LOGS_TCP_ADDR` (`:10516`, `off` to disable), `NINJACAT_TLS_CERT`/`NINJACAT_TLS_KEY`.
 
-Migrations: `NINJACAT_AUTO_MIGRATE=false` stops the storage app from applying the
-ClickHouse migrations at startup (use `ninjacat migrate` instead).
+Migrations: `NINJACAT_AUTO_MIGRATE=false` stops the server from applying the ClickHouse
+migrations at startup (use `ninjacat-api migrate` instead).
 
-Debugging: `DEBUG=true` (request logger + dumps), `NINJACAT_CAPTURE_DIR`,
-`NINJACAT_ACK_UNKNOWN` (202 instead of 404 on unknown paths), `NINJACAT_PRINT_ALL`,
-`NINJACAT_DUMP_K8S`, `NINJACAT_QUERY_POOL`, `NINJACAT_SELFMON_HOST`.
+Limits: `NINJACAT_MAX_BODY_BYTES` (64 MiB) is the largest body the intake reads; a body may
+inflate to 64 MiB (`Body.maxInflatedBytes`).
+
+Proxies: `NINJACAT_TRUSTED_PROXIES` names the reverse proxies whose `X-Forwarded-For` is
+believed (ASP.NET's forwarded-headers middleware); `NINJACAT_RUM_ALLOWED_ORIGINS` narrows
+the CORS policy of browser-intake (ASP.NET's CORS middleware), any origin by default.
+
+Debugging: `DEBUG=true` (dumps), `NINJACAT_CAPTURE_DIR`, `NINJACAT_ACK_UNKNOWN` (202 instead
+of 404 on unknown paths), `NINJACAT_SELFMON_INTERVAL`/`_TENANT`/`_HOST`.
 
 ## Frontend architecture
 
@@ -228,13 +274,17 @@ SvelteKit 5 (runes forced on for project files), Tailwind 4, shadcn-svelte in
 Two data sources, and the split matters:
 
 - **Postgres via Drizzle** — users, sessions, API keys. Schema in `src/lib/server/db/schema.ts`.
-- **The Go panel API via `src/lib/server/ninjacat.ts`** — all telemetry. Server-side only, so
-  the browser never learns :8081 exists. Timeouts here are shorter than the Go side's, so a
-  slow query surfaces as our error rather than a hang.
+- **The server's internal port via `src/lib/server/ninjacat.ts`** — all telemetry. Server-side
+  only, so the browser never learns :8081 exists. Timeouts here are shorter than the server's,
+  so a slow query surfaces as our error rather than a hang. The metrics explorer
+  (`/app/metrics`, proxied by `app/metrics/query/+server.ts`) uses Datadog's query API on the
+  same port; its view lives in the URL (`?view=<json>`, see `src/lib/metrics/query.ts`).
 
 Auth is Better Auth, wired in `src/hooks.server.ts` (after the Paraglide handle) which
-populates `locals.user`/`locals.session`. `/app/**` is guarded once in
-`src/routes/app/+layout.server.ts` — new pages under `/app` inherit it; do not re-check per page.
+populates `locals.user`/`locals.session`. Every route is private unless it is listed in
+`src/lib/server/guard.ts` (only `/login` is), and the guard runs in `handle`, in front of
+pages, data requests, endpoints, form actions and remote functions alike. A layout's load is
+not a guard: the client chooses which loads a data request runs.
 
 API keys are Datadog-shaped (32 hex chars) so they drop into existing agent configs. Postgres
 stores **SHA-256 only**, never the key — deterministic on purpose, because the intake looks up
@@ -242,13 +292,22 @@ stores **SHA-256 only**, never the key — deterministic on purpose, because the
 entropy makes it safe). After creating or deleting a key the panel calls `refreshApiKeys()`,
 which never throws — the keeper re-reads every 30s anyway.
 
-`src/routes/demo/**`, `src/routes/remote-demo/**`, `src/routes/zadania/**` and
 `src/lib/vitest-examples/**` are scaffolding/learning examples, not product surface.
+
+Sign-in goes from the form straight to Better Auth's endpoint (`src/lib/auth-client.ts`),
+not through a form action: Better Auth's rate limiter and its cookies work only on its own
+HTTP path.
+
+## Open work
+
+`TODO.md` at the root is the list: what is left of the move to one server, what the intake
+does not serve, what has never met a real sender, what is stored without being decoded.
+Tick an item there when it is done; add one when something is deferred.
 
 ## Docs worth reading before extending the intake
 
-`server/docs/spis-endpointow-datadoga.md` (full endpoint inventory),
+`api/docs/spis-endpointow-datadoga.md` (full endpoint inventory),
 `datadog-agent.md`, `konfiguracja-agenta.md`, `traces.md`, `ddsketch-agenta.md`.
-`server/docs/zadania/` holds scoped work items (RUM router, OTLP, remote-config TUF, query
+`api/docs/zadania/` holds scoped work items (RUM router, OTLP, remote-config TUF, query
 engine, missing API endpoints, …). `frontend/docs/auth-i-ochrona-tras.md` documents the
 session model empirically. All currently in Polish — translate as you touch them.

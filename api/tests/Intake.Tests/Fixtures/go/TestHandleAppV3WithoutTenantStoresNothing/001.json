@@ -1,0 +1,32 @@
+{
+ "recorded_at": "2026-10-01T15:21:16.876749136Z",
+ "request": {
+  "body_b64": "EiIKC2VudjpzdGFnaW5nEgRob3N0Eg1mYWxsYmFjay1ob3N0Gq4CCjIPc3lzdGVtLmNwdS51c2VyFWh0dHAucmVxdWVzdC5kdXJhdGlvbgtxdWV1ZS5kZXB0aBIwCGVudjpwcm9kDmt1YmVfc2VydmljZTphDmt1YmVfc2VydmljZTpiCHJvbGU6d2ViGgcGAgICBAEKIh8EaG9zdAZ3ZWItMDEGZGV2aWNlBGV0aDAGd2ViLTAyKgIBAjIDAgIEOgMECgFCBwZzeXN0ZW1KAwoLKlIEEbMENFoDAgICYgMCAgFqAwICAXIDDwoAegMCAQGCAQiAxJ/VDB4KFIoBAw4SDJoBIAAAAAAAAPg/AAAAAAAAKEAAAAAAAADwPwAAAAAAACJAogEBA6oBAwgCCLIBAwECA7oBAwIBAMIBAwIAAMoBDAttaWxsaXNlY29uZNIBAQI=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/intake/metrics/v3/series"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [],
+ "sends": [],
+ "seq": 1,
+ "test": "TestHandleAppV3WithoutTenantStoresNothing",
+ "volatile": []
+}

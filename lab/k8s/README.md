@@ -1,8 +1,8 @@
 # NinjaCat end-to-end lab
 
 A single-node [kind](https://kind.sigs.k8s.io/) cluster that runs the whole
-NinjaCat stack (ClickHouse, Postgres, the Go server, the panel, a TLS proxy)
-plus a real Datadog agent pointed at it. The agent collects genuine cluster
+NinjaCat stack (ClickHouse, Postgres, the server's two processes, the panel,
+Traefik) plus a real Datadog agent pointed at it. The agent collects genuine cluster
 telemetry and ships it into NinjaCat, so the full intake path is exercised
 exactly as in production.
 
@@ -20,13 +20,37 @@ exactly as in production.
 ./scripts/up.sh
 ```
 
+`kind` adds its context to your kubeconfig and makes it the current one. To keep
+the lab out of that file altogether, give it one of its own — every script and
+command here then sees only the lab:
+
+```sh
+export KUBECONFIG=$PWD/.kubeconfig
+./scripts/up.sh
+```
+
+NinjaCat itself is installed from the chart in `helm/ninjacat`, with
+`ninjacat-values.yaml`: the chart's hook Jobs migrate both schemas, then the
+`intake`, `query` and panel Deployments start, and the agent reaches the
+intake through the chart's own Ingress, served by Traefik with the lab's
+certificate. So a lab run is the chart's end-to-end test: hooks, Ingress, the
+redirect from HTTP, the NetworkPolicy around the query process. The data
+stores and the panel's NodePort are plain manifests in `manifests/`, because
+the chart does not own them.
+
 ## Host ports
 
 | Host port | What |
 |-----------|------|
 | 8888      | Panel (browser) — `http://localhost:8888` |
 | 18123     | ClickHouse HTTP — `curl 'localhost:18123/?user=ninjacat&password=ninjacat&query=SELECT+1'` |
-| 18081     | NinjaCat panel API — `curl localhost:18081/ping` |
+
+The query process has no host port: the chart's NetworkPolicy admits the
+panel's pods only. To poke it:
+
+```sh
+kubectl --context kind-ninjacat-lab -n ninjacat-lab port-forward deploy/ninjacat-query 18081:8081
+```
 
 ## Verify data is flowing
 

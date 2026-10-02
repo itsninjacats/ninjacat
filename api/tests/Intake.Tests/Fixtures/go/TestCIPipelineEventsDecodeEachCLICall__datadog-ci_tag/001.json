@@ -1,0 +1,112 @@
+{
+ "recorded_at": "2026-10-01T15:21:18.998513698Z",
+ "request": {
+  "body_b64": "eyJkYXRhIjp7InR5cGUiOiJjaV9jdXN0b21fdGFnIiwiYXR0cmlidXRlcyI6eyJjaV9sZXZlbCI6MSwicHJvdmlkZXIiOiJnaXRodWIiLAoJCQkJImNpX2VudiI6eyJHSVRIVUJfUlVOX0lEIjoiOTkxMSIsIkdJVEhVQl9TSEEiOiJhYmMifSwKCQkJCSJ0YWdzIjp7InRlYW0iOiJiYWNrZW5kIiwicmVsZWFzZSI6IjIuNC4wIn19fX0=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/ci/pipeline/tags"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeCIVisibilityAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "*int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:18.998500033Z",
+     "tag",
+     "ci_custom_tag",
+     "github",
+     1,
+     {
+      "GITHUB_RUN_ID": "9911",
+      "GITHUB_SHA": "abc"
+     },
+     {
+      "release": "2.4.0",
+      "team": "backend"
+     },
+     {},
+     "",
+     "",
+     "",
+     "{\"ci_level\":1,\"provider\":\"github\",\n\t\t\t\t\"ci_env\":{\"GITHUB_RUN_ID\":\"9911\",\"GITHUB_SHA\":\"abc\"},\n\t\t\t\t\"tags\":{\"team\":\"backend\",\"release\":\"2.4.0\"}}",
+     "{\"data\":{\"type\":\"ci_custom_tag\",\"attributes\":{\"ci_level\":1,\"provider\":\"github\",\n\t\t\t\t\"ci_env\":{\"GITHUB_RUN_ID\":\"9911\",\"GITHUB_SHA\":\"abc\"},\n\t\t\t\t\"tags\":{\"team\":\"backend\",\"release\":\"2.4.0\"}}}}",
+     {}
+    ]
+   ],
+   "insert": "INSERT INTO ci_pipeline_events\n\t\t\t(tenant_id, received_at, kind, data_type, provider, ci_level, ci_env,\n\t\t\t tags, metrics, span_name, span_start_raw, span_end_raw,\n\t\t\t attributes, body, extra)",
+   "rows": [
+    {
+     "Attributes": "{\"ci_level\":1,\"provider\":\"github\",\n\t\t\t\t\"ci_env\":{\"GITHUB_RUN_ID\":\"9911\",\"GITHUB_SHA\":\"abc\"},\n\t\t\t\t\"tags\":{\"team\":\"backend\",\"release\":\"2.4.0\"}}",
+     "Body": "{\"data\":{\"type\":\"ci_custom_tag\",\"attributes\":{\"ci_level\":1,\"provider\":\"github\",\n\t\t\t\t\"ci_env\":{\"GITHUB_RUN_ID\":\"9911\",\"GITHUB_SHA\":\"abc\"},\n\t\t\t\t\"tags\":{\"team\":\"backend\",\"release\":\"2.4.0\"}}}}",
+     "CIEnv": {
+      "GITHUB_RUN_ID": "9911",
+      "GITHUB_SHA": "abc"
+     },
+     "CILevel": 1,
+     "DataType": "ci_custom_tag",
+     "Extra": {},
+     "Kind": "tag",
+     "Metrics": {},
+     "Provider": "github",
+     "ReceivedAt": "2026-10-01T15:21:18.998500033Z",
+     "SpanEndRaw": "",
+     "SpanName": "",
+     "SpanStartRaw": "",
+     "Tags": {
+      "release": "2.4.0",
+      "team": "backend"
+     },
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_ci_pipeline_events",
+   "type": "storage.WriteCIPipelineEvents"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCIPipelineEventsDecodeEachCLICall/datadog-ci_tag",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

@@ -1,0 +1,74 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.036416461Z",
+ "request": {
+  "body_b64": "eyJkYXRhIjp7InR5cGUiOiJkZXF1ZXVlIiwiaWQiOiIxIiwiYXR0cmlidXRlcyI6ewoJCQkicnVubmVyX3N0YXJ0ZWRfYXQiOiIyMDI2LTA5LTIzIDA4OjAwOjAwIiwibGFzdF90YXNrX3JlY2VpdmVkX2F0IjoibmV2ZXIifX19",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ],
+   "X-Datadog-Onprem-Modes": [
+    "workflow_automation"
+   ],
+   "X-Datadog-Onprem-Version": [
+    "1.4.0"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/on-prem-management-service/workflow-tasks/dequeue"
+ },
+ "response": {
+  "body_b64": "",
+  "headers": {},
+  "status": 200
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.036415088Z",
+     "2026-09-23 08:00:00",
+     "never",
+     "1.4.0",
+     "workflow_automation"
+    ]
+   ],
+   "insert": "INSERT INTO runner_dequeues\n\t\t\t(tenant_id, at, runner_started_at, last_task_received_at, version, modes)",
+   "rows": [
+    {
+     "At": "2026-10-01T15:21:14.036415088Z",
+     "LastTaskReceivedAt": "never",
+     "Modes": "workflow_automation",
+     "RunnerStartedAt": "2026-09-23 08:00:00",
+     "TenantID": "test",
+     "Version": "1.4.0"
+    }
+   ],
+   "to": "storage_runner_dequeues",
+   "type": "storage.WriteRunnerDequeues"
+  }
+ ],
+ "seq": 1,
+ "test": "TestRunnerDequeueStoresThePollAndAnswersBare200",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/At"
+ ]
+}

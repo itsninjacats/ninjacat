@@ -1,0 +1,7 @@
+init_config:
+instances:
+  - hostname: app.ninjacat.lab
+    port: 8080
+    protocol: TCP
+    min_collection_interval: 20
+    tags: ["team:core"]

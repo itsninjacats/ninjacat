@@ -1,0 +1,98 @@
+{
+ "recorded_at": "2026-10-01T15:21:35.288906991Z",
+ "request": {
+  "body_b64": "CAE=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/sdsresult"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeSDS"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:35.288903825Z",
+     "sds",
+     "unexpected_shape",
+     "POST",
+     "example.com",
+     "/api/v2/sdsresult",
+     {},
+     "application/json",
+     "",
+     {},
+     "\b\u0001",
+     2,
+     "not an SdsResultPayload: no resource and no results; 1:varint"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "\b\u0001",
+     "BodyBytes": 2,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "sds",
+     "Method": "POST",
+     "Note": "not an SdsResultPayload: no resource and no results; 1:varint",
+     "Path": "/api/v2/sdsresult",
+     "Query": {},
+     "Reason": "unexpected_shape",
+     "ReceivedAt": "2026-10-01T15:21:35.288903825Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleSDSResultAlwaysStoresRaw",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ],
+ "edited": "Reason was no_schema and Note was the bare wire layout in the Go recording, when every scanner result was kept raw. Results are decoded now (sds_result.proto); this body names no resource and has no result, so it is still kept raw, as an unexpected shape."
+}

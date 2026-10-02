@@ -1,0 +1,132 @@
+{
+ "recorded_at": "2026-10-01T15:21:19.004556263Z",
+ "request": {
+  "body_b64": "eyJob3N0IjoiZGIxIiwiZGF0YWJhc2VfaW5zdGFuY2UiOiJkYjEvb3JjbCIsImRkc291cmNlIjoib3JhY2xlIiwiZGR0YWdzIjpbImVudjpwcm9kIl19",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/dbmactivity"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeDBM"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "*time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*float64",
+     "map[string][]string",
+     "[]string",
+     "[]string",
+     "string",
+     "*string",
+     "*string",
+     "*string",
+     "*string",
+     "*uint32"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:19.004553768Z",
+     "dbmactivity",
+     null,
+     "db1",
+     "db1/orcl",
+     "",
+     "",
+     "oracle",
+     "",
+     "",
+     "",
+     "",
+     null,
+     {
+      "env": [
+       "prod"
+      ]
+     },
+     [],
+     [],
+     "{\"host\":\"db1\",\"database_instance\":\"db1/orcl\",\"ddsource\":\"oracle\",\"ddtags\":[\"env:prod\"]}",
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   ],
+   "insert": "INSERT INTO dbm_events\n\t\t\t(tenant_id, received_at, track, timestamp,\n\t\t\t host, database_instance, agent_hostname, agent_version,\n\t\t\t source, dbm_type, kind, dbms, dbms_version,\n\t\t\t collection_interval, tags,\n\t\t\t extra_keys, undecoded_keys,\n\t\t\t event,\n\t\t\t db_instance, query_signature, statement, plan_signature, plan_definition_steps)",
+   "rows": [
+    {
+     "AgentHostname": "",
+     "AgentVersion": "",
+     "CollectionInterval": null,
+     "DBInstance": null,
+     "DBMS": "",
+     "DBMSVersion": "",
+     "DBMType": "",
+     "DatabaseInstance": "db1/orcl",
+     "Event": "{\"host\":\"db1\",\"database_instance\":\"db1/orcl\",\"ddsource\":\"oracle\",\"ddtags\":[\"env:prod\"]}",
+     "ExtraKeys": [],
+     "Host": "db1",
+     "Kind": "",
+     "PlanDefinitionSteps": null,
+     "PlanSignature": null,
+     "QuerySignature": null,
+     "ReceivedAt": "2026-10-01T15:21:19.004553768Z",
+     "Source": "oracle",
+     "Statement": null,
+     "Tags": {
+      "env": [
+       "prod"
+      ]
+     },
+     "TenantID": "test",
+     "Timestamp": null,
+     "Track": "dbmactivity",
+     "UndecodedKeys": []
+    }
+   ],
+   "to": "storage_dbm_events",
+   "type": "storage.WriteDBMEvents"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleDBMStoresEventsPerTrack/dbmactivity",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

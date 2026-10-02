@@ -1,0 +1,139 @@
+{
+ "recorded_at": "2026-10-01T15:21:28.465609822Z",
+ "request": {
+  "body_b64": "LS1iNTJkOWFlYWJjNTNlMGIzNDY2NzY0ZDZlYzcxMTVhODZjZjJhNDQ1MjIyYmEzNjI4YThiZmIzNTI5YzANCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZXZlbnQiDQoNCnsic2VydmljZSI6InMiLCJ1cGxvYWRJZCI6InUxIiwiYmF0Y2hOdW0iOiIxIiwiZmluYWwiOnRydWV9DQotLWI1MmQ5YWVhYmM1M2UwYjM0NjY3NjRkNmVjNzExNWE4NmNmMmE0NDUyMjJiYTM2MjhhOGJmYjM1MjljMA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlIg0KDQofiwgAAAAAAAD/ADwAw/97InNlcnZpY2UiOiJzIiwidXBsb2FkX2lkIjoidTEiLCJiYXRjaF9udW0iOiIxIiwic2NvcGVzIjpbXX0DAByoRSs8AAAADQotLWI1MmQ5YWVhYmM1M2UwYjM0NjY3NjRkNmVjNzExNWE4NmNmMmE0NDUyMjJiYTM2MjhhOGJmYjM1MjljMC0tDQo=",
+  "headers": {
+   "Content-Type": [
+    "multipart/form-data; boundary=b52d9aeabc53e0b3466764d6ec7115a86cf2a445222ba3628a8bfb3529c0"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/debugger?ddtags=env:prod,team:x"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeDebugger"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*uint8",
+     "*uint64",
+     "string",
+     "uint64",
+     "uint32",
+     "uint8",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:28.46560319Z",
+     "{\"service\":\"s\",\"uploadId\":\"u1\",\"batchNum\":\"1\",\"final\":true}",
+     {
+      "env": [
+       "prod"
+      ],
+      "team": [
+       "x"
+      ]
+     },
+     "s",
+     "",
+     "",
+     "",
+     "u1",
+     "1",
+     1,
+     null,
+     {
+      "$b64": "H4sIAAAAAAAA/wA8AMP/eyJzZXJ2aWNlIjoicyIsInVwbG9hZF9pZCI6InUxIiwiYmF0Y2hfbnVtIjoiMSIsInNjb3BlcyI6W119AwAcqEUrPAAAAA=="
+     },
+     60,
+     0,
+     1,
+     "s",
+     "",
+     "",
+     "u1",
+     "1",
+     ""
+    ]
+   ],
+   "insert": "INSERT INTO symdb_uploads\n\t\t\t(tenant_id, received_at, event, ddtags, service, version, language, runtime_id,\n\t\t\t upload_id, batch_num, final, attachment_size,\n\t\t\t file, inflated_size, scope_count, scopes_ok,\n\t\t\t env_service, env_version, env_language, env_upload_id, env_batch_num, env_final)",
+   "rows": [
+    {
+     "AttachmentSize": null,
+     "BatchNum": "1",
+     "DDTags": {
+      "env": [
+       "prod"
+      ],
+      "team": [
+       "x"
+      ]
+     },
+     "EnvBatchNum": "1",
+     "EnvFinal": "",
+     "EnvLanguage": "",
+     "EnvService": "s",
+     "EnvUploadID": "u1",
+     "EnvVersion": "",
+     "Event": "{\"service\":\"s\",\"uploadId\":\"u1\",\"batchNum\":\"1\",\"final\":true}",
+     "File": {
+      "$b64": "H4sIAAAAAAAA/wA8AMP/eyJzZXJ2aWNlIjoicyIsInVwbG9hZF9pZCI6InUxIiwiYmF0Y2hfbnVtIjoiMSIsInNjb3BlcyI6W119AwAcqEUrPAAAAA=="
+     },
+     "Final": 1,
+     "InflatedSize": 60,
+     "Language": "",
+     "ReceivedAt": "2026-10-01T15:21:28.46560319Z",
+     "RuntimeID": "",
+     "ScopeCount": 0,
+     "ScopesOK": 1,
+     "Service": "s",
+     "TenantID": "test",
+     "UploadID": "u1",
+     "Version": ""
+    }
+   ],
+   "to": "storage_symdb_uploads",
+   "type": "storage.WriteSymdbUploads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleDebuggerSymdbVariantStoresRow",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

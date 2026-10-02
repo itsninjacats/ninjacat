@@ -1,0 +1,104 @@
+{
+ "recorded_at": "2026-10-01T15:21:18.998055647Z",
+ "request": {
+  "body_b64": "eyJkYXRhIjpbeyJpZCI6ImFhYTExMSIsInR5cGUiOiJjb21taXQifSx7ImlkIjoiYmJiMjIyIiwidHlwZSI6ImNvbW1pdCJ9XSwKCQkibWV0YSI6eyJyZXBvc2l0b3J5X3VybCI6Imh0dHBzOi8vZ2l0aHViLmNvbS9pdHNuaW5qYWNhdHMvbmluamFjYXQifX0=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/git/repository/search_commits"
+ },
+ "response": {
+  "body_b64": "eyJkYXRhIjpbXSwibWV0YSI6eyJyZXBvc2l0b3J5X3VybCI6Imh0dHBzOi8vZ2l0aHViLmNvbS9pdHNuaW5qYWNhdHMvbmluamFjYXQifX0=",
+  "body_json": {
+   "data": [],
+   "meta": {
+    "repository_url": "https://github.com/itsninjacats/ninjacat"
+   }
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeCIVisibilityAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "string",
+     "string",
+     "time.Time",
+     "*string",
+     "string"
+    ],
+    [
+     "string",
+     "string",
+     "string",
+     "time.Time",
+     "*string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "https://github.com/itsninjacats/ninjacat",
+     "aaa111",
+     "2026-10-01T15:21:18.998053233Z",
+     null,
+     "search_commits"
+    ],
+    [
+     "test",
+     "https://github.com/itsninjacats/ninjacat",
+     "bbb222",
+     "2026-10-01T15:21:18.998053233Z",
+     null,
+     "search_commits"
+    ]
+   ],
+   "insert": "INSERT INTO git_commits\n\t\t\t(tenant_id, repository_url, sha, seen_at, packfile_id, source)",
+   "rows": [
+    {
+     "PackfileID": null,
+     "RepositoryURL": "https://github.com/itsninjacats/ninjacat",
+     "SHA": "aaa111",
+     "SeenAt": "2026-10-01T15:21:18.998053233Z",
+     "Source": "search_commits",
+     "TenantID": "test"
+    },
+    {
+     "PackfileID": null,
+     "RepositoryURL": "https://github.com/itsninjacats/ninjacat",
+     "SHA": "bbb222",
+     "SeenAt": "2026-10-01T15:21:18.998053233Z",
+     "Source": "search_commits",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_git_commits",
+   "type": "storage.WriteGitCommits"
+  }
+ ],
+ "seq": 1,
+ "test": "TestGitSearchCommitsStoresCandidatesAndAnswersEmpty",
+ "volatile": [
+  "/sends/0/args/0/3",
+  "/sends/0/args/1/3",
+  "/sends/0/rows/0/SeenAt",
+  "/sends/0/rows/1/SeenAt"
+ ]
+}

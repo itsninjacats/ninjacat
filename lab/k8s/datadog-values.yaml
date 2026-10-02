@@ -12,7 +12,8 @@
 #    overrides do not even exist for container lifecycle, container images or
 #    the orchestrator, which are exactly the payloads being tested here.
 #
-# 2. CoreDNS sends *.ninjacat.lab to the lab's TLS proxy (scripts/coredns-patch.sh).
+# 2. CoreDNS sends *.ninjacat.lab to Traefik (scripts/coredns-patch.sh), which serves
+#    the chart's Ingress with the lab's certificate.
 #
 # 3. SSL_CERT_FILE makes the agent trust the lab CA.
 #    The agent is written in Go, and Go's crypto/x509 reads SSL_CERT_FILE. One
@@ -22,8 +23,8 @@
 #    skip-verification flag.
 #
 #    Note this REPLACES the system trust store for those clients rather than
-#    adding to it. Acceptable here because the lab is sealed and the agent has
-#    nowhere else to go; it would be wrong in a real deployment, where the CA
+#    adding to it. Acceptable here because the lab is sealed (the namespace's
+#    NetworkPolicy lets nothing out) and the agent has nowhere else to go; it would be wrong in a real deployment, where the CA
 #    should be appended to the system bundle instead.
 #
 #    DD_SKIP_SSL_VALIDATION stays on as a belt-and-braces second line, for any

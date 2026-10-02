@@ -1,0 +1,33 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.666540826Z",
+ "request": {
+  "body_b64": "",
+  "headers": {
+   "Dd-Api-Key": [
+    "routes-test-key"
+   ]
+  },
+  "host": "intake.synthetics.example.test",
+  "method": "GET",
+  "url": "/api/unstable/synthetics/agents/tests"
+ },
+ "response": {
+  "body_b64": "eyJ0ZXN0cyI6W119",
+  "body_json": {
+   "tests": []
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeSyntheticsAgent"
+ ],
+ "sends": null,
+ "seq": 36,
+ "test": "anonymous",
+ "volatile": []
+}

@@ -1,0 +1,196 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.034242539Z",
+ "request": {
+  "body_b64": "eyJzZXJpZXMiOlsKCQl7Im1ldHJpYyI6ImxhdGVuY3kiLCJwb2ludHMiOltbMTc5MDE1MTMzMCxbMSwyLDNdXV0sInRhZ3MiOlsiZW52OnByb2QiXSwidGVhbSI6ImNvcmUifSwKCQl7Im1ldHJpYyI6ImJyb2tlbiIsInBvaW50cyI6W1sxNzkwMTUxMzMwXV19CgldfQ==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v1/distribution_points"
+ },
+ "response": {
+  "body_b64": "eyJlcnJvcnMiOltdfQ==",
+  "body_json": {
+   "errors": []
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.03423776Z",
+     "distribution_points",
+     "unexpected_shape",
+     "POST",
+     "example.com",
+     "/api/v1/distribution_points",
+     {},
+     "application/json",
+     "",
+     {},
+     "[1790151330]",
+     12,
+     "series[1].points[0]: expected a [timestamp, [values]] pair"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "[1790151330]",
+     "BodyBytes": 12,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "distribution_points",
+     "Method": "POST",
+     "Note": "series[1].points[0]: expected a [timestamp, [values]] pair",
+     "Path": "/api/v1/distribution_points",
+     "Query": {},
+     "Reason": "unexpected_shape",
+     "ReceivedAt": "2026-10-01T15:21:14.03423776Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "map[string][]string",
+     "uint64",
+     "float64",
+     "float64",
+     "float64",
+     "float64",
+     "[]int32",
+     "[]uint32",
+     "uint32",
+     "uint32",
+     "uint32",
+     "map[string]string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-09-23T08:15:30Z",
+     "latency",
+     "",
+     {
+      "env": [
+       "prod"
+      ]
+     },
+     3,
+     1,
+     3,
+     2,
+     6,
+     [
+      1338,
+      1383,
+      1409
+     ],
+     [
+      1,
+      1,
+      1
+     ],
+     0,
+     0,
+     0,
+     {},
+     {
+      "team": "\"core\""
+     }
+    ]
+   ],
+   "insert": "INSERT INTO sketches\n\t\t\t(tenant_id, timestamp, metric, host, tags, count, min, max, avg, sum, bucket_keys, bucket_counts,\n\t\t\t origin_product, origin_category, origin_service, resources, extra)",
+   "rows": [
+    {
+     "Avg": 2,
+     "BucketCounts": [
+      1,
+      1,
+      1
+     ],
+     "BucketKeys": [
+      1338,
+      1383,
+      1409
+     ],
+     "Count": 3,
+     "Extra": {
+      "team": "\"core\""
+     },
+     "Host": "",
+     "Max": 3,
+     "Metric": "latency",
+     "Min": 1,
+     "OriginCategory": 0,
+     "OriginProduct": 0,
+     "OriginService": 0,
+     "Resources": {},
+     "Sum": 6,
+     "Tags": {
+      "env": [
+       "prod"
+      ]
+     },
+     "TenantID": "test",
+     "Timestamp": "2026-09-23T08:15:30Z"
+    }
+   ],
+   "to": "storage_sketches",
+   "type": "storage.WriteSketches"
+  }
+ ],
+ "seq": 1,
+ "test": "TestDistributionPointsKeepAnUnsplittablePairRaw",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ],
+ "edited": "The notes say which member did not fit and what was found there, in one wording for every intake. They used to be the Go server's, naming the Go API client's model types."
+}

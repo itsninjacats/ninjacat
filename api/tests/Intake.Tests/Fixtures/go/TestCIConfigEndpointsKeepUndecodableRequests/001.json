@@ -1,0 +1,196 @@
+{
+ "recorded_at": "2026-10-01T15:21:18.997897056Z",
+ "request": {
+  "body_b64": "e25vdCBqc29u",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/libraries/tests/services/setting"
+ },
+ "response": {
+  "body_b64": "eyJkYXRhIjp7ImlkIjoiIiwidHlwZSI6ImNpX2FwcF90ZXN0X3NlcnZpY2VfbGlicmFyaWVzX3NldHRpbmdzIiwiYXR0cmlidXRlcyI6eyJjb2RlX2NvdmVyYWdlIjpmYWxzZSwiY292ZXJhZ2VfcmVwb3J0X3VwbG9hZF9lbmFibGVkIjpmYWxzZSwiZWFybHlfZmxha2VfZGV0ZWN0aW9uIjp7ImVuYWJsZWQiOmZhbHNlLCJzbG93X3Rlc3RfcmV0cmllcyI6eyI1cyI6MCwiMTBzIjowLCIzMHMiOjAsIjVtIjowfSwiZmF1bHR5X3Nlc3Npb25fdGhyZXNob2xkIjpudWxsfSwiZmxha3lfdGVzdF9yZXRyaWVzX2VuYWJsZWQiOmZhbHNlLCJpdHJfZW5hYmxlZCI6ZmFsc2UsInJlcXVpcmVfZ2l0IjpmYWxzZSwidGVzdHNfc2tpcHBpbmciOmZhbHNlLCJrbm93bl90ZXN0c19lbmFibGVkIjpmYWxzZSwiaW1wYWN0ZWRfdGVzdHNfZW5hYmxlZCI6ZmFsc2UsInRlc3RfbWFuYWdlbWVudCI6eyJlbmFibGVkIjpmYWxzZSwiYXR0ZW1wdF90b19maXhfcmV0cmllcyI6MH19fX0=",
+  "body_json": {
+   "data": {
+    "attributes": {
+     "code_coverage": false,
+     "coverage_report_upload_enabled": false,
+     "early_flake_detection": {
+      "enabled": false,
+      "faulty_session_threshold": null,
+      "slow_test_retries": {
+       "10s": 0,
+       "30s": 0,
+       "5m": 0,
+       "5s": 0
+      }
+     },
+     "flaky_test_retries_enabled": false,
+     "impacted_tests_enabled": false,
+     "itr_enabled": false,
+     "known_tests_enabled": false,
+     "require_git": false,
+     "test_management": {
+      "attempt_to_fix_retries": 0,
+      "enabled": false
+     },
+     "tests_skipping": false
+    },
+    "id": "",
+    "type": "ci_app_test_service_libraries_settings"
+   }
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeCIVisibilityAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:18.99788861Z",
+     "cisettings",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/api/v2/libraries/tests/services/setting",
+     {},
+     "application/json",
+     "",
+     {},
+     "{not json",
+     9,
+     "settings envelope: invalid character 'n' looking for beginning of object key string"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "{not json",
+     "BodyBytes": 9,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "cisettings",
+     "Method": "POST",
+     "Note": "settings envelope: invalid character 'n' looking for beginning of object key string",
+     "Path": "/api/v2/libraries/tests/services/setting",
+     "Query": {},
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T15:21:18.99788861Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:18.997890824Z",
+     "settings",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "{not json",
+     "{\"data\":{\"id\":\"\",\"type\":\"ci_app_test_service_libraries_settings\",\"attributes\":{\"code_coverage\":false,\"coverage_report_upload_enabled\":false,\"early_flake_detection\":{\"enabled\":false,\"slow_test_retries\":{\"5s\":0,\"10s\":0,\"30s\":0,\"5m\":0},\"faulty_session_threshold\":null},\"flaky_test_retries_enabled\":false,\"itr_enabled\":false,\"require_git\":false,\"tests_skipping\":false,\"known_tests_enabled\":false,\"impacted_tests_enabled\":false,\"test_management\":{\"enabled\":false,\"attempt_to_fix_retries\":0}}}}"
+    ]
+   ],
+   "insert": "INSERT INTO ci_settings_requests\n\t\t\t(tenant_id, received_at, endpoint, request_id, request_type,\n\t\t\t service, env, repository_url, branch, sha, test_level,\n\t\t\t module, commit_message, page_state, configurations,\n\t\t\t request_body, response_body)",
+   "rows": [
+    {
+     "Branch": "",
+     "CommitMessage": "",
+     "Configurations": "",
+     "Endpoint": "settings",
+     "Env": "",
+     "Module": "",
+     "PageState": "",
+     "ReceivedAt": "2026-10-01T15:21:18.997890824Z",
+     "RepositoryURL": "",
+     "RequestBody": "{not json",
+     "RequestID": "",
+     "RequestType": "",
+     "ResponseBody": "{\"data\":{\"id\":\"\",\"type\":\"ci_app_test_service_libraries_settings\",\"attributes\":{\"code_coverage\":false,\"coverage_report_upload_enabled\":false,\"early_flake_detection\":{\"enabled\":false,\"slow_test_retries\":{\"5s\":0,\"10s\":0,\"30s\":0,\"5m\":0},\"faulty_session_threshold\":null},\"flaky_test_retries_enabled\":false,\"itr_enabled\":false,\"require_git\":false,\"tests_skipping\":false,\"known_tests_enabled\":false,\"impacted_tests_enabled\":false,\"test_management\":{\"enabled\":false,\"attempt_to_fix_retries\":0}}}}",
+     "SHA": "",
+     "Service": "",
+     "TenantID": "test",
+     "TestLevel": ""
+    }
+   ],
+   "to": "storage_ci_settings_requests",
+   "type": "storage.WriteCISettingsRequests"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCIConfigEndpointsKeepUndecodableRequests",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt",
+  "/sends/1/args/0/1",
+  "/sends/1/rows/0/ReceivedAt"
+ ]
+}

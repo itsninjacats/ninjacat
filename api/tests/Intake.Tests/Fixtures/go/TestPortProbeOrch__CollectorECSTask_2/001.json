@@ -1,0 +1,448 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.496495098Z",
+ "request": {
+  "body_b64": "AgDICZIQAAAIg4CAgICAgBASDHM0IDwmPiAiw6kiChoCczYiDHM4IDwmPiAiw6kiCigKMPT//////////wE6zwEKA3MxNRoDczE4KgNzMjE6DXMyNCA8Jj4gIsOpIgpKEAoFa2V5MjkRYzk33ZofPkBKEAoFa2V5MjcRYzk33ZofPEBaA3MzM2ikrpmkD3in4s+qBooBB2s0Mjp2NDKKARVrNDI6b3RoZXI6d2l0aDpjb2xvbnOKAQZiYXJlNDKKAQh6NDI6bGFzdJoBB2s0NTp2NDWaARVrNDU6b3RoZXI6d2l0aDpjb2xvbnOaAQZiYXJlNDWaAQh6NDU6bGFzdKoBDXM0OCA8Jj4gIsOpIgo61AEKA3M1MRoDczU0KgNzNTc6DXM2MCA8Jj4gIsOpIgpKEAoFa2V5NjURWc5Nt+aHUEBKEAoFa2V5NjMRWc5Nt+YHUEBaA3M2OWjI4s+qBni1//////////8BigEHazc4OnY3OIoBFWs3ODpvdGhlcjp3aXRoOmNvbG9uc4oBBmJhcmU3OIoBCHo3ODpsYXN0mgEHazgxOnY4MZoBFWs4MTpvdGhlcjp3aXRoOmNvbG9uc5oBBmJhcmU4MZoBCHo4MTpsYXN0qgENczg0IDwmPiAiw6kiCkIHazg3OnY4N0IVazg3Om90aGVyOndpdGg6Y29sb25zQgZiYXJlODdCCHo4NzpsYXN0ShsI24CAgICAgBAaA3M5Mzig//////////8BSGNSBHMxMDJaRQoEczEwNRofCG0SBHMxMTEiBHMxMTQyBHMxMTdAiP//////////ARocCHsaBHMxMjYqBHMxMjk4/P7/////////AUiHAWIiCIvjz6oGEI2vmaQPIg5zMTQ0IDwmPiAiw6kiCjIEczE0Nw==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "int64",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string]float64",
+     "map[string]int64",
+     "*time.Time",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "uint32",
+     "map[string][]string",
+     "map[string][]string",
+     "map[string][]string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "int64",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string]float64",
+     "map[string]int64",
+     "*time.Time",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "uint32",
+     "map[string][]string",
+     "map[string][]string",
+     "map[string][]string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.496455085Z",
+     4242,
+     9,
+     null,
+     "protobuf",
+     9007199254740995,
+     "s6",
+     "s4 <&> \"é\"\n",
+     "s8 <&> \"é\"\n",
+     10,
+     -12,
+     "s102",
+     "1700000139.4102444941.0-s144 <&> \"é\"\n",
+     {
+      "bare87": [
+       ""
+      ],
+      "k87": [
+       "v87",
+       "other:with:colons"
+      ],
+      "z87": [
+       "last"
+      ]
+     },
+     "s15",
+     "",
+     "s18",
+     "",
+     "s21",
+     "",
+     "s24 <&> \"é\"\n",
+     "",
+     "s33",
+     "",
+     "s48 <&> \"é\"\n",
+     "",
+     "",
+     {
+      "key27": 28.123456789,
+      "key29": 30.123456789
+     },
+     {},
+     "2100-01-01T00:00:36Z",
+     null,
+     "2023-11-14T22:13:59Z",
+     "",
+     0,
+     {
+      "bare42": [
+       ""
+      ],
+      "k42": [
+       "v42",
+       "other:with:colons"
+      ],
+      "z42": [
+       "last"
+      ]
+     },
+     {},
+     {
+      "bare45": [
+       ""
+      ],
+      "k45": [
+       "v45",
+       "other:with:colons"
+      ],
+      "z45": [
+       "last"
+      ]
+     },
+     "{ \"awsAccountID\": \"9007199254740995\", \"clusterName\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"clusterId\": \"s6\", \"region\": \"s8 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 10, \"groupSize\": -12, \"tags\": [ \"k87:v87\", \"k87:other:with:colons\", \"bare87\", \"z87:last\" ], \"host\": { \"id\": \"9007199254741083\", \"name\": \"s93\", \"numCpus\": -96, \"tagIndex\": 99 }, \"hostName\": \"s102\", \"info\": { \"uuid\": \"s105\", \"cpus\": [ { \"number\": 109, \"vendor\": \"s111\", \"model\": \"s114\", \"coreId\": \"s117\", \"mhz\": \"-120\" }, { \"number\": 123, \"family\": \"s126\", \"physicalId\": \"s129\", \"cores\": -132, \"cacheSize\": 135 } ] }, \"agentVersion\": { \"Major\": \"1700000139\", \"Minor\": \"4102444941\", \"Pre\": \"s144 \\u003c&\\u003e \\\"é\\\"\\n\", \"Commit\": \"s147\" } }",
+     ""
+    ],
+    [
+     "test",
+     "2026-10-01T16:08:42.496455085Z",
+     4242,
+     9,
+     null,
+     "protobuf",
+     9007199254740995,
+     "s6",
+     "s4 <&> \"é\"\n",
+     "s8 <&> \"é\"\n",
+     10,
+     -12,
+     "s102",
+     "1700000139.4102444941.0-s144 <&> \"é\"\n",
+     {
+      "bare87": [
+       ""
+      ],
+      "k87": [
+       "v87",
+       "other:with:colons"
+      ],
+      "z87": [
+       "last"
+      ]
+     },
+     "s51",
+     "",
+     "s54",
+     "",
+     "s57",
+     "",
+     "s60 <&> \"é\"\n",
+     "",
+     "s69",
+     "",
+     "s84 <&> \"é\"\n",
+     "",
+     "",
+     {
+      "key63": 64.123456789,
+      "key65": 66.123456789
+     },
+     {},
+     "2023-11-14T22:14:32Z",
+     null,
+     null,
+     "",
+     0,
+     {
+      "bare78": [
+       ""
+      ],
+      "k78": [
+       "v78",
+       "other:with:colons"
+      ],
+      "z78": [
+       "last"
+      ]
+     },
+     {},
+     {
+      "bare81": [
+       ""
+      ],
+      "k81": [
+       "v81",
+       "other:with:colons"
+      ],
+      "z81": [
+       "last"
+      ]
+     },
+     "{ \"awsAccountID\": \"9007199254740995\", \"clusterName\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"clusterId\": \"s6\", \"region\": \"s8 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 10, \"groupSize\": -12, \"tags\": [ \"k87:v87\", \"k87:other:with:colons\", \"bare87\", \"z87:last\" ], \"host\": { \"id\": \"9007199254741083\", \"name\": \"s93\", \"numCpus\": -96, \"tagIndex\": 99 }, \"hostName\": \"s102\", \"info\": { \"uuid\": \"s105\", \"cpus\": [ { \"number\": 109, \"vendor\": \"s111\", \"model\": \"s114\", \"coreId\": \"s117\", \"mhz\": \"-120\" }, { \"number\": 123, \"family\": \"s126\", \"physicalId\": \"s129\", \"cores\": -132, \"cacheSize\": 135 } ] }, \"agentVersion\": { \"Major\": \"1700000139\", \"Minor\": \"4102444941\", \"Pre\": \"s144 \\u003c&\\u003e \\\"é\\\"\\n\", \"Commit\": \"s147\" } }",
+     ""
+    ]
+   ],
+   "insert": "INSERT INTO ecs_tasks\n\t\t\t(tenant_id, collected_at, org_id, subscription_id, header_timestamp, encoding,\n\t\t\t aws_account_id, cluster_id, cluster_name, region, group_id, group_size,\n\t\t\t host_name, agent_version, envelope_tags,\n\t\t\t arn, resource_version, launch_type, desired_status, known_status,\n\t\t\t family, version, availability_zone, service_name, vpc_id,\n\t\t\t container_instance_arn, daemon_name, task_host_name,\n\t\t\t limits, ephemeral_storage_metrics,\n\t\t\t pull_started_at, pull_stopped_at, execution_stopped_at,\n\t\t\t containers, container_count,\n\t\t\t tags, ecs_tags, container_instance_tags,\n\t\t\t envelope, task_host)",
+   "rows": [
+    {
+     "ARN": "s15",
+     "AWSAccountID": 9007199254740995,
+     "AgentVersion": "1700000139.4102444941.0-s144 <&> \"é\"\n",
+     "AvailabilityZone": "",
+     "ClusterID": "s6",
+     "ClusterName": "s4 <&> \"é\"\n",
+     "CollectedAt": "2026-10-01T16:08:42.496455085Z",
+     "ContainerCount": 0,
+     "ContainerInstanceARN": "s48 <&> \"é\"\n",
+     "ContainerInstanceTags": {
+      "bare45": [
+       ""
+      ],
+      "k45": [
+       "v45",
+       "other:with:colons"
+      ],
+      "z45": [
+       "last"
+      ]
+     },
+     "Containers": "",
+     "DaemonName": "",
+     "DesiredStatus": "",
+     "ECSTags": {},
+     "Encoding": "protobuf",
+     "Envelope": "{ \"awsAccountID\": \"9007199254740995\", \"clusterName\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"clusterId\": \"s6\", \"region\": \"s8 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 10, \"groupSize\": -12, \"tags\": [ \"k87:v87\", \"k87:other:with:colons\", \"bare87\", \"z87:last\" ], \"host\": { \"id\": \"9007199254741083\", \"name\": \"s93\", \"numCpus\": -96, \"tagIndex\": 99 }, \"hostName\": \"s102\", \"info\": { \"uuid\": \"s105\", \"cpus\": [ { \"number\": 109, \"vendor\": \"s111\", \"model\": \"s114\", \"coreId\": \"s117\", \"mhz\": \"-120\" }, { \"number\": 123, \"family\": \"s126\", \"physicalId\": \"s129\", \"cores\": -132, \"cacheSize\": 135 } ] }, \"agentVersion\": { \"Major\": \"1700000139\", \"Minor\": \"4102444941\", \"Pre\": \"s144 \\u003c&\\u003e \\\"é\\\"\\n\", \"Commit\": \"s147\" } }",
+     "EnvelopeTags": {
+      "bare87": [
+       ""
+      ],
+      "k87": [
+       "v87",
+       "other:with:colons"
+      ],
+      "z87": [
+       "last"
+      ]
+     },
+     "EphemeralStorageMetrics": {},
+     "ExecutionStoppedAt": "2023-11-14T22:13:59Z",
+     "Family": "",
+     "GroupID": 10,
+     "GroupSize": -12,
+     "HeaderTimestamp": null,
+     "HostName": "s102",
+     "KnownStatus": "s21",
+     "LaunchType": "s18",
+     "Limits": {
+      "key27": 28.123456789,
+      "key29": 30.123456789
+     },
+     "OrgID": 4242,
+     "PullStartedAt": "2100-01-01T00:00:36Z",
+     "PullStoppedAt": null,
+     "Region": "s8 <&> \"é\"\n",
+     "ResourceVersion": "",
+     "ServiceName": "s33",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare42": [
+       ""
+      ],
+      "k42": [
+       "v42",
+       "other:with:colons"
+      ],
+      "z42": [
+       "last"
+      ]
+     },
+     "TaskHost": "",
+     "TaskHostName": "",
+     "TenantID": "test",
+     "Version": "s24 <&> \"é\"\n",
+     "VpcID": ""
+    },
+    {
+     "ARN": "s51",
+     "AWSAccountID": 9007199254740995,
+     "AgentVersion": "1700000139.4102444941.0-s144 <&> \"é\"\n",
+     "AvailabilityZone": "",
+     "ClusterID": "s6",
+     "ClusterName": "s4 <&> \"é\"\n",
+     "CollectedAt": "2026-10-01T16:08:42.496455085Z",
+     "ContainerCount": 0,
+     "ContainerInstanceARN": "s84 <&> \"é\"\n",
+     "ContainerInstanceTags": {
+      "bare81": [
+       ""
+      ],
+      "k81": [
+       "v81",
+       "other:with:colons"
+      ],
+      "z81": [
+       "last"
+      ]
+     },
+     "Containers": "",
+     "DaemonName": "",
+     "DesiredStatus": "",
+     "ECSTags": {},
+     "Encoding": "protobuf",
+     "Envelope": "{ \"awsAccountID\": \"9007199254740995\", \"clusterName\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"clusterId\": \"s6\", \"region\": \"s8 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 10, \"groupSize\": -12, \"tags\": [ \"k87:v87\", \"k87:other:with:colons\", \"bare87\", \"z87:last\" ], \"host\": { \"id\": \"9007199254741083\", \"name\": \"s93\", \"numCpus\": -96, \"tagIndex\": 99 }, \"hostName\": \"s102\", \"info\": { \"uuid\": \"s105\", \"cpus\": [ { \"number\": 109, \"vendor\": \"s111\", \"model\": \"s114\", \"coreId\": \"s117\", \"mhz\": \"-120\" }, { \"number\": 123, \"family\": \"s126\", \"physicalId\": \"s129\", \"cores\": -132, \"cacheSize\": 135 } ] }, \"agentVersion\": { \"Major\": \"1700000139\", \"Minor\": \"4102444941\", \"Pre\": \"s144 \\u003c&\\u003e \\\"é\\\"\\n\", \"Commit\": \"s147\" } }",
+     "EnvelopeTags": {
+      "bare87": [
+       ""
+      ],
+      "k87": [
+       "v87",
+       "other:with:colons"
+      ],
+      "z87": [
+       "last"
+      ]
+     },
+     "EphemeralStorageMetrics": {},
+     "ExecutionStoppedAt": null,
+     "Family": "",
+     "GroupID": 10,
+     "GroupSize": -12,
+     "HeaderTimestamp": null,
+     "HostName": "s102",
+     "KnownStatus": "s57",
+     "LaunchType": "s54",
+     "Limits": {
+      "key63": 64.123456789,
+      "key65": 66.123456789
+     },
+     "OrgID": 4242,
+     "PullStartedAt": "2023-11-14T22:14:32Z",
+     "PullStoppedAt": null,
+     "Region": "s8 <&> \"é\"\n",
+     "ResourceVersion": "",
+     "ServiceName": "s69",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare78": [
+       ""
+      ],
+      "k78": [
+       "v78",
+       "other:with:colons"
+      ],
+      "z78": [
+       "last"
+      ]
+     },
+     "TaskHost": "",
+     "TaskHostName": "",
+     "TenantID": "test",
+     "Version": "s60 <&> \"é\"\n",
+     "VpcID": ""
+    }
+   ],
+   "to": "storage_ecs_tasks",
+   "type": "storage.WriteECSTasks"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorECSTask_2",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/CollectedAt",
+  "/sends/0/rows/1/CollectedAt"
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
+}

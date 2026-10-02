@@ -1,0 +1,104 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.028722253Z",
+ "request": {
+  "body_b64": "LS04MjI1MjA2YTU4YTNhMDNiOTY1ODczMjBiMDljMWRlNTRlMmUzZDY4Y2Y3ZTgwNzU2N2NhYzYyMjg2YzENCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iY2FzZV9pZCINCg0KMQ0KLS04MjI1MjA2YTU4YTNhMDNiOTY1ODczMjBiMDljMWRlNTRlMmUzZDY4Y2Y3ZTgwNzU2N2NhYzYyMjg2YzEtLQ0K",
+  "headers": {
+   "Content-Type": [
+    "multipart/form-data; boundary=8225206a58a3a03b96587320b09c1de54e2e3d68cf7e807567cac62286c1"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/support/flare"
+ },
+ "response": {
+  "body_b64": "eyJjYXNlX2lkIjowLCJlcnJvciI6Im5vIGZsYXJlIGFyY2hpdmUgaW4gdGhlIHJlcXVlc3QiLCJyZXF1ZXN0X3V1aWQiOiI1YzNjYzQwNi03YjQ0LTQyOGEtOGNlMC0wZDk5ZTg4OWJmMmEifQ==",
+  "body_json": {
+   "case_id": 0,
+   "error": "no flare archive in the request",
+   "request_uuid": "5c3cc406-7b44-428a-8ce0-0d99e889bf2a"
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.028716232Z",
+     "flare",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/support/flare",
+     {},
+     "multipart/form-data; boundary=8225206a58a3a03b96587320b09c1de54e2e3d68cf7e807567cac62286c1",
+     "",
+     {},
+     "--8225206a58a3a03b96587320b09c1de54e2e3d68cf7e807567cac62286c1\r\nContent-Disposition: form-data; name=\"case_id\"\r\n\r\n1\r\n--8225206a58a3a03b96587320b09c1de54e2e3d68cf7e807567cac62286c1--\r\n",
+     183,
+     "no flare_file part in the multipart body"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "--8225206a58a3a03b96587320b09c1de54e2e3d68cf7e807567cac62286c1\r\nContent-Disposition: form-data; name=\"case_id\"\r\n\r\n1\r\n--8225206a58a3a03b96587320b09c1de54e2e3d68cf7e807567cac62286c1--\r\n",
+     "BodyBytes": 183,
+     "ContentEncoding": "",
+     "ContentType": "multipart/form-data; boundary=8225206a58a3a03b96587320b09c1de54e2e3d68cf7e807567cac62286c1",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "flare",
+     "Method": "POST",
+     "Note": "no flare_file part in the multipart body",
+     "Path": "/support/flare",
+     "Query": {},
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T15:21:14.028716232Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleFlareMissingArchiveGoesToRaw",
+ "volatile": [
+  "/response/body_json/request_uuid",
+  "/sends/0/args/0/1",
+  "/sends/0/args/0/8",
+  "/sends/0/args/0/11",
+  "/sends/0/rows/0/Body",
+  "/sends/0/rows/0/ContentType",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

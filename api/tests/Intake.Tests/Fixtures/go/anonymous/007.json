@@ -1,0 +1,34 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.66543697Z",
+ "request": {
+  "body_b64": "",
+  "headers": {
+   "Dd-Api-Key": [
+    "routes-test-key"
+   ]
+  },
+  "host": "7-60-0-app.agent.example.test",
+  "method": "GET",
+  "url": "/api/v1/validate"
+ },
+ "response": {
+  "body_b64": "eyJ2YWxpZCI6dHJ1ZX0=",
+  "body_json": {
+   "valid": true
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeAPI",
+  "routeApp"
+ ],
+ "sends": null,
+ "seq": 7,
+ "test": "anonymous",
+ "volatile": []
+}

@@ -1,0 +1,245 @@
+# Tests, then images.
+#
+#   pull request      tests; images are built but not pushed
+#   push to main      tests; images pushed as `main` and `sha-<commit>`
+#   tag v1.2.3        tests; images pushed as `1.2.3`, `1.2` and `latest`
+#
+# Images land at:
+#   ghcr.io/itsninjacats/ninjacat/api
+#   ghcr.io/itsninjacats/ninjacat/frontend
+#
+# Built from ${{ github.repository }} rather than hardcoded, so a fork
+# publishes to the fork's own namespace instead of failing on permissions.
+#
+# Actions are pinned to commits: a tag can be moved by whoever owns the
+# action, and the last job here can write packages.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  # A second push to the same branch makes the first run irrelevant. Tags are
+  # never cancelled — a release that vanishes mid-run is worse than a slow one.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  # Nothing in this build reports to anyone.
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+
+    services:
+      # With it the round-trip tests insert every fixture's rows into a real
+      # ClickHouse; without it they are skipped.
+      clickhouse:
+        image: clickhouse/clickhouse-server:26.8.6.5
+        env:
+          CLICKHOUSE_DB: ninjacat
+          CLICKHOUSE_USER: ninjacat
+          CLICKHOUSE_PASSWORD: ninjacat
+        ports:
+          - 8123:8123
+        options: >-
+          --ulimit nofile=262144:262144
+          --health-cmd "clickhouse-client -u ninjacat --password ninjacat -q 'SELECT 1'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          global-json-file: api/global.json
+
+      - name: Build
+        working-directory: api
+        run: dotnet build -warnaserror
+
+      - name: Engine tests
+        working-directory: api/tests/Engine.Tests
+        run: dotnet test --no-build
+
+      - name: Intake tests
+        working-directory: api/tests/Intake.Tests
+        run: dotnet test --no-build
+
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      - name: Install
+        working-directory: frontend
+        run: bun install --frozen-lockfile
+
+      # src/lib/paraglide is generated (the Vite plugin does it in a build);
+      # svelte-check needs it to exist.
+      - name: Compile messages
+        working-directory: frontend
+        run: bunx paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide
+
+      - name: Type check
+        working-directory: frontend
+        run: bun run check
+
+      # The client project runs in a real Chromium.
+      - name: Install Chromium
+        working-directory: frontend
+        run: bunx playwright install --with-deps chromium
+
+      - name: Tests
+        working-directory: frontend
+        run: bun run test
+
+      # `bun run lint` is not here yet: Prettier reports 431 files and ESLint
+      # 12 errors on the tree as it is. Add it once the tree is formatted.
+
+  chart:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Lint and render
+        run: |
+          set -- --set domainRoot=ninjacat.example \
+            --set secrets.databaseUrl=postgres://u:p@h/d --set secrets.clickhousePassword=x \
+            --set secrets.betterAuthSecret=0123456789abcdef0123456789abcdef
+          helm lint helm/ninjacat "$@"
+          helm template ci helm/ninjacat "$@" > /dev/null
+          # With Traefik's CRDs in the cluster the chart adds the redirect.
+          helm template ci helm/ninjacat "$@" --api-versions traefik.io/v1alpha1 > /dev/null
+
+      # A release's images are what the chart installs by default
+      # (appVersion), so the two have to say the same version.
+      - name: The tag is the chart's appVersion
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          app_version="$(sed -n 's/^appVersion: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' helm/ninjacat/Chart.yaml)"
+          if [ "v$app_version" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME, but helm/ninjacat/Chart.yaml says appVersion $app_version" >&2
+            exit 1
+          fi
+
+  images:
+    # Both images or neither, and only from a tree whose tests pass.
+    needs: [api, frontend, chart]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      # Pull requests build to prove the Dockerfiles still work, but publish
+      # nothing: a fork's PR has no write access, and an unreviewed image in
+      # the registry is not something to hand people.
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # `latest` is the newest release and nothing else: the action adds it to
+      # a version tag by itself, and main is published as `main`.
+      - id: meta-api
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/api
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=long
+
+      - id: meta-frontend
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/frontend
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=long
+
+      # Both are built before either is pushed.
+      # amd64 only, deliberately: an arm64 image built under QEMU emulation
+      # turns a two-minute build into twenty. Add linux/arm64 when something
+      # needs it.
+      - name: Build api
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./api
+          push: false
+          platforms: linux/amd64
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Build frontend
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./frontend
+          push: false
+          platforms: linux/amd64
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Push api
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./api
+          push: true
+          tags: ${{ steps.meta-api.outputs.tags }}
+          labels: ${{ steps.meta-api.outputs.labels }}
+          platforms: linux/amd64
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=api
+
+      - name: Push frontend
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          platforms: linux/amd64
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=frontend

@@ -1,0 +1,120 @@
+{{- $fullname := include "ninjacat.fullname" . -}}
+{{- $secret := include "ninjacat.secretName" . -}}
+# `ninjacat-api query`: what the panel reads from. Nothing on its port asks
+# for a key, so it has pods and a Service of its own that no Ingress names.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-query
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "query") | nindent 4 }}
+spec:
+  replicas: {{ .Values.query.replicas }}
+  selector:
+    matchLabels:
+      {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "query") | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if not .Values.secrets.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.query.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "query") | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 1654
+        runAsGroup: 1654
+      containers:
+        - name: query
+          image: {{ include "ninjacat.apiImage" . | quote }}
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          args: ["query"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: query
+              containerPort: {{ .Values.query.service.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ $fullname }}-query
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: DATABASE_URL
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: {{ ternary "CLICKHOUSE_QUERY_PASSWORD" "CLICKHOUSE_PASSWORD" (ne .Values.clickhouse.queryUser "") }}
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: query
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: query
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          # The root filesystem is read-only; these are the two places the
+          # server may write: its working directory and /tmp.
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+          {{- with .Values.query.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.query.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.query.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.query.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-query
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "query") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: query
+      port: {{ .Values.query.service.port }}
+      targetPort: query
+  selector:
+    {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "query") | nindent 4 }}

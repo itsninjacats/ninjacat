@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The query engine: parsers, AST, compiler to SQL, formula evaluation.
+    It must not reference ASP.NET, Oxpecker or the ClickHouse driver — it
+    produces SQL text plus bound parameters and nothing else. That is what
+    keeps it testable without a server and the web layer cheap to swap.
+  -->
+  <PropertyGroup>
+    <AssemblyName>NinjaCat.Api.Engine</AssemblyName>
+    <RootNamespace>NinjaCat.Api.Engine</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Serialization.fs" />
+    <Compile Include="Sql.fs" />
+    <Compile Include="Duration.fs" />
+    <Compile Include="Metrics.fs" />
+    <Compile Include="MetricQuery/Ast.fs" />
+    <Compile Include="MetricQuery/Filter.fs" />
+    <Compile Include="MetricQuery/Parser.fs" />
+    <Compile Include="Api/V2/Wire.fs" />
+    <Compile Include="Api/V2/Timeseries.fs" />
+    <Compile Include="Api/V2/Scalar.fs" />
+    <Compile Include="Query/Plan.fs" />
+    <Compile Include="Query/Compile.fs" />
+    <Compile Include="Query/Series.fs" />
+    <Compile Include="Query/Algorithms.fs" />
+    <Compile Include="Query/Stl.fs" />
+    <Compile Include="Query/Models.fs" />
+    <Compile Include="Query/Evaluate.fs" />
+    <Compile Include="Query/Execute.fs" />
+    <Compile Include="Query/Engine.fs" />
+    <Compile Include="Panel.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FParsec" />
+    <PackageReference Include="FSharp.SystemTextJson" />
+    <PackageReference Include="MathNet.Numerics" />
+  </ItemGroup>
+</Project>

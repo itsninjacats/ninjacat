@@ -43,8 +43,7 @@
 				<span class="font-heading text-sm font-semibold tracking-tight">ninjacat</span>
 			</div>
 			<nav class="flex items-center gap-1">
-				<Button href="/zadania" variant="ghost" size="sm">Zadania</Button>
-				<Button href="/demo/better-auth" variant="ghost" size="sm">Konto</Button>
+				<Button href="/app" variant="ghost" size="sm">Panel</Button>
 			</nav>
 		</div>
 	</header>

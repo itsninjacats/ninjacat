@@ -1,0 +1,42 @@
+{
+ "recorded_at": "2026-10-01T15:21:30.830381552Z",
+ "request": {
+  "body_b64": "eyJ0eXBlIjoid2hhdGV2ZXIifQ==",
+  "headers": {
+   "Origin": [
+    "https://shop.example"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/not-invented-yet?dd-api-key=00000000000000000000000000000001"
+ },
+ "response": {
+  "body_b64": "eyJlcnJvcnMiOlsidW5rbm93biBlbmRwb2ludCJdfQ==",
+  "body_json": {
+   "errors": [
+    "unknown endpoint"
+   ]
+  },
+  "headers": {
+   "Access-Control-Allow-Origin": [
+    "https://shop.example"
+   ],
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ],
+   "Vary": [
+    "Origin"
+   ]
+  },
+  "status": 404
+ },
+ "routes": [
+  "routeRUM"
+ ],
+ "sends": [],
+ "seq": 1,
+ "test": "TestRUMUnknownPathStillCarriesCORS",
+ "volatile": [],
+ "edited": "The CORS headers of the response are the ones ASP.NET's CORS middleware sets. The Go server wrote its own: Allow-Methods, Allow-Headers and Max-Age on every answer, and Allow-Origin: * for a request with no Origin. The middleware keeps those three for preflights and says nothing to a request that names no origin."
+}

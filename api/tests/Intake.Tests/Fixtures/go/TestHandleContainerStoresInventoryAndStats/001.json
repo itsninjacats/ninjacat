@@ -1,0 +1,442 @@
+{
+ "recorded_at": "2026-10-01T15:21:28.46042366Z",
+ "request": {
+  "body_b64": "AwAnAAcAAAAAAAAAAAAAAAoGaG9zdC1hEggKBnV1aWQtMRr3AQoKY29udGFpbmVyZBIFY2lkLTEaA2FwcCIKcmVwby9hcHA6MS0AAABAMICAgIAEQANIAlCA4s+qBl0AAIA/ZQAAAEBoTXUAAEBAfQAAgECFAQAAoECNAQAAwECVAQAA4ECdAQAAAEGlAQAAcEGoAQmwAQrAAbziz6oGygEBqtIBCGVudjpwcm9k0gEOa3ViZV9zZXJ2aWNlOmHSAQ5rdWJlX3NlcnZpY2U6YtoBDQoIMTAuMC4wLjEQkD/aAQ8KCDEwLjAuMC4xEJA/GAHgAQzoAWTwAQ39AQAAYEGAAg+NAgAAAD+QAoCAQJoCCnNoYTI1NjphYmMgASgBQgIIBVoFdnBjLTk=",
+  "headers": {
+   "Content-Type": [
+    "application/x-protobuf"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ],
+   "X-Dd-Containercount": [
+    "31"
+   ],
+   "X-Dd-Hostname": [
+    "ip-10-0-1-7"
+   ],
+   "X-Dd-Processagentversion": [
+    "7.58.2"
+   ],
+   "X-Dd-Request-Id": [
+    "b0a1f2c3-0000-4000-8000-000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v1/container"
+ },
+ "response": {
+  "body_b64": "AwAXAAAAAAAAAAAAAAAAAAoCIBcaAhAK",
+  "headers": {
+   "Content-Length": [
+    "24"
+   ],
+   "Content-Type": [
+    "application/x-protobuf"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeProcess"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "uuid.UUID",
+     "uint8",
+     "string",
+     "string",
+     "uint8",
+     "uint8",
+     "uint8",
+     "int32",
+     "int64",
+     "uint64",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "int64",
+     "int32",
+     "string",
+     "map[string][]string",
+     "int32",
+     "int64",
+     "int32",
+     "*time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int64",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]int32",
+     "[]int64",
+     "[]int32",
+     "*int32",
+     "int64",
+     "int32",
+     "int32",
+     "int64",
+     "uint32",
+     "uint32",
+     "uint32",
+     "uint32",
+     "uint32",
+     "uint32",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:28.46041297Z",
+     "2282b65b-70e3-4cf8-9551-15e3b8d8a717",
+     39,
+     "CollectorContainer",
+     "/api/v1/container",
+     3,
+     0,
+     0,
+     7,
+     0,
+     299,
+     "host-a",
+     "vpc-9",
+     1,
+     1,
+     "notSpecified",
+     5,
+     0,
+     "",
+     {},
+     0,
+     0,
+     0,
+     null,
+     "uuid-1",
+     "",
+     "",
+     "",
+     "",
+     "",
+     0,
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     null,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     "ip-10-0-1-7",
+     "7.58.2",
+     "31",
+     "b0a1f2c3-0000-4000-8000-000000000001"
+    ]
+   ],
+   "insert": "INSERT INTO process_snapshots\n\t\t\t(tenant_id, received_at, snapshot_id,\n\t\t\t message_type, message_type_name, path,\n\t\t\t header_version, header_encoding, header_subscription_id,\n\t\t\t header_org_id, header_timestamp, frame_bytes,\n\t\t\t host_name, network_id, group_id, group_size, container_host_type,\n\t\t\t host_id, host_org_id, host_display_name, host_all_tags,\n\t\t\t host_num_cpus, host_total_memory, host_tag_index, host_tags_modified,\n\t\t\t sys_uuid, os_name, os_platform, os_family, os_version,\n\t\t\t kernel_version, sys_total_memory,\n\t\t\t cpu_numbers, cpu_vendors, cpu_families, cpu_models,\n\t\t\t cpu_physical_ids, cpu_core_ids, cpu_cores, cpu_mhz, cpu_cache_sizes,\n\t\t\t hint_mask,\n\t\t\t rt_host_id, rt_org_id, rt_num_cpus, rt_total_memory,\n\t\t\t process_count, process_stat_count, container_count,\n\t\t\t container_stat_count, discovery_count, connection_count,\n\t\t\t agent_hostname, agent_version, agent_container_count, request_id)",
+   "rows": [
+    {
+     "AgentContainerCount": "31",
+     "AgentHostname": "ip-10-0-1-7",
+     "AgentVersion": "7.58.2",
+     "CPUCacheSizes": [],
+     "CPUCoreIDs": [],
+     "CPUCores": [],
+     "CPUFamilies": [],
+     "CPUMhz": [],
+     "CPUModels": [],
+     "CPUNumbers": [],
+     "CPUPhysicalIDs": [],
+     "CPUVendors": [],
+     "ConnectionCount": 0,
+     "ContainerCount": 1,
+     "ContainerHostType": "notSpecified",
+     "ContainerStatCount": 0,
+     "DiscoveryCount": 0,
+     "FrameBytes": 299,
+     "GroupID": 1,
+     "GroupSize": 1,
+     "HeaderEncoding": 0,
+     "HeaderOrgID": 7,
+     "HeaderSubscriptionID": 0,
+     "HeaderTimestamp": 0,
+     "HeaderVersion": 3,
+     "HintMask": null,
+     "HostAllTags": {},
+     "HostDisplayName": "",
+     "HostID": 5,
+     "HostName": "host-a",
+     "HostNumCPUs": 0,
+     "HostOrgID": 0,
+     "HostTagIndex": 0,
+     "HostTagsModified": null,
+     "HostTotalMemory": 0,
+     "KernelVersion": "",
+     "MessageType": 39,
+     "MessageTypeName": "CollectorContainer",
+     "NetworkID": "vpc-9",
+     "OSFamily": "",
+     "OSName": "",
+     "OSPlatform": "",
+     "OSVersion": "",
+     "Path": "/api/v1/container",
+     "ProcessCount": 0,
+     "ProcessStatCount": 0,
+     "RTHostID": 0,
+     "RTNumCPUs": 0,
+     "RTOrgID": 0,
+     "RTTotalMemory": 0,
+     "ReceivedAt": "2026-10-01T15:21:28.46041297Z",
+     "RequestID": "b0a1f2c3-0000-4000-8000-000000000001",
+     "SnapshotID": "2282b65b-70e3-4cf8-9551-15e3b8d8a717",
+     "SysTotalMemory": 0,
+     "SysUUID": "uuid-1",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_process_snapshots",
+   "type": "storage.WriteProcessSnapshots"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "uuid.UUID",
+     "string",
+     "int32",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "float32",
+     "uint64",
+     "float32",
+     "uint64",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "float32",
+     "uint64",
+     "uint64",
+     "uint64",
+     "uint64",
+     "uint64",
+     "uint64",
+     "uint32",
+     "string",
+     "[]string",
+     "[]int32",
+     "[]string",
+     "map[string][]string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:28.46041297Z",
+     "host-a",
+     "2282b65b-70e3-4cf8-9551-15e3b8d8a717",
+     "collector_container",
+     0,
+     "containerd",
+     "cid-1",
+     "app",
+     "repo/app:1",
+     "sha256:abc",
+     2,
+     1073741824,
+     0.5,
+     1048576,
+     "running",
+     "healthy",
+     "2023-11-14T22:13:20Z",
+     "2023-11-14T22:14:20Z",
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     15,
+     14,
+     9,
+     10,
+     13,
+     15,
+     12,
+     100,
+     77,
+     {
+      "$b64": "qg=="
+     },
+     [
+      "10.0.0.1",
+      "10.0.0.1"
+     ],
+     [
+      8080,
+      8080
+     ],
+     [
+      "tcp",
+      "udp"
+     ],
+     {
+      "env": [
+       "prod"
+      ],
+      "kube_service": [
+       "a",
+       "b"
+      ]
+     },
+     "",
+     "vpc-9",
+     1,
+     1,
+     "notSpecified",
+     "7.58.2",
+     "b0a1f2c3-0000-4000-8000-000000000001"
+    ]
+   ],
+   "insert": "INSERT INTO containers\n\t\t\t(tenant_id, timestamp, host, snapshot_id, source, pid,\n\t\t\t type, id, name, image, repo_digest,\n\t\t\t cpu_limit, memory_limit, cpu_request, memory_request,\n\t\t\t state, health, created, started,\n\t\t\t rbps, wbps, net_rcvd_ps, net_sent_ps, net_rcvd_bps, net_sent_bps,\n\t\t\t user_pct, system_pct, total_pct, cpu_usage_ns,\n\t\t\t mem_rss, mem_cache, mem_usage, mem_accounted,\n\t\t\t thread_count, thread_limit, key, byte_key,\n\t\t\t addr_ips, addr_ports, addr_protocols, tags, host_info,\n\t\t\t network_id, group_id, group_size, container_host_type,\n\t\t\t agent_version, request_id)",
+   "rows": [
+    {
+     "AddrIPs": [
+      "10.0.0.1",
+      "10.0.0.1"
+     ],
+     "AddrPorts": [
+      8080,
+      8080
+     ],
+     "AddrProtocols": [
+      "tcp",
+      "udp"
+     ],
+     "AgentVersion": "7.58.2",
+     "ByteKey": {
+      "$b64": "qg=="
+     },
+     "CPULimit": 2,
+     "CPURequest": 0.5,
+     "CPUUsageNs": 14,
+     "ContainerHostType": "notSpecified",
+     "Created": "2023-11-14T22:13:20Z",
+     "GroupID": 1,
+     "GroupSize": 1,
+     "Health": "healthy",
+     "Host": "host-a",
+     "HostInfo": "",
+     "ID": "cid-1",
+     "Image": "repo/app:1",
+     "Key": 77,
+     "MemAccounted": 15,
+     "MemCache": 10,
+     "MemRSS": 9,
+     "MemUsage": 13,
+     "MemoryLimit": 1073741824,
+     "MemoryRequest": 1048576,
+     "Name": "app",
+     "NetRcvdBps": 5,
+     "NetRcvdPs": 3,
+     "NetSentBps": 6,
+     "NetSentPs": 4,
+     "NetworkID": "vpc-9",
+     "PID": 0,
+     "Rbps": 1,
+     "RepoDigest": "sha256:abc",
+     "RequestID": "b0a1f2c3-0000-4000-8000-000000000001",
+     "SnapshotID": "2282b65b-70e3-4cf8-9551-15e3b8d8a717",
+     "Source": "collector_container",
+     "Started": "2023-11-14T22:14:20Z",
+     "State": "running",
+     "SystemPct": 8,
+     "Tags": {
+      "env": [
+       "prod"
+      ],
+      "kube_service": [
+       "a",
+       "b"
+      ]
+     },
+     "TenantID": "test",
+     "ThreadCount": 12,
+     "ThreadLimit": 100,
+     "Timestamp": "2026-10-01T15:21:28.46041297Z",
+     "TotalPct": 15,
+     "Type": "containerd",
+     "UserPct": 7,
+     "Wbps": 2
+    }
+   ],
+   "to": "storage_containers",
+   "type": "storage.WriteContainers"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleContainerStoresInventoryAndStats",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/0/2",
+  "/sends/0/rows/0/ReceivedAt",
+  "/sends/0/rows/0/SnapshotID",
+  "/sends/1/args/0/1",
+  "/sends/1/args/0/3",
+  "/sends/1/rows/0/SnapshotID",
+  "/sends/1/rows/0/Timestamp"
+ ]
+}

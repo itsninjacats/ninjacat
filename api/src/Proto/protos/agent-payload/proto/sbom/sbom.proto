@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+option go_package = "github.com/DataDog/agent-payload/v5/sbom";
+
+package datadog.sbom;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "proto/deps/github.com/CycloneDX/specification/schema/bom-1.4.proto";
+
+// SBOMPayload represents the main SBOM payload
+message SBOMPayload {
+  int32               version  = 1;
+  string              host     = 2;
+  optional string     source   = 3; // use to know the source of the message: agent, other
+  repeated SBOMEntity entities = 4;
+  optional string     dd_env   = 5;
+}
+
+message SBOMEntity {
+  SBOMSourceType                     type               = 1;
+  string                             id                 = 2; // Unique identifier to be able to correlated and "deduplicate" SBOM
+  optional google.protobuf.Timestamp generatedAt        = 3; // the datetime of the SBOM generation
+  repeated string                    repo_tags          = 4; // the tags of the container image
+  bool                               inUse              = 5; // Whether the SBOM concerns a running entity (running container) or an inert entity (image not used by any container)
+  optional google.protobuf.Duration  generationDuration = 6; // SBOM generation duration (how long it took to generate the SBOM report)
+  repeated string                    dd_tags            = 7; // datadog tags that will be added by the agent depending of the SBOMSourceType
+  bool                               heartbeat          = 8; // Whether the SBOM is identical to the previously sent one
+  string                             hash               = 9; // Hash of the SBOM
+  oneof sbom {
+    cyclonedx.v1_4.Bom cyclonedx = 10; // only cyclonedx will be supported initially but putting it optional will allow us to move to another format later
+    // spdx.SBOM      spdx      = 13; // SPDX can be added later as any other format.
+    string error = 12;
+  }
+  SBOMStatus status = 11;
+  repeated string repo_digests = 14; // The digests of the container image
+  string kernel_version        = 15;
+  string cpu_architecture      = 16;
+}
+
+enum SBOMSourceType {
+  UNSPECIFIED            = 0;
+  CONTAINER_IMAGE_LAYERS = 1;
+  CONTAINER_FILE_SYSTEM  = 2;
+  HOST_FILE_SYSTEM       = 3;
+  CI_PIPELINE            = 4;
+  HOST_IMAGE             = 5; // SBOM sourced from an Host OS image (ie AWS AMIs, GCP OS images etc.)
+  SERVERLESS_FUNCTION    = 6; // SBOM sourced from a serverless function (ie AWS Lambda, GCP Cloud Functions etc.)
+}
+
+enum SBOMStatus {
+  SUCCESS = 0;
+  FAILED = 1;
+  PENDING = 2;
+}

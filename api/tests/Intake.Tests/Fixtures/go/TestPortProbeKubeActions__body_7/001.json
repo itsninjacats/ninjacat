@@ -1,0 +1,98 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.505924933Z",
+ "request": {
+  "body_b64": "W3siYWN0aW9uX2lkIjoib25seS1iYWQiLCJvcmdfaWQiOiJ4In1d",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/kubeactions"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.505921286Z",
+     "kubeactions",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/api/v2/kubeactions",
+     {},
+     "application/json",
+     "",
+     {},
+     "{\"action_id\":\"only-bad\",\"org_id\":\"x\"}",
+     37,
+     "[0].org_id: expected an integer, got string"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "{\"action_id\":\"only-bad\",\"org_id\":\"x\"}",
+     "BodyBytes": 37,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "kubeactions",
+     "Method": "POST",
+     "Note": "[0].org_id: expected an integer, got string",
+     "Path": "/api/v2/kubeactions",
+     "Query": {},
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T16:08:42.505921286Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeKubeActions/body_7",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ],
+ "edited": "The notes say which member did not fit and what was found there, in one wording for every intake. They used to be the Go server's, quoting Go's encoding/json."
+}

@@ -1,0 +1,324 @@
+{
+ "recorded_at": "2026-10-01T15:21:30.832354174Z",
+ "request": {
+  "body_b64": "eyJzcGFucyI6W3sidHJhY2VfaWQiOiIxIiwic3Bhbl9pZCI6IjIiLCJwYXJlbnRfaWQiOiIwIiwibmFtZSI6Im9wIiwic2VydmljZSI6ImFwcCIsInJlc291cmNlIjoiR0VUIC94IiwidHlwZSI6ImN1c3RvbSIsInN0YXJ0IjoxNTkxMjgzOTI0OTQwMDAwMDAwLCJkdXJhdGlvbiI6NSwiZXJyb3IiOjAsIm1ldGEiOnsib3MiOnsibmFtZSI6ImlPUyJ9fSwibWV0cmljcyI6eyJfdG9wX2xldmVsIjoxfX1dLCJlbnYiOiJwcm9kIn0KeyJzcGFucyI6W3sidHJhY2VfaWQiOiIzIiwic3Bhbl9pZCI6IjQiLCJwYXJlbnRfaWQiOiIyIiwibmFtZSI6Im9wMiIsInNlcnZpY2UiOiJhcHAiLCJzdGFydCI6MTU5MTI4MzkyNDk1MDAwMDAwMCwiZHVyYXRpb24iOjYsImVycm9yIjowfV0sImVudiI6InByb2QiLCJuZXdfZW52ZWxvcGVfa2V5Ijp7IngiOjF9fQpub3QganNvbiBhdCBhbGw=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/spans?ddsource=ios"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeRUM"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:30.83235212Z",
+     "rum",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/api/v2/spans",
+     {
+      "ddsource": [
+       "ios"
+      ]
+     },
+     "application/json",
+     "",
+     {},
+     "not json at all",
+     15,
+     "invalid character 'o' in literal null (expecting 'u')"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "not json at all",
+     "BodyBytes": 15,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "rum",
+     "Method": "POST",
+     "Note": "invalid character 'o' in literal null (expecting 'u')",
+     "Path": "/api/v2/spans",
+     "Query": {
+      "ddsource": [
+       "ios"
+      ]
+     },
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T15:21:30.83235212Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*uint32",
+     "*int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "time.Time",
+     "int64",
+     "int8",
+     "map[string]string",
+     "map[string]float64",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*uint32",
+     "*int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "time.Time",
+     "int64",
+     "int8",
+     "map[string]string",
+     "map[string]float64",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:30.832306947Z",
+     "ios",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     null,
+     null,
+     null,
+     "192.0.2.1",
+     "",
+     "",
+     "1",
+     "2",
+     "0",
+     "op",
+     "app",
+     "GET /x",
+     "custom",
+     "prod",
+     "2020-06-04T15:18:44.94Z",
+     5,
+     0,
+     {
+      "os.name": "iOS"
+     },
+     {
+      "_top_level": 1
+     },
+     "{\"trace_id\":\"1\",\"span_id\":\"2\",\"parent_id\":\"0\",\"name\":\"op\",\"service\":\"app\",\"resource\":\"GET /x\",\"type\":\"custom\",\"start\":1591283924940000000,\"duration\":5,\"error\":0,\"meta\":{\"os\":{\"name\":\"iOS\"}},\"metrics\":{\"_top_level\":1}}",
+     ""
+    ],
+    [
+     "test",
+     "2026-10-01T15:21:30.832306947Z",
+     "ios",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     null,
+     null,
+     null,
+     "192.0.2.1",
+     "",
+     "",
+     "3",
+     "4",
+     "2",
+     "op2",
+     "app",
+     "",
+     "",
+     "prod",
+     "2020-06-04T15:18:44.95Z",
+     6,
+     0,
+     {},
+     {},
+     "{\"trace_id\":\"3\",\"span_id\":\"4\",\"parent_id\":\"2\",\"name\":\"op2\",\"service\":\"app\",\"start\":1591283924950000000,\"duration\":6,\"error\":0}",
+     "{\"new_envelope_key\":{\"x\":1}}"
+    ]
+   ],
+   "insert": "INSERT INTO rum_spans\n\t\t\t(tenant_id, received_at, ddsource, evp_origin, evp_origin_version, evp_encoding,\n\t\t request_id, idempotency_key, dd_api, batch_time, retry_count, retry_after,\n\t\t remote_addr, user_agent, query_extra,\n\t\t\t trace_id, span_id, parent_id,\n\t\t\t name, service, resource, type, env,\n\t\t\t start, duration_ns, error, meta, metrics, span, envelope_extra)",
+   "rows": [
+    {
+     "DurationNS": 5,
+     "Env": "prod",
+     "EnvelopeExtra": "",
+     "Error": 0,
+     "Meta": {
+      "os.name": "iOS"
+     },
+     "Metrics": {
+      "_top_level": 1
+     },
+     "Name": "op",
+     "ParentID": "0",
+     "Req": {
+      "BatchTime": null,
+      "DDAPI": "",
+      "DDSource": "ios",
+      "EVPEncoding": "",
+      "EVPOrigin": "",
+      "EVPOriginVersion": "",
+      "IdempotencyKey": "",
+      "QueryExtra": "",
+      "ReceivedAt": "2026-10-01T15:21:30.832306947Z",
+      "RemoteAddr": "192.0.2.1",
+      "RequestID": "",
+      "RetryAfter": null,
+      "RetryCount": null,
+      "TenantID": "test",
+      "UserAgent": ""
+     },
+     "Resource": "GET /x",
+     "Service": "app",
+     "Span": "{\"trace_id\":\"1\",\"span_id\":\"2\",\"parent_id\":\"0\",\"name\":\"op\",\"service\":\"app\",\"resource\":\"GET /x\",\"type\":\"custom\",\"start\":1591283924940000000,\"duration\":5,\"error\":0,\"meta\":{\"os\":{\"name\":\"iOS\"}},\"metrics\":{\"_top_level\":1}}",
+     "SpanID": "2",
+     "Start": "2020-06-04T15:18:44.94Z",
+     "TraceID": "1",
+     "Type": "custom"
+    },
+    {
+     "DurationNS": 6,
+     "Env": "prod",
+     "EnvelopeExtra": "{\"new_envelope_key\":{\"x\":1}}",
+     "Error": 0,
+     "Meta": {},
+     "Metrics": {},
+     "Name": "op2",
+     "ParentID": "2",
+     "Req": {
+      "BatchTime": null,
+      "DDAPI": "",
+      "DDSource": "ios",
+      "EVPEncoding": "",
+      "EVPOrigin": "",
+      "EVPOriginVersion": "",
+      "IdempotencyKey": "",
+      "QueryExtra": "",
+      "ReceivedAt": "2026-10-01T15:21:30.832306947Z",
+      "RemoteAddr": "192.0.2.1",
+      "RequestID": "",
+      "RetryAfter": null,
+      "RetryCount": null,
+      "TenantID": "test",
+      "UserAgent": ""
+     },
+     "Resource": "",
+     "Service": "app",
+     "Span": "{\"trace_id\":\"3\",\"span_id\":\"4\",\"parent_id\":\"2\",\"name\":\"op2\",\"service\":\"app\",\"start\":1591283924950000000,\"duration\":6,\"error\":0}",
+     "SpanID": "4",
+     "Start": "2020-06-04T15:18:44.95Z",
+     "TraceID": "3",
+     "Type": ""
+    }
+   ],
+   "to": "storage_rum_spans",
+   "type": "storage.WriteRumSpans"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleRUMSpansEnvelope",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt",
+  "/sends/1/args/0/1",
+  "/sends/1/args/1/1",
+  "/sends/1/rows/0/Req/ReceivedAt",
+  "/sends/1/rows/1/Req/ReceivedAt"
+ ]
+}

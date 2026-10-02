@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Golden/Capture.fs" />
+    <Compile Include="Golden/Encode.fs" />
+    <Compile Include="Golden/Compare.fs" />
+    <Compile Include="Golden/Replay.fs" />
+    <Compile Include="Golden/Requests.fs" />
+    <Compile Include="GoldenTests.fs" />
+    <Compile Include="DDSketchTests.fs" />
+    <Compile Include="MsgpackTests.fs" />
+    <Compile Include="ProcessFrameTests.fs" />
+    <Compile Include="TcpLogsTests.fs" />
+    <Compile Include="IntakeCoreTests.fs" />
+    <Compile Include="MigrationsTests.fs" />
+    <Compile Include="CaptureTests.fs" />
+    <Compile Include="ClickHouseRoundTripTests.fs" />
+    <Compile Include="ApiTests.fs" />
+    <Compile Include="AppTests.fs" />
+    <Compile Include="ConfigTests.fs" />
+    <Compile Include="InstallTests.fs" />
+    <Compile Include="ContainersTests.fs" />
+    <Compile Include="KubeopsTests.fs" />
+    <Compile Include="JsonFieldsTests.fs" />
+    <Compile Include="DbmTests.fs" />
+    <Compile Include="NdmTests.fs" />
+    <Compile Include="MiscTests.fs" />
+    <Compile Include="ProfilingTests.fs" />
+    <Compile Include="SecurityTests.fs" />
+    <Compile Include="EvpTests.fs" />
+    <Compile Include="CiVisibilityTests.fs" />
+    <Compile Include="CiWebhookTests.fs" />
+    <Compile Include="TraceTests.fs" />
+    <Compile Include="ProcessTests.fs" />
+    <Compile Include="UsmTests.fs" />
+    <Compile Include="RumTests.fs" />
+    <Compile Include="RealPayloadTests.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Fixtures/go/**/*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures/trace/**/*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures/overrides.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures/frames/*.bin" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures/real/*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+    <PackageReference Include="Oxpecker" />
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="ClickHouse.Driver" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Intake/Intake.fsproj" />
+    <ProjectReference Include="../../src/Storage/Storage.fsproj" />
+    <ProjectReference Include="../../src/Proto/NinjaCat.Api.Proto.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,160 @@
+{
+ "recorded_at": "2026-10-01T15:21:30.832190754Z",
+ "request": {
+  "body_b64": "LS05NWIzMjUwYjYwMTJmZmU0MzkyMmRlMGNiODI1NmVjNTQ0ZDYxOTNmNDA2NWRhOWRjMWU5NGZkYjZmNmYNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iaW1hZ2UiOyBmaWxlbmFtZT0iY2FudmFzIg0KQ29udGVudC1UeXBlOiBhcHBsaWNhdGlvbi9vY3RldC1zdHJlYW0NCg0KiVBORw0NCi0tOTViMzI1MGI2MDEyZmZlNDM5MjJkZTBjYjgyNTZlYzU0NGQ2MTkzZjQwNjVkYTlkYzFlOTRmZGI2ZjZmDQpDb250ZW50LURpc3Bvc2l0aW9uOiBmb3JtLWRhdGE7IG5hbWU9ImV2ZW50Ig0KDQp7ImFwcGxpY2F0aW9uIjp7ImlkIjoiYXBwIn0sInR5cGUiOiJyZXNvdXJjZSJ9DQotLTk1YjMyNTBiNjAxMmZmZTQzOTIyZGUwY2I4MjU2ZWM1NDRkNjE5M2Y0MDY1ZGE5ZGMxZTk0ZmRiNmY2Zi0tDQo=",
+  "headers": {
+   "Content-Type": [
+    "multipart/form-data; boundary=95b3250b6012ffe43922de0cb8256ec544d6193f4065da9dc1e94fdb6f6f"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/replay?ddsource=browser"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeRUM"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*uint32",
+     "*int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "*bool",
+     "*int64",
+     "string",
+     "*int64",
+     "*int64",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:30.832173071Z",
+     "browser",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     null,
+     null,
+     null,
+     "192.0.2.1",
+     "",
+     "",
+     "app",
+     "",
+     "",
+     "",
+     "resource",
+     "image",
+     "canvas",
+     null,
+     null,
+     null,
+     null,
+     null,
+     "",
+     null,
+     null,
+     "",
+     {
+      "$b64": "iVBORw0="
+     },
+     "{\"application\":{\"id\":\"app\"},\"type\":\"resource\"}"
+    ]
+   ],
+   "insert": "INSERT INTO rum_replay_segments\n\t\t\t(tenant_id, received_at, ddsource, evp_origin, evp_origin_version, evp_encoding,\n\t\t request_id, idempotency_key, dd_api, batch_time, retry_count, retry_after,\n\t\t remote_addr, user_agent, query_extra,\n\t\t\t application_id, session_id, view_id, source,\n\t\t\t variant, part_name, part_filename,\n\t\t\t start, end, records_count, has_full_snapshot, index_in_view, creation_reason,\n\t\t\t raw_segment_size, compressed_segment_size,\n\t\t\t segment, image, event)",
+   "rows": [
+    {
+     "ApplicationID": "app",
+     "CompressedSegmentSize": null,
+     "CreationReason": "",
+     "End": null,
+     "Event": "{\"application\":{\"id\":\"app\"},\"type\":\"resource\"}",
+     "HasFullSnapshot": null,
+     "Image": {
+      "$b64": "iVBORw0="
+     },
+     "IndexInView": null,
+     "PartFilename": "canvas",
+     "PartName": "image",
+     "RawSegmentSize": null,
+     "RecordsCount": null,
+     "Req": {
+      "BatchTime": null,
+      "DDAPI": "",
+      "DDSource": "browser",
+      "EVPEncoding": "",
+      "EVPOrigin": "",
+      "EVPOriginVersion": "",
+      "IdempotencyKey": "",
+      "QueryExtra": "",
+      "ReceivedAt": "2026-10-01T15:21:30.832173071Z",
+      "RemoteAddr": "192.0.2.1",
+      "RequestID": "",
+      "RetryAfter": null,
+      "RetryCount": null,
+      "TenantID": "test",
+      "UserAgent": ""
+     },
+     "Segment": "",
+     "SessionID": "",
+     "Source": "",
+     "Start": null,
+     "Variant": "resource",
+     "ViewID": ""
+    }
+   ],
+   "to": "storage_rum_replay_segments",
+   "type": "storage.WriteRumReplaySegments"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleRUMReplayResourceVariant",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/Req/ReceivedAt"
+ ]
+}
