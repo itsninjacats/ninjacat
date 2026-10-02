@@ -10,8 +10,8 @@ type UnixNanos = UnixNanos of int64
 /// One ClickHouse table as the write path sees it: where its rows go and how
 /// a row becomes column values.
 type Table<'row> =
-    { /// The table's name on the write path ("storage_logs"). Kept from the
-      /// Go server, where it named the writer process; tests and logs use it.
+    { /// The name the sink keeps the table's one writer under
+      /// ("storage_logs"); the golden fixtures name a write by it.
       Writer: string
       Name: string
       /// In the order `Values` returns them.

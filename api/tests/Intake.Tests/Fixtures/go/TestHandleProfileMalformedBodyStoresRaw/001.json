@@ -62,7 +62,7 @@
      {},
      "not multipart",
      13,
-     "not multipart, content-type text/plain: content-type is text/plain"
+     "not multipart, content-type text/plain: the content type is text/plain, not multipart"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -76,7 +76,7 @@
      "Host": "example.com",
      "Intake": "profiling",
      "Method": "POST",
-     "Note": "not multipart, content-type text/plain: content-type is text/plain",
+     "Note": "not multipart, content-type text/plain: the content type is text/plain, not multipart",
      "Path": "/api/v2/profile",
      "Query": {},
      "Reason": "decode_error",
@@ -93,5 +93,6 @@
  "volatile": [
   "/sends/0/args/0/1",
   "/sends/0/rows/0/ReceivedAt"
- ]
+ ],
+ "edited": "The note's last part is Multipart.tryParts' wording, one for every multipart intake; it used to be this router's own."
 }

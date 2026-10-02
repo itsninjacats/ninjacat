@@ -22,32 +22,8 @@ open NinjaCat.Api.Intake.Routers
 open NinjaCat.Api.Storage.Rows
 open NinjaCat.Api.Intake.Tests.Golden
 
-/// Sends one request to the intake made of the named Go route sets, the way
-/// the golden replay does. Returns the answer and what was written.
-let send
-    (routeSets: string list)
-    (method: string)
-    (path: string)
-    (headers: (string * string) list)
-    (body: byte[])
-    : Response * CapturingSink =
-    let sink = CapturingSink()
-
-    let deps: Deps =
-        { Store = Replay.testStore ()
-          Sink = sink
-          Log = NullLogger.Instance
-          AckUnknown = false }
-
-    let http = DefaultHttpContext()
-    http.Request.Method <- method
-    http.Request.Host <- HostString "example.com"
-    http.Request.Path <- PathString path
-
-    for name, value in headers do
-        http.Request.Headers[name] <- StringValues value
-
-    Replay.byGoNames deps routeSets http body, sink
+/// Sends one request to the intake made of the named Go route sets.
+let send = Requests.send
 
 let private same (expected: 'a) (actual: 'a) =
     if expected <> actual then
@@ -552,8 +528,7 @@ let private seriesPath = "/api/intake/metrics/v3/series"
 let ``without a tenant nothing is stored and the answer is the same`` () =
     let sink = CapturingSink()
     // The handler itself, with no key behind the request.
-    let deps: Deps = { Store = Replay.testStore (); Sink = sink; Log = NullLogger.Instance; AckUnknown = false }
-    let ctx = Replay.contextFor deps ""
+    let ctx = Replay.contextFor (Requests.deps sink) ""
     ctx.Request.Method <- "POST"
     ctx.Request.Path <- PathString seriesPath
     (App.handle "v3series" ((examplePayload ()).ToByteArray()) ctx).Wait()

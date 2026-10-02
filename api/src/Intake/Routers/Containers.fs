@@ -11,10 +11,8 @@
 module NinjaCat.Api.Intake.Routers.Containers
 
 open System
-open System.Reflection
 open System.Threading.Tasks
 open Google.Protobuf
-open Google.Protobuf.Reflection
 open Google.Protobuf.WellKnownTypes
 open Microsoft.Extensions.Logging
 open Microsoft.AspNetCore.Http
@@ -24,15 +22,6 @@ open Datadog.Contlcycle
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
-
-/// An enum value under its name in the .proto, which is what the Go server
-/// stored; the number when the schema has no name for it.
-let private protoName (value: 'enum when 'enum: enum<int32>) : string =
-    let name = string value
-
-    match typeof<'enum>.GetField name with
-    | null -> name
-    | field -> field.GetCustomAttribute<OriginalNameAttribute>().Name
 
 let private tryParse (parser: MessageParser<'message>) (body: byte[]) : Result<'message, string> =
     try
@@ -51,7 +40,7 @@ let private containerStateLabel (state: ContainerStateValue) : string =
         let reason = if state.HasReason then "/" + state.Reason else ""
         let exitCode = if state.HasExitCode then $" exit={state.ExitCode}" else ""
         let signal = if state.HasSignal then $" signal={state.Signal}" else ""
-        protoName state.Kind + reason + exitCode + signal
+        ProtoEnum.name state.Kind + reason + exitCode + signal
 
 /// A pod status as one label: a phase, or a condition as type=status/reason.
 let private podStatusLabel (status: PodStatusValue) : string =
@@ -112,14 +101,14 @@ let private withContainerTransition (transition: ContainerStateTransition) (row:
             OldState = containerStateLabel was
             NewState = containerStateLabel became
             TransitionAt = Time.optionalSeconds true transition.TransitionTimestamp
-            ContainerKind = protoName transition.ContainerKind
-            Precision = protoName transition.Precision
-            MissedIntermediate = protoName transition.MissedIntermediate
-            OldStateKind = (if isNull was then "" else protoName was.Kind)
+            ContainerKind = ProtoEnum.name transition.ContainerKind
+            Precision = ProtoEnum.name transition.Precision
+            MissedIntermediate = ProtoEnum.name transition.MissedIntermediate
+            OldStateKind = (if isNull was then "" else ProtoEnum.name was.Kind)
             OldReason = (if not (isNull was) && was.HasReason then Some was.Reason else None)
             OldExitCode = (if not (isNull was) && was.HasExitCode then Some was.ExitCode else None)
             OldSignal = (if not (isNull was) && was.HasSignal then Some was.Signal else None)
-            NewStateKind = (if isNull became then "" else protoName became.Kind)
+            NewStateKind = (if isNull became then "" else ProtoEnum.name became.Kind)
             NewReason = (if not (isNull became) && became.HasReason then Some became.Reason else None)
             NewExitCode = (if not (isNull became) && became.HasExitCode then Some became.ExitCode else None)
             NewSignal = (if not (isNull became) && became.HasSignal then Some became.Signal else None) }
@@ -135,9 +124,9 @@ let private withPodTransition (transition: PodStateTransition) (row: ContainerEv
             OldState = podStatusLabel transition.LastObservedState
             NewState = podStatusLabel transition.NewState
             TransitionAt = Time.optionalSeconds true transition.TransitionTimestamp
-            PodStatusField = protoName transition.Field
-            Precision = protoName transition.Precision
-            MissedIntermediate = protoName transition.MissedIntermediate
+            PodStatusField = ProtoEnum.name transition.Field
+            Precision = ProtoEnum.name transition.Precision
+            MissedIntermediate = ProtoEnum.name transition.MissedIntermediate
             OldStateVariant = was.Variant
             OldPhase = was.Phase
             OldConditionType = was.ConditionType
@@ -163,7 +152,7 @@ let eventRows (payload: EventsPayload) (tenant: string) (now: DateTime) : Contai
           Timestamp = now
           Host = payload.Host
           ClusterID = payload.ClusterId
-          ObjectKind = protoName payload.ObjectKind
+          ObjectKind = ProtoEnum.name payload.ObjectKind
           EventType = ""
           ContainerID = ""
           ContainerName = ""
@@ -207,7 +196,7 @@ let eventRows (payload: EventsPayload) (tenant: string) (now: DateTime) : Contai
           ContainerNamePresent = 0uy }
 
     let toRow (event: Event) : ContainerEventRow =
-        let row = { envelope with EventType = protoName event.EventType }
+        let row = { envelope with EventType = ProtoEnum.name event.EventType }
 
         match event.TypedEventCase with
         | Event.TypedEventOneofCase.Container ->
@@ -225,7 +214,7 @@ let eventRows (payload: EventsPayload) (tenant: string) (now: DateTime) : Contai
                 ExitCode = (if container.HasExitCode then Some container.ExitCode else None)
                 CreatedAt = Time.optionalSeconds container.HasCreationTimestamp container.CreationTimestamp
                 ExitedAt = Time.optionalSeconds container.HasExitTimestamp container.ExitTimestamp
-                OwnerType = (if isNull owner then "" else protoName owner.OwnerType)
+                OwnerType = (if isNull owner then "" else ProtoEnum.name owner.OwnerType)
                 OwnerUID = (if isNull owner then "" else owner.OwnerUID) }
             |> withContainerTransition container.Transition
         | Event.TypedEventOneofCase.Pod ->
@@ -254,19 +243,10 @@ let eventRows (payload: EventsPayload) (tenant: string) (now: DateTime) : Contai
 
 // ---- image inventory ----
 
-/// A protobuf Timestamp for a nullable column. Absent, out of range or not
-/// after 1970 is None: a missing build date must not become a real one.
+/// A protobuf Timestamp for a nullable column. Not after 1970 is None, like
+/// an absent one: a missing build date must not become a real one.
 let private timestamp (value: Timestamp) : DateTime option =
-    if
-        isNull value
-        || value.Seconds <= 0L
-        || value.Seconds > 253402300799L
-        || value.Nanos < 0
-        || value.Nanos > 999_999_999
-    then
-        None
-    else
-        Some((Time.fromUnixSeconds value.Seconds).AddTicks(int64 value.Nanos / 100L))
+    if isNull value || value.Seconds <= 0L then None else Time.ofTimestamp value
 
 /// The rows of one inventory, and how many images were skipped for having
 /// neither a digest nor an id.
@@ -342,8 +322,6 @@ let imageRows (payload: ContainerImagePayload) (tenant: string) (now: DateTime) 
 
 // ---- handlers ----
 
-let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
-
 // Protobuf carries no type marker and skips fields it does not know, so a
 // payload meant for another endpoint decodes "successfully" into nothing. An
 // empty decode is the one hint that the wrong message arrived; both handlers
@@ -353,19 +331,14 @@ let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
 /// kind of object, named by ObjectKind.
 let handleLifecycle (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     match tryParse EventsPayload.Parser body with
     | Error e ->
-        log.LogWarning("[contlcycle] protobuf: {Error} ({Bytes} bytes)", e, body.Length)
         Raw.store ctx "contlcycle" "decode_error" e body
     | Ok payload when payload.Events.Count = 0 ->
-        log.LogWarning("[contlcycle] decoded to zero events ({Bytes} bytes), wrong payload type?", body.Length)
         Raw.store ctx "contlcycle" "unexpected_shape" "EventsPayload decoded with no events" body
     | Ok payload ->
-        if tenant <> "" then
-            Sink.write sink ContainerEvents.table (eventRows payload tenant DateTime.UtcNow)
+        Ctx.write ctx ContainerEvents.table (eventRows payload tenant DateTime.UtcNow)
 
     accepted ctx
 
@@ -373,30 +346,26 @@ let handleLifecycle (body: byte[]) (ctx: HttpContext) : Task =
 let handleImages (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
     let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     match tryParse ContainerImagePayload.Parser body with
     | Error e ->
-        log.LogWarning("[contimage] protobuf: {Error} ({Bytes} bytes)", e, body.Length)
         Raw.store ctx "contimage" "decode_error" e body
     | Ok payload when payload.Images.Count = 0 ->
-        log.LogWarning("[contimage] decoded to zero images ({Bytes} bytes), wrong payload type?", body.Length)
         Raw.store ctx "contimage" "unexpected_shape" "ContainerImagePayload decoded with no images" body
     | Ok payload ->
-        if tenant <> "" then
-            let rows, skipped = imageRows payload tenant DateTime.UtcNow
+        let rows, skipped = imageRows payload tenant DateTime.UtcNow
 
-            if skipped > 0 then
-                log.LogWarning(
-                    "[contimage] {Skipped} of {Total} images skipped: neither digest nor image id, so nothing to key on",
-                    skipped,
-                    payload.Images.Count
-                )
+        if skipped > 0 then
+            log.LogWarning(
+                "[contimage] {Skipped} of {Total} images skipped: neither digest nor image id, so nothing to key on",
+                skipped,
+                payload.Images.Count
+            )
 
-                // The metric is what makes an incomplete inventory noticeable
-                // without going looking for a log line.
-                SelfMetrics.count ctx payload.Host SelfMetrics.imagesSkipped (float skipped) (Map [ "reason", [| "no_identity" |] ])
+            // The metric is what makes an incomplete inventory noticeable
+            // without going looking for a log line.
+            SelfMetrics.count ctx payload.Host SelfMetrics.imagesSkipped (float skipped) (Map [ "reason", [| "no_identity" |] ])
 
-            Sink.write sink ContainerImages.table rows
+        Ctx.write ctx ContainerImages.table rows
 
     accepted ctx

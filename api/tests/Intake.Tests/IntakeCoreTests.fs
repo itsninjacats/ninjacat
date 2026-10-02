@@ -24,21 +24,7 @@ let private store =
 let private deps (sink: CapturingSink) : Deps =
     { Store = store; Sink = sink; Log = NullLogger.Instance; AckUnknown = false }
 
-let private request (method: string) (host: string) (target: string) (headers: (string * string) list) : HttpContext =
-    let http = DefaultHttpContext()
-    http.Request.Method <- method
-    http.Request.Host <- HostString host
-
-    match target.IndexOf '?' with
-    | -1 -> http.Request.Path <- PathString target
-    | i ->
-        http.Request.Path <- PathString(target.Substring(0, i))
-        http.Request.QueryString <- QueryString(target.Substring i)
-
-    for name, value in headers do
-        http.Request.Headers[name] <- StringValues value
-
-    http
+let private request = Requests.httpContext
 
 let private ok (_: byte[]) : EndpointHandler = setStatusCode 200
 
@@ -87,6 +73,10 @@ let ``the probes need no key, an unknown path is answered before the guard`` () 
 
     Assert.Equal(200, status "GET" "/ping")
     Assert.Equal(200, status "GET" "/_health")
+    // The agent's connectivity check sends this one without a key.
+    Assert.Equal(200, status "HEAD" "/support/flare")
+    Assert.Equal(200, status "HEAD" "/support/flare/1234")
+    Assert.Equal(403, status "POST" "/support/flare")
     Assert.Equal(404, status "POST" "/nowhere")
     // A known path under another method is the router's own 405.
     Assert.Equal(405, status "GET" "/x")
@@ -105,21 +95,8 @@ let ``a body nested deeper than any telemetry is kept raw; one inside the limit 
     =
     let send (depth: int) =
         let deep = System.String('[', depth) + System.String(']', depth)
-        let sink = Golden.CapturingSink()
-
-        let deps: Deps =
-            { Store = Golden.Replay.testStore ()
-              Sink = sink
-              Log = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance
-              AckUnknown = false }
-
-        let http = Microsoft.AspNetCore.Http.DefaultHttpContext()
-        http.Request.Method <- "POST"
-        http.Request.Host <- Microsoft.AspNetCore.Http.HostString "example.com"
-        http.Request.Path <- Microsoft.AspNetCore.Http.PathString path
-        http.Request.Headers["Dd-Api-Key"] <- Microsoft.Extensions.Primitives.StringValues Golden.Replay.testKey
-        let body = System.Text.Encoding.UTF8.GetBytes(template.Replace("DEEP", deep))
-        let response = Replay.byGoNames deps [ routeSet ] http body
+        let body = Requests.utf8 (template.Replace("DEEP", deep))
+        let response, sink = Requests.send [ routeSet ] "POST" path Requests.withKey body
         response.Status, sink.Rows<NinjaCat.Api.Storage.Rows.RawPayloadRow>() |> List.map _.Reason
 
     // Past the limit the body does not parse at all: kept whole, answered as usual.
@@ -138,6 +115,25 @@ let ``a timestamp beyond year 9999 is kept at the limit, not an error`` () =
     Assert.Equal(9999, (Time.fromUnixMillis System.Int64.MaxValue).Year)
     Assert.Equal(1, (Time.fromUnixSeconds System.Int64.MinValue).Year)
     Assert.Equal(System.DateTime(2026, 9, 23, 16, 10, 38, System.DateTimeKind.Utc), Time.fromUnixSeconds 1790179838L)
+
+[<Fact>]
+let ``a protobuf Timestamp is a time to 100 ns, or None when absent or invalid`` () =
+    let stamp (seconds: int64) (nanos: int) = Google.Protobuf.WellKnownTypes.Timestamp(Seconds = seconds, Nanos = nanos)
+    let whole = System.DateTime(2026, 9, 23, 16, 10, 38, System.DateTimeKind.Utc)
+
+    Assert.Equal(Some(whole.AddTicks 1234567L), Time.ofTimestamp (stamp 1790179838L 123_456_789))
+    Assert.Equal(Some(System.DateTime.UnixEpoch.AddSeconds -1.0), Time.ofTimestamp (stamp -1L 0))
+    Assert.Equal(None, Time.ofTimestamp null)
+    Assert.Equal(None, Time.ofTimestamp (stamp 1790179838L -1))
+    Assert.Equal(None, Time.ofTimestamp (stamp 1790179838L 1_000_000_000))
+    Assert.Equal(None, Time.ofTimestamp (stamp 253402300800L 0))
+    Assert.Equal(None, Time.ofTimestamp (stamp System.Int64.MaxValue 0))
+
+[<Fact>]
+let ``a protobuf enum value is its name in the schema, its number when the schema has none`` () =
+    Assert.Equal("GAUGE", ProtoEnum.name Datadog.Agentpayload.MetricPayload.Types.MetricType.Gauge)
+    Assert.Equal("ISSUE_SEVERITY_HIGH", ProtoEnum.name Datadog.Healthplatform.IssueSeverity.High)
+    Assert.Equal("77", ProtoEnum.name (enum<Datadog.Agentpayload.MetricPayload.Types.MetricType> 77))
 
 [<Fact>]
 let ``a handler that throws is a 500, not a crash`` () =
@@ -176,6 +172,25 @@ let private storing (body: string) : Endpoint list =
     [ POST [ route "/api/v2/databasequery" (bindBody store) ] ]
 
 [<Fact>]
+let ``a body that inflates past the limit comes back as it was sent`` () =
+    let gzip (data: byte[]) =
+        use packed = new System.IO.MemoryStream()
+
+        do
+            use writer = new System.IO.Compression.GZipStream(packed, System.IO.Compression.CompressionLevel.Fastest)
+            writer.Write(data, 0, data.Length)
+
+        packed.ToArray()
+
+    let small = gzip (Encoding.UTF8.GetBytes "hello")
+    Assert.Equal("hello", Encoding.UTF8.GetString(Body.decompress NullLogger.Instance "gzip" small))
+
+    // A few kilobytes that would become more memory than the limit allows.
+    let bomb = gzip (Array.zeroCreate<byte> (Body.maxInflatedBytes + 1))
+    Assert.True(bomb.Length < 1024 * 1024)
+    Assert.Equal<byte[]>(bomb, Body.decompress NullLogger.Instance "gzip" bomb)
+
+[<Fact>]
 let ``a raw payload keeps what identifies the request, and no credentials`` () =
     let sink = CapturingSink()
 
@@ -183,7 +198,7 @@ let ``a raw payload keeps what identifies the request, and no credentials`` () =
         request
             "POST"
             "dbm-metrics-intake.ninjacat.local"
-            "/api/v2/databasequery?api-version=2"
+            "/api/v2/databasequery?api-version=2&api_key=in-the-query&DD-API-KEY=in-the-query"
             [ "Dd-Api-Key", key
               "Content-Type", "application/json"
               "Content-Encoding", "identity"
@@ -199,6 +214,9 @@ let ``a raw payload keeps what identifies the request, and no credentials`` () =
     Assert.Equal("dbm-metrics-intake.ninjacat.local", row.Host)
     Assert.Equal("/api/v2/databasequery", row.Path)
     Assert.Equal<string[]>([| "2" |], row.Query["api-version"])
+    // A key sent in the query string is not kept either.
+    Assert.Equal<string list>([ "api-version" ], row.Query.Keys |> List.ofSeq)
+    Assert.Equal("/v1/input/<key>", Secrets.pathWithoutKey "/v1/input/0123456789abcdef0123456789abcdef")
     Assert.Equal("identity", row.ContentEncoding)
     Assert.Equal("""{"x":1}""", Encoding.UTF8.GetString row.Body)
     Assert.Equal(7UL, row.BodyBytes)
@@ -225,6 +243,59 @@ let ``the agent's empty probes are not stored`` (body: string) =
     Assert.False(Raw.isProbe (Encoding.UTF8.GetBytes """{"a":1}"""))
     Assert.False(Raw.isProbe (Encoding.UTF8.GetBytes "x"))
 
+// --- reading JSON without notes ----------------------------------------------------------
+
+let private element (text: string) : JsonElement option = Some(Requests.json text)
+
+[<Fact>]
+let ``a column's text is the string itself, a number digit for digit, JSON for the rest, empty for absent and null`` () =
+    Assert.Equal("v2", Json.text (element "\"v2\""))
+    Assert.Equal("", Json.text None)
+    Assert.Equal("", Json.text (element "null"))
+    Assert.Equal("9007199254740993", Json.text (element "9007199254740993"))
+    Assert.Equal("true", Json.text (element "true"))
+    Assert.Equal("""{"a":1,"b":[2]}""", Json.text (element """{"b": [2], "a": 1}"""))
+    Assert.Equal<string[]>([| "a"; "2"; "" |], Json.textList (element """["a", 2, null]"""))
+    Assert.Equal<string[]>([| "one" |], Json.textList (element "\"one\""))
+    Assert.Equal<string[]>([||], Json.textList (element "\"\""))
+
+[<Fact>]
+let ``the raw text of a value is kept as it was sent, null included`` () =
+    Assert.Equal("\"not a time\"", Json.rawOrEmpty (element "\"not a time\""))
+    Assert.Equal("""{"b": 1}""", Json.rawOrEmpty (element """{"b": 1}"""))
+    Assert.Equal("null", Json.rawOrEmpty (element "null"))
+    Assert.Equal("", Json.rawOrEmpty None)
+
+[<Fact>]
+let ``members without a column are kept as JSON text, a null one as null`` () =
+    let extra =
+        Json.otherMembers
+            (set [ "namespace"; "devices" ])
+            _.GetRawText()
+            (element """{"namespace":"default","devices":[],"future_field":{"nested":true},"count":3,"gone":null}""")
+
+    Assert.Equal<Map<string, string>>(Map [ "count", "3"; "future_field", """{"nested":true}"""; "gone", "null" ], extra)
+    Assert.True((Json.otherMembers Set.empty Json.compact None).IsEmpty)
+
+[<Fact>]
+let ``a path is walked through objects only, and ends at a value that is not null`` () =
+    let root = (element """{"a": {"b": {"c": 1, "n": null}}, "s": "text"}""").Value
+    Assert.Equal(Some "1", Json.at [ "a"; "b"; "c" ] root |> Option.map _.GetRawText())
+    Assert.Equal(None, Json.at [ "a"; "b"; "n" ] root)
+    Assert.Equal(None, Json.at [ "s"; "b" ] root)
+    Assert.Equal(None, Json.at [ "a"; "x"; "c" ] root)
+    Assert.Equal(Some 1uy, Json.flag (element "true"))
+    Assert.Equal(None, Json.flag (element "1"))
+
+[<Theory>]
+[<InlineData("""["env:prod","team:a"]""", "env:prod|team:a")>]
+[<InlineData("\"env:prod,team:a\"", "env:prod|team:a")>]
+[<InlineData("\"\"", "")>]
+[<InlineData("5", "")>]
+[<InlineData("""["a", 5]""", "")>]
+let ``a tag list is a list of strings or one comma-separated string`` (sent: string, expected: string) =
+    Assert.Equal(expected, String.concat "|" (Json.tagList (element sent)))
+
 // --- tags ------------------------------------------------------------------------------
 
 [<Fact>]
@@ -244,7 +315,7 @@ let ``labels are pairs split at the first colon`` () =
     Assert.Equal<Map<string, string>>(Map.empty, Tags.toMap [])
 
 [<Fact>]
-let ``RFC 3339 is read as Go reads it`` () =
+let ``RFC 3339: what is read and what is not`` () =
     let utc (y: int) (mo: int) (d: int) (h: int) (mi: int) (s: int) = System.DateTime(y, mo, d, h, mi, s, System.DateTimeKind.Utc)
     Assert.Equal(Some(utc 2026 9 21 9 30 0), Time.tryRfc3339 "2026-09-21T09:30:00Z")
     Assert.Equal(Some(utc 2026 9 21 7 30 0), Time.tryRfc3339 "2026-09-21T09:30:00+02:00")
@@ -271,3 +342,10 @@ let ``a body of one object, an array, or null`` () =
     Assert.Equal(0, count "null")
     Assert.Equal(0, count "[]")
     Assert.Equal(-1, count "not json")
+    Assert.Equal(-1, count "5")
+
+    // Where only a list will do, one bare object is refused: the agent's
+    // `{}` probe must not become an empty row.
+    Assert.Equal(Ok 2, Json.tryParseArray (Encoding.UTF8.GetBytes "[1, 2]") |> Result.map List.length)
+    Assert.Equal(Ok 0, Json.tryParseArray (Encoding.UTF8.GetBytes "null") |> Result.map List.length)
+    Assert.Equal(Error "expected a list, got object", Json.tryParseArray (Encoding.UTF8.GetBytes "{}") |> Result.map List.length)

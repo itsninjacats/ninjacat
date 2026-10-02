@@ -10,11 +10,8 @@ open Xunit
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Intake.Routers
 open NinjaCat.Api.Intake.Tests.Golden
+open NinjaCat.Api.Intake.Tests.Golden.Requests
 open NinjaCat.Api.Storage.Rows
-
-let private json (text: string) : JsonElement =
-    use doc = JsonDocument.Parse text
-    doc.RootElement.Clone()
 
 let private ok (result: Result<'a, string>) : 'a =
     match result with
@@ -27,23 +24,9 @@ let private flows (body: string) : NetflowFlowRow[] =
 let private path (body: string) : NetworkPathRow =
     ok (Ndm.decodePaths "test" (Encoding.UTF8.GetBytes body)) |> Array.exactlyOne
 
-/// Posts a body through the engine with the test key; returns the answer and
-/// what was written.
+/// Posts a body with the test key; returns the answer and what was written.
 let private post (path: string) (body: string) : Response * CapturingSink =
-    let sink = CapturingSink()
-
-    let deps: Deps =
-        { Store = Replay.testStore ()
-          Sink = sink
-          Log = NullLogger.Instance
-          AckUnknown = false }
-
-    let http = DefaultHttpContext()
-    http.Request.Method <- "POST"
-    http.Request.Host <- HostString "example.com"
-    http.Request.Path <- PathString path
-    http.Request.Headers["Dd-Api-Key"] <- StringValues Replay.testKey
-    Replay.byGoNames deps [ "routeNDM" ] http (Encoding.UTF8.GetBytes body), sink
+    Requests.send [ "routeNDM" ] "POST" path Requests.withKey (utf8 body)
 
 [<Fact>]
 let ``additional fields spread over the root come back, 64-bit digits intact`` () =
@@ -100,20 +83,15 @@ let ``an additional field's value is JSON text: a string keeps its quotes, an ob
     )
 
 [<Fact>]
-let ``a key in another case fills the field and is an additional field as well`` () =
-    // Go matches struct fields ignoring case, but tells known keys from extra ones exactly.
+let ``a key in another case is an additional field and fills nothing`` () =
     let row = flows """[{"TYPE":"upper","Source":{"IP":"1.1.1.1"}}]""" |> Array.exactlyOne
-    Assert.Equal("upper", row.FlowType)
-    Assert.Equal("1.1.1.1", row.SourceIP)
+    Assert.Equal("", row.FlowType)
+    Assert.Equal("", row.SourceIP)
 
     Assert.Equal<Map<string, string>>(
         Map [ "Source", """{"IP":"1.1.1.1"}"""; "TYPE", "\"upper\"" ],
         row.AdditionalFields
     )
-
-[<Fact>]
-let ``bare objects separated by commas are a batch, because the body is wrapped in brackets`` () =
-    Assert.Equal(2, (flows """{"type":"a"},{"type":"b"}""").Length)
 
 [<Fact>]
 let ``half a surrogate pair in a flow reads as U+FFFD, in fields and in additional fields`` () =
@@ -126,7 +104,7 @@ let ``half a surrogate pair in a flow reads as U+FFFD, in fields and in addition
     )
 
 [<Fact>]
-let ``a null flow is a flow of zero values, as it is for Go's decoder`` () =
+let ``a null flow is a flow of zero values`` () =
     let row = flows "[null]" |> Array.exactlyOne
     Assert.Equal("", row.FlowType)
     Assert.Equal(0UL, row.Bytes)
@@ -167,21 +145,6 @@ let ``an interface flag is true, false or not reported`` () =
     Assert.Equal(Some 0uy, rows.Interfaces[0].MerakiEnabled)
     Assert.Equal(None, rows.Interfaces[1].IsPhysical)
     Assert.Equal(None, rows.Interfaces[1].MerakiEnabled)
-
-[<Fact>]
-let ``an empty ddtags gives no tags, not one empty tag`` () =
-    Assert.Equal<string list>([], Ndm.splitTags "")
-    Assert.Equal<string list>([ "env:prod" ], Ndm.splitTags "env:prod")
-    Assert.Equal<string list>([ "env:prod"; "namespace:default" ], Ndm.splitTags "env:prod,namespace:default")
-
-[<Fact>]
-let ``root keys nothing declares are kept as JSON text`` () =
-    let extra =
-        Ndm.extraTopLevel
-            (set [ "namespace"; "devices" ])
-            (json """{"namespace":"default","devices":[],"future_field":{"nested":true},"count":3}""")
-
-    Assert.Equal<Map<string, string>>(Map [ "count", "3"; "future_field", """{"nested":true}""" ], extra)
 
 [<Fact>]
 let ``the other lists are kept whole, with the ids the element carries`` () =
@@ -344,7 +307,7 @@ let ``an address is stored in its canonical text`` (sent: string, stored: string
 [<InlineData("1.2.3.256")>]
 [<InlineData("fe80::1%eth0")>]
 [<InlineData("[::1]")>]
-let ``what Go does not take as an address is refused`` (sent: string) = Assert.Equal(None, Ndm.ipText sent)
+let ``what is not an address is refused`` (sent: string) = Assert.Equal(None, Ndm.ipText sent)
 
 [<Fact>]
 let ``no via gives NULL for both via columns`` () =

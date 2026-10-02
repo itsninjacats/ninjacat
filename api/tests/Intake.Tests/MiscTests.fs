@@ -11,35 +11,14 @@ open Xunit
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Intake.Routers
 open NinjaCat.Api.Intake.Tests.Golden
+open NinjaCat.Api.Intake.Tests.Golden.Requests
 open NinjaCat.Api.Storage.Rows
-
-let private json (text: string) : JsonElement =
-    use doc = JsonDocument.Parse text
-    doc.RootElement.Clone()
 
 let private value (text: string) : JsonElement option = Some(json text)
 
-/// Posts a body through the engine with the test key; returns the answer and
-/// what was written.
+/// Posts a body with the test key; returns the answer and what was written.
 let private post (routeSet: string) (path: string) (headers: (string * string) list) (body: string) : Response * CapturingSink =
-    let sink = CapturingSink()
-
-    let deps: Deps =
-        { Store = Replay.testStore ()
-          Sink = sink
-          Log = NullLogger.Instance
-          AckUnknown = false }
-
-    let http = DefaultHttpContext()
-    http.Request.Method <- "POST"
-    http.Request.Host <- HostString "example.com"
-    http.Request.Path <- PathString path
-    http.Request.Headers["Dd-Api-Key"] <- StringValues Replay.testKey
-
-    for name, header in headers do
-        http.Request.Headers[name] <- StringValues header
-
-    Replay.byGoNames deps [ routeSet ] http (Encoding.UTF8.GetBytes body), sink
+    Requests.send [ routeSet ] "POST" path (Requests.withKey @ headers) (utf8 body)
 
 let private telemetry (body: string) : APMTelemetryRow list =
     let response, sink = post "routeTelemetry" "/api/v2/apmtelemetry" [] body
@@ -71,7 +50,7 @@ let ``a telemetry time is Unix seconds with a fraction, and nothing when it does
     Assert.Equal(None, Misc.unixTime (value "null"))
 
 [<Fact>]
-let ``a telemetry time takes what Go's ParseFloat takes, and no surrounding space`` () =
+let ``a telemetry time is a float in any spelling, with no surrounding space`` () =
     Assert.Equal(Some(Time.fromUnixSeconds 5L), Misc.unixTime (value "\"+5\""))
     Assert.Equal(Some(Time.fromUnixSeconds 5L), Misc.unixTime (value "\"5.\""))
     Assert.Equal(Some(Time.fromUnixSeconds 1000L), Misc.unixTime (value "1e3"))
@@ -82,19 +61,6 @@ let ``a telemetry time takes what Go's ParseFloat takes, and no surrounding spac
 [<Fact>]
 let ``a time no DateTime can hold becomes the nearest one, not an exception`` () =
     Assert.Equal(Some(DateTime(9999, 12, 31, 23, 59, 59, DateTimeKind.Utc)), Misc.unixTime (value "1e300"))
-
-[<Fact>]
-let ``the raw text of a value is kept whether or not it parses`` () =
-    Assert.Equal("\"not a time\"", Misc.rawText (value "\"not a time\""))
-    Assert.Equal("", Misc.rawText None)
-
-[<Fact>]
-let ``a column's text is the string itself, empty for absent and null, JSON text for anything else`` () =
-    Assert.Equal("v2", Misc.text (value "\"v2\""))
-    Assert.Equal("", Misc.text None)
-    Assert.Equal("", Misc.text (value "null"))
-    Assert.Equal("2", Misc.text (value "2"))
-    Assert.Equal("""{"a": 1}""", Misc.text (value """{"a": 1}"""))
 
 [<Fact>]
 let ``an absent application or host block is empty, not malformed`` () =
@@ -187,7 +153,7 @@ let ``a null batch entry is still an entry, with nothing in it`` () =
     Assert.Equal<string list>([ ""; "message-batch"; "message-batch" ], rows |> List.map _.ParentRequestType)
 
 [<Fact>]
-let ``a null body is an empty envelope and still a row, as it was for Go`` () =
+let ``a null body is an empty envelope and still a row`` () =
     let row = telemetry "null" |> List.exactlyOne
     Assert.Equal("", row.RequestType)
     Assert.Equal("unknown", row.Producer)
@@ -201,7 +167,7 @@ let ``a body that is JSON but not an object goes to raw_payloads`` () =
     Assert.Equal("decode_error", raw.Reason)
 
 [<Fact>]
-let ``genresources quotes the origin headers in the note as Go's %q does`` () =
+let ``genresources quotes the origin headers in the note`` () =
     let _, sink =
         post
             "routeResources"

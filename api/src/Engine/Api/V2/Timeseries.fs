@@ -72,7 +72,7 @@ let private required (body: TimeseriesFormulaQueryRequest) : string list =
 /// query and formula strings are all collected (parse).
 let decode (json: string) : Result<TimeseriesFormulaRequestAttributes, string list> =
     try
-        match JsonSerializer.Deserialize<TimeseriesFormulaQueryRequest>(json, NinjaCat.Api.Engine.Json.options) with
+        match JsonSerializer.Deserialize<TimeseriesFormulaQueryRequest>(json, NinjaCat.Api.Engine.Serialization.options) with
         | body when isNull (box body) || isNull (box body.Data) || isNull (box body.Data.Attributes) ->
             Error [ "missing field 'data.attributes' in the body" ]
         | body ->

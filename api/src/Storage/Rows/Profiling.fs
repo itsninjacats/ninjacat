@@ -231,3 +231,25 @@ module SymbolUploads =
               FlushInterval = TimeSpan.FromSeconds 10.0
               BufferLimit = 5_000
               MaxInFlight = 1 }
+
+/// One "which of these build ids do you hold?" from the profiler's symbol
+/// uploader. BuildIDs keeps its order: the reply is positional against it.
+type SymbolQueryRow =
+    { TenantID: string
+      At: DateTime
+      Arch: string
+      BuildIDs: string[]
+      Resource: string }
+
+module SymbolQueries =
+    let table: Table<SymbolQueryRow> =
+        { Table.create
+              "storage_symbol_queries"
+              "symbol_queries"
+              [ "tenant_id"; "at"; "arch"; "build_ids"; "resource" ]
+              (fun (r: SymbolQueryRow) -> [| r.TenantID; r.At; r.Arch; r.BuildIDs; r.Resource |])
+          with
+              MaxRows = 50
+              FlushInterval = TimeSpan.FromSeconds 15.0
+              BufferLimit = 1_000
+              MaxInFlight = 1 }

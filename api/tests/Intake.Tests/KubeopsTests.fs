@@ -18,11 +18,8 @@ open Datadog.ProcessAgent
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Intake.Routers
 open NinjaCat.Api.Intake.Tests.Golden
+open NinjaCat.Api.Intake.Tests.Golden.Requests
 open NinjaCat.Api.Storage.Rows
-
-/// Equal as JSON: the formatter's spacing is not what is being tested.
-let private sameJson (expected: string) (actual: string) =
-    Assert.True(JsonNode.DeepEquals(JsonNode.Parse expected, JsonNode.Parse actual), $"expected {expected}\nactual   {actual}")
 
 let private now = DateTime(2026, 9, 21, 12, 0, 0, DateTimeKind.Utc)
 
@@ -46,33 +43,16 @@ let private podRows (pods: Pod list) : K8sResourceRow[] =
 
 let private podRow (pod: Pod) : K8sResourceRow = podRows [ pod ] |> Assert.Single
 
-let private json (text: string) : JsonElement =
-    use document = JsonDocument.Parse text
-    document.RootElement.Clone()
-
 let private decoded (text: string) : Kubeops.ActionEvent =
-    match Kubeops.decodeAction (json text) with
+    match Kubeops.decodeAction "" (json text) with
     | Ok event -> event
     | Error e -> failwith e
 
-let private refused (text: string) : bool = Result.isError (Kubeops.decodeAction (json text))
+let private refused (text: string) : bool = Result.isError (Kubeops.decodeAction "" (json text))
 
 /// Sends a body through the kubeops intake as the cluster agent would.
 let private post (path: string) (body: byte[]) : Response * CapturingSink =
-    let sink = CapturingSink()
-
-    let deps: Deps =
-        { Store = Replay.testStore ()
-          Sink = sink
-          Log = NullLogger.Instance
-          AckUnknown = false }
-
-    let http = DefaultHttpContext()
-    http.Request.Method <- "POST"
-    http.Request.Host <- HostString "example.com"
-    http.Request.Path <- PathString path
-    http.Request.Headers["Dd-Api-Key"] <- StringValues Replay.testKey
-    Replay.byGoNames deps [ "routeKubeops" ] http body, sink
+    Requests.send [ "routeKubeops" ] "POST" path Requests.withKey body
 
 // ---- object collections ----
 
@@ -1040,16 +1020,14 @@ let ``an action row with nothing extra has empty extra columns`` () =
     Assert.Empty row.Payloads
 
 [<Fact>]
-let ``an action event is decoded as the Go server decoded it`` () =
-    // A key matches whatever its letter case; the last one wins.
-    Assert.Equal("y", (decoded """{"action_id":"x","ACTION_ID":"y"}""").ActionID)
-    Assert.Equal("x", (decoded """{"ACTION_ID":"y","action_id":"x"}""").ActionID)
-    // ...and a key that is not exactly a known one is also kept as extra.
+let ``an action event: exact keys, the last of two, null as absent, the rest in Extra`` () =
+    Assert.Equal("x", (decoded """{"action_id":"x","ACTION_ID":"y"}""").ActionID)
+    Assert.Equal("z", (decoded """{"action_id":"x","action_id":"z"}""").ActionID)
+    // A key that is not exactly a known one fills nothing and is kept as extra.
     Assert.Equal<string list>([ "ACTION_ID" ], (decoded """{"ACTION_ID":"y"}""").Extra |> Map.toList |> List.map fst)
-    Assert.Equal("", (decoded """{"actionid":"x","action-id":"x"}""").ActionID)
+    Assert.Equal("", (decoded """{"ACTION_ID":"y","actionid":"x","action-id":"x"}""").ActionID)
 
-    // null leaves a field as it was.
-    Assert.Equal("x", (decoded """{"action_id":"x","action_id":null}""").ActionID)
+    Assert.Equal("", (decoded """{"action_id":"x","action_id":null}""").ActionID)
     Assert.Equal(0L, (decoded """{"org_id":null,"payloads":null}""").OrgID)
     Assert.Equal(-5L, (decoded """{"org_id":-5}""").OrgID)
 
@@ -1083,9 +1061,13 @@ let ``attachments are padded standard base64, line breaks allowed`` () =
     Assert.True(refused """{"payloads":{"a":"-_-_"}}""")
     Assert.True(refused """{"payloads":{"a":5}}""")
 
-    // A repeated "payloads" key adds to what the first one attached.
-    let merged = decoded """{"payloads":{"a":"YQ=="},"payloads":{"b":"Yg=="}}"""
-    Assert.Equal<string list>([ "a"; "b" ], merged.Payloads |> Map.toList |> List.map fst)
+    // A null attachment is an empty one.
+    Assert.Equal<byte[]>([||], (decoded """{"payloads":{"a":null}}""").Payloads["a"])
+
+    Assert.Equal(
+        Error "[3].payloads.a: not base64",
+        Kubeops.decodeAction "[3]" (json """{"payloads":{"a":"YmE"}}""") |> Result.map ignore
+    )
 
 // ---- through the intake ----
 
@@ -1135,7 +1117,7 @@ let ``one bad action in a batch is kept raw while the rest become rows`` () =
     Assert.Equal<string list>([ "storage_raw_payloads"; "storage_k8s_actions" ], sink.Writes |> List.map _.Writer)
     let raw = sink.Rows<RawPayloadRow>() |> Assert.Single
     Assert.Equal(("kubeactions", "decode_error"), (raw.Intake, raw.Reason))
-    Assert.StartsWith("batch element 1: ", raw.Note)
+    Assert.Equal("[1].action_id: expected a string, got number", raw.Note)
     // The element's own JSON, as it stood in the batch.
     Assert.Equal("""{"action_id": 5}""", Encoding.UTF8.GetString raw.Body)
     Assert.Equal<string list>([ "a-1"; "a-3" ], sink.Rows<K8sActionRow>() |> List.map _.ActionID)

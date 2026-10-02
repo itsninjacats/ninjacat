@@ -22,10 +22,7 @@ open NinjaCat.Api.Intake.Routers
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
 open NinjaCat.Api.Intake.Tests.Golden
-
-let private json (text: string) : JsonElement = JsonDocument.Parse(text).RootElement
-
-let private utf8 (value: string) : byte[] = Encoding.UTF8.GetBytes value
+open NinjaCat.Api.Intake.Tests.Golden.Requests
 
 let private child (name: string) (node: JsonNode) : JsonNode = node[name]
 
@@ -35,33 +32,13 @@ let private text (node: JsonNode) : string = node.GetValue<string>()
 let private peer = IPAddress.Parse "192.0.2.1"
 
 let private httpContext (method: string) (url: string) (headers: (string * string) list) : HttpContext =
-    let http = DefaultHttpContext()
-
-    let path, query =
-        match url.IndexOf '?' with
-        | -1 -> url, ""
-        | i -> url.Substring(0, i), url.Substring i
-
-    http.Request.Method <- method
-    http.Request.Host <- HostString "browser-intake.example.test"
-    http.Request.Path <- PathString path
-    http.Request.QueryString <- QueryString query
-
-    for name, value in headers do
-        http.Request.Headers[name] <- StringValues value
-
+    let http = Requests.httpContext method "browser-intake.example.test" url headers
     http.Connection.RemoteIpAddress <- peer
     http
 
 /// browser-intake as it is served: the routes behind the wrapper.
 let private serve (allowedOrigins: string list) (sink: CapturingSink) (http: HttpContext) (body: byte[]) : Response =
-    let deps: Deps =
-        { Store = Replay.testStore ()
-          Sink = sink
-          Log = NullLogger.Instance
-          AckUnknown = false }
-
-    Replay.browserIntake deps allowedOrigins http body
+    Replay.browserIntake (Requests.deps sink) allowedOrigins http body
 
 /// A POST with the test key in the header, as the mobile SDKs send it.
 let private post (sink: CapturingSink) (url: string) (headers: (string * string) list) (body: byte[]) : Response =
@@ -78,25 +55,16 @@ let private requestOf (url: string) (headers: (string * string) list) : HttpCont
 
 let private sender: RumRequest = Rum.requestInfo (requestOf "/api/v2/rum" [])
 
+/// A multipart body of (name, file name, data); a part with a file name
+/// is sent as application/octet-stream.
 let private multipart (parts: (string * string * byte[]) list) : string * byte[] =
-    let boundary = "rum-tests-boundary"
-    use buffer = new MemoryStream()
-    let write (text: string) = buffer.Write(ReadOnlySpan(utf8 text))
-
-    for name, fileName, data in parts do
-        write $"--{boundary}\r\n"
-
-        if fileName = "" then
-            write $"Content-Disposition: form-data; name=\"{name}\"\r\n\r\n"
-        else
-            write $"Content-Disposition: form-data; name=\"{name}\"; filename=\"{fileName}\"\r\n"
-            write "Content-Type: application/octet-stream\r\n\r\n"
-
-        buffer.Write(ReadOnlySpan data)
-        write "\r\n"
-
-    write $"--{boundary}--\r\n"
-    $"multipart/form-data; boundary={boundary}", buffer.ToArray()
+    Requests.multipart
+        "rum-tests-boundary"
+        [ for name, fileName, data in parts ->
+              { Name = name
+                FileName = fileName
+                ContentType = (if fileName = "" then "" else "application/octet-stream")
+                Data = data } ]
 
 let private action =
     """{"type":"action","date":1,"application":{"id":"app"},"session":{"id":"s"},"action":{"id":"a","type":"click"}}"""
@@ -624,7 +592,7 @@ let recordedOnTheEngine: obj[] seq =
 
 [<Theory>]
 [<MemberData(nameof recordedOnTheEngine)>]
-let ``a recorded request gets Go's headers and Go's sender address through the wrapper`` (id: string) =
+let ``a recorded request gets the recorded headers and sender address through the wrapper`` (id: string) =
     let fixture = (Replay.all |> List.find (fun f -> f.Id = id)).Json
     let request = child "request" fixture
     let expected = child "response" fixture
@@ -833,9 +801,9 @@ let ``an event part that is neither an object nor an array is kept raw, and the 
     Assert.Equal("", row.Event)
 
 [<Theory>]
-[<InlineData("application/json", "replay body is not multipart: content-type is application/json")>]
-[<InlineData("", "replay body is not multipart: mime: no media type")>]
-[<InlineData("multipart/form-data", "replay body is not multipart: multipart without boundary")>]
+[<InlineData("application/json", "replay body is not multipart: the content type is application/json, not multipart")>]
+[<InlineData("", "replay body is not multipart: the content type is not a media type")>]
+[<InlineData("multipart/form-data", "replay body is not multipart: the content type is multipart without a boundary")>]
 let ``a replay body that is not multipart is kept raw`` (contentType: string, note: string) =
     let sink = CapturingSink()
     let headers = if contentType = "" then [] else [ "Content-Type", contentType ]

@@ -8,8 +8,8 @@ open System
 open System.Threading
 open Npgsql
 
-/// Turns the `postgres://user:pass@host:port/db?sslmode=...` URL that Go and
-/// the panel share into Npgsql's key=value form, which is all Npgsql accepts.
+/// Turns the `postgres://user:pass@host:port/db?sslmode=...` URL the panel
+/// uses too into Npgsql's key=value form, which is all Npgsql accepts.
 let connectionString (url: string) =
     let uri = Uri url
 

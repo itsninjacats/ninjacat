@@ -3,6 +3,7 @@ module NinjaCat.Api.Engine.Tests.PanelTests
 open System
 open Xunit
 open NinjaCat.Api.Engine
+open NinjaCat.Api.Engine.MetricQuery.Ast
 open NinjaCat.Api.Engine.Panel
 
 let private tenant = TenantId "default"
@@ -18,18 +19,18 @@ let private values (sql: Sql) : SqlValue list = sql.Parameters |> List.map snd
 // --- tag filters --------------------------------------------------------------------
 
 [<Fact>]
-let ``tags of one key become one filter, in order of first appearance`` () =
-    Assert.Equal<TagFilter list>([], ok (parseTagFilters []))
-    Assert.Equal<TagFilter list>([ { Key = "env"; Values = [ "prod" ] } ], ok (parseTagFilters [ "env:prod" ]))
+let ``tags of one key are one condition, keys in order of first appearance`` () =
+    Assert.Equal(All, ok (parseTagFilters []))
+    Assert.Equal(Tag("env", "prod"), ok (parseTagFilters [ "env:prod" ]))
 
-    Assert.Equal<TagFilter list>(
-        [ { Key = "env"; Values = [ "prod" ] }; { Key = "kube_service"; Values = [ "a"; "b" ] } ],
+    Assert.Equal(
+        And [ Tag("env", "prod"); In("kube_service", [ "a"; "b" ]) ],
         ok (parseTagFilters [ "env:prod"; "kube_service:a"; "kube_service:b" ])
     )
 
 [<Fact>]
 let ``a tag value keeps its colons`` () =
-    Assert.Equal<TagFilter list>([ { Key = "image"; Values = [ "nginx:1.25" ] } ], ok (parseTagFilters [ "image:nginx:1.25" ]))
+    Assert.Equal(Tag("image", "nginx:1.25"), ok (parseTagFilters [ "image:nginx:1.25" ]))
 
 [<Theory>]
 [<InlineData("envprod")>]
@@ -38,7 +39,7 @@ let ``a tag value keeps its colons`` () =
 let ``a tag without key or value is refused`` (tag: string) =
     Assert.True(Result.isError (parseTagFilters [ tag ]))
 
-// --- times and steps ------------------------------------------------------------------
+// --- times and durations ------------------------------------------------------------------
 
 [<Fact>]
 let ``times are relative, absolute, or the fallback`` () =
@@ -62,92 +63,107 @@ let ``a time that is none of those is refused`` (raw: string) =
     Assert.True(Result.isError (parseTime raw noon noon))
 
 [<Fact>]
-let ``the step is honoured, derived, widened and never under a second`` () =
-    // 360 points at 60 s: under the ceiling, honoured.
-    Assert.Equal(TimeSpan.FromMinutes 1.0, resolveStep "60s" (TimeSpan.FromHours 6.0))
-    // A month at 1 s would be 2.6 M points: widened to span / maxPoints.
-    Assert.Equal(TimeSpan.FromSeconds 1296.0, resolveStep "1s" (TimeSpan.FromDays 30.0))
-    // No step: about 300 points.
-    Assert.Equal(TimeSpan.FromMinutes 1.0, resolveStep "" (TimeSpan.FromHours 5.0))
-    Assert.Equal(TimeSpan.FromSeconds 1.0, resolveStep "" (TimeSpan.FromMinutes 1.0))
+let ``a duration is a sign and number-and-unit pairs, from nanoseconds to weeks`` () =
+    Assert.Equal(Ok(TimeSpan.FromSeconds 15.0), Duration.parse "15s")
+    Assert.Equal(Ok(TimeSpan.FromMinutes -90.0), Duration.parse "-1h30m")
+    Assert.Equal(Ok(TimeSpan.FromMilliseconds 300.0), Duration.parse "300ms")
+    Assert.Equal(Ok(TimeSpan.FromDays 7.0), Duration.parse "7d")
+    Assert.Equal(Ok(TimeSpan.FromDays 14.0), Duration.parse "+2w")
+    Assert.Equal(Ok(TimeSpan.FromHours 36.0), Duration.parse "1.5d")
 
-// --- group by --------------------------------------------------------------------------
+    for bad in [ ""; "15"; "s"; "3x"; "1h 30m"; "-" ] do
+        Assert.True(Result.isError (Duration.parse bad), bad)
 
-[<Fact>]
-let ``group-by keys are deduplicated and sorted`` () =
-    Assert.Equal<string list>([], ok (normalizeGroupBy []))
-    Assert.Equal<string list>([ "env"; "service" ], ok (normalizeGroupBy [ "service"; "env" ]))
-    Assert.Equal<string list>([ "env"; "service" ], ok (normalizeGroupBy [ "env"; "env"; "service" ]))
-    Assert.Equal<string list>([ "a"; "b"; "c"; "d" ], ok (normalizeGroupBy [ "a"; "b"; "c"; "d" ]))
+// --- series ------------------------------------------------------------------------------
 
-[<Fact>]
-let ``five keys are refused, not truncated, and so is an empty key`` () =
-    match normalizeGroupBy [ "a"; "b"; "c"; "d"; "pod_name" ] with
-    | Error e -> Assert.Contains("too many group-by keys", e)
-    | Ok keys -> Assert.Fail $"got %A{keys}"
-
-    match normalizeGroupBy [ "env"; "" ] with
-    | Error e -> Assert.Contains("must not be empty", e)
-    | Ok keys -> Assert.Fail $"got %A{keys}"
-
-// --- SQL ---------------------------------------------------------------------------------
-
-let private series: SeriesQuery =
-    { Tenant = tenant
-      Metric = "system.cpu.user"
+let private cpu: SeriesQuery =
+    { Metric = "system.cpu.user"
       Hosts = []
-      From = noon.AddHours -1.0
+      From = noon.AddMinutes -1.0
       To = noon
-      Step = TimeSpan.FromSeconds 20.0
-      Aggregation = "avg"
-      Tags = []
+      Step = Some(TimeSpan.FromSeconds 20.0)
+      Aggregation = ""
+      Tags = All
       GroupBy = [] }
 
 [<Fact>]
-let ``a cold tag key is a membership test on the map, several values hasAny`` () =
-    let sql, _ = ok (querySeries { series with Tags = [ { Key = "team"; Values = [ "core" ] }; { Key = "zone"; Values = [ "a"; "b" ] } ] })
-    Assert.Contains("AND has(tags[{p5:String}], {p6:String}) AND hasAny(tags[{p7:String}], {p8:Array(String)})", sql.Text)
-    Assert.Contains(SqlValue.String "team", values sql)
-    Assert.Contains(SqlValue.StringArray [ "a"; "b" ], values sql)
+let ``a series query is the engine's own request: by host unless grouped, avg unless told`` () =
+    let plain = (seriesRequest cpu).Queries.Head.Query
+    Assert.Equal(Some "avg", plain.SpaceAgg)
+    Assert.Equal<string list>([ "host" ], plain.GroupBy)
+    Assert.Equal(All, plain.Filter)
+    Assert.Empty (seriesRequest cpu).Formulas
+    Assert.Equal(cpu.Step, (seriesRequest cpu).Interval)
+
+    let narrowed =
+        (seriesRequest { cpu with Hosts = [ "a"; "b" ]; Tags = Tag("env", "prod"); Aggregation = "MAX"; GroupBy = [ "service"; "env"; "env" ] })
+            .Queries.Head.Query
+
+    Assert.Equal(Some "max", narrowed.SpaceAgg)
+    Assert.Equal<string list>([ "env"; "service" ], narrowed.GroupBy)
+    Assert.Equal(And [ In("host", [ "a"; "b" ]); Tag("env", "prod") ], narrowed.Filter)
+    Assert.Equal(In("host", [ "a" ]), (seriesRequest { cpu with Hosts = [ "a" ] }).Queries.Head.Query.Filter)
+
+/// Two series, each with one point per bucket; with two group keys the
+/// second series lacks the second tag.
+let private execute (sql: Sql) =
+    let groups = sql.Text.Split("AS g").Length - 1
+    let row (group: string option list) (t: int64) (v: float) : Query.Compile.Row = { Groups = group; BucketMs = t; Value = v; SeriesId = None }
+    let start = noon.AddMinutes(-1.0).ToUnixTimeMilliseconds()
+
+    Threading.Tasks.Task.FromResult
+        [ for i in 0L .. 2L do
+              row (if groups = 1 then [ Some "a" ] else [ Some "prod"; Some "web" ]) (start + i * 20000L) (float i)
+              row (if groups = 1 then [ Some "b" ] else [ Some "prod"; None ]) (start + i * 20000L) (float i * 10.0) ]
+
+let private seriesFor (q: SeriesQuery) : Series list =
+    match (Query.Engine.parsed execute tenant [ "q" ] (seriesRequest q)).Result with
+    | Ok results -> seriesOf q results
+    | Error problems -> failwith (String.concat "; " problems)
 
 [<Fact>]
-let ``a hot tag key uses its column in metrics, and the map in logs`` () =
-    let sql, _ = ok (querySeries { series with Tags = [ { Key = "env"; Values = [ "prod" ] }; { Key = "service"; Values = [ "web"; "api" ] } ] })
-    Assert.Contains("AND env = {p5:String} AND service IN {p6:Array(String)}", sql.Text)
+let ``ungrouped series are hosts; grouped ones are named by their tags, N/A where one is missing`` () =
+    let hosts = seriesFor cpu
+    Assert.Equal<string list>([ "a"; "b" ], hosts |> List.map _.Name)
+    Assert.Equal<string option list>([ Some "a"; Some "b" ], hosts |> List.map _.Host)
+    Assert.Equal<Map<string, string>>(Map [ "host", "a" ], hosts.Head.Tags)
+    Assert.Equal<(DateTimeOffset * float) list>([ noon.AddSeconds -60.0, 0.0; noon.AddSeconds -40.0, 1.0; noon.AddSeconds -20.0, 2.0 ], hosts.Head.Points)
 
-    let logs: LogSearch =
-        { Tenant = tenant; Text = ""; Service = ""; Host = ""; Status = ""; Tags = [ { Key = "env"; Values = [ "prod" ] } ]; From = noon.AddHours -1.0; To = noon; Limit = 0 }
-
-    let rows, _ = ok (searchLogs logs)
-    Assert.Contains("AND has(tags[{p3:String}], {p4:String})", rows.Text)
+    let grouped = seriesFor { cpu with GroupBy = [ "service"; "env" ] }
+    Assert.Equal<string list>([ "env:prod, service:web"; "env:prod, service:N/A" ], grouped |> List.map _.Name |> List.sortDescending)
+    Assert.True(grouped |> List.forall (fun series -> series.Host.IsNone))
 
 [<Fact>]
-let ``a filter without key or values is refused`` () =
-    Assert.True(Result.isError (querySeries { series with Tags = [ { Key = ""; Values = [ "x" ] } ] }))
-    Assert.True(Result.isError (querySeries { series with Tags = [ { Key = "env"; Values = [] } ] }))
+let ``an aggregation the engine does not have is refused, not replaced`` () =
+    match (Query.Engine.parsed execute tenant [ "q" ] (seriesRequest { cpu with Aggregation = "median" })).Result with
+    | Error problems -> Assert.Contains("median", String.concat "; " problems)
+    | Ok _ -> Assert.Fail "median was accepted"
+
+// --- SQL ---------------------------------------------------------------------------------
+
+let private logs: LogSearch =
+    { Tenant = tenant; Text = ""; Service = ""; Host = ""; Status = ""; Tags = All; From = noon.AddHours -1.0; To = noon; Limit = 0 }
+
+[<Fact>]
+let ``a tag filter on logs is a membership test on the map, several values hasAny`` () =
+    let rows, _ = searchLogs { logs with Tags = And [ Tag("team", "core"); In("zone", [ "a"; "b" ]) ] }
+    Assert.Contains("AND ((has(tags[{k3:String}], {p4:String})) AND (hasAny(tags[{k5:String}], {p6:Array(String)})))", rows.Text)
+    Assert.Contains(SqlValue.String "team", values rows)
+    Assert.Contains(SqlValue.StringArray [ "a"; "b" ], values rows)
+
+    let unfiltered, _ = searchLogs logs
+    Assert.DoesNotContain("tags[", unfiltered.Text.Substring(unfiltered.Text.IndexOf " WHERE"))
 
 [<Fact>]
 let ``the caller's text is bound, never part of the SQL`` () =
-    let evil = "env'] , 1); DROP TABLE metrics; --"
-    let sql, keys = ok (querySeries { series with Tags = [ { Key = evil; Values = [ "x'y" ] } ]; GroupBy = [ evil ] })
-    Assert.DoesNotContain("DROP", sql.Text)
-    Assert.DoesNotContain("'", sql.Text)
-    Assert.Equal<string list>([ evil ], keys)
-    Assert.Contains("arrayJoin(tags[{p0:String}]) AS g0", sql.Text)
-    Assert.Contains(SqlValue.String evil, values sql)
-    Assert.Contains(SqlValue.String "x'y", values sql)
+    let evil = "env'] , 1); DROP TABLE logs; --"
+    let rows, count = searchLogs { logs with Tags = Tag(evil, "x'y"); Service = evil; Text = evil }
 
-[<Fact>]
-let ``series split by host unless grouped, and an unknown aggregation is avg`` () =
-    let byHost, _ = ok (querySeries { series with Aggregation = "median" })
-    Assert.StartsWith("SELECT host, ", byHost.Text)
-    Assert.Contains("avg(value) AS value", byHost.Text)
-    Assert.EndsWith("GROUP BY host, bucket ORDER BY host, bucket", byHost.Text)
-
-    let grouped, keys = ok (querySeries { series with Aggregation = "MAX"; GroupBy = [ "service"; "env" ] })
-    Assert.Equal<string list>([ "env"; "service" ], keys)
-    Assert.Contains("max(value) AS value", grouped.Text)
-    Assert.EndsWith("GROUP BY g0, g1, bucket ORDER BY g0, g1, bucket", grouped.Text)
+    for sql in [ rows; count ] do
+        Assert.DoesNotContain("DROP", sql.Text)
+        Assert.DoesNotContain("'", sql.Text.Replace("toUnixTimestamp64Milli", ""))
+        Assert.Contains(SqlValue.String evil, values sql)
+        Assert.Contains(SqlValue.String "x'y", values sql)
 
 [<Fact>]
 let ``message tokens are runs of letters and digits`` () =
@@ -164,12 +180,12 @@ let ``log search scopes by tenant first, then tokens, then the phrase`` () =
           Service = "nginx"
           Host = ""
           Status = ""
-          Tags = [ { Key = "k\"ey'"; Values = [ "v" ] } ]
+          Tags = Tag("k\"ey'", "v")
           From = noon.AddHours -1.0
           To = noon
           Limit = 5000 }
 
-    let rows, count = ok (searchLogs search)
+    let rows, count = searchLogs search
     let where = rows.Text.Substring(rows.Text.IndexOf " WHERE")
     Assert.StartsWith(" WHERE tenant_id = {p0:String}", where)
     Assert.Equal(2, where.Split("hasToken(message, ").Length - 1)

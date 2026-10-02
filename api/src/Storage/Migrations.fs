@@ -31,8 +31,8 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
     checksum   UInt64
 ) ENGINE = ReplacingMergeTree(applied_at) ORDER BY version"""
 
-/// A migration file's checksum. The ledger already holds checksums the Go
-/// server wrote with this function, so it cannot change.
+/// A migration file's checksum. Ledgers already hold checksums written with
+/// this function, so it cannot change.
 let checksum (data: byte[]) : uint64 = Fnv.hash64 data
 
 let parseFilename (name: string) : Result<uint32 * string, string> =

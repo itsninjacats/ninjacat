@@ -64,7 +64,7 @@
       "$b64": "AgAnCZIQAAAKAnMyEmMKAnM3EhkKA3MxMBINczEyIDwmPiAiw6kiCiIDczE1GiYIExIDczIxIg1zMjQgPCY+ICLDqSIKMgNzMjdA4v//////////ARoaCCEaDXMzNiA8Jj4gIsOpIgoqA3MzOTgqSC0a6wEKA3M0ORIDczUxIgNzNTQwxv//////////AUgBXWZmfEJowtCs8w59MzOKQo0BMzOQQp0BMzOWQqgBsf//////////AboBVQjTgICAgICAEBCs//////////8BMgdrODc6djg3MhVrODc6b3RoZXI6d2l0aDpjb2xvbnMyBmJhcmU4NzIIejg3Omxhc3RA24CAgICAgBBQ3eLPqgbKAQP/AGDaARIKDnMxMDAgPCY+ICLDqSIKEGbaAQgKBHMxMDUYAegBkP//////////Af0BMzPkQo0CMzPqQpoCDnMxMjAgPCY+ICLDqSIKGvMBEgRzMTIzIgRzMTI2MP7+/////////wFIAV2aGQdDaIrRrPMOfZoZDUONAZoZEEOdAZoZE0OoAen+/////////wG6AV8Im4GAgICAgBAQ5P7/////////ATIJazE1OTp2MTU5MhZrMTU5Om90aGVyOndpdGg6Y29sb25zMgdiYXJlMTU5Mgl6MTU5Omxhc3RAo4GAgICAgBBQ2/7/////////AcoBA/8AqNoBEwoOczE3MiA8Jj4gIsOpIgoQrgHaAQgKBHMxNzcYAegByP7/////////Af0Bmhk6Q40Cmhk9Q5oCDnMxOTIgPCY+ICLDqSIKIMIBKLz+/////////wFCVwjIgYCAgICAEBDJATIJazIwNDp2MjA0MhZrMjA0Om90aGVyOndpdGg6Y29sb25zMgdiYXJlMjA0Mgl6MjA0Omxhc3RA0IGAgICAgBBQrv7/////////AUgBWgxzNCA8Jj4gIsOpIgo="
      },
      716,
-     "orch: *process.CollectorContainer on an orchestrator intake"
+     "orch: CollectorContainer on an orchestrator intake"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -80,7 +80,7 @@
      "Host": "example.com",
      "Intake": "orchestrator",
      "Method": "POST",
-     "Note": "orch: *process.CollectorContainer on an orchestrator intake",
+     "Note": "orch: CollectorContainer on an orchestrator intake",
      "Path": "/api/v2/orch",
      "Query": {},
      "Reason": "unexpected_shape",
@@ -97,5 +97,6 @@
  "volatile": [
   "/sends/0/args/0/1",
   "/sends/0/rows/0/ReceivedAt"
- ]
+ ],
+ "edited": "The note names the protobuf message that arrived by its own name; it no longer spells it as a Go type (*process.…)."
 }

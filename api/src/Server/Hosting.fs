@@ -9,10 +9,12 @@ open Microsoft.Extensions.Logging
 let createBuilder (args: string[]) : WebApplicationBuilder =
     let builder = WebApplication.CreateBuilder(args)
 
-    // At the default level every request is four lines and every key
-    // refresh one; an intake under load would bury its own warnings.
+    // At the default level every request is four lines, every key refresh
+    // one and every refused key two; an intake under load would bury its own
+    // warnings, and anyone without a key could fill the log.
     builder.Logging
         .AddFilter("Microsoft.AspNetCore", LogLevel.Warning)
+        .AddFilter("NinjaCat.Api.Intake.ApiKeyHandler", LogLevel.Warning)
         .AddFilter("Npgsql", LogLevel.Warning)
     |> ignore
 

@@ -62,7 +62,7 @@
      {},
      "null",
      4,
-     "[dbmactivity] event 1: not an object: event is null, not a JSON object"
+     "[dbmactivity] event 1: expected an object, got null"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -76,7 +76,7 @@
      "Host": "example.com",
      "Intake": "dbm",
      "Method": "POST",
-     "Note": "[dbmactivity] event 1: not an object: event is null, not a JSON object",
+     "Note": "[dbmactivity] event 1: expected an object, got null",
      "Path": "/api/v2/dbmactivity",
      "Query": {},
      "Reason": "decode_error",
@@ -181,5 +181,6 @@
   "/sends/0/rows/0/ReceivedAt",
   "/sends/1/args/0/1",
   "/sends/1/rows/0/ReceivedAt"
- ]
+ ],
+ "edited": "The notes say which member did not fit and what was found there, in one wording for every intake. They used to be the Go server's, quoting Go's encoding/json."
 }

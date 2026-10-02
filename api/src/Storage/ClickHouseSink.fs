@@ -35,9 +35,9 @@ type ClickHouseSink(client: ClickHouseClient, log: ILogger) =
             return types :> IReadOnlyDictionary<string, string>
         }
 
-    /// What ClickHouse's own range allows for a column, and the Go driver's
-    /// reading of a zero time (0001-01-01) as the epoch. One value outside
-    /// the range would otherwise fail the whole batch it travels in.
+    /// What ClickHouse's own range allows for a column; a zero time
+    /// (0001-01-01), which a row holds for "none", is the epoch. One value
+    /// outside the range would otherwise fail the whole batch it travels in.
     let clamp (earliest: DateTime) (latest: DateTime) (time: DateTime) : DateTime =
         if time = DateTime.MinValue then DateTime.UnixEpoch
         elif time < earliest then earliest

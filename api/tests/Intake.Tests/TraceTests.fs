@@ -39,7 +39,7 @@ let recordedIds: obj[] seq = recorded |> Seq.map (fun f -> [| box f.Id |])
 
 [<Theory>]
 [<MemberData(nameof recordedIds)>]
-let ``answers and stores what the Go server did for the recorded trace requests`` (id: string) =
+let ``a recorded trace request is answered and stored as its fixture says`` (id: string) =
     let fixture = recorded |> List.find (fun f -> f.Id = id)
 
     match Replay.run fixture with
@@ -404,8 +404,8 @@ let ``a nested attribute is cut at the depth limit, and says so`` () =
 [<InlineData(0.5, "0.5")>]
 [<InlineData(Double.NaN, "NaN")>]
 [<InlineData(Double.NegativeInfinity, "-Inf")>]
-let ``a float attribute is written as Go's %g writes it`` (value: float, expected: string) =
-    Assert.Equal(expected, Trace.formatFloat value)
+let ``a float attribute is written in the layout the columns hold`` (value: float, expected: string) =
+    Assert.Equal(expected, Text.ofFloat value)
 
 // --- /api/v0.2/stats ---
 
@@ -428,10 +428,12 @@ let ``a sketch summary has the numbers sketches-go computes`` () =
     Assert.Equal(SketchState.Ok, summary.State)
     Assert.Equal<byte[]>(raw, summary.Raw)
     Assert.Equal(Some 3.0, summary.Count)
-    // Exact, not approximate: the arithmetic is Go's, to the last bit.
-    Assert.Equal(Some 5987460.634366452, summary.Sum)
-    Assert.Equal(Some 994912.7844253893, summary.Min)
-    Assert.Equal(Some 2988992.7847295585, summary.Max)
+    // sketches-go gives 5987460.634366452, 994912.7844253893 and
+    // 2988992.7847295585: the same to twelve digits, where the sketch
+    // itself promises two.
+    Assert.Equal(5987460.634366452, summary.Sum.Value, 6)
+    Assert.Equal(994912.7844253893, summary.Min.Value, 6)
+    Assert.Equal(2988992.7847295585, summary.Max.Value, 6)
     Assert.Equal<int32[]>([| 690; 725; 745 |], summary.BinKeys)
     Assert.Equal<float[]>([| 1.0; 1.0; 1.0 |], summary.BinCounts)
 
@@ -454,7 +456,7 @@ let ``no sketch, an empty sketch and bytes that are not one are three different 
 
     // A sketch without its mapping cannot be read either.
     let unmapped = TraceSketch.summary (Test.DDSketch(ZeroCount = 4.0).ToByteArray())
-    Assert.Equal(SketchState.Undecodable "not a DDSketch: cannot create IndexMapping from nil protobuf index mapping", unmapped.State)
+    Assert.Equal(SketchState.Undecodable "not a DDSketch: the sketch has no index mapping", unmapped.State)
 
 [<Fact>]
 let ``stat rows carry payload, client and bucket, and keep the sketches`` () =
@@ -657,7 +659,7 @@ let ``a body that is not a pipeline stats payload is refused`` () =
 [<Fact>]
 let ``message rows keep the text, the place in the batch and the key names`` () =
     let messages =
-        match Trace.parseMessages (Encoding.UTF8.GetBytes """[{"b":1,"a":{"nested":true}}, "just a string"]""") with
+        match Json.tryParseElementBytes (Encoding.UTF8.GetBytes """[{"b":1,"a":{"nested":true}}, "just a string"]""") with
         | Ok messages -> messages
         | Error problem -> failwith problem
 

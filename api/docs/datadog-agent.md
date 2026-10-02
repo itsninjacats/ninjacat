@@ -110,8 +110,14 @@ resources-intake.ninjacat.ninjacats.eu
 contlcycle-intake.ninjacat.ninjacats.eu
 sbom-intake.ninjacat.ninjacats.eu
 trace.agent.ninjacat.ninjacats.eu
-7-83-2-app.agent.ninjacat.ninjacats.eu
+app.ninjacat.ninjacats.eu
 ```
+
+(Poprawka z 2026-10-02: wcześniej stało tu `7-83-2-app.agent.ninjacat.ninjacats.eu`.
+Agent dokleja wersję tylko wtedy, gdy host pasuje do domen Datadoga —
+`ddURLRegexp` w `pkg/config/utils/endpoints.go`, tak samo w 7.70, 7.80, 7.83.2
+i 7.84.0. Dla własnej domeny zostaje `app.<site>`; w labie kind agent 7.84.0
+z `site: ninjacat.lab` pytał o `app.ninjacat.lab`.)
 
 Czyli **`DD_SITE` jest trzecią drogą** — obok `dd_url` i proxy — i jako jedyna
 z konfiguracyjnych obejmuje pipeline'y, które `dd_url` nie mają. Kierujesz DNS

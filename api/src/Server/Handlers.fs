@@ -8,7 +8,7 @@ open Oxpecker
 open ClickHouse.Driver
 open NinjaCat.Api.Engine
 
-/// Used until requests carry a tenant — same placeholder as the Go side.
+/// Used until requests carry a tenant: the one every API key has today.
 let private defaultTenant = TenantId "default"
 
 /// Datadog's error envelope, so API clients report our errors the way they

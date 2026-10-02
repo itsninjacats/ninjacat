@@ -24,7 +24,6 @@ open System
 open System.Collections.Generic
 open System.IO
 open System.Text
-open System.Text.Encodings.Web
 open System.Text.Json
 open Google.Protobuf.Collections
 open Google.Protobuf.Reflection
@@ -45,15 +44,14 @@ open Oxpecker
 let private orEmpty (message: 'T) : 'T when 'T: null and 'T: (new: unit -> 'T) =
     if isNull message then new 'T() else message
 
-/// What a row holds when the agent sent no start time: Go's zero time. The
-/// has_create_time column beside it says so.
+/// What a row holds when the agent sent no start time: the year 1, which
+/// the table writes as the epoch. The has_create_time column beside it says
+/// so.
 let private noTime = DateTime(0L, DateTimeKind.Utc)
 
-// Go's time holds any int64. ClickHouse's DateTime ends in 2106, and the
-// driver refuses a whole batch over one value past that; .NET's DateTime ends
-// with the year 9999. A time beyond the end is pinned to it.
+// ClickHouse's DateTime ends in 2106, and the driver refuses a whole batch
+// over one value past that. A start time beyond the end is pinned to it.
 let private lastCreateMillis = int64 UInt32.MaxValue * 1000L
-let private lastSeconds = DateTimeOffset.MaxValue.ToUnixTimeSeconds()
 
 /// A start time in Unix milliseconds, and whether there was one.
 let private createTime (millis: int64) : DateTime * uint8 =
@@ -65,7 +63,7 @@ let private createTime (millis: int64) : DateTime * uint8 =
 /// Unix seconds, or None when the runtime never reported a time: it must not
 /// become 1970-01-01.
 let private secondsOrNone (seconds: int64) : DateTime option =
-    Time.optionalSeconds true (min seconds lastSeconds)
+    Time.optionalSeconds true seconds
 
 /// The sender identity the process-agent stamps on every submit. Every table
 /// of this intake keeps at least the version and the request id: "which agent
@@ -225,7 +223,7 @@ let snapshotRow (info: FrameInfo) (frame: Frame) : ProcessSnapshotRow =
             NetworkID = b.NetworkId
             GroupID = b.GroupId
             GroupSize = b.GroupSize
-            ContainerHostType = ProcessEnum.name b.ContainerHostType
+            ContainerHostType = ProtoEnum.name b.ContainerHostType
             ProcessCount = uint32 b.Processes.Count
             ContainerCount = uint32 b.Containers.Count
             // "No hints" and "hint mask 0" are different statements.
@@ -235,7 +233,7 @@ let snapshotRow (info: FrameInfo) (frame: Frame) : ProcessSnapshotRow =
             HostName = b.HostName
             GroupID = b.GroupId
             GroupSize = b.GroupSize
-            ContainerHostType = ProcessEnum.name b.ContainerHostType
+            ContainerHostType = ProtoEnum.name b.ContainerHostType
             RTHostID = b.HostId
             RTOrgID = b.OrgId
             RTNumCPUs = b.NumCpus
@@ -248,14 +246,14 @@ let snapshotRow (info: FrameInfo) (frame: Frame) : ProcessSnapshotRow =
             NetworkID = b.NetworkId
             GroupID = b.GroupId
             GroupSize = b.GroupSize
-            ContainerHostType = ProcessEnum.name b.ContainerHostType
+            ContainerHostType = ProtoEnum.name b.ContainerHostType
             ContainerCount = uint32 b.Containers.Count }
     | :? CollectorContainerRealTime as b ->
         { row with
             HostName = b.HostName
             GroupID = b.GroupId
             GroupSize = b.GroupSize
-            ContainerHostType = ProcessEnum.name b.ContainerHostType
+            ContainerHostType = ProtoEnum.name b.ContainerHostType
             RTHostID = b.HostId
             RTNumCPUs = b.NumCpus
             RTTotalMemory = b.TotalMemory
@@ -272,7 +270,7 @@ let snapshotRow (info: FrameInfo) (frame: Frame) : ProcessSnapshotRow =
             NetworkID = b.NetworkId
             GroupID = b.GroupId
             GroupSize = b.GroupSize
-            ContainerHostType = ProcessEnum.name b.ContainerHostType
+            ContainerHostType = ProtoEnum.name b.ContainerHostType
             ConnectionCount = uint32 b.Connections.Count }
     | _ -> row
 
@@ -310,7 +308,7 @@ let processRow (info: FrameInfo) (proc: CollectorProc) (p: Process) : ProcessRow
       CPUPct = cpu.TotalPct
       Threads = cpu.NumThreads
       OpenFDs = p.OpenFdCount
-      State = ProcessEnum.name p.State
+      State = ProtoEnum.name p.State
       CreateTime = created
       ContainerID = p.ContainerId
       Tags = Tags.toMultiMap p.Tags
@@ -351,21 +349,21 @@ let processRow (info: FrameInfo) (proc: CollectorProc) (p: Process) : ProcessRow
       NetConnectionRate = networks.ConnectionRate
       NetBytesRate = networks.BytesRate
       ProcessContext = Array.ofSeq p.ProcessContext
-      Language = ProcessEnum.name p.Language
+      Language = ProtoEnum.name p.Language
       PortTCP = Array.ofSeq ports.Tcp
       PortUDP = Array.ofSeq ports.Udp
       GeneratedServiceName = (if isNull generatedName then "" else generatedName.Name)
-      GeneratedServiceNameSource = (if isNull generatedName then "" else ProcessEnum.name generatedName.Source)
+      GeneratedServiceNameSource = (if isNull generatedName then "" else ProtoEnum.name generatedName.Source)
       DDServiceName = (if isNull ddName then "" else ddName.Name)
-      DDServiceNameSource = (if isNull ddName then "" else ProcessEnum.name ddName.Source)
+      DDServiceNameSource = (if isNull ddName then "" else ProtoEnum.name ddName.Source)
       // Parallel arrays, in the order sent: name i came from source i.
       AdditionalGeneratedNames = discovery.AdditionalGeneratedNames |> Seq.map _.Name |> Array.ofSeq
-      AdditionalGeneratedNameSources = discovery.AdditionalGeneratedNames |> Seq.map (fun n -> ProcessEnum.name n.Source) |> Array.ofSeq
+      AdditionalGeneratedNameSources = discovery.AdditionalGeneratedNames |> Seq.map (fun n -> ProtoEnum.name n.Source) |> Array.ofSeq
       TracerRuntimeIDs = discovery.TracerMetadata |> Seq.map _.RuntimeId |> Array.ofSeq
       TracerServiceNames = discovery.TracerMetadata |> Seq.map _.ServiceName |> Array.ofSeq
       APMInstrumentation = Text.flag discovery.ApmInstrumentation
       ServiceResources = ProtoJson.messages discovery.Resources
-      InjectionState = ProcessEnum.name p.InjectionState
+      InjectionState = ProtoEnum.name p.InjectionState
       ZombieChildrenCount = p.ZombieChildrenCount
       ZombieNetRate = p.ZombieNetRate
       HasZombieAggregation = Text.flag p.HasZombieAggregation
@@ -377,7 +375,7 @@ let processRow (info: FrameInfo) (proc: CollectorProc) (p: Process) : ProcessRow
       NetworkID = proc.NetworkId
       GroupID = proc.GroupId
       GroupSize = proc.GroupSize
-      ContainerHostType = ProcessEnum.name proc.ContainerHostType
+      ContainerHostType = ProtoEnum.name proc.ContainerHostType
       AgentVersion = info.Agent.Version
       RequestID = info.Agent.RequestID
       HostUUID = system.Uuid
@@ -433,9 +431,9 @@ let processStatRow (info: FrameInfo) (realTime: CollectorRealTime) (s: ProcessSt
       VoluntaryCtxSwitches = s.VoluntaryCtxSwitches
       InvoluntaryCtxSwitches = s.InvoluntaryCtxSwitches
       ContainerID = s.ContainerId
-      ContainerState = ProcessEnum.name s.ContainerState
-      ProcessState = ProcessEnum.name s.ProcessState
-      ContainerHealth = ProcessEnum.name s.ContainerHealth
+      ContainerState = ProtoEnum.name s.ContainerState
+      ProcessState = ProtoEnum.name s.ProcessState
+      ContainerHealth = ProtoEnum.name s.ContainerHealth
       ContainerRbps = s.ContainerRbps
       ContainerWbps = s.ContainerWbps
       ContainerKey = s.ContainerKey
@@ -447,7 +445,7 @@ let processStatRow (info: FrameInfo) (realTime: CollectorRealTime) (s: ProcessSt
       ContainerByteKey = s.ContainerByteKey.ToByteArray()
       GroupID = realTime.GroupId
       GroupSize = realTime.GroupSize
-      ContainerHostType = ProcessEnum.name realTime.ContainerHostType
+      ContainerHostType = ProtoEnum.name realTime.ContainerHostType
       RTHostID = realTime.HostId
       RTOrgID = realTime.OrgId
       RTNumCPUs = realTime.NumCpus
@@ -484,8 +482,8 @@ let containerRow (info: FrameInfo) (envelope: ContainerEnvelope) (host: string) 
       MemoryLimit = c.MemoryLimit
       CPURequest = c.CpuRequest
       MemoryRequest = c.MemoryRequest
-      State = ProcessEnum.name c.State
-      Health = ProcessEnum.name c.Health
+      State = ProtoEnum.name c.State
+      Health = ProtoEnum.name c.Health
       // Unix SECONDS on the wire: the agent sends CreatedAt.Unix().
       Created = secondsOrNone c.Created
       Started = secondsOrNone c.Started
@@ -511,7 +509,7 @@ let containerRow (info: FrameInfo) (envelope: ContainerEnvelope) (host: string) 
       // same port on two addresses.
       AddrIPs = c.Addresses |> Seq.map _.Ip |> Array.ofSeq
       AddrPorts = c.Addresses |> Seq.map _.Port |> Array.ofSeq
-      AddrProtocols = c.Addresses |> Seq.map (fun a -> ProcessEnum.name a.Protocol) |> Array.ofSeq
+      AddrProtocols = c.Addresses |> Seq.map (fun a -> ProtoEnum.name a.Protocol) |> Array.ofSeq
       Tags = Tags.toMultiMap c.Tags
       HostInfo = ProtoJson.message c.Host
       NetworkID = envelope.NetworkID
@@ -532,7 +530,7 @@ let procContainerRows (info: FrameInfo) (proc: CollectorProc) : ContainerRow[] =
           NetworkID = proc.NetworkId
           GroupID = proc.GroupId
           GroupSize = proc.GroupSize
-          ContainerHostType = ProcessEnum.name proc.ContainerHostType }
+          ContainerHostType = ProtoEnum.name proc.ContainerHostType }
 
     let fromInventory =
         proc.Containers |> Seq.map (containerRow info inventory proc.HostName) |> Array.ofSeq
@@ -552,7 +550,7 @@ let private inventoryContainerRows (info: FrameInfo) (inventory: CollectorContai
           NetworkID = inventory.NetworkId
           GroupID = inventory.GroupId
           GroupSize = inventory.GroupSize
-          ContainerHostType = ProcessEnum.name inventory.ContainerHostType }
+          ContainerHostType = ProtoEnum.name inventory.ContainerHostType }
 
     inventory.Containers |> Seq.map (containerRow info envelope inventory.HostName) |> Array.ofSeq
 
@@ -594,8 +592,8 @@ let containerStatRow (info: FrameInfo) (envelope: ContainerStatEnvelope) (s: Con
       NetSentPs = s.NetSentPs
       NetRcvdBps = s.NetRcvdBps
       NetSentBps = s.NetSentBps
-      State = ProcessEnum.name s.State
-      Health = ProcessEnum.name s.Health
+      State = ProtoEnum.name s.State
+      Health = ProtoEnum.name s.Health
       Key = s.Key
       Started = secondsOrNone s.Started
       ByteKey = s.ByteKey.ToByteArray()
@@ -617,7 +615,7 @@ let private realTimeContainerStatRows (info: FrameInfo) (realTime: CollectorReal
           Host = realTime.HostName
           GroupID = realTime.GroupId
           GroupSize = realTime.GroupSize
-          ContainerHostType = ProcessEnum.name realTime.ContainerHostType
+          ContainerHostType = ProtoEnum.name realTime.ContainerHostType
           RTHostID = realTime.HostId
           RTOrgID = realTime.OrgId
           RTNumCPUs = realTime.NumCpus
@@ -631,7 +629,7 @@ let private containerRealTimeStatRows (info: FrameInfo) (realTime: CollectorCont
           Host = realTime.HostName
           GroupID = realTime.GroupId
           GroupSize = realTime.GroupSize
-          ContainerHostType = ProcessEnum.name realTime.ContainerHostType
+          ContainerHostType = ProtoEnum.name realTime.ContainerHostType
           RTHostID = realTime.HostId
           // CollectorContainerRealTime carries no org id.
           RTOrgID = 0
@@ -719,7 +717,7 @@ let connectionsPayloadRow (info: FrameInfo) (conns: CollectorConnections) (dnsNa
       NetworkID = conns.NetworkId
       GroupID = conns.GroupId
       GroupSize = conns.GroupSize
-      ContainerHostType = ProcessEnum.name conns.ContainerHostType
+      ContainerHostType = ProtoEnum.name conns.ContainerHostType
       ConnectionCount = uint32 conns.Connections.Count
       Architecture = conns.Architecture
       KernelVersion = conns.KernelVersion
@@ -734,9 +732,9 @@ let connectionsPayloadRow (info: FrameInfo) (conns: CollectorConnections) (dnsNa
       ConnTelemetry = connTelemetry conns.ConnTelemetry
       ConnTelemetryMap = conns.ConnTelemetryMap |> Seq.map (fun e -> e.Key, e.Value) |> Map.ofSeq
       CompilationTelemetry = ProtoJson.messageMap conns.CompilationTelemetryByAsset
-      KernelHeaderFetchResult = ProcessEnum.name conns.KernelHeaderFetchResult
+      KernelHeaderFetchResult = ProtoEnum.name conns.KernelHeaderFetchResult
       // The CO-RE result per asset, by name.
-      CORETelemetry = conns.CORETelemetryByAsset |> Seq.map (fun e -> e.Key, ProcessEnum.name e.Value) |> Map.ofSeq
+      CORETelemetry = conns.CORETelemetryByAsset |> Seq.map (fun e -> e.Key, ProtoEnum.name e.Value) |> Map.ofSeq
       PrebuiltEBPFAssets = Array.ofSeq conns.PrebuiltEBPFAssets
       Routes = ProtoJson.messages conns.Routes
       RouteMetadata = ProtoJson.messages conns.RouteMetadata
@@ -778,10 +776,10 @@ let connectionRow (info: FrameInfo) (host: string) (encodedTags: byte[]) (connec
       RaddrPort = remote.Port
       RaddrContainerID = remote.ContainerId
       RaddrHostName = remote.HostName
-      Family = ProcessEnum.name c.Family
-      Type = ProcessEnum.name c.Type
-      Direction = ProcessEnum.name c.Direction
-      IsLocalPortEphemeral = ProcessEnum.name c.IsLocalPortEphemeral
+      Family = ProtoEnum.name c.Family
+      Type = ProtoEnum.name c.Type
+      Direction = ProtoEnum.name c.Direction
+      IsLocalPortEphemeral = ProtoEnum.name c.IsLocalPortEphemeral
       LastBytesSent = c.LastBytesSent
       LastBytesReceived = c.LastBytesReceived
       LastPacketsSent = c.LastPacketsSent
@@ -791,7 +789,7 @@ let connectionRow (info: FrameInfo) (host: string) (encodedTags: byte[]) (connec
         (if isNull c.Protocol then
              [||]
          else
-             c.Protocol.Stack |> Seq.map ProcessEnum.name |> Array.ofSeq)
+             c.Protocol.Stack |> Seq.map ProtoEnum.name |> Array.ofSeq)
       NetNS = c.NetNS
       RemoteNetworkID = c.RemoteNetworkId
       IPTranslationReplSrcIP = (if translated then Some translation.ReplSrcIP else None)
@@ -873,32 +871,23 @@ let private reply: EndpointHandler = setContentType "application/x-protobuf" >=>
 /// The frame of a request. One that cannot be read is kept whole: it is
 /// exactly the payload that would explain why, and it arrives once.
 let private decode (body: byte[]) (ctx: HttpContext) (label: string) : Frame option =
-    let log = Ctx.log ctx
 
     match ProcessFrame.decode body with
     | Ok frame -> Some frame
     | Error error ->
-        log.LogWarning("[{Label}] process-agent frame: {Error} ({Bytes} bytes)", label, error, body.Length)
         Raw.store ctx "process" "decode_error" (label + ": " + error) body
         None
 
 /// The frame's type byte decides the body, not the path, so the two can
 /// disagree: a misconfigured agent, or a type not met before.
 let private unexpected (body: byte[]) (ctx: HttpContext) (label: string) (frame: Frame) : unit =
-    let log = Ctx.log ctx
-
-    let goType = "*process." + frame.Body.Descriptor.Name
-    log.LogWarning("[{Label}] type={Type} {GoType} - not handled", label, frame.Header.Type, goType)
-    Raw.store ctx "process" "unexpected_shape" $"/api/v1/{label} decoded to {goType} (frame type {frame.Header.Type})" body
+    let message = frame.Body.Descriptor.Name
+    Raw.store ctx "process" "unexpected_shape" $"/api/v1/{label} decoded to {message} (frame type {frame.Header.Type})" body
 
 /// Without a tenant there is nowhere to put a row: tenant_id leads every
 /// table's ORDER BY. The agent still gets its reply.
 let private write (ctx: HttpContext) (table: Table<'row>) (rows: 'row[]) : unit =
-    let tenant = Ctx.tenant ctx
-    let sink = Ctx.sink ctx
-
-    if tenant <> "" then
-        Sink.write sink table rows
+    Ctx.write ctx table rows
 
 /// The process check. One path, two message types: 12 (CollectorProc, the
 /// full snapshot every 10 s) and 27 (CollectorRealTime, stats only, every

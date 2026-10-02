@@ -19,37 +19,13 @@ open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
 
-let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
-
-/// A string as Go's %q prints it.
-let private quoted (text: string) : string =
-    let out = StringBuilder("\"")
-
-    for c in text do
-        match c with
-        | '"' -> out.Append "\\\"" |> ignore
-        | '\\' -> out.Append "\\\\" |> ignore
-        | '\n' -> out.Append "\\n" |> ignore
-        | '\r' -> out.Append "\\r" |> ignore
-        | '\t' -> out.Append "\\t" |> ignore
-        | c when c < ' ' || c = '\127' -> out.Append("\\x").Append((int c).ToString "x2") |> ignore
-        | c -> out.Append c |> ignore
-
-    out.Append('"').ToString()
-
 /// One opaque integration payload per request. The agent never looks inside:
 /// an integration hands it bytes, and no schema for them is published
 /// anywhere. So the bytes are kept as they are, with the sender's identity,
 /// which the event platform carries in headers, in the note.
 let handleGenResources (body: byte[]) (ctx: HttpContext) : Task =
-    let header (name: string) = quoted (Ctx.header ctx name)
-
-    let note =
-        $"""DD-EVP-ORIGIN={header "DD-EVP-ORIGIN"} DD-EVP-ORIGIN-VERSION={header "DD-EVP-ORIGIN-VERSION"} Content-Type={header "Content-Type"}"""
-
-    Raw.store ctx "genresources" "no_schema" note body
+    Raw.store ctx "genresources" "no_schema" (Raw.originNote ctx) body
     accepted ctx
-
 
 // instrumentation-telemetry-intake: one path, five producers, one envelope
 // with `request_type` as the discriminator.
@@ -67,29 +43,10 @@ let handleGenResources (body: byte[]) (ctx: HttpContext) : Task =
 // `application` and `host` give their known fields as columns, and `payload`
 // stays JSON text whoever sent it.
 
-/// A value that lands in a column as text: a string as itself, absent and
-/// null as "", anything else as its JSON text. Never a "-" placeholder: the
-/// columns are not Nullable, and "-" could not be told from a sender's own.
-let text (value: JsonElement option) : string =
-    match value with
-    | None -> ""
-    | Some value ->
-        match value.ValueKind with
-        | JsonValueKind.String -> value.GetString()
-        | JsonValueKind.Null -> ""
-        | _ -> value.GetRawText()
-
-/// The JSON text exactly as it arrived; "" when absent. Kept next to every
-/// parsed field, so a value that does not parse is not lost.
-let rawText (value: JsonElement option) : string =
-    match value with
-    | None -> ""
-    | Some value -> value.GetRawText()
-
 /// `seq_id`, read from its digits: a float would round a large sequence
 /// number past 2^53.
 let seqId (value: JsonElement option) : int64 option =
-    match value |> Option.bind GoJson.numberText with
+    match value |> Option.bind Json.numberText with
     | None -> None
     | Some digits ->
         match Int64.TryParse(digits, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture) with
@@ -134,15 +91,15 @@ let application (value: JsonElement option) : Application option =
     match value with
     | Some value when value.ValueKind <> JsonValueKind.Object && value.ValueKind <> JsonValueKind.Null -> None
     | _ ->
-        let fields = value |> Option.map GoJson.members |> Option.defaultValue Map.empty
+        let fields = value |> Option.map Json.members |> Option.defaultValue Map.empty
 
         Some
-            { ServiceName = text (fields.TryFind "service_name")
-              ServiceVersion = text (fields.TryFind "service_version")
-              Env = text (fields.TryFind "env")
-              LanguageName = text (fields.TryFind "language_name")
-              LanguageVersion = text (fields.TryFind "language_version")
-              TracerVersion = text (fields.TryFind "tracer_version") }
+            { ServiceName = Json.text (fields.TryFind "service_name")
+              ServiceVersion = Json.text (fields.TryFind "service_version")
+              Env = Json.text (fields.TryFind "env")
+              LanguageName = Json.text (fields.TryFind "language_name")
+              LanguageVersion = Json.text (fields.TryFind "language_version")
+              TracerVersion = Json.text (fields.TryFind "tracer_version") }
 
 type Host =
     { Hostname: string
@@ -157,12 +114,12 @@ let host (value: JsonElement option) : Host option =
     match value with
     | Some value when value.ValueKind <> JsonValueKind.Object && value.ValueKind <> JsonValueKind.Null -> None
     | _ ->
-        let fields = value |> Option.map GoJson.members |> Option.defaultValue Map.empty
+        let fields = value |> Option.map Json.members |> Option.defaultValue Map.empty
 
         Some
-            { Hostname = text (fields.TryFind "hostname")
-              OS = text (fields.TryFind "os")
-              Architecture = text (fields.TryFind "architecture")
+            { Hostname = Json.text (fields.TryFind "hostname")
+              OS = Json.text (fields.TryFind "os")
+              Architecture = Json.text (fields.TryFind "architecture")
               Extra =
                 fields
                 |> Map.filter (fun name _ -> name <> "hostname" && name <> "os" && name <> "architecture")
@@ -216,8 +173,8 @@ let private requestRow (ctx: HttpContext) (envelope: Map<string, JsonElement>) (
     // A block that did not read as an object has no column to go to either,
     // so its text is put back under its own name.
     let extra = extraKeys envelope
-    let extra = if app.IsSome then extra else extra.Add("application", rawText (envelope.TryFind "application"))
-    let extra = if sender.IsSome then extra else extra.Add("host", rawText (envelope.TryFind "host"))
+    let extra = if app.IsSome then extra else extra.Add("application", Json.rawOrEmpty (envelope.TryFind "application"))
+    let extra = if sender.IsSome then extra else extra.Add("host", Json.rawOrEmpty (envelope.TryFind "host"))
 
     let app =
         app
@@ -241,13 +198,13 @@ let private requestRow (ctx: HttpContext) (envelope: Map<string, JsonElement>) (
       ReceivedAt = DateTime.UtcNow
       RequestType = requestType
       Producer = producer envelope requestType
-      APIVersion = text (envelope.TryFind "api_version")
-      RuntimeID = text (envelope.TryFind "runtime_id")
+      APIVersion = Json.text (envelope.TryFind "api_version")
+      RuntimeID = Json.text (envelope.TryFind "runtime_id")
       SeqID = seqId (envelope.TryFind "seq_id")
       TracerTime = unixTime (envelope.TryFind "tracer_time")
-      TracerTimeRaw = rawText (envelope.TryFind "tracer_time")
+      TracerTimeRaw = Json.rawOrEmpty (envelope.TryFind "tracer_time")
       EventTime = unixTime (envelope.TryFind "event_time")
-      EventTimeRaw = rawText (envelope.TryFind "event_time")
+      EventTimeRaw = Json.rawOrEmpty (envelope.TryFind "event_time")
       ServiceName = app.ServiceName
       ServiceVersion = app.ServiceVersion
       Env = app.Env
@@ -258,9 +215,9 @@ let private requestRow (ctx: HttpContext) (envelope: Map<string, JsonElement>) (
       HostOS = sender.OS
       HostArchitecture = sender.Architecture
       HostExtra = sender.Extra
-      Payload = rawText (envelope.TryFind "payload")
-      Debug = rawText (envelope.TryFind "debug")
-      Origin = text (envelope.TryFind "origin")
+      Payload = Json.rawOrEmpty (envelope.TryFind "payload")
+      Debug = Json.rawOrEmpty (envelope.TryFind "debug")
+      Origin = Json.text (envelope.TryFind "origin")
       Via = Ctx.header ctx "Via"
       DDAgentHostname = Ctx.header ctx "DD-Agent-Hostname"
       DDAgentEnv = Ctx.header ctx "DD-Agent-Env"
@@ -279,7 +236,7 @@ let private batchEntries (payload: JsonElement option) : Map<string, JsonElement
         let entries = List.ofSeq (value.EnumerateArray())
 
         if entries |> List.forall (fun e -> e.ValueKind = JsonValueKind.Object || e.ValueKind = JsonValueKind.Null) then
-            Some(entries |> List.map GoJson.members)
+            Some(entries |> List.map Json.members)
         else
             None
     | _ -> None
@@ -288,46 +245,42 @@ let private batchEntries (payload: JsonElement option) : Map<string, JsonElement
 /// is [{request_type, payload}, …], adds one row per entry on top of that
 /// row, which keeps the whole batch.
 let handleTelemetry (body: byte[]) (ctx: HttpContext) : Task =
-    let tenant = Ctx.tenant ctx
     let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     let refuse (error: string) =
-        log.LogWarning("[apmtelemetry] not a JSON object: {Error}", error)
         Raw.store ctx "apmtelemetry" "decode_error" error body
 
-    match GoJson.parse body with
+    match Json.tryParse body with
     | Error e -> refuse e
     | Ok root when root.ValueKind <> JsonValueKind.Object && root.ValueKind <> JsonValueKind.Null ->
-        refuse $"expected a JSON object, got {GoJson.kind root}"
+        refuse $"expected an object, got {Json.kind root}"
     | Ok root ->
-        if tenant <> "" then
-            let envelope = GoJson.members root
-            let requestType = text (envelope.TryFind "request_type")
-            let parent = requestRow ctx envelope requestType
+        let envelope = Json.members root
+        let requestType = Json.text (envelope.TryFind "request_type")
+        let parent = requestRow ctx envelope requestType
 
-            let children =
-                if requestType <> "message-batch" then
+        let children =
+            if requestType <> "message-batch" then
+                []
+            else
+                match batchEntries (envelope.TryFind "payload") with
+                | None ->
+                    log.LogWarning "[apmtelemetry] batch payload is not a list of objects; kept only on the request's row"
                     []
-                else
-                    match batchEntries (envelope.TryFind "payload") with
-                    | None ->
-                        log.LogWarning "[apmtelemetry] batch payload is not a list of objects; kept only on the request's row"
-                        []
-                    | Some entries ->
-                        // Entries carry no envelope of their own: they
-                        // inherit the request's identity.
-                        entries
-                        |> List.mapi (fun i entry ->
-                            let entryType = text (entry.TryFind "request_type")
+                | Some entries ->
+                    // Entries carry no envelope of their own: they
+                    // inherit the request's identity.
+                    entries
+                    |> List.mapi (fun i entry ->
+                        let entryType = Json.text (entry.TryFind "request_type")
 
-                            { parent with
-                                RequestType = entryType
-                                Producer = producer envelope entryType
-                                Payload = rawText (entry.TryFind "payload")
-                                BatchIndex = Some(uint32 i)
-                                ParentRequestType = requestType })
+                        { parent with
+                            RequestType = entryType
+                            Producer = producer envelope entryType
+                            Payload = Json.rawOrEmpty (entry.TryFind "payload")
+                            BatchIndex = Some(uint32 i)
+                            ParentRequestType = requestType })
 
-            Sink.write sink ApmTelemetry.table (Array.ofList (parent :: children))
+        Ctx.write ctx ApmTelemetry.table (Array.ofList (parent :: children))
 
     accepted ctx

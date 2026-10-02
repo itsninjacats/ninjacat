@@ -43,15 +43,6 @@ let rec value (k: int32) : float =
     elif k < 0 then -(value -k)
     else Math.Pow(gamma, float (int k - bias))
 
-/// The range of values that map to a bucket: half a step either side of its
-/// value.
-let bounds (k: int32) : float * float =
-    if k = 0 then
-        0.0, min
-    else
-        let exponent = float (int k - bias)
-        Math.Pow(gamma, exponent - 0.5), Math.Pow(gamma, exponent + 0.5)
-
 /// The summary that travels with the buckets.
 type Stats =
     { Count: int64

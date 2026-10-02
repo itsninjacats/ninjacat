@@ -8,9 +8,7 @@
 module NinjaCat.Api.Intake.Routers.Logs
 
 open System
-open System.IO
 open System.Text
-open System.Text.Encodings.Web
 open System.Text.Json
 open System.Threading.Tasks
 open Microsoft.Extensions.Logging
@@ -34,9 +32,8 @@ type LogItem =
       Attributes: Map<string, JsonElement> }
 
 type ItemProblem =
-    /// JSON, but not a log: a declared field has the wrong type. Carries the
-    /// keys that were there.
-    | NotALog of keys: string
+    /// JSON, but not a log: a declared field is not a string. Says which.
+    | NotALog of problem: string
     | Undecodable of error: string
 
 /// Splits a body into items. Three framings arrive here: a JSON array (the
@@ -69,40 +66,18 @@ let decodeItem (raw: JsonElement) : Result<LogItem, ItemProblem> =
     if raw.ValueKind <> JsonValueKind.Object then
         Error(Undecodable "a log item must be a JSON object")
     else
-        let properties = raw.EnumerateObject() |> Seq.map (fun p -> p.Name, p.Value) |> Map.ofSeq
+        let bad = JsonFields.Mismatches()
+        let fields = JsonFields.fields bad "" raw
 
-        let declared (name: string) : Result<string option, unit> =
-            match properties.TryFind name with
-            | None -> Ok None
-            | Some value when value.ValueKind = JsonValueKind.Null -> Ok None
-            | Some value when value.ValueKind = JsonValueKind.String -> Ok(Some(value.GetString()))
-            | Some _ -> Error()
+        let item =
+            { Source = fields.String "ddsource"
+              Tags = fields.String "ddtags"
+              Hostname = fields.String "hostname"
+              Message = fields.String "message"
+              Service = fields.String "service"
+              Attributes = fields.Members |> Map.filter (fun name _ -> not (declaredFields.Contains name)) }
 
-        match declared "ddsource", declared "ddtags", declared "hostname", declared "message", declared "service" with
-        | Ok source, Ok tags, Ok hostname, Ok message, Ok service ->
-            Ok
-                { Source = defaultArg source ""
-                  Tags = defaultArg tags ""
-                  Hostname = defaultArg hostname ""
-                  Message = defaultArg message ""
-                  Service = defaultArg service ""
-                  Attributes = properties |> Map.filter (fun name _ -> not (declaredFields.Contains name)) }
-        | _ -> Error(NotALog(Json.keys raw))
-
-let private attributeString (name: string) (attributes: Map<string, JsonElement>) : string option =
-    match attributes.TryFind name with
-    | Some value when value.ValueKind = JsonValueKind.String -> Some(value.GetString())
-    | _ -> None
-
-/// An integer attribute. A number written with a fraction or an exponent is
-/// not one, so a 64-bit id is never rounded through a float.
-let private attributeInt64 (name: string) (attributes: Map<string, JsonElement>) : int64 option =
-    match attributes.TryFind name with
-    | Some value when value.ValueKind = JsonValueKind.Number ->
-        match value.TryGetInt64() with
-        | true, n -> Some n
-        | false, _ -> None
-    | _ -> None
+        if bad.Count = 0 then Ok item else Error(NotALog bad[0])
 
 /// The row's timestamp, where it came from, and the attribute it used.
 ///
@@ -121,10 +96,10 @@ type LogTime =
 
 let timestamp (attributes: Map<string, JsonElement>) (arrival: DateTime) : LogTime =
     let millis (name: string) =
-        attributeInt64 name attributes |> Option.filter (fun ms -> ms > 0L) |> Option.map Time.fromUnixMillis
+        attributes.TryFind name |> Option.bind Json.int64Of |> Option.filter (fun ms -> ms > 0L) |> Option.map Time.fromUnixMillis
 
     let text (name: string) =
-        attributeString name attributes |> Option.bind Time.tryRfc3339
+        attributes.TryFind name |> Option.bind Json.stringOf |> Option.bind Time.tryRfc3339
 
     match millis "timestamp", text "timestamp", millis "date", text "date", text "@t" with
     | Some t, _, _, _, _ -> { Time = t; Source = "timestamp_ms"; Key = "timestamp" }
@@ -136,25 +111,6 @@ let timestamp (attributes: Map<string, JsonElement>) (arrival: DateTime) : LogTi
     // always send one. The row says so instead of passing arrival off as the
     // sender's clock.
     | None, None, None, None, None -> { Time = arrival; Source = "arrival"; Key = "" }
-
-/// The attributes left after some became columns, as JSON text; "" if none.
-let private attributesJson (attributes: Map<string, JsonElement>) : string =
-    if attributes.IsEmpty then
-        ""
-    else
-        use buffer = new MemoryStream()
-
-        do
-            use writer = new Utf8JsonWriter(buffer, JsonWriterOptions(Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping))
-            writer.WriteStartObject()
-
-            for pair in attributes do
-                writer.WritePropertyName pair.Key
-                pair.Value.WriteTo writer
-
-            writer.WriteEndObject()
-
-        Encoding.UTF8.GetString(buffer.ToArray())
 
 /// A .NET log level (Microsoft's names and Serilog's) under the status names
 /// the agent and the browser SDK use.
@@ -182,7 +138,7 @@ let toRow (tenant: string) (item: LogItem) (arrival: DateTime) (defaults: BatchD
     // declared field, so it arrives as an attribute.
     let hostAttribute =
         if item.Hostname = "" then
-            attributeString "host" item.Attributes |> Option.filter (fun h -> h <> "")
+            item.Attributes.TryFind "host" |> Option.bind Json.stringOf |> Option.filter (fun h -> h <> "")
         else
             None
 
@@ -192,10 +148,10 @@ let toRow (tenant: string) (item: LogItem) (arrival: DateTime) (defaults: BatchD
     // message, @t for the time, @l for the level (left out when it is
     // Information), and dd_service where its log injection already put one.
     // Each stands in only where the usual field is missing.
-    let status = attributeString "status" item.Attributes
-    let compactMessage = if item.Message = "" then attributeString "@m" item.Attributes else None
-    let compactLevel = if status.IsNone then attributeString "@l" item.Attributes else None
-    let compactService = if item.Service = "" then attributeString "dd_service" item.Attributes else None
+    let status = item.Attributes.TryFind "status" |> Option.bind Json.stringOf
+    let compactMessage = if item.Message = "" then (item.Attributes.TryFind "@m" |> Option.bind Json.stringOf) else None
+    let compactLevel = if status.IsNone then (item.Attributes.TryFind "@l" |> Option.bind Json.stringOf) else None
+    let compactService = if item.Service = "" then (item.Attributes.TryFind "dd_service" |> Option.bind Json.stringOf) else None
 
     // Only attributes that were actually USED leave the JSON column.
     let rest =
@@ -224,23 +180,17 @@ let toRow (tenant: string) (item: LogItem) (arrival: DateTime) (defaults: BatchD
       Message = defaultArg compactMessage item.Message
       // Batch tags first: they are the weaker statement.
       Tags = Tags.toMultiMap (defaults.Tags @ Tags.splitDDTags item.Tags)
-      Attributes = attributesJson rest
+      Attributes = (if rest.IsEmpty then "" else Json.compactObject rest)
       TimestampSource = time.Source }
-
-/// Datadog answers logs with an empty object and 202, whatever happened.
-let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
 
 let handle (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     if Diagnose.isSweep ctx || body.Length = 0 then
         accepted ctx
     else
         match parseItems body with
         | Error e ->
-            log.LogWarning("[logs] {Error}", e)
             Raw.store ctx "logs" "decode_error" e body
             accepted ctx
         | Ok items ->
@@ -261,17 +211,14 @@ let handle (body: byte[]) (ctx: HttpContext) : Task =
                 let rawBytes = Encoding.UTF8.GetBytes(raw.GetRawText())
 
                 match decodeItem raw with
-                | Error(NotALog keys) ->
-                    log.LogWarning("[logs] item #{Index} is not shaped like a log, kept raw, keys: {Keys}", i, keys)
-                    Raw.store ctx "logs" "unexpected_shape" $"item #{i} did not fit datadogV2.HTTPLogItem" rawBytes
+                | Error(NotALog problem) ->
+                    Raw.store ctx "logs" "unexpected_shape" $"item #{i}: {problem}" rawBytes
                 | Error(Undecodable error) ->
-                    log.LogWarning("[logs] item #{Index}: {Error}", i, error)
                     Raw.store ctx "logs" "decode_error" $"item #{i}: {error}" rawBytes
                 // `{}` says nothing: a probe, not a log.
                 | Ok item when item.Message = "" && item.Attributes.IsEmpty && item.Source = "" && item.Service = "" -> ()
                 | Ok item ->
-                    if tenant <> "" then
-                        rows.Add(toRow tenant item arrival defaults))
+                    rows.Add(toRow tenant item arrival defaults))
 
-            Sink.write sink Logs.table (rows.ToArray())
+            Ctx.write ctx Logs.table (rows.ToArray())
             accepted ctx

@@ -18,9 +18,7 @@ module NinjaCat.Api.Intake.Routers.Trace
 open System
 open System.Collections.Generic
 open System.Globalization
-open System.IO
 open System.Text
-open System.Text.Encodings.Web
 open System.Text.Json
 open System.Threading.Tasks
 open Google.Protobuf
@@ -37,16 +35,6 @@ open NinjaCat.Api.Storage.Rows
 let private intake = "trace"
 
 // --- JSON for the *_json columns ---
-
-/// Writes one of the *_json columns.
-let private jsonText (write: Utf8JsonWriter -> unit) : string =
-    use buffer = new MemoryStream()
-
-    do
-        use writer = new Utf8JsonWriter(buffer, JsonWriterOptions(Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping))
-        write writer
-
-    Encoding.UTF8.GetString(buffer.ToArray())
 
 /// A float as JSON can hold it. JSON has numbers, but no NaN and no infinity.
 type private JsonDouble =
@@ -92,52 +80,6 @@ let private writeObject (writer: Utf8JsonWriter) (entries: Map<string, 'v>) (wri
         writeValue entry.Value
 
     writer.WriteEndObject()
-
-/// A float as Go's strconv.FormatFloat(v, 'g', -1, 64) writes it: the
-/// shortest digits that round-trip, with an exponent below 1e-4 and from 1e6.
-let formatFloat (value: float) : string =
-    if Double.IsNaN value then
-        "NaN"
-    elif Double.IsPositiveInfinity value then
-        "+Inf"
-    elif Double.IsNegativeInfinity value then
-        "-Inf"
-    else
-        let sign = if Double.IsNegative value then "-" else ""
-
-        // .NET's "R" is also the shortest round-trip form; only its layout
-        // differs, so take its digits and lay them out again.
-        let text = (abs value).ToString("R", CultureInfo.InvariantCulture)
-
-        let mantissa, exponent =
-            match text.IndexOf 'E' with
-            | -1 -> text, 0
-            | i -> text.Substring(0, i), int (text.Substring(i + 1))
-
-        let whole, fraction =
-            match mantissa.IndexOf '.' with
-            | -1 -> mantissa, ""
-            | i -> mantissa.Substring(0, i), mantissa.Substring(i + 1)
-
-        let allDigits = whole + fraction
-        let leadingZeros = allDigits.Length - allDigits.TrimStart('0').Length
-        let digits = allDigits.Trim '0'
-        // The value is 0.<digits> × 10^point.
-        let point = whole.Length + exponent - leadingZeros
-
-        if digits = "" then
-            sign + "0"
-        elif point - 1 < -4 || point - 1 >= 6 then
-            let rest = if digits.Length > 1 then "." + digits.Substring 1 else ""
-            let power = point - 1
-            let powerSign = if power < 0 then "-" else "+"
-            sign + digits.Substring(0, 1) + rest + "e" + powerSign + (abs power).ToString "00"
-        elif point <= 0 then
-            sign + "0." + String('0', -point) + digits
-        elif digits.Length <= point then
-            sign + digits + String('0', point - digits.Length)
-        else
-            sign + digits.Substring(0, point) + "." + digits.Substring point
 
 // --- /api/v0.2/traces -> spans ---
 
@@ -208,7 +150,7 @@ let private v04EventAttributes (attributes: MapField<string, AttributeAnyValue>)
     if attributes.Count = 0 then
         ""
     else
-        jsonText (fun writer -> writeObject writer (toMap attributes) (writeV04Value writer))
+        Json.write (fun writer -> writeObject writer (toMap attributes) (writeV04Value writer))
 
 /// A v0.4 span link's plain string attributes, in the tagged form too, so the
 /// link_attributes column has one shape across both wire formats.
@@ -216,7 +158,7 @@ let private v04LinkAttributes (attributes: MapField<string, string>) : string =
     if attributes.Count = 0 then
         ""
     else
-        jsonText (fun writer ->
+        Json.write (fun writer ->
             writeObject writer (toMap attributes) (fun value ->
                 writeTagged writer "string" (fun () -> writer.WriteStringValue value)))
 
@@ -354,7 +296,7 @@ let idxAttributesJson (strings: IList<string>) (attributes: MapField<uint32, Idx
         ""
     else
         let byName = attributes |> Seq.map (fun pair -> stringAt strings pair.Key, pair.Value) |> Map.ofSeq
-        jsonText (fun writer -> writeObject writer byName (fun value -> writeIdxValue strings writer value 0))
+        Json.write (fun writer -> writeObject writer byName (fun value -> writeIdxValue strings writer value 0))
 
 /// The scalar attributes as plain strings, for the tracer_tags and chunk_tags
 /// columns. The others survive in the matching *_attributes_json column.
@@ -369,7 +311,7 @@ let private idxScalarAttributes (strings: IList<string>) (attributes: MapField<u
         | Idx.AnyValue.ValueOneofCase.StringValueRef -> found <- found.Add(key, stringAt strings value.StringValueRef)
         | Idx.AnyValue.ValueOneofCase.BoolValue -> found <- found.Add(key, (if value.BoolValue then "true" else "false"))
         | Idx.AnyValue.ValueOneofCase.IntValue -> found <- found.Add(key, value.IntValue.ToString CultureInfo.InvariantCulture)
-        | Idx.AnyValue.ValueOneofCase.DoubleValue -> found <- found.Add(key, formatFloat value.DoubleValue)
+        | Idx.AnyValue.ValueOneofCase.DoubleValue -> found <- found.Add(key, Text.ofFloat value.DoubleValue)
         | _ -> ()
 
     found
@@ -573,8 +515,6 @@ let spanRows (tenant: string) (receivedAt: DateTime) (payload: AgentPayload) : S
 /// (rate_by_service feeds its priority sampler), so it keeps exactly this shape.
 let handleTraces (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     let answer: EndpointHandler = json {| rate_by_service = {||} |}
 
@@ -589,17 +529,14 @@ let handleTraces (body: byte[]) (ctx: HttpContext) : Task =
 
         match parsed with
         | Error problem ->
-            log.LogWarning("[traces] protobuf AgentPayload: {Error} ({Bytes} bytes)", problem, body.Length)
             Raw.store ctx intake "decode_error" $"protobuf AgentPayload: {problem}" body
         | Ok payload when payload.TracerPayloads.Count = 0 && payload.IdxTracerPayloads.Count = 0 ->
             // Protobuf carries no type marker and skips unknown fields, so a
             // body meant for another endpoint decodes "successfully" into an
             // empty payload. Neither list being filled is the one signal.
-            log.LogWarning("[traces] protobuf decoded to zero tracer payloads ({Bytes} bytes), wrong payload type?", body.Length)
             Raw.store ctx intake "unexpected_shape" "AgentPayload decoded with no TracerPayloads and no IdxTracerPayloads" body
         | Ok payload ->
-            if tenant <> "" then
-                Sink.write sink Spans.table (spanRows tenant DateTime.UtcNow payload)
+            Ctx.write ctx Spans.table (spanRows tenant DateTime.UtcNow payload)
 
         answer ctx
 
@@ -786,16 +723,13 @@ let statRows (log: ILogger) (tenant: string) (receivedAt: DateTime) (payload: St
 let handleStats (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
     let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     if not (Diagnose.isSweep ctx) then
         match decodeStatsPayload body with
         | Error problem ->
-            log.LogWarning("[apm-stats] msgpack StatsPayload: {Error} ({Bytes} bytes)", problem, body.Length)
             Raw.store ctx intake "decode_error" $"msgpack StatsPayload: {problem}" body
         | Ok payload ->
-            if tenant <> "" then
-                Sink.write sink ApmStats.table (statRows log tenant DateTime.UtcNow payload)
+            Ctx.write ctx ApmStats.table (statRows log tenant DateTime.UtcNow payload)
 
     json {||} ctx
 // --- /api/v0.1/pipeline_stats -> dsm_pipeline_stats, dsm_backlogs, dsm_bucket_transactions ---
@@ -904,7 +838,7 @@ let rec private writeUnknown (writer: Utf8JsonWriter) (value: MsgValue) : unit =
         if Single.IsFinite number then writer.WriteNumberValue number else writeDouble writer (float number)
     | MsgFloat number -> writeDouble writer number
     | MsgStr text -> writer.WriteStringValue text
-    // msgp hands an empty bin over as a nil slice, which Go writes as null.
+    // An empty bin is null: there are no bytes to write.
     | MsgBin bytes -> if bytes.Length = 0 then writer.WriteNullValue() else writeBytes writer bytes
     | MsgArray items ->
         writer.WriteStartArray()
@@ -983,7 +917,7 @@ let dsmRows
                     if unknown.IsEmpty then
                         ""
                     else
-                        jsonText (fun writer -> writeObject writer unknown (writeUnknown writer)) }
+                        Json.write (fun writer -> writeObject writer unknown (writeUnknown writer)) }
 
         for backlog in bucket.Backlogs do
             backlogs.Add
@@ -1007,76 +941,33 @@ let dsmRows
 /// body untouched.
 let handlePipelineStats (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     if not (Diagnose.isSweep ctx) then
         match decodeDsmPayload body with
         | Error problem ->
-            log.LogWarning("[pipeline-stats] msgpack datastreams.StatsPayload: {Error} ({Bytes} bytes)", problem, body.Length)
             Raw.store ctx intake "decode_error" $"msgpack datastreams.StatsPayload: {problem}" body
         | Ok payload ->
-            if tenant <> "" then
-                let headers =
-                    { Via = Ctx.header ctx "Via"
-                      AdditionalTags = Ctx.header ctx "X-Datadog-Additional-Tags"
-                      ContainerTags = Ctx.header ctx "X-Datadog-Container-Tags"
-                      // The engine decompresses the body and leaves the
-                      // header, so this is what the tracer put on the wire.
-                      ContentEncoding = Ctx.header ctx "Content-Encoding" }
+            let headers =
+                { Via = Ctx.header ctx "Via"
+                  AdditionalTags = Ctx.header ctx "X-Datadog-Additional-Tags"
+                  ContainerTags = Ctx.header ctx "X-Datadog-Container-Tags"
+                  // The engine decompresses the body and leaves the
+                  // header, so this is what the tracer put on the wire.
+                  ContentEncoding = Ctx.header ctx "Content-Encoding" }
 
-                let points, backlogs, blobs = dsmRows tenant DateTime.UtcNow payload headers
-                Sink.write sink DsmPipelineStats.table points
-                Sink.write sink DsmBacklogs.table backlogs
-                Sink.write sink DsmBucketTransactions.table blobs
+            let points, backlogs, blobs = dsmRows tenant DateTime.UtcNow payload headers
+            Ctx.write ctx DsmPipelineStats.table points
+            Ctx.write ctx DsmBacklogs.table backlogs
+            Ctx.write ctx DsmBucketTransactions.table blobs
 
-    (setStatusCode 202 >=> json {||}) ctx
+    accepted ctx
 // --- /api/v2/data_streams_messages -> dsm_messages ---
-
-/// Go's JSON depth limit; .NET's default of 64 would refuse what Go took.
-let private jsonDepth = Json.maxDepth
-
-/// The body as the messages of the array the forwarder sends, each as the
-/// bytes it arrived as, or why the body is not one. `null` is an empty batch,
-/// as it was to Go's decoder.
-let parseMessages (body: byte[]) : Result<byte[] list, string> =
-    let wrongKind (kind: string) =
-        Error $"json: cannot unmarshal {kind} into Go value of type []jsontext.Value"
-
-    try
-        let mutable reader = Utf8JsonReader(ReadOnlySpan body, JsonReaderOptions(MaxDepth = jsonDepth))
-        reader.Read() |> ignore
-
-        match reader.TokenType with
-        | JsonTokenType.StartArray ->
-            let messages = ResizeArray<byte[]>()
-
-            while reader.Read() && reader.TokenType <> JsonTokenType.EndArray do
-                let start = int reader.TokenStartIndex
-                reader.Skip()
-                messages.Add(body[start .. int reader.BytesConsumed - 1])
-
-            // Anything after the array is an error, raised by this read.
-            reader.Read() |> ignore
-            Ok(List.ofSeq messages)
-        | kind ->
-            reader.Skip()
-            reader.Read() |> ignore
-
-            match kind with
-            | JsonTokenType.Null -> Ok []
-            | JsonTokenType.StartObject -> wrongKind "object"
-            | JsonTokenType.String -> wrongKind "string"
-            | JsonTokenType.Number -> wrongKind "number"
-            | _ -> wrongKind "bool"
-    with :? JsonException as e ->
-        Error e.Message
 
 /// A message's top-level key names, sorted. The one thing extractable without
 /// guessing at meaning, and enough to turn "what does this track send?" into
 /// a GROUP BY. A message that is not an object has none.
 let messageKeys (message: byte[]) : string[] =
-    let mutable reader = Utf8JsonReader(ReadOnlySpan message, JsonReaderOptions(MaxDepth = jsonDepth))
+    let mutable reader = Utf8JsonReader(ReadOnlySpan message, JsonReaderOptions(MaxDepth = Json.maxDepth))
     let keys = ResizeArray<string>()
 
     if reader.Read() && reader.TokenType = JsonTokenType.StartObject then
@@ -1085,7 +976,7 @@ let messageKeys (message: byte[]) : string[] =
                 try
                     reader.GetString()
                 with :? InvalidOperationException ->
-                    // Not UTF-8: Go read such a key with replacement characters.
+                    // Not UTF-8: read with replacement characters instead.
                     Encoding.UTF8.GetString reader.ValueSpan
 
             keys.Add key
@@ -1123,24 +1014,20 @@ let dsmMessageRows
 /// forwarder into one array.
 let handleDataStreamsMessages (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
-    match parseMessages body with
+    match Json.tryParseElementBytes body with
     | Error problem ->
-        log.LogWarning("[data-streams] JSON array: {Error} ({Bytes} bytes)", problem, body.Length)
         Raw.store ctx intake "unexpected_shape" $"body is not the JSON array the forwarder sends: {problem}" body
     | Ok messages ->
-        if tenant <> "" then
-            let rows =
-                dsmMessageRows
-                    tenant
-                    DateTime.UtcNow
-                    messages
-                    (Ctx.header ctx "Dd-Evp-Origin")
-                    (Ctx.header ctx "Dd-Evp-Origin-Version")
-                    (Ctx.header ctx "Content-Encoding")
+        let rows =
+            dsmMessageRows
+                tenant
+                DateTime.UtcNow
+                messages
+                (Ctx.header ctx "Dd-Evp-Origin")
+                (Ctx.header ctx "Dd-Evp-Origin-Version")
+                (Ctx.header ctx "Content-Encoding")
 
-            Sink.write sink DsmMessages.table rows
+        Ctx.write ctx DsmMessages.table rows
 
-    (setStatusCode 202 >=> json {||}) ctx
+    accepted ctx

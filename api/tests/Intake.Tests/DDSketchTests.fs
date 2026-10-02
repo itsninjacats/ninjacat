@@ -22,18 +22,14 @@ let ``constants are the agent's`` () =
 let ``a bucket's value is its middle, not its floor`` () =
     let k = DDSketch.key 1150.0
     Assert.True(DDSketch.value k > 1150.0)
-    let lo, hi = DDSketch.bounds k
-    Assert.True(1150.0 >= lo && 1150.0 < hi)
 
 [<Fact>]
-let ``relative error stays within eps and bounds contain the value`` () =
+let ``relative error stays within eps`` () =
     let mutable v = 0.001
 
     while v < 1e6 do
         let k = DDSketch.key v
         Assert.True(abs (DDSketch.value k - v) / v <= DDSketch.eps, $"value {v}")
-        let lo, hi = DDSketch.bounds k
-        Assert.True(v >= lo && v < hi, $"{v} outside bounds of {k}")
         v <- v * 1.3
 
 [<Fact>]

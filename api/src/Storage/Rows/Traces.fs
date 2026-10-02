@@ -431,7 +431,7 @@ type DSMMessageRow =
       ReceivedAt: DateTime
       /// The place in the batch, the only ordering these messages have.
       Position: uint32
-      /// JSON as it arrived; Go's decoder let invalid UTF-8 through, so bytes.
+      /// JSON as it arrived, as bytes: a message may hold invalid UTF-8.
       Message: byte[]
       /// The element's top-level key names, sorted.
       Keys: string[]

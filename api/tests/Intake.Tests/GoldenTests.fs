@@ -1,6 +1,7 @@
-/// The golden fixtures: every request the Go server's own tests sent, with
-/// the answer and the rows Go produced (see Fixtures/README.md). The F#
-/// intake must produce the same.
+/// The golden fixtures: requests recorded from the Go server this intake
+/// replaced, each with its answer and the rows it stored (see
+/// Fixtures/README.md). A fixture changed on purpose since says so in its
+/// `edited` key. The intake must produce what the fixture holds.
 module NinjaCat.Api.Intake.Tests.GoldenTests
 
 open Xunit
@@ -11,7 +12,7 @@ let fixtures: obj[] seq =
 
 [<Theory>]
 [<MemberData(nameof fixtures)>]
-let ``answers and stores what the Go server did`` (id: string) =
+let ``a recorded request is answered and stored as its fixture says`` (id: string) =
     let fixture = Replay.all |> List.find (fun f -> f.Id = id)
 
     match Replay.run fixture with

@@ -47,12 +47,13 @@ let ``a capture is a file and an index line, with keys left out`` () =
     let directory = Path.Combine(Path.GetTempPath(), "ninjacat-capture-" + Guid.NewGuid().ToString "N")
 
     try
-        let http = DefaultHttpContext()
-        http.Request.Method <- "POST"
-        http.Request.Host <- HostString "api.ninjacat.local"
-        http.Request.Path <- PathString "/api/v2/series"
-        http.Request.Headers["Dd-Api-Key"] <- "0123456789abcdef0123456789abcdef"
-        http.Request.Headers["User-Agent"] <- "datadog-agent/7.60.0"
+        let http =
+            Golden.Requests.httpContext
+                "POST"
+                "api.ninjacat.local"
+                "/api/v2/series"
+                [ "Dd-Api-Key", "0123456789abcdef0123456789abcdef"; "User-Agent", "datadog-agent/7.60.0" ]
+
         let body = Encoding.UTF8.GetBytes """{"series":[]}"""
 
         let file = Capture.write directory http body body 202 DateTime.UtcNow

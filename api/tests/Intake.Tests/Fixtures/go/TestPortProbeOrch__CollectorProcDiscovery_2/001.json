@@ -64,7 +64,7 @@
       "$b64": "AgA1CZIQAAAKAnMyEPz//////////wEYBiJ2CAkaTAiOgICAgICAEBAPMgdrMTg6djE4MhVrMTg6b3RoZXI6d2l0aDpjb2xvbnMyBmJhcmUxODIIejE4Omxhc3RAloCAgICAgBBQmOLPqgYqHgoNczI4IDwmPiAiw6kiChAeICEw3P//////////ATCn4s+qBiJsCCoaVQivgICAgICAEBDQ//////////8BMgdrNTE6djUxMhVrNTE6b3RoZXI6d2l0aDpjb2xvbnMyBmJhcmU1MTIIejUxOmxhc3RAt4CAgICAgBBQueLPqgYqCwoDczYxED8gQjBFMMjiz6oGKkwIzYCAgICAgBAQTjIHazgxOnY4MTIVazgxOm90aGVyOndpdGg6Y29sb25zMgZiYXJlODEyCHo4MTpsYXN0QNWAgICAgIAQUNfiz6oG"
      },
      333,
-     "orch: *process.CollectorProcDiscovery on an orchestrator intake"
+     "orch: CollectorProcDiscovery on an orchestrator intake"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -80,7 +80,7 @@
      "Host": "example.com",
      "Intake": "orchestrator",
      "Method": "POST",
-     "Note": "orch: *process.CollectorProcDiscovery on an orchestrator intake",
+     "Note": "orch: CollectorProcDiscovery on an orchestrator intake",
      "Path": "/api/v2/orch",
      "Query": {},
      "Reason": "unexpected_shape",
@@ -97,5 +97,6 @@
  "volatile": [
   "/sends/0/args/0/1",
   "/sends/0/rows/0/ReceivedAt"
- ]
+ ],
+ "edited": "The note names the protobuf message that arrived by its own name; it no longer spells it as a Go type (*process.…)."
 }

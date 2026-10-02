@@ -1,5 +1,5 @@
 /// The one set of JSON options, for requests read and responses written.
-module NinjaCat.Api.Engine.Json
+module NinjaCat.Api.Engine.Serialization
 
 open System.Text.Json
 open System.Text.Json.Serialization

@@ -20,19 +20,14 @@ module NinjaCat.Api.Intake.Routers.CiVisibility
 
 open System
 open System.Globalization
-open System.Numerics
 open System.IO
 open System.Security.Cryptography
 open System.Text
 open System.Text.Encodings.Web
 open System.Text.Json
-open System.Text.RegularExpressions
-open System.Text.Unicode
 open System.Threading.Tasks
 open MessagePack
-open Microsoft.AspNetCore.WebUtilities
 open Microsoft.Extensions.Logging
-open Microsoft.Net.Http.Headers
 open Microsoft.AspNetCore.Http
 open Oxpecker
 open NinjaCat.Api.Intake
@@ -63,98 +58,6 @@ type Value =
     /// A msgpack extension.
     | Ext of extType: sbyte * data: byte[]
 
-/// JSON parsed the way Go's decoder took it, where .NET's differs.
-///
-/// Go reads bytes that are not UTF-8, and an escape that is half a surrogate
-/// pair, as U+FFFD. .NET fails on both, and only when the string is read,
-/// long after the document parsed. So such a body is repaired before parsing.
-/// Go also nests far deeper than .NET's default of 64.
-module GoJson =
-    /// A whole surrogate pair, half of one, or any other escape.
-    let private escape =
-        Regex(
-            @"\\u(d[89ab][0-9a-f]{2})\\u(d[c-f][0-9a-f]{2})|\\u(d[89a-f][0-9a-f]{2})|\\.",
-            RegexOptions.IgnoreCase ||| RegexOptions.Singleline ||| RegexOptions.Compiled
-        )
-
-    let private maxDepth = Json.maxDepth
-
-    let private repaired (body: byte[]) : byte[] =
-        let span = ReadOnlySpan<byte> body
-
-        let mayHoldSurrogate =
-            MemoryExtensions.IndexOf(span, ReadOnlySpan<byte> "\\ud"B) >= 0
-            || MemoryExtensions.IndexOf(span, ReadOnlySpan<byte> "\\uD"B) >= 0
-
-        if Utf8.IsValid span && not mayHoldSurrogate then
-            body
-        else
-            let text = Encoding.UTF8.GetString body
-            Encoding.UTF8.GetBytes(escape.Replace(text, fun m -> if m.Groups[3].Success then "\\ufffd" else m.Value))
-
-    /// A whole body as one JSON document.
-    let parse (body: byte[]) : Result<JsonElement, string> =
-        try
-            use doc = JsonDocument.Parse(ReadOnlyMemory(repaired body), JsonDocumentOptions(MaxDepth = maxDepth))
-            Ok(doc.RootElement.Clone())
-        with :? JsonException as e ->
-            Error e.Message
-
-    /// The first JSON value of a body. What follows it is not looked at, as
-    /// with Go's json.Decoder.
-    let first (body: byte[]) : Result<JsonElement, string> =
-        try
-            let options = JsonReaderOptions(AllowMultipleValues = true, MaxDepth = maxDepth)
-            let mutable reader = Utf8JsonReader(ReadOnlySpan(repaired body), options)
-
-            if reader.Read() then Ok(JsonElement.ParseValue(&reader)) else Error "EOF"
-        with :? JsonException as e ->
-            Error e.Message
-
-/// Go's strconv.FormatFloat(x, 'g', -1, bits), built from .NET's shortest
-/// round-trip text of the same number: the same digits in Go's layout. It is
-/// what the Go server stored when a float arrived where text was expected.
-let private goFloatText (roundTrip: string) : string =
-    match roundTrip with
-    | "NaN" -> "NaN"
-    | "Infinity" -> "+Inf"
-    | "-Infinity" -> "-Inf"
-    | _ ->
-        let sign = if roundTrip.StartsWith '-' then "-" else ""
-        let unsigned = roundTrip.TrimStart '-'
-
-        let mantissa, exponent =
-            match unsigned.IndexOf 'E' with
-            | -1 -> unsigned, 0
-            | i -> unsigned.Substring(0, i), int (unsigned.Substring(i + 1))
-
-        let whole, fraction =
-            match mantissa.IndexOf '.' with
-            | -1 -> mantissa, ""
-            | i -> mantissa.Substring(0, i), mantissa.Substring(i + 1)
-
-        let written = whole + fraction
-        let leadingZeros = written.Length - written.TrimStart('0').Length
-        let digits = written.Trim '0'
-
-        if digits = "" then
-            sign + "0"
-        else
-            // The number is 0.<digits> × 10^point.
-            let point = whole.Length + exponent - leadingZeros
-            let exp = point - 1
-
-            if exp < -4 || exp >= 6 then
-                let rest = if digits.Length > 1 then "." + digits.Substring 1 else ""
-                let expSign = if exp < 0 then "-" else "+"
-                sign + digits.Substring(0, 1) + rest + "e" + expSign + (abs exp).ToString "00"
-            elif point <= 0 then
-                sign + "0." + String('0', -point) + digits
-            elif point >= digits.Length then
-                sign + digits + String('0', point - digits.Length)
-            else
-                sign + digits.Substring(0, point) + "." + digits.Substring point
-
 module Value =
     let rec ofMsgpack (value: MsgValue) : Value =
         match value with
@@ -167,7 +70,7 @@ module Value =
         | MsgStr s -> Value.String s
         | MsgBin b -> Value.Bytes b
         | MsgArray items -> Value.List(List.map ofMsgpack items)
-        // A repeated key keeps its last value, as in a Go map.
+        // A repeated key keeps its last value.
         | MsgMap entries -> Value.Object(entries |> List.fold (fun found (key, v) -> Map.add key (ofMsgpack v) found) Map.empty)
         | MsgExt(extType, data) -> Value.Ext(extType, data)
 
@@ -194,9 +97,6 @@ module Value =
         match value with
         | Value.Object fields -> fields.ContainsKey key
         | _ -> false
-
-    let private jsonWriterOptions =
-        JsonWriterOptions(Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping)
 
     let rec private write (writer: Utf8JsonWriter) (value: Value) : unit =
         match value with
@@ -225,7 +125,7 @@ module Value =
 
             writer.WriteEndObject()
         | Value.Ext(extType, data) ->
-            // The shape Go's encoder gave msgp's RawExtension.
+            // An extension has no JSON form: its bytes and its type number.
             writer.WriteStartObject()
             writer.WriteBase64String("Data", ReadOnlySpan data)
             writer.WriteNumber("Type", int extType)
@@ -238,16 +138,10 @@ module Value =
         | Value.Null -> ""
         | _ ->
             try
-                use buffer = new MemoryStream()
-
-                do
-                    use writer = new Utf8JsonWriter(buffer, jsonWriterOptions)
-                    write writer value
-
-                Encoding.UTF8.GetString(buffer.ToArray())
+                Json.write (fun writer -> write writer value)
             with :? ArgumentException ->
-                // NaN and the infinities have no JSON form; Go's encoder
-                // refused the whole value too.
+                // NaN and the infinities have no JSON form, so a value that
+                // holds one has none either.
                 ""
 
     /// The value as the text a column holds: exact, never rounded.
@@ -261,8 +155,8 @@ module Value =
         | Value.Bool false -> "false"
         | Value.Int n -> string n
         | Value.UInt n -> string n
-        | Value.Float f -> goFloatText (f.ToString("R", CultureInfo.InvariantCulture))
-        | Value.Float32 f -> goFloatText (f.ToString("R", CultureInfo.InvariantCulture))
+        | Value.Float f -> Text.ofFloat f
+        | Value.Float32 f -> Text.ofFloat32 f
         | Value.List _
         | Value.Object _
         | Value.Ext _ -> toJson value
@@ -374,80 +268,8 @@ module Value =
         | Value.Object fields -> fields |> Map.filter (fun key _ -> not (known.Contains key)) |> Map.map (fun _ v -> toJson v)
         | _ -> Map.empty
 
-/// Go's encoding/json filling a struct, which is how the Go server read the
-/// JSON documents below: property names match whatever their case, null
-/// leaves a field as it was, and a value of the wrong type is an error that
-/// does NOT stop the rest from being read. Callers keep what did decode; the
-/// first entry of `problems` is the error.
-module private GoStruct =
-    /// The properties of an object in document order, names lower-cased. A
-    /// name may repeat.
-    type Fields = (string * JsonElement) list
-
-    let private kindName (value: JsonElement) : string =
-        match value.ValueKind with
-        | JsonValueKind.Object -> "an object"
-        | JsonValueKind.Array -> "an array"
-        | JsonValueKind.String -> "a string"
-        | JsonValueKind.Number -> "a number"
-        | JsonValueKind.Null -> "null"
-        | _ -> "a bool"
-
-    let mismatch (problems: ResizeArray<string>) (value: JsonElement) (path: string) (expected: string) : unit =
-        problems.Add $"json: {path} is {kindName value}, expected {expected}"
-
-    let fields (problems: ResizeArray<string>) (path: string) (value: JsonElement) : Fields =
-        match value.ValueKind with
-        | JsonValueKind.Object -> value.EnumerateObject() |> Seq.map (fun p -> p.Name.ToLowerInvariant(), p.Value) |> List.ofSeq
-        | JsonValueKind.Null -> []
-        | _ ->
-            mismatch problems value path "an object"
-            []
-
-    /// The last value given for a name, null included.
-    let last (name: string) (parent: Fields) : JsonElement option =
-        parent |> List.filter (fun (n, _) -> n = name) |> List.tryLast |> Option.map snd
-
-    /// Every value given for a name that is not null, in order.
-    let private given (name: string) (parent: Fields) : JsonElement list =
-        parent |> List.filter (fun (n, v) -> n = name && v.ValueKind <> JsonValueKind.Null) |> List.map snd
-
-    /// The last value given for a name that is not null.
-    let lastSet (name: string) (parent: Fields) : JsonElement option = List.tryLast (given name parent)
-
-    /// A nested object. A repeated name adds to what the earlier one set.
-    let child (problems: ResizeArray<string>) (path: string) (name: string) (parent: Fields) : Fields =
-        given name parent |> List.collect (fields problems path)
-
-    /// A string property; None when the document does not set it.
-    let tryText (problems: ResizeArray<string>) (path: string) (name: string) (parent: Fields) : string option =
-        let mutable found = None
-
-        for value in given name parent do
-            if value.ValueKind = JsonValueKind.String then
-                found <- Some(value.GetString())
-            else
-                mismatch problems value (path + name) "a string"
-
-        found
-
-    let text (problems: ResizeArray<string>) (path: string) (name: string) (parent: Fields) : string =
-        tryText problems path name parent |> Option.defaultValue ""
-
-    /// A property kept as it was written (Go's json.RawMessage), or "".
-    let raw (name: string) (parent: Fields) : string =
-        match last name parent with
-        | Some value -> value.GetRawText()
-        | None -> ""
-
-let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
-
 let private orUnknown (contentType: string) : string =
     if contentType = "" then "(no content-type)" else contentType
-
-/// A JSON string literal, for building an answer by hand.
-let private quoted (text: string) : string =
-    "\"" + JsonEncodedText.Encode(text, JavaScriptEncoder.UnsafeRelaxedJsonEscaping).ToString() + "\""
 
 /// What a payload carries about the hop it took: direct, or through the
 /// agent's EVP proxy.
@@ -489,7 +311,7 @@ let private looksJson (body: byte[]) : bool =
 /// the coverage part differently.
 let decodeAny (contentType: string) (body: byte[]) : string * Result<Value, string> =
     let msgpack () = "msgpack", Msgpack.decode body |> Result.map Value.ofMsgpack
-    let json () = "json", GoJson.first body |> Result.map Value.ofJson
+    let json () = "json", Json.tryParseFirst body |> Result.map Value.ofJson
     let declared = contentType.ToLowerInvariant()
 
     if declared.Contains "msgpack" then msgpack ()
@@ -645,15 +467,12 @@ let testEventRow
 
 let private storeTestCycle (body: byte[]) (ctx: HttpContext) : unit =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     let contentType = Ctx.header ctx "Content-Type"
     let format, decoded = decodeAny contentType body
 
     match decoded with
     | Error e ->
-        log.LogWarning("[citestcycle] {Format} decode: {Error} ({Bytes} bytes)", format, e, body.Length)
         Raw.store ctx "citestcycle" "decode_error" $"{format} envelope, content-type {orUnknown contentType}: {e}" body
     | Ok(Value.Object _ as envelope) ->
         let events = Value.items (Value.field "events" envelope)
@@ -675,8 +494,7 @@ let private storeTestCycle (body: byte[]) (ctx: HttpContext) : unit =
             |> List.iteri (fun i event ->
                 match event with
                 | Value.Object _ ->
-                    if tenant <> "" then
-                        rows.Add(testEventRow tenant now headers payloadVersion metadata event)
+                    rows.Add(testEventRow tenant now headers payloadVersion metadata event)
                 | _ -> notMaps.Add i)
 
             // The body is kept once, however many of its events are bad.
@@ -685,7 +503,7 @@ let private storeTestCycle (body: byte[]) (ctx: HttpContext) : unit =
                 let more = if notMaps.Count > 8 then ", …" else ""
                 Raw.store ctx "citestcycle" "decode_error" $"{notMaps.Count} of {events.Length} events are not maps: {places}{more}" body
 
-            Sink.write sink CITestEvents.table (rows.ToArray())
+            Ctx.write ctx CITestEvents.table (rows.ToArray())
     | Ok _ -> Raw.store ctx "citestcycle" "unexpected_shape" $"payload is not a {format} map" body
 
 /// A test-cycle payload: {version, metadata, events[]}, whose events are the
@@ -700,114 +518,30 @@ let handleTestCycle (body: byte[]) (ctx: HttpContext) : Task =
 
     accepted ctx
 
-/// Like `Multipart.parts`, with two differences the Go server had. A body
-/// that breaks off is an error, so the upload is kept raw whole instead of
-/// being stored in part. And a part's name counts only on a form-data
-/// disposition, its file name without any directory.
-let readParts (contentType: string) (body: byte[]) : Result<MultipartPart list, string> =
-    match MediaTypeHeaderValue.TryParse contentType with
-    | false, _ -> Error(if contentType = "" then "mime: no media type" else "mime: malformed media type")
-    | true, media ->
-        let mediaType = media.MediaType.Value.ToLowerInvariant()
-
-        if not (mediaType.StartsWith("multipart/", StringComparison.Ordinal)) then
-            Error $"content-type {mediaType} is not multipart"
-        else
-            match Multipart.boundary contentType with
-            | None -> Error "multipart without boundary"
-            | Some boundary ->
-                let reader = MultipartReader(boundary, new MemoryStream(body))
-                reader.HeadersLengthLimit <- 1024 * 1024
-                reader.BodyLengthLimit <- Nullable()
-                let found = ResizeArray<MultipartPart>()
-
-                try
-                    let mutable section = reader.ReadNextSectionAsync().GetAwaiter().GetResult()
-
-                    while not (isNull section) do
-                        use data = new MemoryStream()
-                        section.Body.CopyTo data
-
-                        let name, fileName =
-                            match ContentDispositionHeaderValue.TryParse section.ContentDisposition with
-                            | true, disposition ->
-                                let file =
-                                    if disposition.FileNameStar.HasValue then disposition.FileNameStar.Value
-                                    elif disposition.FileName.HasValue then HeaderUtilities.RemoveQuotes(disposition.FileName).Value
-                                    else ""
-
-                                let name =
-                                    if disposition.DispositionType.Equals("form-data", StringComparison.OrdinalIgnoreCase) then
-                                        HeaderUtilities.RemoveQuotes(disposition.Name).Value |> Option.ofObj |> Option.defaultValue ""
-                                    else
-                                        ""
-
-                                name, Path.GetFileName file
-                            | _ -> "", ""
-
-                        found.Add
-                            { Name = name
-                              FileName = fileName
-                              ContentType = (if isNull section.ContentType then "" else section.ContentType)
-                              Data = data.ToArray() }
-
-                        section <- reader.ReadNextSectionAsync().GetAwaiter().GetResult()
-
-                    Ok(List.ofSeq found)
-                with e ->
-                    Error $"multipart: {e.Message}"
-
 /// One coverages[] element: its decoded value and the bytes it occupied.
 /// The bytes are kept per entry, not per request: a payload holds one entry
 /// per test, and storing the whole part on every row would cost the square of
 /// its size.
 type CoverageEntry = { Value: Value; Raw: byte[] }
 
-let private jsonNumber =
-    Regex(@"^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?$", RegexOptions.Compiled)
-
-/// The payload version of a JSON coverage upload. Go's ParseInt gives the
-/// nearest limit for an integer past int64, and the Go server took it.
-let private jsonVersion (literal: string) : int64 =
-    match Int64.TryParse(literal, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture) with
-    | true, n -> n
-    | false, _ ->
-        match BigInteger.TryParse(literal, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture) with
-        | true, big -> if big.Sign < 0 then Int64.MinValue else Int64.MaxValue
-        | false, _ -> 0L
-
 let private coverageEntriesJson (data: byte[]) : Result<int32 * CoverageEntry list, string> =
-    match GoJson.first data with
+    match Json.tryParseFirst data with
     | Error e -> Error e
     | Ok root ->
-        let problems = ResizeArray<string>()
-        let document = GoStruct.fields problems "the payload" root
-
+        let bad = JsonFields.Mismatches()
+        let document = JsonFields.fields bad "" root
+        // Read like the msgpack form: a version nobody can read is 0, and
+        // never a reason to lose the coverage that came with it.
         let version =
-            match GoStruct.lastSet "version" document with
-            | None -> 0L
-            | Some v when v.ValueKind = JsonValueKind.Number -> jsonVersion (v.GetRawText())
-            // Go's json.Number also takes a number written as a string.
-            | Some v when v.ValueKind = JsonValueKind.String && jsonNumber.IsMatch(v.GetString()) -> jsonVersion (v.GetString())
-            | Some v ->
-                GoStruct.mismatch problems v "version" "a number"
-                0L
+            match document.Find "version" with
+            | Some found -> int32 (Value.toInt64 (Value.ofJson found))
+            | None -> 0
 
         let entries =
-            match GoStruct.last "coverages" document with
-            | None -> []
-            | Some v when v.ValueKind = JsonValueKind.Null -> []
-            | Some v when v.ValueKind = JsonValueKind.Array ->
-                v.EnumerateArray()
-                |> Seq.map (fun item ->
-                    { Value = Value.ofJson item
-                      Raw = Encoding.UTF8.GetBytes(item.GetRawText()) })
-                |> List.ofSeq
-            | Some v ->
-                GoStruct.mismatch problems v "coverages" "an array"
-                []
+            document.Items "coverages"
+            |> List.map (fun item -> { Value = Value.ofJson item; Raw = Json.rawBytes item })
 
-        if problems.Count > 0 then Error problems[0] else Ok(int32 version, entries)
+        if bad.Count > 0 then Error bad[0] else Ok(version, entries)
 
 /// Walks the msgpack document key by key, so each entry's exact bytes can be
 /// cut out of the part: the bytes between the reader's position before and
@@ -914,14 +648,11 @@ let private partNames (parts: MultipartPart list) : string =
 
 let private storeCoverage (body: byte[]) (ctx: HttpContext) : unit =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     let contentType = Ctx.header ctx "Content-Type"
 
-    match readParts contentType body with
+    match Multipart.tryParts contentType body with
     | Error e ->
-        log.LogWarning("[citestcov] multipart: {Error}", e)
         Raw.store ctx "citestcov" "decode_error" $"multipart, content-type {orUnknown contentType}: {e}" body
     | Ok parts ->
         // The coverage part is "coveragex" to dd-trace-go and "coverage1" to
@@ -935,19 +666,17 @@ let private storeCoverage (body: byte[]) (ctx: HttpContext) : unit =
 
             match entries with
             | Error e ->
-                log.LogWarning("[citestcov] {Format} coverage payload: {Error} ({Bytes} bytes)", format, e, coverage.Data.Length)
                 Raw.store ctx "citestcov" "decode_error" $"coverage part ({orUnknown coverage.ContentType}): {e}" body
             | Ok(payloadVersion, entries) ->
-                if tenant <> "" then
-                    let event =
-                        match parts |> List.tryFindBack (fun p -> p.Name = "event") with
-                        | Some part -> part.Data
-                        | None -> [||]
+                let event =
+                    match parts |> List.tryFindBack (fun p -> p.Name = "event") with
+                    | Some part -> part.Data
+                    | None -> [||]
 
-                    let now = DateTime.UtcNow
-                    let headers = agentHeaders ctx
-                    let rows = entries |> List.map (coverageRow tenant now headers event payloadVersion format)
-                    Sink.write sink CICoverage.table (Array.ofList rows)
+                let now = DateTime.UtcNow
+                let headers = agentHeaders ctx
+                let rows = entries |> List.map (coverageRow tenant now headers event payloadVersion format)
+                Ctx.write ctx CICoverage.table (Array.ofList rows)
 
 /// A code-coverage upload: multipart with a dummy JSON "event" part and the
 /// coverage payload, msgpack or JSON:
@@ -996,47 +725,36 @@ let private noConfigRequest: ConfigRequest =
 /// "attributes") and why. What did decode is returned either way, except
 /// that attributes are not read under a broken envelope.
 let readConfigRequest (body: byte[]) : ConfigRequest * (string * string) option =
-    match GoJson.parse body with
+    match Json.tryParse body with
     | Error e -> noConfigRequest, Some("envelope", e)
     | Ok root ->
-        let problems = ResizeArray<string>()
-        let document = GoStruct.fields problems "the document" root
-        let data = GoStruct.child problems "data" "data" document
+        let bad = JsonFields.Mismatches()
+        let data = (JsonFields.fields bad "" root).Object "data"
 
         let envelope =
             { noConfigRequest with
-                ID = GoStruct.text problems "data." "id" data
-                Type = GoStruct.text problems "data." "type" data }
+                ID = data.String "id"
+                Type = data.String "type" }
 
-        if problems.Count > 0 then
-            envelope, Some("envelope", problems[0])
+        if bad.Count > 0 then
+            envelope, Some("envelope", bad[0])
         else
-            let attributes =
-                match GoStruct.last "attributes" data with
-                | Some written -> GoStruct.fields problems "data.attributes" written
-                | None -> []
-
-            let text (name: string) = GoStruct.text problems "data.attributes." name attributes
-
-            let pageInfo =
-                match GoStruct.last "page_info" attributes with
-                | Some written -> GoStruct.fields problems "data.attributes.page_info" written
-                | None -> []
+            let attributes = data.Object "attributes"
 
             let request =
                 { envelope with
-                    Service = text "service"
-                    Env = text "env"
-                    RepositoryURL = text "repository_url"
-                    Branch = text "branch"
-                    Sha = text "sha"
-                    TestLevel = text "test_level"
-                    Module = text "module"
-                    CommitMessage = text "commit_message"
-                    Configurations = GoStruct.raw "configurations" attributes
-                    PageState = GoStruct.text problems "data.attributes.page_info." "page_state" pageInfo }
+                    Service = attributes.String "service"
+                    Env = attributes.String "env"
+                    RepositoryURL = attributes.String "repository_url"
+                    Branch = attributes.String "branch"
+                    Sha = attributes.String "sha"
+                    TestLevel = attributes.String "test_level"
+                    Module = attributes.String "module"
+                    CommitMessage = attributes.String "commit_message"
+                    Configurations = attributes.Raw "configurations"
+                    PageState = (attributes.Object "page_info").String "page_state" }
 
-            request, (if problems.Count > 0 then Some("attributes", problems[0]) else None)
+            request, (if bad.Count > 0 then Some("attributes", bad[0]) else None)
 
 /// Answers a configuration question and keeps both the question and the
 /// answer. A body that does not parse still gets a row and a well-formed
@@ -1044,40 +762,36 @@ let readConfigRequest (body: byte[]) : ConfigRequest * (string * string) option 
 /// for, and a 4xx here is terminal for the client.
 let answerConfig (endpoint: string) (answer: ConfigRequest -> string) (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     let request, problem = readConfigRequest body
 
     match problem with
     | Some(part, error) ->
-        log.LogWarning("[cisettings] {Endpoint}: {Part}: {Error} ({Bytes} bytes)", endpoint, part, error, body.Length)
         Raw.store ctx "cisettings" "decode_error" $"{endpoint} {part}: {error}" body
     | None -> ()
 
     let response = answer request
 
-    if tenant <> "" then
-        Sink.write
-            sink
-            CISettingsRequests.table
-            [| { TenantID = tenant
-                 ReceivedAt = DateTime.UtcNow
-                 Endpoint = endpoint
-                 RequestID = request.ID
-                 RequestType = request.Type
-                 Service = request.Service
-                 Env = request.Env
-                 RepositoryURL = request.RepositoryURL
-                 Branch = request.Branch
-                 SHA = request.Sha
-                 TestLevel = request.TestLevel
-                 Module = request.Module
-                 CommitMessage = request.CommitMessage
-                 PageState = request.PageState
-                 Configurations = request.Configurations
-                 RequestBody = body
-                 ResponseBody = response } |]
+    Ctx.write
+        ctx
+        CISettingsRequests.table
+        [| { TenantID = tenant
+             ReceivedAt = DateTime.UtcNow
+             Endpoint = endpoint
+             RequestID = request.ID
+             RequestType = request.Type
+             Service = request.Service
+             Env = request.Env
+             RepositoryURL = request.RepositoryURL
+             Branch = request.Branch
+             SHA = request.Sha
+             TestLevel = request.TestLevel
+             Module = request.Module
+             CommitMessage = request.CommitMessage
+             PageState = request.PageState
+             Configurations = request.Configurations
+             RequestBody = body
+             ResponseBody = response } |]
 
     // The answer was built as JSON text, so that the row keeps exactly what was sent.
     (setContentType "application/json; charset=utf-8" >=> bytes (Encoding.UTF8.GetBytes response)) ctx
@@ -1091,7 +805,7 @@ let answerConfig (endpoint: string) (answer: ConfigRequest -> string) (body: byt
 ///
 /// The keys are dd-trace-go's settingsResponse (settings_api.go).
 let settingsAnswer (request: ConfigRequest) : string =
-    """{"data":{"id":""" + quoted request.ID + ""","type":"ci_app_test_service_libraries_settings","attributes":{"code_coverage":false,"coverage_report_upload_enabled":false,"early_flake_detection":{"enabled":false,"slow_test_retries":{"5s":0,"10s":0,"30s":0,"5m":0},"faulty_session_threshold":null},"flaky_test_retries_enabled":false,"itr_enabled":false,"require_git":false,"tests_skipping":false,"known_tests_enabled":false,"impacted_tests_enabled":false,"test_management":{"enabled":false,"attempt_to_fix_retries":0}}}}"""
+    """{"data":{"id":""" + Json.quoted request.ID + ""","type":"ci_app_test_service_libraries_settings","attributes":{"code_coverage":false,"coverage_report_upload_enabled":false,"early_flake_detection":{"enabled":false,"slow_test_retries":{"5s":0,"10s":0,"30s":0,"5m":0},"faulty_session_threshold":null},"flaky_test_retries_enabled":false,"itr_enabled":false,"require_git":false,"tests_skipping":false,"known_tests_enabled":false,"impacted_tests_enabled":false,"test_management":{"enabled":false,"attempt_to_fix_retries":0}}}}"""
 
 /// Which tests may be skipped: none. `meta` is sent although empty, because
 /// dd-trace-py treats a missing meta as a malformed response. When this is
@@ -1114,40 +828,32 @@ let skippableAnswer (_: ConfigRequest) : string =
 ///
 /// The keys are dd-trace-go's knownTestsResponse (known_tests_api.go).
 let testListAnswer (request: ConfigRequest) : string =
-    """{"data":{"id":""" + quoted request.ID + ""","type":"ci_app_libraries_tests","attributes":{"tests":{},"page_info":{"cursor":"","size":0,"has_next":false}}}}"""
+    """{"data":{"id":""" + Json.quoted request.ID + ""","type":"ci_app_libraries_tests","attributes":{"tests":{},"page_info":{"cursor":"","size":0,"has_next":false}}}}"""
 
 /// Which tests are quarantined, disabled or being fixed: none. The keys are
 /// dd-trace-go's testManagementTestsResponse.
 let testManagementAnswer (request: ConfigRequest) : string =
-    """{"data":{"id":""" + quoted request.ID + ""","type":"ci_app_libraries_tests","attributes":{"modules":{}}}}"""
+    """{"data":{"id":""" + Json.quoted request.ID + ""","type":"ci_app_libraries_tests","attributes":{"modules":{}}}}"""
 
 /// The commit list of a search_commits request: the repository and the shas
 /// the client asked about.
 let private readSearchCommits (body: byte[]) : Result<string * string list, string> =
-    match GoJson.parse body with
+    match Json.tryParse body with
     | Error e -> Error e
     | Ok root ->
-        let problems = ResizeArray<string>()
-        let document = GoStruct.fields problems "the document" root
-        let shas = ResizeArray<string>()
+        let bad = JsonFields.Mismatches()
+        let document = JsonFields.fields bad "" root
 
-        match GoStruct.last "data" document with
-        | None -> ()
-        | Some v when v.ValueKind = JsonValueKind.Null -> ()
-        | Some v when v.ValueKind = JsonValueKind.Array ->
-            let mutable i = 0
+        let shas =
+            document.Objects "data"
+            |> List.map (fun commit ->
+                // Read only so that a type that is not text is noted.
+                commit.String "type" |> ignore
+                commit.String "id")
 
-            for item in v.EnumerateArray() do
-                let commit = GoStruct.fields problems $"data[{i}]" item
-                GoStruct.text problems $"data[{i}]." "type" commit |> ignore
-                shas.Add(GoStruct.text problems $"data[{i}]." "id" commit)
-                i <- i + 1
-        | Some v -> GoStruct.mismatch problems v "data" "an array"
+        let repository = (document.Object "meta").String "repository_url"
 
-        let meta = GoStruct.child problems "meta" "meta" document
-        let repository = GoStruct.text problems "meta." "repository_url" meta
-
-        if problems.Count > 0 then Error problems[0] else Ok(repository, List.ofSeq shas)
+        if bad.Count > 0 then Error bad[0] else Ok(repository, shas)
 
 /// Records the shas a client asked about and answers that we hold none.
 ///
@@ -1159,32 +865,28 @@ let private readSearchCommits (body: byte[]) : Result<string * string list, stri
 /// retries a 200 of any other content type, and a 4xx is terminal.
 let handleSearchCommits (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     match readSearchCommits body with
     | Error e ->
-        log.LogWarning("[gitmeta] search_commits: {Error} ({Bytes} bytes)", e, body.Length)
         Raw.store ctx "gitmeta" "decode_error" $"search_commits: {e}" body
         json {| data = List.empty<string>; meta = {| repository_url = "" |} |} ctx
     | Ok(repository, shas) ->
-        if tenant <> "" then
-            let now = DateTime.UtcNow
+        let now = DateTime.UtcNow
 
-            let rows: GitCommitRow list =
-                shas
-                |> List.filter (fun sha -> sha <> "")
-                |> List.map (fun sha ->
-                    { TenantID = tenant
-                      RepositoryURL = repository
-                      SHA = sha
-                      SeenAt = now
-                      // The client is ASKING about this sha, which says
-                      // nothing about whether we hold its objects.
-                      PackfileID = None
-                      Source = "search_commits" })
+        let rows: GitCommitRow list =
+            shas
+            |> List.filter (fun sha -> sha <> "")
+            |> List.map (fun sha ->
+                { TenantID = tenant
+                  RepositoryURL = repository
+                  SHA = sha
+                  SeenAt = now
+                  // The client is ASKING about this sha, which says
+                  // nothing about whether we hold its objects.
+                  PackfileID = None
+                  Source = "search_commits" })
 
-            Sink.write sink GitCommits.table (Array.ofList rows)
+        Ctx.write ctx GitCommits.table (Array.ofList rows)
 
         json {| data = List.empty<string>; meta = {| repository_url = repository |} |} ctx
 
@@ -1198,17 +900,16 @@ type private PushedSha =
       Decoded: bool }
 
 let private readPushedSha (data: byte[]) : PushedSha =
-    match GoJson.parse data with
+    match Json.tryParse data with
     | Error _ -> { Sha = None; Repository = None; Decoded = false }
     | Ok root ->
-        let problems = ResizeArray<string>()
-        let document = GoStruct.fields problems "the document" root
-        let commit = GoStruct.child problems "data" "data" document
-        GoStruct.text problems "data." "type" commit |> ignore
-        let sha = GoStruct.tryText problems "data." "id" commit
-        let meta = GoStruct.child problems "meta" "meta" document
-        let repository = GoStruct.tryText problems "meta." "repository_url" meta
-        { Sha = sha; Repository = repository; Decoded = problems.Count = 0 }
+        let bad = JsonFields.Mismatches()
+        let document = JsonFields.fields bad "" root
+        let commit = document.Object "data"
+        commit.String "type" |> ignore
+        let sha = commit.OptionalString "id"
+        let repository = (document.Object "meta").OptionalString "repository_url"
+        { Sha = sha; Repository = repository; Decoded = bad.Count = 0 }
 
 /// One git packfile: multipart with a "pushedSha" JSON part and a "packfile"
 /// part, one request per .pack file.
@@ -1218,13 +919,11 @@ let private readPushedSha (data: byte[]) : PushedSha =
 let handlePackfile (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
     let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     let contentType = Ctx.header ctx "Content-Type"
 
-    match readParts contentType body with
+    match Multipart.tryParts contentType body with
     | Error e ->
-        log.LogWarning("[gitmeta] packfile multipart: {Error}", e)
         Raw.store ctx "gitmeta" "decode_error" $"packfile multipart, content-type {orUnknown contentType}: {e}" body
         setStatusCode 204 ctx
     | Ok parts ->
@@ -1237,8 +936,7 @@ let handlePackfile (body: byte[]) (ctx: HttpContext) : Task =
         for part in parts do
             match part.Name with
             | "pushedSha" ->
-                // A repeated part changes only what it sets, as Go's decoder
-                // did when it filled the same struct twice.
+                // A repeated part changes only what it sets.
                 let pushed = readPushedSha part.Data
                 sha <- defaultArg pushed.Sha sha
                 repository <- defaultArg pushed.Repository repository
@@ -1253,14 +951,13 @@ let handlePackfile (body: byte[]) (ctx: HttpContext) : Task =
 
         match pack with
         | None ->
-            log.LogWarning("[gitmeta] packfile upload without a packfile part")
             Raw.store ctx "gitmeta" "unexpected_shape" "packfile upload without a packfile part" body
-        | Some pack when tenant <> "" ->
+        | Some pack ->
             let packfileID = Convert.ToHexStringLower(SHA256.HashData pack)
             let now = DateTime.UtcNow
 
-            Sink.write
-                sink
+            Ctx.write
+                ctx
                 GitPackfiles.table
                 [| { TenantID = tenant
                      ReceivedAt = now
@@ -1277,8 +974,8 @@ let handlePackfile (body: byte[]) (ctx: HttpContext) : Task =
             // ReplacingMergeTree lets it replace the NULL a search_commits
             // sighting left behind.
             if sha <> "" then
-                Sink.write
-                    sink
+                Ctx.write
+                    ctx
                     GitCommits.table
                     [| { TenantID = tenant
                          RepositoryURL = repository
@@ -1286,7 +983,6 @@ let handlePackfile (body: byte[]) (ctx: HttpContext) : Task =
                          SeenAt = now
                          PackfileID = Some packfileID
                          Source = "packfile" } |]
-        | Some _ -> ()
 
         setStatusCode 204 ctx
 let private pipelineKnownKeys =
@@ -1294,26 +990,23 @@ let private pipelineKnownKeys =
 
 let private storePipelineEvent (kind: string) (body: byte[]) (ctx: HttpContext) : unit =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
-    let problems = ResizeArray<string>()
+    let problems = JsonFields.Mismatches()
 
     let data =
-        match GoJson.parse body with
+        match Json.tryParse body with
+        | Ok root -> (JsonFields.fields problems "" root).Object "data"
         | Error e ->
             problems.Add e
-            []
-        | Ok root -> GoStruct.child problems "data" "data" (GoStruct.fields problems "the document" root)
+            JsonFields.Fields(problems, "data", JsonElement())
 
-    let dataType = GoStruct.text problems "data." "type" data
+    let dataType = data.String "type"
 
     if problems.Count > 0 then
-        log.LogWarning("[cipipeline] {Kind}: {Error} ({Bytes} bytes)", kind, problems[0], body.Length)
         Raw.store ctx "cipipeline" "decode_error" $"{kind} envelope: {problems[0]}" body
-    elif tenant <> "" then
+    else
         let attributes =
-            match GoStruct.last "attributes" data with
+            match data.Find "attributes" with
             | Some written -> Value.ofJson written
             | None -> Value.Null
 
@@ -1321,8 +1014,8 @@ let private storePipelineEvent (kind: string) (body: byte[]) (ctx: HttpContext) 
         // idea "measures".
         let metrics = Value.floatMap (Value.field "metrics" attributes)
 
-        Sink.write
-            sink
+        Ctx.write
+            ctx
             CIPipelineEvents.table
             [| { TenantID = tenant
                  ReceivedAt = DateTime.UtcNow
@@ -1336,7 +1029,7 @@ let private storePipelineEvent (kind: string) (body: byte[]) (ctx: HttpContext) 
                  SpanName = Value.fieldText "name" attributes
                  SpanStartRaw = Value.fieldText "start_time" attributes
                  SpanEndRaw = Value.fieldText "end_time" attributes
-                 Attributes = GoStruct.raw "attributes" data
+                 Attributes = data.Raw "attributes"
                  Body = body
                  Extra = Value.unknown pipelineKnownKeys attributes } |]
 

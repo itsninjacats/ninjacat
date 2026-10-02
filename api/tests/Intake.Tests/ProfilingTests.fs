@@ -15,9 +15,8 @@ open Xunit
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Intake.Routers
 open NinjaCat.Api.Intake.Tests.Golden
+open NinjaCat.Api.Intake.Tests.Golden.Requests
 open NinjaCat.Api.Storage.Rows
-
-let private utf8 (text: string) : byte[] = Encoding.UTF8.GetBytes text
 
 let private gzip (data: byte[]) : byte[] =
     use compressed = new MemoryStream()
@@ -46,51 +45,16 @@ let private pprof () : byte[] =
     profile.Function.Add(Function(Id = 1UL, Name = 3L, SystemName = 3L, Filename = 4L))
     gzip (profile.ToByteArray())
 
-/// A multipart/form-data body of the given parts, and its Content-Type.
+/// A multipart/form-data body of the given form fields, and its Content-Type.
 let private multipart (parts: (string * byte[]) list) : string * byte[] =
-    let boundary = "profiling-tests-boundary"
-    use body = new MemoryStream()
-    let write (data: byte[]) = body.Write(data, 0, data.Length)
+    Requests.multipart "profiling-tests-boundary" [ for name, data in parts -> Requests.field name data ]
 
-    for name, data in parts do
-        write (utf8 $"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n")
-        write data
-        write (utf8 "\r\n")
-
-    write (utf8 $"--{boundary}--\r\n")
-    $"multipart/form-data; boundary={boundary}", body.ToArray()
-
-/// One POST through a route set, as the Go tests sent them: the answer and
-/// what was written.
+/// One POST with the test key: the answer and what was written.
 let private post (routeSet: string) (url: string) (contentType: string) (body: byte[]) : Response * CapturingSink =
-    let sink = CapturingSink()
+    let contentTypeHeader = if contentType = "" then [] else [ "Content-Type", contentType ]
+    Requests.send [ routeSet ] "POST" url (Requests.withKey @ contentTypeHeader) body
 
-    let deps: Deps =
-        { Store = Replay.testStore ()
-          Sink = sink
-          Log = NullLogger.Instance
-          AckUnknown = false }
-
-    let path, query =
-        match url.IndexOf '?' with
-        | -1 -> url, ""
-        | i -> url.Substring(0, i), url.Substring i
-
-    let http = DefaultHttpContext()
-    http.Request.Method <- "POST"
-    http.Request.Host <- HostString "example.com"
-    http.Request.Path <- PathString path
-    http.Request.QueryString <- QueryString query
-    http.Request.Headers["Dd-Api-Key"] <- StringValues Replay.testKey
-
-    if contentType <> "" then
-        http.Request.Headers["Content-Type"] <- StringValues contentType
-
-    Replay.byGoNames deps [ routeSet ] http body, sink
-
-let private jsonValue (text: string) : JsonElement =
-    use document = JsonDocument.Parse text
-    document.RootElement.Clone()
+let private jsonValue = Requests.json
 
 let private time (text: string) : DateTime =
     DateTime.Parse(text, Globalization.CultureInfo.InvariantCulture, Globalization.DateTimeStyles.RoundtripKind)
@@ -117,7 +81,7 @@ let ``a profile row keeps the event whole and describes each attachment`` () =
         |> Map.ofList
 
     let row =
-        Profiling.profileRow "test-tenant" "profile" "dd-trace-go" "1.60.0" parts (Lenient.tryObject event) profiles
+        Profiling.profileRow "test-tenant" "profile" "dd-trace-go" "1.60.0" parts (Json.tryParseObject event) profiles
 
     Assert.Equal("test-tenant", row.TenantID)
     Assert.Equal("profile", row.Variant)
@@ -164,12 +128,12 @@ let ``a profile row without an event part still lists the attachments`` () =
 [<InlineData("\"2025-09-23T10:30:00Z\"", "2025-09-23T10:30:00Z")>]
 [<InlineData("true", "true")>]
 [<InlineData("null", "")>]
-// What Go's %v printed for these, which is what the Go intake stored.
-[<InlineData("""{"b":[1,"x",null,true,{"k":1.50}],"a":"s"}""", "map[a:s b:[1 x <nil> true map[k:1.50]]]")>]
+// Anything else is kept as JSON.
+[<InlineData("""{"b":[1,"x",null,true,{"k":1.50}],"a":"s"}""", """{"a":"s","b":[1,"x",null,true,{"k":1.50}]}""")>]
 [<InlineData("[]", "[]")>]
-[<InlineData("{}", "map[]")>]
+[<InlineData("{}", "{}")>]
 let ``start is kept as the text it had on the wire`` (start: string, expected: string) =
-    let event = Lenient.tryObject (utf8 $"{{\"start\": {start}}}")
+    let event = Json.tryParseObject (utf8 $"{{\"start\": {start}}}")
     let row = Profiling.profileRow "t" "profile" "" "" Map.empty event Map.empty
     Assert.Equal(expected, row.StartRaw)
 
@@ -177,8 +141,7 @@ let ``start is kept as the text it had on the wire`` (start: string, expected: s
 [<InlineData("\"2025-09-23T10:30:00Z\"", "2025-09-23T10:30:00.0000000Z")>]
 [<InlineData("\"2025-09-23T10:30:00.5Z\"", "2025-09-23T10:30:00.5000000Z")>]
 [<InlineData("\"2025-09-23T12:30:00+02:00\"", "2025-09-23T10:30:00.0000000Z")>]
-// Two things Go's parser takes beyond RFC 3339.
-[<InlineData("\"2025-09-23T1:30:00Z\"", "2025-09-23T01:30:00.0000000Z")>]
+// A comma before the fraction, as ISO 8601 allows.
 [<InlineData("\"2025-09-23T10:30:00,5Z\"", "2025-09-23T10:30:00.5000000Z")>]
 // Digits past the seventh are cut off, not rounded up.
 [<InlineData("\"2025-09-23T10:30:00.99999999Z\"", "2025-09-23T10:30:00.9999999Z")>]
@@ -399,7 +362,7 @@ let ``a profile event with broken text is still read`` () =
               [| 0xFFuy |]
               utf8 "\"}" ]
 
-    let row = Profiling.profileRow "t" "profile" "" "" (Map.ofList [ "event", event ]) (Lenient.tryObject event) Map.empty
+    let row = Profiling.profileRow "t" "profile" "" "" (Map.ofList [ "event", event ]) (Json.tryParseObject event) Map.empty
 
     Assert.Equal("g\uFFFDo", row.Family)
     Assert.Equal("\uFFFDx", row.Version)
@@ -412,7 +375,7 @@ let ``a profile event with broken text is still read`` () =
 let ``JSON nested far deeper than .NET's default is still read`` () =
     let deep = String('[', 300) + String(']', 300)
     let event = utf8 $"{{\"family\": \"go\", \"start\": {deep}}}"
-    let row = Profiling.profileRow "t" "profile" "" "" Map.empty (Lenient.tryObject event) Map.empty
+    let row = Profiling.profileRow "t" "profile" "" "" Map.empty (Json.tryParseObject event) Map.empty
 
     Assert.Equal("go", row.Family)
     Assert.Equal(deep, row.StartRaw)
@@ -450,7 +413,7 @@ let ``a diagnostics entry that is not an object still gets its row`` () =
 [<Fact>]
 let ``an exception without a message is an empty message, not an absent one`` () =
     let message = utf8 """{"debugger":{"diagnostics":{"exception":{"type":"NPE"}}}}"""
-    let row = Profiling.diagnosticRow "t" DateTime.UtcNow Map.empty message (Lenient.tryObject message)
+    let row = Profiling.diagnosticRow "t" DateTime.UtcNow Map.empty message (Json.tryParseObject message)
 
     Assert.Equal(Some "NPE", row.ExceptionType)
     Assert.Equal(Some "", row.ExceptionMessage)
@@ -484,7 +447,7 @@ let ``a symdb row keeps both spellings of the upload`` () =
         }"""
 
     let symdb = Profiling.decodeSymdbFile file
-    let row = Profiling.symdbUploadRow "t" event file "env:prod,team:x" (Lenient.tryObject event) symdb
+    let row = Profiling.symdbUploadRow "t" event file "env:prod,team:x" (Json.tryParseObject event) symdb
 
     Assert.Equal<byte[]>(event, row.Event)
     Assert.Equal<byte[]>(file, row.File)
@@ -536,7 +499,7 @@ let ``gzip that does not hold a JSON object still reports its size`` () =
     Assert.Equal(None, symdb.ScopeCount)
     Assert.Equal(9, symdb.InflatedSize)
 
-/// GZipStream reads both without complaint; Go's reader refuses them.
+/// GZipStream reads both without complaint.
 [<Fact>]
 let ``a gzip stream that breaks off, or has bytes after its end, is not read`` () =
     let whole = gzip (utf8 """{"service": "s", "scopes": []}""")
@@ -553,7 +516,7 @@ let ``a gzip stream that breaks off, or has bytes after its end, is not read`` (
 [<Fact>]
 let ``a numeric upload id is kept as its digits`` () =
     let event = utf8 """{"uploadId": 42, "batchNum": 12345678901234567890}"""
-    let row = Profiling.symdbUploadRow "t" event [||] "" (Lenient.tryObject event) (Profiling.decodeSymdbFile [||])
+    let row = Profiling.symdbUploadRow "t" event [||] "" (Json.tryParseObject event) (Profiling.decodeSymdbFile [||])
 
     Assert.Equal("42", row.UploadID)
     Assert.Equal("12345678901234567890", row.BatchNum)
@@ -566,7 +529,7 @@ let ``a numeric upload id is kept as its digits`` () =
 [<InlineData("\"4096\"")>]
 let ``an attachment size that is not a whole, non-negative number is absent`` (size: string) =
     let event = utf8 $"{{\"attachmentSize\": {size}, \"final\": \"yes\"}}"
-    let row = Profiling.symdbUploadRow "t" event [||] "" (Lenient.tryObject event) (Profiling.decodeSymdbFile [||])
+    let row = Profiling.symdbUploadRow "t" event [||] "" (Json.tryParseObject event) (Profiling.decodeSymdbFile [||])
 
     Assert.Equal(None, row.AttachmentSize)
     Assert.Equal(None, row.Final)
@@ -601,7 +564,7 @@ let ``a symbol upload row reads the metadata and keeps the parts it does not nam
               "elf_symbol_file", fakeElf 2uy 1uy
               "debug_extra", utf8 "a part this router does not name" ]
 
-    let row = Profiling.symbolUploadRow "t" parts (Lenient.tryObject meta)
+    let row = Profiling.symbolUploadRow "t" parts (Json.tryParseObject meta)
 
     Assert.Equal<string list>(
         [ "elf_symbol_file"; "amd64"; "abc123"; ""; "deadbeef"; "agent"; "profiler"; "7.60.0"; "myapp" ],
@@ -620,7 +583,7 @@ let ``a symbol upload row reads the metadata and keeps the parts it does not nam
 [<Fact>]
 let ``a symbol upload without an ELF part says so`` () =
     let meta = utf8 """{"type":"x"}"""
-    let row = Profiling.symbolUploadRow "t" (Map.ofList [ "event", meta ]) (Lenient.tryObject meta)
+    let row = Profiling.symbolUploadRow "t" (Map.ofList [ "event", meta ]) (Json.tryParseObject meta)
 
     Assert.Equal("x", row.Type)
     Assert.Equal(0uy, row.HasELF)
@@ -651,19 +614,16 @@ let ``a repeated part name keeps the last part`` () =
     Assert.Equal<string[]>([| "notes" |], row.AttachName)
     Assert.Equal("second", Encoding.UTF8.GetString row.AttachBytes[0])
 
-/// The note quotes what Go's mime.ParseMediaType said of the header.
 [<Theory>]
-[<InlineData("", "not multipart, content-type (no content-type): mime: no media type")>]
-[<InlineData("text/plain", "not multipart, content-type text/plain: content-type is text/plain")>]
-[<InlineData("TEXT/Plain ; charset=utf-8", "not multipart, content-type TEXT/Plain ; charset=utf-8: content-type is text/plain")>]
-[<InlineData("multipart/form-data", "not multipart, content-type multipart/form-data: content-type is multipart without boundary")>]
-[<InlineData("multipart/form-data;", "not multipart, content-type multipart/form-data;: content-type is multipart without boundary")>]
-[<InlineData("multipart/form-data; boundary=", "not multipart, content-type multipart/form-data; boundary=: mime: invalid media parameter")>]
-[<InlineData("multipart/form-data; garbage", "not multipart, content-type multipart/form-data; garbage: mime: invalid media parameter")>]
-[<InlineData("multipart/form-data; boundary=a; boundary=b", "not multipart, content-type multipart/form-data; boundary=a; boundary=b: mime: duplicate parameter name")>]
-[<InlineData("multipart/", "not multipart, content-type multipart/: mime: expected token after slash")>]
-[<InlineData("a/b/c", "not multipart, content-type a/b/c: mime: unexpected content after media subtype")>]
-[<InlineData("a b", "not multipart, content-type a b: mime: expected slash after first token")>]
+[<InlineData("", "not multipart, content-type (no content-type): the content type is not a media type")>]
+[<InlineData("text/plain", "not multipart, content-type text/plain: the content type is text/plain, not multipart")>]
+[<InlineData("TEXT/Plain ; charset=utf-8", "not multipart, content-type TEXT/Plain ; charset=utf-8: the content type is text/plain, not multipart")>]
+[<InlineData("multipart/form-data", "not multipart, content-type multipart/form-data: the content type is multipart without a boundary")>]
+[<InlineData("multipart/form-data; boundary=", "not multipart, content-type multipart/form-data; boundary=: the content type is multipart without a boundary")>]
+[<InlineData("multipart/form-data; boundary=x", "not multipart, content-type multipart/form-data; boundary=x: the multipart body breaks off")>]
+[<InlineData("multipart/", "not multipart, content-type multipart/: the content type is not a media type")>]
+[<InlineData("a/b/c", "not multipart, content-type a/b/c: the content type is not a media type")>]
+[<InlineData("a b", "not multipart, content-type a b: the content type is not a media type")>]
 let ``a profile that is not multipart is kept raw, with the reason`` (contentType: string, note: string) =
     let response, sink = post "routeProfile" "/api/v2/profile" contentType (utf8 "not multipart")
 
@@ -706,7 +666,7 @@ let ``a symbol upload that is not multipart is kept raw`` () =
     Assert.Equal(202, response.Status)
     let raw = Assert.Single(sink.Rows<RawPayloadRow>())
     Assert.Equal("srcmap", raw.Intake)
-    Assert.Equal("multipart, content-type application/octet-stream: content-type is application/octet-stream", raw.Note)
+    Assert.Equal("multipart, content-type application/octet-stream: the content type is application/octet-stream, not multipart", raw.Note)
 
 [<Fact>]
 let ``a symbol upload whose event is not JSON still stores the file`` () =

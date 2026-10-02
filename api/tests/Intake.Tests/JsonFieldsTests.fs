@@ -1,31 +1,27 @@
-/// Tests of Routers/GoCompat.fs: each case is what Go's encoding/json did
-/// with the same input.
-module NinjaCat.Api.Intake.Tests.GoCompatTests
+/// Tests of JsonFields.fs: the one reader of a JSON object's members.
+module NinjaCat.Api.Intake.Tests.JsonFieldsTests
 
 open System
 open System.Text
 open System.Text.Json
 open Xunit
 open NinjaCat.Api.Intake
-open NinjaCat.Api.Intake.Routers
-
-let private json (text: string) : JsonElement =
-    use doc = JsonDocument.Parse text
-    doc.RootElement.Clone()
+open NinjaCat.Api.Intake.Tests.Golden.Requests
 
 /// The object's fields, and the list its mismatches go to.
-let private read (text: string) : GoJson.Fields * GoJson.Mismatches =
-    let bad = GoJson.Mismatches()
-    GoJson.fields bad "" (json text), bad
+let private read (text: string) : JsonFields.Fields * JsonFields.Mismatches =
+    let bad = JsonFields.Mismatches()
+    JsonFields.fields bad "" (json text), bad
 
 [<Fact>]
-let ``a key matches whatever its case, and the last match wins`` () =
+let ``a member is found by its exact name, and of two the last counts`` () =
     let upper, _ = read """{"NAME":"x"}"""
-    Assert.Equal("x", upper.String "name")
-    let exactFirst, _ = read """{"name":"a","Name":"b"}"""
-    Assert.Equal("b", exactFirst.String "name")
-    let exactLast, _ = read """{"Name":"b","name":"a"}"""
-    Assert.Equal("a", exactLast.String "name")
+    Assert.Equal("", upper.String "name")
+    let twice, _ = read """{"name":"a","Name":"b","name":"c"}"""
+    Assert.Equal("c", twice.String "name")
+    // Null is the same as absent, also when an earlier member had a value.
+    let thenNull, _ = read """{"name":"a","name":null}"""
+    Assert.Equal("", thenNull.String "name")
 
 [<Fact>]
 let ``null and a missing key leave every kind of field at its zero value, without a mismatch`` () =
@@ -105,7 +101,7 @@ let ``a float too large for its type is refused, a string is not a float`` () =
     Assert.Equal(3, bad.Count)
 
 [<Fact>]
-let ``a json.Number keeps the digits as written, and takes a number inside a string`` () =
+let ``a number as text keeps the digits as written, and takes a number inside a string`` () =
     let f, bad = read """{"a":1.50,"b":1E3,"c":"123"}"""
     Assert.Equal("1.50", f.Number "a")
     Assert.Equal("1E3", f.Number "b")
@@ -117,13 +113,13 @@ let ``a json.Number keeps the digits as written, and takes a number inside a str
 [<InlineData("\"\"")>]
 [<InlineData("\"12\\n\"")>]
 [<InlineData("true")>]
-let ``a json.Number refuses what is not a number`` (literal: string) =
+let ``a number as text refuses what is not a number`` (literal: string) =
     let f, bad = read $"""{{"v":{literal}}}"""
     Assert.Equal("", f.Number "v")
     Assert.Single bad |> ignore
 
 [<Fact>]
-let ``a bool is a bool, and a pointer to one tells false from absent`` () =
+let ``a bool is a bool, and an optional one tells false from absent`` () =
     let f, bad = read """{"yes":true,"no":false,"number":1}"""
     Assert.Equal(Some true, f.OptionalBool "yes")
     Assert.Equal(Some false, f.OptionalBool "no")
@@ -143,14 +139,14 @@ let ``a list of strings takes null as an empty string, and refuses anything else
     Assert.Equal(2, bad.Count)
 
 [<Fact>]
-let ``a raw message is the text as written, null included, and empty when absent`` () =
+let ``a raw member is the text as written, null included, and empty when absent`` () =
     let f, _ = read """{"a" :  [ 1 , 2 ] ,"b":null}"""
     Assert.Equal("[ 1 , 2 ]", f.Raw "a")
     Assert.Equal("null", f.Raw "b")
     Assert.Equal("", f.Raw "c")
 
 [<Fact>]
-let ``a struct member that is not an object is refused; a pointer to one is None only when null or missing`` () =
+let ``an object member that is not an object is refused; an optional one is None only when null or missing`` () =
     let f, bad = read """{"a":"x","b":[],"c":{},"d":{"ip":"1"}}"""
     Assert.Equal("", (f.Object "a").String "ip")
     Assert.Equal("", (f.Object "b").String "ip")
@@ -161,7 +157,7 @@ let ``a struct member that is not an object is refused; a pointer to one is None
     Assert.Equal(2, bad.Count)
 
 [<Fact>]
-let ``a list of structs reads a null element as an empty struct, and refuses the rest`` () =
+let ``a list of objects reads a null element as an empty object, and refuses the rest`` () =
     let f, bad = read """{"ok":[null,{"ip":"a"}],"mixed":[5,{"ip":"b"}],"wrong":{}}"""
     Assert.Equal<string list>([ ""; "a" ], f.Objects "ok" |> List.map (fun item -> item.String "ip"))
     Assert.Empty bad
@@ -176,41 +172,41 @@ let ``a mismatch says where it is, and the rest of the document is still read`` 
     let devices = f.Objects "devices"
     Assert.Equal<string list>([ "a"; "" ], devices |> List.map (fun d -> d.String "id"))
     Assert.Equal("second", devices[1].String "name")
-    Assert.Equal<string list>([ "devices.1.id: expected a string, got number" ], List.ofSeq bad)
+    Assert.Equal<string list>([ "devices[1].id: expected a string, got number" ], List.ofSeq bad)
 
 [<Fact>]
-let ``a root that is not an object is refused, and null is an empty struct`` () =
-    let bad = GoJson.Mismatches()
-    Assert.Equal("", (GoJson.fields bad "" (json "null")).String "x")
+let ``a root that is not an object is refused, and null is an empty object`` () =
+    let bad = JsonFields.Mismatches()
+    Assert.Equal("", (JsonFields.fields bad "" (json "null")).String "x")
     Assert.Empty bad
-    Assert.Equal("", (GoJson.fields bad "0" (json "[]")).String "x")
+    Assert.Equal("", (JsonFields.fields bad "0" (json "[]")).String "x")
     Assert.Equal<string list>([ "0: expected an object, got array" ], List.ofSeq bad)
 
 [<Fact>]
 let ``members: the last of two equal keys wins, and only an object has any`` () =
-    let found = GoJson.members (json """{"a":1,"b":2,"a":3}""")
+    let found = Json.members (json """{"a":1,"b":2,"a":3}""")
     Assert.Equal<string list>([ "a"; "b" ], found.Keys |> List.ofSeq)
     Assert.Equal("3", found["a"].GetRawText())
-    Assert.True((GoJson.members (json "null")).IsEmpty)
-    Assert.True((GoJson.members (json "[1]")).IsEmpty)
+    Assert.True((Json.members (json "null")).IsEmpty)
+    Assert.True((Json.members (json "[1]")).IsEmpty)
 
 [<Fact>]
-let ``compact writes sorted keys, no whitespace, and numbers digit for digit`` () =
+let ``compactSorted writes sorted keys, no whitespace, and numbers digit for digit`` () =
     let value = json """{ "c": {"z": 1, "a": 2}, "a": 1.50, "b": [1E3, "x", null, true], "n": 9007199254740993 }"""
-    Assert.Equal("""{"a":1.50,"b":[1E3,"x",null,true],"c":{"a":2,"z":1},"n":9007199254740993}""", GoJson.compact value)
-    Assert.Equal("\"s\"", GoJson.compact (json "\"s\""))
+    Assert.Equal("""{"a":1.50,"b":[1E3,"x",null,true],"c":{"a":2,"z":1},"n":9007199254740993}""", Json.compactSorted value)
+    Assert.Equal("\"s\"", Json.compactSorted (json "\"s\""))
 
 [<Fact>]
 let ``parse reads nesting deeper than System.Text.Json's default limit`` () =
     let deep = String('[', 200) + String(']', 200)
-    Assert.True((GoJson.parse (Encoding.UTF8.GetBytes deep)).IsOk)
-    Assert.True((GoJson.parse (Encoding.UTF8.GetBytes "not json")).IsError)
+    Assert.True((Json.tryParse (Encoding.UTF8.GetBytes deep)).IsOk)
+    Assert.True((Json.tryParse (Encoding.UTF8.GetBytes "not json")).IsError)
 
 [<Fact>]
 let ``half a surrogate pair reads as U+FFFD, a whole pair and an escaped backslash are left alone`` () =
-    // What Go stored for the same bodies; System.Text.Json alone throws on the first.
+    // System.Text.Json alone throws on the first.
     let read (body: string) : string =
-        match GoJson.parse (Encoding.UTF8.GetBytes body) with
+        match Json.tryParse (Encoding.UTF8.GetBytes body) with
         | Ok root -> root.GetProperty("v").GetString()
         | Error e -> failwith e
 
@@ -223,7 +219,7 @@ let ``half a surrogate pair reads as U+FFFD, a whole pair and an escaped backsla
 let ``bytes that are not UTF-8 read as U+FFFD`` () =
     let body = Array.concat [ Encoding.UTF8.GetBytes """{"v":"a"""; [| 0xffuy |]; Encoding.UTF8.GetBytes "b\"}" ]
 
-    match GoJson.parse body with
+    match Json.tryParse body with
     | Ok root -> Assert.Equal("a\uFFFDb", root.GetProperty("v").GetString())
     | Error e -> failwith e
 
@@ -233,3 +229,25 @@ let ``a Unix time out of DateTime's range becomes the nearest instant`` () =
     Assert.Equal(DateTime(9999, 12, 31, 23, 59, 59, DateTimeKind.Utc), Time.fromUnixSeconds Int64.MaxValue)
     Assert.Equal(DateTime(1, 1, 1, 0, 0, 0, DateTimeKind.Utc), Time.fromUnixMillis Int64.MinValue)
     Assert.Equal(DateTime(9999, 12, 31, 23, 59, 59, 999, DateTimeKind.Utc), Time.fromUnixMillis Int64.MaxValue)
+
+[<Fact>]
+let ``a member that has to be there is noted when it is missing or null, and so is one that is not acceptable`` () =
+    let f, bad = read """{"a":1,"b":null}"""
+    f.Require "a"
+    f.Require "b"
+    f.Require "c"
+    f.Invalid("a", "expected 2 to 3, got 1")
+    Assert.Equal<string list>([ "b: missing"; "c: missing"; "a: expected 2 to 3, got 1" ], List.ofSeq bad)
+    Assert.Equal<string list>([ "a"; "b" ], f.Members.Keys |> List.ofSeq)
+
+[<Fact>]
+let ``an optional member is None when missing, null, or of the wrong type`` () =
+    let f, bad = read """{"s":"x","n":7,"list":["a"],"null":null}"""
+    Assert.Equal(Some "x", f.OptionalString "s")
+    Assert.Equal(Some 7L, f.OptionalInt64 "n")
+    Assert.Equal<string[] option>(Some [| "a" |], f.OptionalStrings "list")
+    Assert.Equal(None, f.OptionalString "null")
+    Assert.Equal(None, f.OptionalInt64 "missing")
+    Assert.Empty bad
+    Assert.Equal(None, f.OptionalString "n")
+    Assert.Equal<string list>([ "n: expected a string, got number" ], List.ofSeq bad)

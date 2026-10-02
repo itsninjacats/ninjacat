@@ -134,7 +134,19 @@ let private sequence = ref 0L
 let private indexLock = obj ()
 
 /// Headers that carry a key are not written to disk.
-let private secretHeaders = set [ "dd-api-key"; "authorization"; "dd-application-key" ]
+let private secretHeaders = set [ "dd-api-key"; "dd-client-token"; "authorization"; "dd-application-key" ]
+
+/// The query string with the value of a key parameter replaced.
+let private queryWithoutKeys (request: HttpRequest) : string =
+    let shown =
+        request.Query
+        |> Seq.collect (fun pair ->
+            pair.Value
+            |> Seq.map (fun value -> if Secrets.queryParameters.Contains(pair.Key.ToLowerInvariant()) then pair.Key, "<redacted>" else pair.Key, value))
+        |> Seq.map (fun (key, value) -> $"{Uri.EscapeDataString key}={Uri.EscapeDataString value}")
+        |> List.ofSeq
+
+    if shown.IsEmpty then "" else "?" + String.Join("&", shown)
 
 let private orDash (text: string) = if text = "" then "-" else text
 
@@ -146,7 +158,8 @@ let write (directory: string) (http: HttpContext) (raw: byte[]) (decoded: byte[]
     let encoding = request.Headers.ContentEncoding.ToString()
     let number = Interlocked.Increment &sequence.contents
     let stamp = started.ToString "yyyyMMdd'T'HHmmss.fff"
-    let name = $"{stamp}_{request.Method}_{slug request.Path.Value}_{number:D4}.txt"
+    let path = Secrets.pathWithoutKey request.Path.Value
+    let name = $"{stamp}_{request.Method}_{slug path}_{number:D4}.txt"
     let file = Path.Combine(directory, name)
 
     let out = StringBuilder()
@@ -155,7 +168,7 @@ let write (directory: string) (http: HttpContext) (raw: byte[]) (decoded: byte[]
     out.Append($"# status:   {status}\n") |> ignore
     out.Append($"# took:     {(DateTime.UtcNow - started).TotalMilliseconds:F1} ms\n") |> ignore
     out.Append($"# body:     {raw.Length} B raw -> {decoded.Length} B decompressed ({orDash encoding})\n\n") |> ignore
-    out.Append($"{request.Method} {request.Path}{request.QueryString} {request.Protocol}\n") |> ignore
+    out.Append($"{request.Method} {path}{queryWithoutKeys request} {request.Protocol}\n") |> ignore
     out.Append($"Host: {request.Host}\n") |> ignore
 
     for header in request.Headers do
@@ -168,7 +181,7 @@ let write (directory: string) (http: HttpContext) (raw: byte[]) (decoded: byte[]
     File.WriteAllText(file, out.ToString())
 
     let time = started.ToString "yyyy-MM-dd'T'HH:mm:ss'Z'"
-    let line = $"{time}\t{request.Method}\t{request.Path}\t{status}\t{raw.Length}\t{decoded.Length}\t{orDash encoding}\t{name}\n"
+    let line = $"{time}\t{request.Method}\t{path}\t{status}\t{raw.Length}\t{decoded.Length}\t{orDash encoding}\t{name}\n"
     lock indexLock (fun () -> File.AppendAllText(Path.Combine(directory, "index.log"), line))
 
     file

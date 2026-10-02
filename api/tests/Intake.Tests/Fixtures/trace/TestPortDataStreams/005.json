@@ -75,7 +75,7 @@
      },
      "true",
      4,
-     "body is not the JSON array the forwarder sends: json: cannot unmarshal bool into Go value of type []jsontext.Value"
+     "body is not the JSON array the forwarder sends: expected a list, got bool"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -93,7 +93,7 @@
      "Host": "example.com",
      "Intake": "trace",
      "Method": "POST",
-     "Note": "body is not the JSON array the forwarder sends: json: cannot unmarshal bool into Go value of type []jsontext.Value",
+     "Note": "body is not the JSON array the forwarder sends: expected a list, got bool",
      "Path": "/api/v2/data_streams_messages",
      "Query": {},
      "Reason": "unexpected_shape",
@@ -110,5 +110,6 @@
  "volatile": [
   "/sends/0/args/0/1",
   "/sends/0/rows/0/ReceivedAt"
- ]
+ ],
+ "edited": "A body that is not a list is refused in one wording for every intake (\"expected a list, got …\"); the note no longer quotes Go's encoding/json."
 }

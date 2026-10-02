@@ -34,8 +34,7 @@ let private info: FrameInfo =
 
 let private bytes (base64: string) : byte[] = Convert.FromBase64String base64
 
-let private sameJson (expected: string) (actual: string) =
-    Assert.True(JsonNode.DeepEquals(JsonNode.Parse expected, JsonNode.Parse actual), $"expected {expected}\nactual   {actual}")
+let private sameJson = Requests.sameJson
 
 /// One container with every field set, each to a different value: a field
 /// that silently read its neighbour would still look plausible with zeros.
@@ -208,21 +207,7 @@ let private frameOf (messageType: uint8) (body: IMessage) : Frame =
 
 /// Posts a frame to the process intake as the test agent would.
 let private post (path: string) (body: byte[]) : Response * CapturingSink =
-    let sink = CapturingSink()
-
-    let deps: Deps =
-        { Store = Replay.testStore ()
-          Sink = sink
-          Log = NullLogger.Instance
-          AckUnknown = false }
-
-    let http = DefaultHttpContext()
-    http.Request.Method <- "POST"
-    http.Request.Host <- HostString "example.com"
-    http.Request.Path <- PathString path
-    http.Request.Headers["Dd-Api-Key"] <- StringValues Replay.testKey
-    http.Request.Headers["X-Dd-Processagentversion"] <- StringValues agentVersion
-    Replay.byGoNames deps [ "routeProcess" ] http body, sink
+    Requests.send [ "routeProcess" ] "POST" path (Requests.withKey @ [ "X-Dd-Processagentversion", agentVersion ]) body
 
 [<Fact>]
 let ``the reply carries a status, which the agent dereferences without checking`` () =
@@ -701,8 +686,7 @@ let ``a DNS buffer cut short is an error or fewer names, never an exception`` ()
 let ``without a tenant nothing is stored, and the agent still gets its reply`` () =
     let sink = CapturingSink()
     // The handler itself, with no key behind the request.
-    let deps: Deps = { Store = Replay.testStore (); Sink = sink; Log = NullLogger.Instance; AckUnknown = false }
-    let ctx = Replay.contextFor deps ""
+    let ctx = Replay.contextFor (Requests.deps sink) ""
     ctx.Request.Method <- "POST"
     ctx.Request.Path <- PathString "/api/v1/collector"
     (handleCollector (ProcessFrame.encode 12uy 0L (fullCollectorProc ())) ctx).Wait()
@@ -739,11 +723,11 @@ let ``a frame whose body is not its type's protobuf is kept raw`` () =
 [<Fact>]
 let ``every route keeps a frame of a type it has no table for`` () =
     let cases =
-        [ "/api/v1/container", 53uy, (CollectorProcDiscovery(HostName = "host-a") :> IMessage), "*process.CollectorProcDiscovery"
-          "/api/v1/connections", 12uy, (CollectorProc(HostName = "host-a") :> IMessage), "*process.CollectorProc"
-          "/api/v1/discovery", 22uy, (CollectorConnections(HostName = "host-a") :> IMessage), "*process.CollectorConnections"
+        [ "/api/v1/container", 53uy, (CollectorProcDiscovery(HostName = "host-a") :> IMessage), "CollectorProcDiscovery"
+          "/api/v1/connections", 12uy, (CollectorProc(HostName = "host-a") :> IMessage), "CollectorProc"
+          "/api/v1/discovery", 22uy, (CollectorConnections(HostName = "host-a") :> IMessage), "CollectorConnections"
           // A Kubernetes resource: the same frame, meant for another intake.
-          "/api/v1/collector", 41uy, (CollectorPod(HostName = "host-a") :> IMessage), "*process.CollectorPod" ]
+          "/api/v1/collector", 41uy, (CollectorPod(HostName = "host-a") :> IMessage), "CollectorPod" ]
 
     for path, messageType, body, goType in cases do
         let response, sink = post path (ProcessFrame.encode messageType 0L body)

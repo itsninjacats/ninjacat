@@ -18,21 +18,7 @@ let private fixture (name: string) : byte[] =
 
 /// Posts a body to one route set with the test key; returns what was written.
 let private post (routeSet: string) (path: string) (query: string) (body: byte[]) : CapturingSink =
-    let sink = CapturingSink()
-
-    let deps: Deps =
-        { Store = Replay.testStore ()
-          Sink = sink
-          Log = NullLogger.Instance
-          AckUnknown = false }
-
-    let http = DefaultHttpContext()
-    http.Request.Method <- "POST"
-    http.Request.Host <- HostString "example.com"
-    http.Request.Path <- PathString path
-    http.Request.QueryString <- QueryString query
-    http.Request.Headers["Dd-Api-Key"] <- StringValues Replay.testKey
-    let response = Replay.byGoNames deps [ routeSet ] http body
+    let response, sink = Requests.send [ routeSet ] "POST" (path + query) Requests.withKey body
     Assert.Equal(202, response.Status)
     sink
 
@@ -135,20 +121,9 @@ let ``a postgres plan is EXPLAIN output in a string, or null when none could be 
 
 [<Fact>]
 let ``the agent's resources snapshot becomes one row per process group`` () =
-    let sink = CapturingSink()
+    let response, sink =
+        Requests.send [ "routeAPI" ] "POST" "/intake/" Requests.withKey (fixture "agent-7.84.0-intake-resources.json")
 
-    let deps: Deps =
-        { Store = Replay.testStore ()
-          Sink = sink
-          Log = NullLogger.Instance
-          AckUnknown = false }
-
-    let http = DefaultHttpContext()
-    http.Request.Method <- "POST"
-    http.Request.Host <- HostString "example.com"
-    http.Request.Path <- PathString "/intake/"
-    http.Request.Headers["Dd-Api-Key"] <- StringValues Replay.testKey
-    let response = Replay.byGoNames deps [ "routeAPI" ] http (fixture "agent-7.84.0-intake-resources.json")
     Assert.Equal(200, response.Status)
     Assert.Empty(sink.Rows<RawPayloadRow>())
 

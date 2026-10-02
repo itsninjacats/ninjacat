@@ -62,7 +62,7 @@
      {},
      "{\"message\":{\"nested\":\"object\"}}",
      31,
-     "item #1 did not fit datadogV2.HTTPLogItem"
+     "item #1: message: expected a string, got object"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -76,7 +76,7 @@
      "Host": "example.com",
      "Intake": "logs",
      "Method": "POST",
-     "Note": "item #1 did not fit datadogV2.HTTPLogItem",
+     "Note": "item #1: message: expected a string, got object",
      "Path": "/api/v2/logs",
      "Query": {},
      "Reason": "unexpected_shape",
@@ -142,5 +142,6 @@
   "/sends/0/rows/0/ReceivedAt",
   "/sends/1/args/0/1",
   "/sends/1/rows/0/Timestamp"
- ]
+ ],
+ "edited": "The note says which declared field is not a string, in the wording every intake uses; it no longer names a Go type (datadogV2.HTTPLogItem)."
 }

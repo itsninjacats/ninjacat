@@ -62,7 +62,7 @@
      {},
      "{\"action_id\":\"only-bad\",\"org_id\":\"x\"}",
      37,
-     "batch element 0: json: cannot unmarshal string into Go struct field kubeActionResultEvent.org_id of type int64"
+     "[0].org_id: expected an integer, got string"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -76,7 +76,7 @@
      "Host": "example.com",
      "Intake": "kubeactions",
      "Method": "POST",
-     "Note": "batch element 0: json: cannot unmarshal string into Go struct field kubeActionResultEvent.org_id of type int64",
+     "Note": "[0].org_id: expected an integer, got string",
      "Path": "/api/v2/kubeactions",
      "Query": {},
      "Reason": "decode_error",
@@ -93,5 +93,6 @@
  "volatile": [
   "/sends/0/args/0/1",
   "/sends/0/rows/0/ReceivedAt"
- ]
+ ],
+ "edited": "The notes say which member did not fit and what was found there, in one wording for every intake. They used to be the Go server's, quoting Go's encoding/json."
 }

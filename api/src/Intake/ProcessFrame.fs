@@ -65,47 +65,6 @@ module ProcessFrame =
               88uy, CollectorPodDisruptionBudget.Parser
               200uy, CollectorECSTask.Parser ]
 
-    /// The agent's name for a message type; the number for one it has none for.
-    let typeName (messageType: uint8) : string =
-        match messageType with
-        | 12uy -> "process"
-        | 22uy -> "network"
-        | 27uy -> "process-rt"
-        | 39uy -> "container"
-        | 40uy -> "container-rt"
-        | 41uy -> "pod"
-        | 42uy -> "replica-set"
-        | 43uy -> "deployment"
-        | 44uy -> "service"
-        | 45uy -> "node"
-        | 46uy -> "cluster"
-        | 47uy -> "job"
-        | 48uy -> "cron-job"
-        | 49uy -> "daemon-set"
-        | 50uy -> "stateful-set"
-        | 51uy -> "persistent-volume"
-        | 52uy -> "persistent-volume-claim"
-        | 53uy -> "process-discovery"
-        | 54uy -> "role"
-        | 55uy -> "role-binding"
-        | 56uy -> "cluster-role"
-        | 57uy -> "cluster-role-binding"
-        | 58uy -> "service-account"
-        | 59uy -> "ingress"
-        | 60uy -> "process-event"
-        | 61uy -> "namespace"
-        | 80uy -> "manifest"
-        | 81uy -> "manifest-crd"
-        | 82uy -> "manifest-cr"
-        | 83uy -> "vertical-pod-autoscaler"
-        | 84uy -> "horizontal-pod-autoscaler"
-        | 85uy -> "network-policy"
-        | 86uy -> "limit-range"
-        | 87uy -> "storage-class"
-        | 88uy -> "pod-disruption-budget"
-        | 200uy -> "ecs-task"
-        | other -> string other
-
     /// The header and where the message starts. Three versions exist; each
     /// later one appends fields: v1 is 4 bytes, v2 adds the org id (8), v3
     /// adds the timestamp (16).
@@ -139,9 +98,7 @@ module ProcessFrame =
     let private unzstd (body: byte[]) : byte[] =
         use input = new MemoryStream(body)
         use decoder = new ZstdSharp.DecompressionStream(input)
-        use output = new MemoryStream()
-        decoder.CopyTo output
-        output.ToArray()
+        Body.readInflated decoder
 
     /// The whole frame: header and decoded message.
     let decode (data: byte[]) : Result<Frame, string> =
@@ -160,9 +117,8 @@ module ProcessFrame =
                         let descriptor = parser.ParseFrom(Array.empty<byte>).Descriptor
                         Ok { Header = header; Body = JsonParser.Default.Parse(Encoding.UTF8.GetString body, descriptor) }
                     // Zstandard 0.x predates the format every current library
-                    // reads; the Go server needed a C library for it. Agents
-                    // have sent encoding 4 or 5 for years. The caller keeps
-                    // such a frame in raw_payloads.
+                    // reads. Agents have sent encoding 4 or 5 for years. The
+                    // caller keeps such a frame in raw_payloads.
                     | 2uy -> Error "zstd 0.x frames (message encoding 2) are not supported"
                     | 4uy
                     | 5uy -> Ok { Header = header; Body = parser.ParseFrom(unzstd body) }

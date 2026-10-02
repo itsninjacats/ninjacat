@@ -17,6 +17,7 @@ module NinjaCat.Api.Engine.Query.Compile
 
 open System
 open NinjaCat.Api.Engine
+open NinjaCat.Api.Engine.MetricQuery
 open NinjaCat.Api.Engine.MetricQuery.Ast
 open NinjaCat.Api.Engine.Query.Plan
 
@@ -38,17 +39,6 @@ type Row =
       SeriesId: uint64 option
       BucketMs: int64
       Value: float }
-
-/// Hands out parameter names, so each value gets its own placeholder.
-type private Params() =
-    let values = ResizeArray<string * SqlValue>()
-
-    member _.Add(prefix: string, value: SqlValue) =
-        let name = $"{prefix}{values.Count}"
-        values.Add(name, value)
-        Sql.param name value
-
-    member _.All = List.ofSeq values
 
 let private aggregate =
     function
@@ -82,51 +72,15 @@ let private timeAggregateSql (step: string) =
         $"multiIf(any(metric_type) = 'RATE', sum(value * greatest(interval, 1)) / greatest({step}, max(interval)), "
         + $"any(metric_type) = 'COUNT', sum(value) / {step}, avg(value))"
 
-/// Datadog's `*` wildcard as a LIKE pattern. `_` and `%` are LIKE's own
-/// wildcards and common in tag values (`kube_namespace`), so they are escaped.
-let private likePattern (value: string) =
-    value.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_").Replace("*", "%")
-
-let private isWildcard (value: string) = value.Contains '*'
-
-/// `host` lives in its own column, not in the tag map — the agent sends it
-/// apart from the tags, and the table's ORDER BY uses it.
-let rec private filterSql (p: Params) (filter: TagFilter) : string =
-    match filter with
-    | All -> "1"
-    | Tag("host", v) when isWildcard v -> $"""host LIKE {p.Add("p", String(likePattern v))}"""
-    | Tag("host", v) -> $"""host = {p.Add("p", String v)}"""
-    | Tag(k, v) when isWildcard v ->
-        $"""arrayExists(x -> x LIKE {p.Add("p", String(likePattern v))}, tags[{p.Add("k", String k)}])"""
-    | Tag(k, v) -> $"""has(tags[{p.Add("k", String k)}], {p.Add("p", String v)})"""
-    // A key-less tag is stored as a key with an empty value (intake/server.go
-    // splitTag), so `{prod}` asks whether the key exists.
-    | Bare v when isWildcard v -> $"""arrayExists(x -> x LIKE {p.Add("p", String(likePattern v))}, mapKeys(tags))"""
-    | Bare v -> $"""mapContains(tags, {p.Add("k", String v)})"""
-    // `IN` with a wildcard among its values (`name IN (web-*, db)`) is the OR
-    // of its parts.
-    //
-    // WARNING(undocumented): wildcards inside IN. Datadog's tag rules forbid
-    // `*` in a tag value, so a `*` in a filter can only ever mean one.
-    | In(k, vs) when List.exists isWildcard vs ->
-        let exact = vs |> List.filter (isWildcard >> not)
-        let parts = [ for v in vs |> List.filter isWildcard -> Tag(k, v) ] @ (if exact.IsEmpty then [] else [ In(k, exact) ])
-        filterSql p (Or parts)
-    | In("host", vs) -> $"""has({p.Add("p", StringArray vs)}, host)"""
-    | In(k, vs) -> $"""hasAny(tags[{p.Add("k", String k)}], {p.Add("p", StringArray vs)})"""
-    | Not f -> $"NOT ({filterSql p f})"
-    | And fs -> fs |> List.map (fun f -> $"({filterSql p f})") |> String.concat " AND "
-    | Or fs -> fs |> List.map (fun f -> $"({filterSql p f})") |> String.concat " OR "
-
 /// One expression per `by` key. A tag holds a list of values, and a series
 /// with `role:api` and `role:web` belongs to both groups — arrayJoin gives it a
-/// row in each, as the Go query worker already does.
+/// row in each.
 ///
 /// A series without the tag is not dropped: Datadog shows it in an N/A group
 /// (that is what exclude_null() exists to remove — docs:
 /// dashboards/functions/exclusion). An empty list would make arrayJoin yield
 /// no row at all, so it becomes [NULL] first.
-let private groupSql (p: Params) (key: string) =
+let private groupSql (p: SqlParams) (key: string) =
     match key with
     // WARNING(undocumented): a series with an empty host. It joins the N/A
     // group, as a missing tag does.
@@ -145,7 +99,7 @@ let keepFromMs (plan: Plan) (query: QueryPlan) =
     plan.From.ToUnixTimeMilliseconds() - int64 query.Lookback * int64 query.Step.TotalMilliseconds
 
 let compile (tenant: TenantId) (plan: Plan) (query: QueryPlan) : Sql =
-    let p = Params()
+    let p = SqlParams()
     let (TenantId t) = tenant
 
     let groups = query.GroupBy |> List.mapi (fun i k -> $"g{i}", groupSql p k)
@@ -161,7 +115,7 @@ let compile (tenant: TenantId) (plan: Plan) (query: QueryPlan) : Sql =
     let fromP = p.Add("from", Int64 fromMs)
     let toP = p.Add("to", Int64(plan.To.ToUnixTimeMilliseconds()))
     let stepP = p.Add("step", Int64(int64 query.Step.TotalSeconds))
-    let filter = filterSql p query.Filter
+    let filter = Filter.sql p query.Filter
 
     let perSeries = query.Fill <> NoFill
 

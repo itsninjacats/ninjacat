@@ -54,7 +54,7 @@ let private aggregator (i: int) (name: string) : Result<ScalarAggregator, string
 
 let decode (json: string) : Result<ScalarFormulaRequestAttributes, string list> =
     try
-        match JsonSerializer.Deserialize<ScalarFormulaQueryRequest>(json, NinjaCat.Api.Engine.Json.options) with
+        match JsonSerializer.Deserialize<ScalarFormulaQueryRequest>(json, NinjaCat.Api.Engine.Serialization.options) with
         | body when isNull (box body) || isNull (box body.Data) || isNull (box body.Data.Attributes) ->
             Error [ "missing field 'data.attributes' in the body" ]
         | body ->

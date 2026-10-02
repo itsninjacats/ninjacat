@@ -38,7 +38,7 @@ let ``zstd 1.x, from the agent's cgo build`` () = assertTheProcess (frame 4) 4uy
 [<Fact>]
 let ``zstd from the agent's pure Go build`` () = assertTheProcess (frame 5) 5uy
 
-/// A known deviation from the Go server, which linked a C library for this.
+/// No current library reads it; the frame is kept raw by the caller.
 [<Fact>]
 let ``zstd 0.x, the legacy encoding, is refused by name`` () =
     Assert.Equal(Error "zstd 0.x frames (message encoding 2) are not supported", ProcessFrame.decode (frame 2) |> Result.map ignore)

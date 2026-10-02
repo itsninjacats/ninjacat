@@ -26,9 +26,7 @@
 module NinjaCat.Api.Intake.Routers.Evp
 
 open System
-open System.IO
 open System.Text
-open System.Text.Encodings.Web
 open System.Text.Json
 open System.Threading.Tasks
 open Google.Protobuf
@@ -42,176 +40,32 @@ open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
 
-/// Every handler here answers 202 with an empty object, whatever happened.
-let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
-
-// The JSON tracks are read generically. A value is a `JsonElement option`,
-// where None is Go's nil: a key that is absent, or JSON null.
-
-let private notNull (value: JsonElement) : JsonElement option =
-    if value.ValueKind = JsonValueKind.Null then None else Some value
-
-/// The value under a key. None as well when `parent` is not an object.
-let private child (key: string) (parent: JsonElement option) : JsonElement option =
-    match parent with
-    | Some object when object.ValueKind = JsonValueKind.Object ->
-        match object.TryGetProperty key with
-        | true, value -> notNull value
-        | false, _ -> None
-    | _ -> None
-
-let private asObject (value: JsonElement option) : JsonElement option =
-    value |> Option.filter (fun v -> v.ValueKind = JsonValueKind.Object)
-
-/// Writes a value as Go re-marshals a decoded one: object keys sorted, a
-/// repeated key keeping its last value, numbers digit for digit.
-let rec private writeCanonical (writer: Utf8JsonWriter) (value: JsonElement) : unit =
-    match value.ValueKind with
-    | JsonValueKind.Object ->
-        let mutable properties: Map<string, JsonElement> = Map.empty
-
-        for property in value.EnumerateObject() do
-            properties <- properties.Add(property.Name, property.Value)
-
-        writer.WriteStartObject()
-
-        for pair in properties do
-            writer.WritePropertyName pair.Key
-            writeCanonical writer pair.Value
-
-        writer.WriteEndObject()
-    | JsonValueKind.Array ->
-        writer.WriteStartArray()
-
-        for item in value.EnumerateArray() do
-            writeCanonical writer item
-
-        writer.WriteEndArray()
-    | _ -> value.WriteTo writer
-
-let private canonicalJson (value: JsonElement) : string =
-    use buffer = new MemoryStream()
-
-    do
-        use writer = new Utf8JsonWriter(buffer, JsonWriterOptions(Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping))
-        writeCanonical writer value
-
-    Encoding.UTF8.GetString(buffer.ToArray())
-
-/// A value as JSON text for a column; "" when there is none.
-let private json (value: JsonElement option) : string =
-    match value with
-    | Some v -> canonicalJson v
-    | None -> ""
-
-/// A value as the text a column holds: a string as it is, a number digit for
-/// digit (an id above 2^53 must not pass through a float), anything else as
-/// JSON; "" when there is none.
-let private text (value: JsonElement option) : string =
-    match value with
-    | None -> ""
-    | Some v ->
-        match v.ValueKind with
-        | JsonValueKind.String -> v.GetString()
-        | JsonValueKind.Number -> v.GetRawText()
-        | JsonValueKind.True -> "true"
-        | JsonValueKind.False -> "false"
-        | _ -> canonicalJson v
-
-/// An array as strings. Some producers send a single tag as a bare string;
-/// that is a list of one.
-let private strings (value: JsonElement option) : string[] =
-    match value with
-    | Some v when v.ValueKind = JsonValueKind.Array ->
-        v.EnumerateArray() |> Seq.map (fun item -> text (notNull item)) |> Array.ofSeq
-    | Some v when v.ValueKind = JsonValueKind.String && v.GetString() <> "" -> [| v.GetString() |]
-    | _ -> [||]
-
-/// None unless the value is a JSON bool: "never said" is not "false".
-let private flagOption (value: JsonElement option) : uint8 option =
-    match value with
-    | Some v when v.ValueKind = JsonValueKind.True -> Some(Text.flag true)
-    | Some v when v.ValueKind = JsonValueKind.False -> Some(Text.flag false)
-    | _ -> None
-
-/// None unless the value is a number written as a plain 64-bit integer.
-let private int64Option (value: JsonElement option) : int64 option =
-    match value with
-    | Some v when v.ValueKind = JsonValueKind.Number ->
-        match v.TryGetInt64() with
-        | true, n -> Some n
-        | false, _ -> None
-    | _ -> None
-
-let private floatOption (value: JsonElement option) : float option =
-    match value with
-    | Some v when v.ValueKind = JsonValueKind.Number ->
-        match v.TryGetDouble() with
-        // .NET reads a number too large for a float as infinity; Go refuses it.
-        | true, n when not (Double.IsInfinity n) -> Some n
-        | _ -> None
-    | _ -> None
-
-/// The keys of an object that are not in `known`, each value as JSON.
-let private unknownKeys (known: Set<string>) (value: JsonElement option) : Map<string, string> =
-    match asObject value with
-    | None -> Map.empty
-    | Some object ->
-        let mutable found: Map<string, string> = Map.empty
-
-        for property in object.EnumerateObject() do
-            if not (known.Contains property.Name) then
-                found <- found.Add(property.Name, json (notNull property.Value))
-
-        found
+// The JSON tracks are read generically, with the readers of `Json` that
+// note nothing: a value is a `JsonElement option`, None when the key is
+// absent or null.
 
 /// Adds the keys of a deeper nesting level under a prefix, so that a key of
 /// one level cannot shadow the same key of another.
 let private mergePrefixed (prefix: string) (inner: Map<string, string>) (outer: Map<string, string>) : Map<string, string> =
     Map.fold (fun merged key value -> Map.add (prefix + key) value merged) outer inner
 
-/// What Go decodes into a map: an object, or null (a map without keys).
+/// An object, or null, which stands for an object with no members.
 let private isObjectOrNull (value: JsonElement) : bool =
     value.ValueKind = JsonValueKind.Object || value.ValueKind = JsonValueKind.Null
 
 /// A body as one JSON object (or null): the first value, whatever follows
-/// it. Repaired first and read as deep as every other intake reads, or half
-/// a surrogate pair would throw later, when the string is taken out.
+/// it.
 let parseObject (body: byte[]) : JsonElement option =
-    let options = JsonReaderOptions(AllowMultipleValues = true, MaxDepth = Json.maxDepth)
-    let mutable reader = Utf8JsonReader(ReadOnlySpan(Json.repair body), options)
-
-    try
-        if reader.Read() then
-            Some(JsonElement.ParseValue(&reader)) |> Option.filter isObjectOrNull
-        else
-            None
-    with :? JsonException ->
-        None
-
-/// The items of a batched track: the elements of an array, or the one value
-/// of a client that skipped the batcher. A body of `null` has no items, as
-/// Go unmarshals it into an empty slice.
-let private parseItems (body: byte[]) : Result<JsonElement list, string> =
-    match Json.tryParse body with
-    | Error e -> Error e
-    | Ok root ->
-        match root.ValueKind with
-        | JsonValueKind.Array -> Ok(List.ofSeq (root.EnumerateArray()))
-        | JsonValueKind.Null -> Ok []
-        | _ -> Ok [ root ]
+    match Json.tryParseFirst body with
+    | Ok value when isObjectOrNull value -> Some value
+    | _ -> None
 
 /// A batched track: each item becomes rows or is kept raw, so one bad item
 /// never takes the good ones with it.
 let private handleBatch (body: byte[]) (ctx: HttpContext) (intake: string) (table: Table<'row>) (toRows: DateTime -> JsonElement -> 'row list) : Task =
-    let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
-
     if body.Length > 0 then
-        match parseItems body with
-        | Error e ->
-            log.LogWarning("[{Intake}] json: {Error} ({Bytes} bytes)", intake, e, body.Length)
+        match Json.tryParseList body with
+        | Error _ ->
             Raw.store ctx intake "unexpected_shape" "body is not a JSON array or object" body
         | Ok items ->
             let now = DateTime.UtcNow
@@ -220,38 +74,13 @@ let private handleBatch (body: byte[]) (ctx: HttpContext) (intake: string) (tabl
             for item in items do
                 if not (isObjectOrNull item) then
                     let raw = Encoding.UTF8.GetBytes(item.GetRawText())
-                    log.LogWarning("[{Intake}] not a JSON object ({Bytes} bytes)", intake, raw.Length)
                     Raw.store ctx intake "decode_error" "item is not a JSON object" raw
-                elif tenant <> "" then
+                else
                     rows.AddRange(toRows now item)
 
-            Sink.write sink table (rows.ToArray())
+            Ctx.write ctx table (rows.ToArray())
 
     accepted ctx
-
-/// The enum's name as Go prints it; a number the schema does not know as digits.
-let private payloadFormatName (format: AgentDiscoveryConfigFilePayloadFormat) : string =
-    match int format with
-    | 0 -> "PAYLOAD_FORMAT_UNKNOWN"
-    | 1 -> "PAYLOAD_FORMAT_JSON"
-    | 2 -> "PAYLOAD_FORMAT_YAML"
-    | 3 -> "PAYLOAD_FORMAT_TOML"
-    | 4 -> "PAYLOAD_FORMAT_INI"
-    | 5 -> "PAYLOAD_FORMAT_XML"
-    | 6 -> "PAYLOAD_FORMAT_PROPERTIES"
-    | 7 -> "PAYLOAD_FORMAT_HCL"
-    | 8 -> "PAYLOAD_FORMAT_REDIS_CONF"
-    | other -> string other
-
-/// None when absent — never the Unix epoch — or outside what a DateTime holds.
-let private timestampOption (timestamp: Timestamp) : DateTime option =
-    if isNull timestamp then
-        None
-    else
-        try
-            Some((Time.fromUnixSeconds timestamp.Seconds).AddTicks(int64 timestamp.Nanos / 100L))
-        with :? ArgumentOutOfRangeException ->
-            None
 
 /// One row per payload.
 let agentDiscoveryRows (tenant: string) (receivedAt: DateTime) (batch: AgentDiscoveryPayloadBatch) : AgentDiscoveryRow[] =
@@ -263,11 +92,11 @@ let agentDiscoveryRows (tenant: string) (receivedAt: DateTime) (batch: AgentDisc
           Integration = payload.Integration
           Runtime = payload.Runtime
           RuntimeID = payload.RuntimeId
-          IngestionTimestamp = timestampOption payload.IngestionTimestamp
+          IngestionTimestamp = Time.ofTimestamp payload.IngestionTimestamp
           ConfigPaths = payload.ConfigFiles |> Seq.map _.Path |> Array.ofSeq
           ConfigContents = payload.ConfigFiles |> Seq.map (fun file -> file.Content.ToByteArray()) |> Array.ofSeq
           ConfigTruncated = payload.ConfigFiles |> Seq.map (fun file -> Text.flag file.Truncated) |> Array.ofSeq
-          ConfigFormats = payload.ConfigFiles |> Seq.map (fun file -> payloadFormatName file.PayloadFormat) |> Array.ofSeq
+          ConfigFormats = payload.ConfigFiles |> Seq.map (fun file -> ProtoEnum.name file.PayloadFormat) |> Array.ofSeq
           // Values too, not only names: see the migration for why.
           EnvVarNames = payload.EnvVars |> Seq.map _.Name |> Array.ofSeq
           EnvVarValues = payload.EnvVars |> Seq.map _.Value |> Array.ofSeq })
@@ -278,7 +107,6 @@ let agentDiscoveryRows (tenant: string) (receivedAt: DateTime) (batch: AgentDisc
 let handleAgentDiscovery (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
     let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     if body.Length > 0 then
         let decoded =
@@ -289,7 +117,6 @@ let handleAgentDiscovery (body: byte[]) (ctx: HttpContext) : Task =
 
         match decoded with
         | Error e ->
-            log.LogWarning("[agentdiscovery] protobuf: {Error} ({Bytes} bytes)", e, body.Length)
             Raw.store ctx "agentdiscovery" "decode_error" e body
         | Ok batch when batch.Payloads.Count = 0 ->
             // Protobuf skips fields it does not know, so a payload meant for
@@ -297,204 +124,21 @@ let handleAgentDiscovery (body: byte[]) (ctx: HttpContext) : Task =
             // error, so it is not kept raw.
             log.LogWarning("[agentdiscovery] decoded to zero payloads ({Bytes} bytes) — wrong payload type?", body.Length)
         | Ok batch ->
-            if tenant <> "" then
-                Sink.write sink AgentDiscovery.table (agentDiscoveryRows tenant DateTime.UtcNow batch)
+            Ctx.write ctx AgentDiscovery.table (agentDiscoveryRows tenant DateTime.UtcNow batch)
 
     accepted ctx
 
-
-/// Raised by the readers below; decodeHealthReport turns it into an Error.
-exception private HealthReportMismatch of string
-
-let private mismatch (path: string) (name: string) (wanted: string) (value: JsonElement) : 'a =
-    raise (HealthReportMismatch $"{path}.{name}: expected {wanted}, got {value.ValueKind}")
-
-/// A key's value as encoding/json finds it: names match ignoring case, the
-/// last match wins, and null is the same as absent.
-let private goField (name: string) (object: JsonElement) : JsonElement option =
-    let mutable found = None
-
-    for property in object.EnumerateObject() do
-        if property.Name.Equals(name, StringComparison.OrdinalIgnoreCase) then
-            found <- notNull property.Value
-
-    found
-
-let private goString (path: string) (name: string) (object: JsonElement) : string =
-    match goField name object with
-    | None -> ""
-    | Some v when v.ValueKind = JsonValueKind.String -> v.GetString()
-    | Some v -> mismatch path name "a string" v
-
-/// An int32 field, which is also what an enum is: a number written without a
-/// fraction or an exponent.
-let private goInt32 (path: string) (name: string) (object: JsonElement) : int =
-    match goField name object with
-    | None -> 0
-    | Some v when v.ValueKind = JsonValueKind.Number ->
-        match v.TryGetInt32() with
-        | true, n -> n
-        | false, _ -> mismatch path name "a 32-bit integer" v
-    | Some v -> mismatch path name "a 32-bit integer" v
-
-let private goBool (path: string) (name: string) (object: JsonElement) : bool =
-    match goField name object with
-    | None -> false
-    | Some v when v.ValueKind = JsonValueKind.True -> true
-    | Some v when v.ValueKind = JsonValueKind.False -> false
-    | Some v -> mismatch path name "a bool" v
-
-let private goStrings (path: string) (name: string) (object: JsonElement) : string list =
-    match goField name object with
-    | None -> []
-    | Some v when v.ValueKind = JsonValueKind.Array ->
-        [ for item in v.EnumerateArray() do
-              match item.ValueKind with
-              | JsonValueKind.String -> item.GetString()
-              | JsonValueKind.Null -> ""
-              | _ -> mismatch path name "an array of strings" item ]
-    | Some v -> mismatch path name "an array" v
-
-let private goObject (path: string) (name: string) (object: JsonElement) : JsonElement option =
-    match goField name object with
-    | None -> None
-    | Some v when v.ValueKind = JsonValueKind.Object -> Some v
-    | Some v -> mismatch path name "an object" v
-
-let private decodeScript (path: string) (object: JsonElement) : Script =
-    let script = Script()
-    script.Language <- goString path "language" object
-    script.LanguageVersion <- goString path "language_version" object
-    script.Filename <- goString path "filename" object
-    script.RequiresRoot <- goBool path "requires_root" object
-    script.Content <- goString path "content" object
-    script
-
-let private decodeRemediation (path: string) (object: JsonElement) : Remediation =
-    let remediation = Remediation()
-    remediation.Summary <- goString path "summary" object
-
-    match goField "steps" object with
-    | None -> ()
-    | Some steps when steps.ValueKind = JsonValueKind.Array ->
-        for item in steps.EnumerateArray() do
-            match item.ValueKind with
-            | JsonValueKind.Object ->
-                let step = RemediationStep()
-                step.Order <- goInt32 $"{path}.steps" "order" item
-                step.Text <- goString $"{path}.steps" "text" item
-                remediation.Steps.Add step
-            // Go keeps a null step as a nil pointer and then skips it.
-            | JsonValueKind.Null -> ()
-            | _ -> mismatch path "steps" "an array of objects" item
-    | Some other -> mismatch path "steps" "an array" other
-
-    match goObject path "script" object with
-    | Some script -> remediation.Script <- decodeScript $"{path}.script" script
-    | None -> ()
-
-    remediation
-
-let private decodePersistedIssue (path: string) (object: JsonElement) : PersistedIssue =
-    let lifecycle = PersistedIssue()
-    lifecycle.State <- enum<IssueState> (goInt32 path "state" object)
-    lifecycle.FirstSeen <- goString path "first_seen" object
-    lifecycle.LastSeen <- goString path "last_seen" object
-
-    // Optional on the wire: unresolved is not "resolved at ''".
-    if (goField "resolved_at" object).IsSome then
-        lifecycle.ResolvedAt <- goString path "resolved_at" object
-
-    lifecycle
-
-let private decodeIssue (path: string) (object: JsonElement) : Issue =
-    let issue = Issue()
-    issue.Id <- goString path "id" object
-    issue.IssueName <- goString path "issue_name" object
-    issue.Title <- goString path "title" object
-    issue.Description <- goString path "description" object
-    issue.Category <- goString path "category" object
-    issue.Location <- goString path "location" object
-    issue.Severity <- enum<IssueSeverity> (goInt32 path "severity" object)
-    issue.DetectedAt <- goString path "detected_at" object
-    issue.Source <- goString path "source" object
-    issue.Tags.AddRange(goStrings path "tags" object)
-    issue.IssueType <- goString path "issue_type" object
-
-    match goField "extra" object with
-    | None -> ()
-    | Some extra ->
-        // Extra is a protobuf Struct, read by protobuf's own JSON rules: it
-        // must be an object.
-        try
-            issue.Extra <- JsonParser.Default.Parse<Struct>(extra.GetRawText())
-        with
-        | :? InvalidProtocolBufferException as e -> raise (HealthReportMismatch $"{path}.extra: {e.Message}")
-        | :? InvalidJsonException as e -> raise (HealthReportMismatch $"{path}.extra: {e.Message}")
-
-    match goObject path "remediation" object with
-    | Some remediation -> issue.Remediation <- decodeRemediation $"{path}.remediation" remediation
-    | None -> ()
-
-    match goObject path "persisted_issue" object with
-    | Some lifecycle -> issue.PersistedIssue <- decodePersistedIssue $"{path}.persisted_issue" lifecycle
-    | None -> ()
-
-    issue
-
-let private decodeHost (path: string) (object: JsonElement) : HostInfo =
-    let host = HostInfo()
-    host.Hostname <- goString path "hostname" object
-
-    if (goField "agent_version" object).IsSome then
-        host.AgentVersion <- goString path "agent_version" object
-
-    host.ParIds.AddRange(goStrings path "par_ids" object)
-    host
-
-/// Reads a HealthReport the way Go's encoding/json reads it into the
-/// generated struct: unknown keys are ignored, null leaves a field empty, and
-/// a value of the wrong type refuses the whole report.
-///
-/// That is the sender's own encoding: the agent marshals the protobuf struct
-/// with encoding/json, so keys are snake_case and enums are NUMBERS.
+/// A HealthReport as the agent sends it: the protobuf message written as
+/// JSON by Go's encoding/json, so keys are snake_case and enums are numbers.
+/// Protobuf's JSON parser reads both.
 let decodeHealthReport (body: byte[]) : Result<HealthReport, string> =
-    match Json.tryParse body with
-    | Error e -> Error e
-    | Ok root when root.ValueKind = JsonValueKind.Null -> Ok(HealthReport())
-    | Ok root when root.ValueKind <> JsonValueKind.Object -> Error $"HealthReport: expected an object, got {root.ValueKind}"
-    | Ok root ->
-        try
-            let path = "HealthReport"
-            let report = HealthReport()
-            report.SchemaVersion <- goString path "schema_version" root
-            report.EventType <- goString path "event_type" root
-            report.EmittedAt <- goString path "emitted_at" root
-            report.Service <- goString path "service" root
-
-            match goObject path "host" root with
-            | Some host -> report.Host <- decodeHost $"{path}.host" host
-            | None -> ()
-
-            match goObject path "issues" root with
-            | None -> ()
-            | Some issues ->
-                for entry in issues.EnumerateObject() do
-                    match entry.Value.ValueKind with
-                    | JsonValueKind.Object -> report.Issues[entry.Name] <- decodeIssue $"{path}.issues.{entry.Name}" entry.Value
-                    // Go keeps a null issue as a nil pointer, which reads as an empty issue.
-                    | JsonValueKind.Null -> report.Issues[entry.Name] <- Issue()
-                    | _ -> mismatch $"{path}.issues" entry.Name "an object" entry.Value
-
-            Ok report
-        with HealthReportMismatch message ->
-            Error message
+    ProtoJson.tryParse<HealthReport> body
 
 /// The body's `issues` object, read generically. Protobuf's Struct holds
 /// every number as a float64, so Issue.Extra is taken from here instead, where
 /// a number keeps its digits.
 let healthIssuesRaw (body: byte[]) : JsonElement option =
-    asObject (child "issues" (parseObject body))
+    Json.child "issues" (parseObject body) |> Option.bind Json.objectOf
 
 /// Extra as protobuf decoded it: every number has been through a float64.
 let private structJson (extra: Struct) : string =
@@ -502,33 +146,13 @@ let private structJson (extra: Struct) : string =
         ""
     else
         match Json.tryParse (Encoding.UTF8.GetBytes(JsonFormatter.Default.Format extra)) with
-        | Ok value -> canonicalJson value
+        | Ok value -> Json.compactSorted value
         | Error _ -> ""
 
 let private issueExtra (extra: Struct) (rawIssue: JsonElement option) : string =
-    match rawIssue with
-    | Some raw ->
-        match raw.TryGetProperty "extra" with
-        | true, value -> json (notNull value)
-        | false, _ -> structJson extra
+    match rawIssue |> Option.bind (Json.tryProperty "extra") with
+    | Some sent -> if sent.ValueKind = JsonValueKind.Null then "" else Json.compactSorted sent
     | None -> structJson extra
-
-let private severityName (severity: IssueSeverity) : string =
-    match int severity with
-    | 0 -> "ISSUE_SEVERITY_UNSPECIFIED"
-    | 1 -> "ISSUE_SEVERITY_LOW"
-    | 2 -> "ISSUE_SEVERITY_MEDIUM"
-    | 3 -> "ISSUE_SEVERITY_HIGH"
-    | other -> string other
-
-let private stateName (state: IssueState) : string =
-    match int state with
-    | 0 -> "ISSUE_STATE_UNSPECIFIED"
-    | 1 -> "ISSUE_STATE_NEW"
-    | 2 -> "ISSUE_STATE_ONGOING"
-    | 3 -> "ISSUE_STATE_RESOLVED"
-    | 4 -> "ISSUE_STATE_ACTIVE"
-    | other -> string other
 
 let private healthIssueRow
     (tenant: string)
@@ -556,7 +180,7 @@ let private healthIssueRow
       Description = issue.Description
       Category = issue.Category
       Location = issue.Location
-      Severity = severityName issue.Severity
+      Severity = ProtoEnum.name issue.Severity
       DetectedAt = issue.DetectedAt
       DetectedAtParsed = Time.tryRfc3339 issue.DetectedAt
       Source = issue.Source
@@ -570,7 +194,7 @@ let private healthIssueRow
       ScriptRequiresRoot = if hasScript then Some(Text.flag script.RequiresRoot) else None
       ScriptContent = script.Content
       Tags = Tags.toMultiMap issue.Tags
-      PersistedState = if hasLifecycle then stateName lifecycle.State else ""
+      PersistedState = if hasLifecycle then ProtoEnum.name lifecycle.State else ""
       FirstSeen = lifecycle.FirstSeen
       LastSeen = lifecycle.LastSeen
       ResolvedAt = if lifecycle.HasResolvedAt then Some lifecycle.ResolvedAt else None
@@ -606,7 +230,7 @@ let healthReportRows
         report.Issues.Keys
         |> Seq.sort
         |> Seq.map (fun key ->
-            healthIssueRow tenant receivedAt reportID key report.Issues[key] (asObject (child key rawIssues)))
+            healthIssueRow tenant receivedAt reportID key report.Issues[key] (Json.child key rawIssues |> Option.bind Json.objectOf))
         |> Array.ofSeq
 
     reportRow, issueRows
@@ -615,25 +239,20 @@ let healthReportRows
 /// HealthReport per request. Not an event platform track.
 let handleAgentHealth (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     if body.Length > 0 then
         match decodeHealthReport body with
         | Error e ->
-            log.LogWarning("[agenthealth] json: {Error} ({Bytes} bytes)", e, body.Length)
             Raw.store ctx "agenthealth" "decode_error" e body
         | Ok report ->
-            if tenant <> "" then
-                // The wire has no report id; this one joins the two tables.
-                let reportRow, issueRows =
-                    healthReportRows tenant DateTime.UtcNow (Guid.NewGuid()) report (healthIssuesRaw body)
+            // The wire has no report id; this one joins the two tables.
+            let reportRow, issueRows =
+                healthReportRows tenant DateTime.UtcNow (Guid.NewGuid()) report (healthIssuesRaw body)
 
-                Sink.write sink AgentHealthReports.table [| reportRow |]
-                Sink.write sink AgentHealthIssues.table issueRows
+            Ctx.write ctx AgentHealthReports.table [| reportRow |]
+            Ctx.write ctx AgentHealthIssues.table issueRows
 
     accepted ctx
-
 
 /// The label in raw_payloads. Not "events": /api/v1/events on api.<site>
 /// already has that one, and the two tracks are unrelated.
@@ -660,40 +279,40 @@ let private eventEnvelopeKeys = set [ "data" ]
 /// envelope must have.
 let eventManagementRow (tenant: string) (receivedAt: DateTime) (envelope: JsonElement) : EventManagementEventRow option =
     let top = Some envelope
-    let data = asObject (child "data" top)
-    let attrs = asObject (child "attributes" data)
+    let data = Json.child "data" top |> Option.bind Json.objectOf
+    let attrs = Json.child "attributes" data |> Option.bind Json.objectOf
 
     match attrs with
     | None -> None
     | Some _ ->
-        let timestamp = text (child "timestamp" attrs)
+        let timestamp = Json.text (Json.child "timestamp" attrs)
 
         // Undeclared keys of all three levels land in one map: data's own
         // (a JSON:API "id") and the envelope's ("meta") under a prefix.
         let extra =
-            unknownKeys eventAttributeKeys attrs
-            |> mergePrefixed "data." (unknownKeys eventDataKeys data)
-            |> mergePrefixed "top." (unknownKeys eventEnvelopeKeys top)
+            Json.otherMembers eventAttributeKeys Json.compactSorted attrs
+            |> mergePrefixed "data." (Json.otherMembers eventDataKeys Json.compactSorted data)
+            |> mergePrefixed "top." (Json.otherMembers eventEnvelopeKeys Json.compactSorted top)
 
         let inner =
-            match asObject (child "attributes" attrs) with
-            | Some object -> canonicalJson object
+            match Json.child "attributes" attrs |> Option.bind Json.objectOf with
+            | Some object -> Json.compactSorted object
             | None -> "{}"
 
         Some
             { TenantID = tenant
               ReceivedAt = receivedAt
-              DataType = text (child "type" data)
-              Host = text (child "host" attrs)
-              Title = text (child "title" attrs)
-              Category = text (child "category" attrs)
-              IntegrationID = text (child "integration_id" attrs)
-              Message = text (child "message" attrs)
+              DataType = Json.text (Json.child "type" data)
+              Host = Json.text (Json.child "host" attrs)
+              Title = Json.text (Json.child "title" attrs)
+              Category = Json.text (Json.child "category" attrs)
+              IntegrationID = Json.text (Json.child "integration_id" attrs)
+              Message = Json.text (Json.child "message" attrs)
               Timestamp = timestamp
               TimestampParsed = Time.tryRfc3339 timestamp
-              Tags = Tags.toMultiMap (strings (child "tags" attrs))
-              AggregationKey = text (child "aggregation_key" attrs)
-              NotableEventType = text (child "event_type" (child "system-notable-events" attrs))
+              Tags = Tags.toMultiMap (Json.textList (Json.child "tags" attrs))
+              AggregationKey = Json.text (Json.child "aggregation_key" attrs)
+              NotableEventType = Json.text (Json.child "event_type" (Json.child "system-notable-events" attrs))
               Attributes = inner
               OuterExtra = extra }
 
@@ -701,24 +320,19 @@ let eventManagementRow (tenant: string) (receivedAt: DateTime) (envelope: JsonEl
 /// notifications. A stream track, so one envelope per request.
 let handleEventManagement (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     if body.Length > 0 then
         match parseObject body with
         | None ->
-            log.LogWarning("[event-management] not a JSON object ({Bytes} bytes)", body.Length)
             Raw.store ctx eventManagementIntake "decode_error" "body is not a JSON object" body
         | Some envelope ->
             match eventManagementRow tenant DateTime.UtcNow envelope with
             | None ->
                 Raw.store ctx eventManagementIntake "unexpected_shape" "data.attributes is missing or not an object" body
             | Some row ->
-                if tenant <> "" then
-                    Sink.write sink EventManagement.table [| row |]
+                Ctx.write ctx EventManagement.table [| row |]
 
     accepted ctx
-
 
 let private softwareEntryKeys =
     set
@@ -732,33 +346,33 @@ let private hostSoftwareKeys = set [ "software" ]
 /// payload. An entry that is not an object is dropped.
 let hostSoftwareRows (tenant: string) (receivedAt: DateTime) (payload: JsonElement) : HostSoftwareRow list =
     let top = Some payload
-    let hostSoftware = child "host_software" top
+    let hostSoftware = Json.child "host_software" top
 
     let payloadExtra =
-        unknownKeys softwarePayloadKeys top
-        |> mergePrefixed "host_software." (unknownKeys hostSoftwareKeys hostSoftware)
+        Json.otherMembers softwarePayloadKeys Json.compactSorted top
+        |> mergePrefixed "host_software." (Json.otherMembers hostSoftwareKeys Json.compactSorted hostSoftware)
 
-    match child "software" hostSoftware with
+    match Json.child "software" hostSoftware with
     | Some entries when entries.ValueKind = JsonValueKind.Array ->
         [ for item in entries.EnumerateArray() do
               if item.ValueKind = JsonValueKind.Object then
                   let entry = Some item
-                  let deploymentTime = text (child "deployment_time" entry)
+                  let deploymentTime = Json.text (Json.child "deployment_time" entry)
 
                   { TenantID = tenant
                     ReceivedAt = receivedAt
-                    Hostname = text (child "hostname" top)
-                    SoftwareType = text (child "software_type" entry)
-                    Name = text (child "name" entry)
-                    Version = text (child "version" entry)
-                    Publisher = text (child "publisher" entry)
-                    DeploymentStatus = text (child "deployment_status" entry)
+                    Hostname = Json.text (Json.child "hostname" top)
+                    SoftwareType = Json.text (Json.child "software_type" entry)
+                    Name = Json.text (Json.child "name" entry)
+                    Version = Json.text (Json.child "version" entry)
+                    Publisher = Json.text (Json.child "publisher" entry)
+                    DeploymentStatus = Json.text (Json.child "deployment_status" entry)
                     DeploymentTime = deploymentTime
                     DeploymentTimeParsed = Time.tryRfc3339 deploymentTime
-                    ProductCode = text (child "product_code" entry)
-                    Is64Bit = flagOption (child "is_64_bit" entry)
-                    InstallPaths = strings (child "install_paths" entry)
-                    Extra = unknownKeys softwareEntryKeys entry
+                    ProductCode = Json.text (Json.child "product_code" entry)
+                    Is64Bit = Json.flag (Json.child "is_64_bit" entry)
+                    InstallPaths = Json.textList (Json.child "install_paths" entry)
+                    Extra = Json.otherMembers softwareEntryKeys Json.compactSorted entry
                     PayloadExtra = payloadExtra } ]
     | _ -> []
 
@@ -767,7 +381,6 @@ let handleSoftwareInventory (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
 
     handleBatch body ctx "softinv" HostSoftware.table (hostSoftwareRows tenant)
-
 
 let private syntheticsKeys = set [ "test"; "location"; "result"; "_dd"; "enrichment"; "v" ]
 
@@ -790,68 +403,66 @@ let private syntheticsResultKeys =
 /// netpath is the same type netpath-intake carries.
 let syntheticsResultRow (tenant: string) (receivedAt: DateTime) (item: JsonElement) : SyntheticsResultRow =
     let top = Some item
-    let test = child "test" top
-    let location = child "location" top
-    let result = child "result" top
-    let netstats = child "netstats" result
+    let test = Json.child "test" top
+    let location = Json.child "location" top
+    let result = Json.child "result" top
+    let netstats = Json.child "netstats" result
 
     // An assertion that is not an object still takes its place in the arrays.
     let assertions =
-        match child "assertions" result with
-        | Some list when list.ValueKind = JsonValueKind.Array -> list.EnumerateArray() |> Seq.map Some |> Array.ofSeq
-        | _ -> [||]
+        Json.lenientItems (Json.child "assertions" result) |> List.map Some |> Array.ofList
 
     let isTrue (value: JsonElement option) =
         match value with
         | Some v -> v.ValueKind = JsonValueKind.True
         | None -> false
 
-    let failure = asObject (child "failure" result)
-    let started = text (child "testStartedAt" result)
-    let finished = text (child "testFinishedAt" result)
-    let triggered = text (child "testTriggeredAt" result)
+    let failure = Json.child "failure" result |> Option.bind Json.objectOf
+    let started = Json.text (Json.child "testStartedAt" result)
+    let finished = Json.text (Json.child "testFinishedAt" result)
+    let triggered = Json.text (Json.child "testTriggeredAt" result)
 
     { TenantID = tenant
       ReceivedAt = receivedAt
-      TestID = text (child "id" test)
-      TestName = text (child "name" test)
-      TestType = text (child "type" test)
-      TestSubtype = text (child "subType" test)
-      TestVersion = text (child "version" test)
-      LocationID = text (child "id" location)
-      LocationName = text (child "name" location)
-      LocationDisplayName = text (child "displayName" location)
-      ResultID = text (child "id" result)
-      ResultInitialID = text (child "initialId" result)
-      Status = text (child "status" result)
-      RunType = text (child "runType" result)
-      Duration = text (child "duration" result)
+      TestID = Json.text (Json.child "id" test)
+      TestName = Json.text (Json.child "name" test)
+      TestType = Json.text (Json.child "type" test)
+      TestSubtype = Json.text (Json.child "subType" test)
+      TestVersion = Json.text (Json.child "version" test)
+      LocationID = Json.text (Json.child "id" location)
+      LocationName = Json.text (Json.child "name" location)
+      LocationDisplayName = Json.text (Json.child "displayName" location)
+      ResultID = Json.text (Json.child "id" result)
+      ResultInitialID = Json.text (Json.child "initialId" result)
+      Status = Json.text (Json.child "status" result)
+      RunType = Json.text (Json.child "runType" result)
+      Duration = Json.text (Json.child "duration" result)
       TestStartedAt = started
       TestStartedAtParsed = Time.tryRfc3339 started
       TestFinishedAt = finished
       TestFinishedAtParsed = Time.tryRfc3339 finished
       TestTriggeredAt = triggered
       TestTriggeredAtParsed = Time.tryRfc3339 triggered
-      AssertionType = assertions |> Array.map (fun a -> text (child "type" a))
-      AssertionOperator = assertions |> Array.map (fun a -> text (child "operator" a))
-      AssertionExpected = assertions |> Array.map (fun a -> json (child "expected" a))
-      AssertionActual = assertions |> Array.map (fun a -> json (child "actual" a))
-      AssertionValid = assertions |> Array.map (fun a -> Text.flag (isTrue (child "valid" a)))
+      AssertionType = assertions |> Array.map (fun a -> Json.text (Json.child "type" a))
+      AssertionOperator = assertions |> Array.map (fun a -> Json.text (Json.child "operator" a))
+      AssertionExpected = assertions |> Array.map (fun a -> Json.compactSortedOrEmpty (Json.child "expected" a))
+      AssertionActual = assertions |> Array.map (fun a -> Json.compactSortedOrEmpty (Json.child "actual" a))
+      AssertionValid = assertions |> Array.map (fun a -> Text.flag (isTrue (Json.child "valid" a)))
       // The failure object being there at all is the signal.
-      FailureCode = failure |> Option.map (fun _ -> text (child "code" failure))
-      FailureMessage = failure |> Option.map (fun _ -> text (child "message" failure))
-      Config = json (child "config" result)
-      NetstatsPacketsSent = int64Option (child "packetsSent" netstats)
-      NetstatsPacketsReceived = int64Option (child "packetsReceived" netstats)
-      NetstatsPacketLossPercentage = floatOption (child "packetLossPercentage" netstats)
-      NetstatsJitter = floatOption (child "jitter" netstats)
-      NetstatsLatency = floatOption (child "latency" netstats)
-      NetstatsHops = int64Option (child "hops" netstats)
-      Netpath = json (child "netpath" result)
-      DD = json (child "_dd" top)
-      Enrichment = json (child "enrichment" top)
-      V = text (child "v" top)
-      Extra = unknownKeys syntheticsKeys top |> mergePrefixed "result." (unknownKeys syntheticsResultKeys result) }
+      FailureCode = failure |> Option.map (fun _ -> Json.text (Json.child "code" failure))
+      FailureMessage = failure |> Option.map (fun _ -> Json.text (Json.child "message" failure))
+      Config = Json.compactSortedOrEmpty (Json.child "config" result)
+      NetstatsPacketsSent = Json.child "packetsSent" netstats |> Option.bind Json.int64Of
+      NetstatsPacketsReceived = Json.child "packetsReceived" netstats |> Option.bind Json.int64Of
+      NetstatsPacketLossPercentage = Json.child "packetLossPercentage" netstats |> Option.bind Json.floatOf
+      NetstatsJitter = Json.child "jitter" netstats |> Option.bind Json.floatOf
+      NetstatsLatency = Json.child "latency" netstats |> Option.bind Json.floatOf
+      NetstatsHops = Json.child "hops" netstats |> Option.bind Json.int64Of
+      Netpath = Json.compactSortedOrEmpty (Json.child "netpath" result)
+      DD = Json.compactSortedOrEmpty (Json.child "_dd" top)
+      Enrichment = Json.compactSortedOrEmpty (Json.child "enrichment" top)
+      V = Json.text (Json.child "v" top)
+      Extra = Json.otherMembers syntheticsKeys Json.compactSorted top |> mergePrefixed "result." (Json.otherMembers syntheticsResultKeys Json.compactSorted result) }
 
 /// http-synthetics: results of network tests the agent ran on the server's
 /// behalf, batched.
@@ -859,7 +470,6 @@ let handleSynthetics (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
 
     handleBatch body ctx "synthetics" SyntheticsResults.table (fun now item -> [ syntheticsResultRow tenant now item ])
-
 
 let private lineageKeys =
     set [ "eventType"; "eventTime"; "producer"; "schemaURL"; "run"; "job"; "inputs"; "outputs" ]
@@ -876,9 +486,9 @@ let private datasets (value: JsonElement option) : Datasets =
         | Some list when list.ValueKind = JsonValueKind.Array -> list.EnumerateArray() |> Seq.map Some |> Array.ofSeq
         | _ -> [||]
 
-    { Namespaces = items |> Array.map (fun d -> text (child "namespace" d))
-      Names = items |> Array.map (fun d -> text (child "name" d))
-      Facets = items |> Array.map (fun d -> json (child "facets" d)) }
+    { Namespaces = items |> Array.map (fun d -> Json.text (Json.child "namespace" d))
+      Names = items |> Array.map (fun d -> Json.text (Json.child "name" d))
+      Facets = items |> Array.map (fun d -> Json.compactSortedOrEmpty (Json.child "facets" d)) }
 
 /// Field names follow the published OpenLineage spec (RunEvent).
 let openLineageEventRow
@@ -889,24 +499,24 @@ let openLineageEventRow
     (event: JsonElement)
     : OpenLineageEventRow =
     let top = Some event
-    let run = child "run" top
-    let job = child "job" top
-    let eventTime = text (child "eventTime" top)
-    let inputs = datasets (child "inputs" top)
-    let outputs = datasets (child "outputs" top)
+    let run = Json.child "run" top
+    let job = Json.child "job" top
+    let eventTime = Json.text (Json.child "eventTime" top)
+    let inputs = datasets (Json.child "inputs" top)
+    let outputs = datasets (Json.child "outputs" top)
 
     { TenantID = tenant
       ReceivedAt = receivedAt
-      EventType = text (child "eventType" top)
+      EventType = Json.text (Json.child "eventType" top)
       EventTime = eventTime
       EventTimeParsed = Time.tryRfc3339 eventTime
-      Producer = text (child "producer" top)
-      SchemaURL = text (child "schemaURL" top)
-      RunID = text (child "runId" run)
-      RunFacets = json (child "facets" run)
-      JobNamespace = text (child "namespace" job)
-      JobName = text (child "name" job)
-      JobFacets = json (child "facets" job)
+      Producer = Json.text (Json.child "producer" top)
+      SchemaURL = Json.text (Json.child "schemaURL" top)
+      RunID = Json.text (Json.child "runId" run)
+      RunFacets = Json.compactSortedOrEmpty (Json.child "facets" run)
+      JobNamespace = Json.text (Json.child "namespace" job)
+      JobName = Json.text (Json.child "name" job)
+      JobFacets = Json.compactSortedOrEmpty (Json.child "facets" job)
       InputNamespace = inputs.Namespaces
       InputName = inputs.Names
       InputFacets = inputs.Facets
@@ -915,7 +525,7 @@ let openLineageEventRow
       OutputFacets = outputs.Facets
       APIVersion = apiVersion
       Via = via
-      Extra = unknownKeys lineageKeys top }
+      Extra = Json.otherMembers lineageKeys Json.compactSorted top }
 
 /// OpenLineage RunEvents, forwarded as they are by the trace-agent's reverse
 /// proxy, with ?api-version=2 when the agent is told to add it. The transport
@@ -948,7 +558,7 @@ let handleQueryActions (body: byte[]) (ctx: HttpContext) : Task =
 
         [ { TenantID = tenant
             ReceivedAt = now
-            Result = canonicalJson entry
+            Result = Json.compactSorted entry
             Keys = keys
             DDEVPOrigin = origin
             DDEVPOriginVersion = originVersion } ])

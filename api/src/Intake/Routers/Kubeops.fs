@@ -16,18 +16,13 @@ module NinjaCat.Api.Intake.Routers.Kubeops
 
 open System
 open System.Collections
-open System.Globalization
-open System.IO
 open System.Linq
-open System.Reflection
 open System.Text
-open System.Text.Encodings.Web
 open System.Text.Json
 open System.Text.Unicode
 open System.Threading.Tasks
 open Google.Protobuf
 open Google.Protobuf.Collections
-open Google.Protobuf.Reflection
 open Microsoft.Extensions.Logging
 open Microsoft.AspNetCore.Http
 open Oxpecker
@@ -35,15 +30,6 @@ open Datadog.ProcessAgent
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
-
-/// An enum value under its name in the .proto, which is what the Go server
-/// stored; the number when the schema has no name for it.
-let private protoName (value: 'enum when 'enum: enum<int32>) : string =
-    let name = string value
-
-    match typeof<'enum>.GetField name with
-    | null -> name
-    | field -> field.GetCustomAttribute<OriginalNameAttribute>().Name
 
 /// The frame header as the four columns every orchestrator row carries.
 type FrameColumns =
@@ -702,7 +688,7 @@ let manifestRows
               GroupSize = collector.GroupSize
               HostName = collector.HostName
               AgentVersion = agentVersionText collector.AgentVersion
-              OriginCollector = protoName collector.OriginCollector
+              OriginCollector = ProtoEnum.name collector.OriginCollector
               Tags = Tags.toMultiMap (envelopeTags @ wrapperTags @ manifestTags)
               TagSources =
                 [ "envelope", envelopeTags; "wrapper", wrapperTags; "manifest", manifestTags ]
@@ -832,16 +818,12 @@ let ecsTaskRows (tenant: string) (now: DateTime) (frame: FrameColumns) (collecto
 
 // ---- the orchestrator handlers ----
 
-let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
-
 let private handleFrame (label: string) (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
     let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     match ProcessFrame.decode body with
     | Error e ->
-        log.LogWarning("[{Label}] process frame: {Error} ({Bytes} bytes)", label, e, body.Length)
         Raw.store ctx "orchestrator" "decode_error" (label + ": " + e) body
     | Ok decoded ->
         if Environment.GetEnvironmentVariable "NINJACAT_DUMP_K8S" = "true" then
@@ -850,26 +832,20 @@ let private handleFrame (label: string) (body: byte[]) (ctx: HttpContext) : Task
 
         let frame = frameColumns decoded.Header
         let now = DateTime.UtcNow
-        let hasTenant = tenant <> ""
 
         match decoded.Body with
         | :? CollectorCluster as collector ->
-            if hasTenant then
-                Sink.write sink K8sCluster.table (clusterRows tenant now frame collector)
+            Ctx.write ctx K8sCluster.table (clusterRows tenant now frame collector)
         | :? CollectorManifest as collector ->
-            if hasTenant then
-                Sink.write sink K8sManifests.table (manifestRows tenant now frame collector [])
+            Ctx.write ctx K8sManifests.table (manifestRows tenant now frame collector [])
         // The CRD and CR wrappers hold an inner CollectorManifest that may be
         // missing, and tags of their own beside the inner one's.
         | :? CollectorManifestCRD as wrapper ->
-            if hasTenant then
-                Sink.write sink K8sManifests.table (manifestRows tenant now frame wrapper.Manifest wrapper.Tags)
+            Ctx.write ctx K8sManifests.table (manifestRows tenant now frame wrapper.Manifest wrapper.Tags)
         | :? CollectorManifestCR as wrapper ->
-            if hasTenant then
-                Sink.write sink K8sManifests.table (manifestRows tenant now frame wrapper.Manifest wrapper.Tags)
+            Ctx.write ctx K8sManifests.table (manifestRows tenant now frame wrapper.Manifest wrapper.Tags)
         | :? CollectorECSTask as collector ->
-            if hasTenant then
-                Sink.write sink ECSTasks.table (ecsTaskRows tenant now frame collector)
+            Ctx.write ctx ECSTasks.table (ecsTaskRows tenant now frame collector)
         | :? CollectorPod
         | :? CollectorReplicaSet
         | :? CollectorDeployment
@@ -894,15 +870,12 @@ let private handleFrame (label: string) (body: byte[]) (ctx: HttpContext) : Task
         | :? CollectorLimitRange
         | :? CollectorStorageClass
         | :? CollectorPodDisruptionBudget ->
-            if hasTenant then
-                Sink.write sink K8sResources.table (resourceRows tenant now frame decoded.Body)
+            Ctx.write ctx K8sResources.table (resourceRows tenant now frame decoded.Body)
         | other ->
             // The process agent's own messages belong on /api/v1/collector.
             // Here they mean a misconfigured agent: the frame decoded, but
             // this router has nowhere to put it.
-            let goType = "*process." + other.Descriptor.Name
-            log.LogWarning("[{Label}] {Type} is not an orchestrator message; kept as is", label, goType)
-            Raw.store ctx "orchestrator" "unexpected_shape" $"{label}: {goType} on an orchestrator intake" body
+            Raw.store ctx "orchestrator" "unexpected_shape" $"{label}: {other.Descriptor.Name} on an orchestrator intake" body
 
     accepted ctx
 
@@ -910,11 +883,9 @@ let private handleFrame (label: string) (body: byte[]) (ctx: HttpContext) : Task
 /// orchestrator_explorer.use_legacy_endpoint.
 let handleOrchestrator (body: byte[]) : EndpointHandler = handleFrame "orch" body
 
-
 /// Raw manifests (types 80-82): the object's own YAML or JSON, "exactly what
 /// kubectl would show". Same frame, same decoder.
 let handleManifests (body: byte[]) : EndpointHandler = handleFrame "orchmanif" body
-
 
 // ---- kubeactions → k8s_actions ----
 
@@ -952,36 +923,8 @@ let actionKnownKeys: Set<string> =
           "requested_by"; "timestamp"; "message"; "payloads"; "cluster_name"; "resource_kind"
           "resource_name"; "resource_namespace" ]
 
-let private emptyAction: ActionEvent =
-    { ActionID = ""
-      OrgID = 0L
-      EventType = ""
-      Status = ""
-      ActionType = ""
-      ClusterID = ""
-      ResourceID = ""
-      RequestedBy = ""
-      Timestamp = ""
-      Message = ""
-      Payloads = Map.empty
-      ClusterName = ""
-      ResourceKind = ""
-      ResourceName = ""
-      ResourceNamespace = ""
-      Extra = Map.empty }
-
-let private kindName (value: JsonElement) : string =
-    match value.ValueKind with
-    | JsonValueKind.Object -> "an object"
-    | JsonValueKind.Array -> "an array"
-    | JsonValueKind.String -> "a string"
-    | JsonValueKind.Number -> "a number"
-    | JsonValueKind.True
-    | JsonValueKind.False -> "a boolean"
-    | _ -> "null"
-
-/// Base64 as Go's decoder took it: padded, standard alphabet, line breaks
-/// allowed and nothing else.
+/// Base64 with padding, in the standard alphabet; line breaks are allowed
+/// and nothing else.
 let private tryBase64 (text: string) : byte[] option =
     let joined = text.Replace("\r", "").Replace("\n", "")
 
@@ -993,109 +936,47 @@ let private tryBase64 (text: string) : byte[] option =
         with :? FormatException ->
             None
 
-/// Decodes one event the way the Go server did, so the same events become
-/// rows and the same ones are refused:
-///
-///  - a key matches a field whatever its letter case, and null leaves the
-///    field as it was;
-///  - a value of the wrong type refuses the whole event;
-///  - a key that is not exactly a known one is kept in Extra. So "ACTION_ID"
-///    both sets the field and is kept.
-let decodeAction (raw: JsonElement) : Result<ActionEvent, string> =
-    if raw.ValueKind = JsonValueKind.Null then
-        Ok emptyAction
-    elif raw.ValueKind <> JsonValueKind.Object then
-        Error $"an event must be a JSON object, this is {kindName raw}"
-    else
-        let problems = ResizeArray<string>()
+/// `payloads`: a name → base64 map. A null value is an empty attachment.
+let private attachments (payloads: JsonFields.Fields) : Map<string, byte[]> =
+    let mutable attached = Map.empty
 
-        let text (property: JsonProperty) (current: string) : string =
-            match property.Value.ValueKind with
-            | JsonValueKind.Null -> current
-            | JsonValueKind.String -> property.Value.GetString()
-            | _ ->
-                problems.Add $"{property.Name} must be a string, this is {kindName property.Value}"
-                current
+    for attachment in payloads.Members do
+        match attachment.Value.ValueKind with
+        | JsonValueKind.Null -> attached <- attached.Add(attachment.Key, [||])
+        | JsonValueKind.String ->
+            match tryBase64 (attachment.Value.GetString()) with
+            | Some bytes -> attached <- attached.Add(attachment.Key, bytes)
+            | None -> payloads.Invalid(attachment.Key, "not base64")
+        | _ -> payloads.Refuse(attachment.Key, "base64 text", attachment.Value)
 
-        // Digits only: a fraction or an exponent is not an integer, and a
-        // 64-bit id must not pass through a float.
-        let integer (property: JsonProperty) (current: int64) : int64 =
-            match property.Value.ValueKind with
-            | JsonValueKind.Null -> current
-            | JsonValueKind.Number ->
-                match Int64.TryParse(property.Value.GetRawText(), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture) with
-                | true, n -> n
-                | false, _ ->
-                    problems.Add $"{property.Name} must be a 64-bit integer, this is {property.Value.GetRawText()}"
-                    current
-            | _ ->
-                problems.Add $"{property.Name} must be a number, this is {kindName property.Value}"
-                current
+    attached
 
-        let attachments (property: JsonProperty) (current: Map<string, byte[]>) : Map<string, byte[]> =
-            match property.Value.ValueKind with
-            | JsonValueKind.Null -> current
-            | JsonValueKind.Object ->
-                let mutable attached = current
+/// One event, `path` being its place in the batch. A member of the wrong
+/// type refuses the whole event; a member that is not a known one is kept in
+/// Extra.
+let decodeAction (path: string) (raw: JsonElement) : Result<ActionEvent, string> =
+    let bad = JsonFields.Mismatches()
+    let fields = JsonFields.fields bad path raw
 
-                for attachment in property.Value.EnumerateObject() do
-                    match attachment.Value.ValueKind with
-                    | JsonValueKind.Null -> attached <- attached.Add(attachment.Name, [||])
-                    | JsonValueKind.String ->
-                        match tryBase64 (attachment.Value.GetString()) with
-                        | Some bytes -> attached <- attached.Add(attachment.Name, bytes)
-                        | None -> problems.Add $"{property.Name}.{attachment.Name} is not base64"
-                    | _ -> problems.Add $"{property.Name}.{attachment.Name} must be a base64 string, this is {kindName attachment.Value}"
+    let event =
+        { ActionID = fields.String "action_id"
+          OrgID = fields.Int64 "org_id"
+          EventType = fields.String "event_type"
+          Status = fields.String "status"
+          ActionType = fields.String "action_type"
+          ClusterID = fields.String "cluster_id"
+          ResourceID = fields.String "resource_id"
+          RequestedBy = fields.String "requested_by"
+          Timestamp = fields.String "timestamp"
+          Message = fields.String "message"
+          Payloads = attachments (fields.Object "payloads")
+          ClusterName = fields.String "cluster_name"
+          ResourceKind = fields.String "resource_kind"
+          ResourceName = fields.String "resource_name"
+          ResourceNamespace = fields.String "resource_namespace"
+          Extra = Json.members raw |> Map.filter (fun name _ -> not (actionKnownKeys.Contains name)) }
 
-                attached
-            | _ ->
-                problems.Add $"{property.Name} must be an object, this is {kindName property.Value}"
-                current
-
-        let mutable event = emptyAction
-
-        try
-            for property in raw.EnumerateObject() do
-                match property.Name.ToLowerInvariant() with
-                | "action_id" -> event <- { event with ActionID = text property event.ActionID }
-                | "org_id" -> event <- { event with OrgID = integer property event.OrgID }
-                | "event_type" -> event <- { event with EventType = text property event.EventType }
-                | "status" -> event <- { event with Status = text property event.Status }
-                | "action_type" -> event <- { event with ActionType = text property event.ActionType }
-                | "cluster_id" -> event <- { event with ClusterID = text property event.ClusterID }
-                | "resource_id" -> event <- { event with ResourceID = text property event.ResourceID }
-                | "requested_by" -> event <- { event with RequestedBy = text property event.RequestedBy }
-                | "timestamp" -> event <- { event with Timestamp = text property event.Timestamp }
-                | "message" -> event <- { event with Message = text property event.Message }
-                | "payloads" -> event <- { event with Payloads = attachments property event.Payloads }
-                | "cluster_name" -> event <- { event with ClusterName = text property event.ClusterName }
-                | "resource_kind" -> event <- { event with ResourceKind = text property event.ResourceKind }
-                | "resource_name" -> event <- { event with ResourceName = text property event.ResourceName }
-                | "resource_namespace" -> event <- { event with ResourceNamespace = text property event.ResourceNamespace }
-                | _ -> ()
-
-                if not (actionKnownKeys.Contains property.Name) then
-                    event <- { event with Extra = event.Extra.Add(property.Name, property.Value) }
-
-            if problems.Count > 0 then Error problems[0] else Ok event
-        // A string with half a surrogate pair parses as JSON but cannot be read.
-        with :? InvalidOperationException as e ->
-            Error e.Message
-
-let private extraJson (extra: Map<string, JsonElement>) : string =
-    use buffer = new MemoryStream()
-
-    do
-        use writer = new Utf8JsonWriter(buffer, JsonWriterOptions(Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping))
-        writer.WriteStartObject()
-
-        for pair in extra do
-            writer.WritePropertyName pair.Key
-            pair.Value.WriteTo writer
-
-        writer.WriteEndObject()
-
-    Encoding.UTF8.GetString(buffer.ToArray())
+    if bad.Count > 0 then Error bad[0] else Ok event
 
 /// An empty or unparseable timestamp means "not provided": the row gets the
 /// arrival time, never 1970, and TimestampRaw keeps what was sent.
@@ -1119,7 +1000,7 @@ let actionRow (tenant: string) (arrival: DateTime) (event: ActionEvent) : K8sAct
       // parsing.
       ExtraKeys = event.Extra |> Map.toArray |> Array.map fst
       Payloads = event.Payloads
-      Extra = (if event.Extra.IsEmpty then "" else extraJson event.Extra)
+      Extra = (if event.Extra.IsEmpty then "" else Json.compactObject event.Extra)
       TimestampRaw = event.Timestamp }
 
 /// The cluster agent's reports on the actions it ran: the other half of
@@ -1127,33 +1008,23 @@ let actionRow (tenant: string) (arrival: DateTime) (event: ActionEvent) : K8sAct
 /// is executed. Event platform track "kubeactions": a JSON array of events.
 let handleActions (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
-    match Json.tryParse body with
+    match Json.tryParseArray body with
     | Error e ->
-        log.LogWarning("[kubeactions] not JSON: {Error}", e)
         Raw.store ctx "kubeactions" "decode_error" e body
-    | Ok root when root.ValueKind = JsonValueKind.Null -> ()
-    | Ok root when root.ValueKind <> JsonValueKind.Array ->
-        let note = $"the body must be a JSON array of events, this is {kindName root}"
-        log.LogWarning("[kubeactions] {Problem}", note)
-        Raw.store ctx "kubeactions" "decode_error" note body
-    | Ok root ->
+    | Ok items ->
         let events = ResizeArray<ActionEvent>()
 
-        root.EnumerateArray()
-        |> Seq.iteri (fun i raw ->
-            match decodeAction raw with
+        items
+        |> List.iteri (fun i raw ->
+            match decodeAction $"[{i}]" raw with
             | Ok event -> events.Add event
             | Error e ->
                 // One bad element must not cost the batch, nor itself: its
                 // own JSON is kept while the rest become rows.
-                log.LogWarning("[kubeactions] event {Index}: {Error}", i, e)
-                Raw.store ctx "kubeactions" "decode_error" $"batch element {i}: {e}" (Encoding.UTF8.GetBytes(raw.GetRawText())))
+                Raw.store ctx "kubeactions" "decode_error" e (Json.rawBytes raw))
 
-        if tenant <> "" then
-            let arrival = DateTime.UtcNow
-            Sink.write sink K8sActions.table (events |> Seq.map (actionRow tenant arrival) |> Array.ofSeq)
+        let arrival = DateTime.UtcNow
+        Ctx.write ctx K8sActions.table (events |> Seq.map (actionRow tenant arrival) |> Array.ofSeq)
 
     accepted ctx

@@ -21,7 +21,7 @@ open System.IO.Compression
 open System.Text
 open System.Text.Json
 open System.Threading.Tasks
-open Microsoft.AspNetCore.WebUtilities
+open Microsoft.Net.Http.Headers
 open Microsoft.Extensions.Logging
 open Microsoft.AspNetCore.Http
 open Oxpecker
@@ -29,234 +29,18 @@ open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
 
-/// A Content-Type or Content-Disposition header, read the way Go's
-/// mime.ParseMediaType reads it: the notes in raw_payloads quote its verdict,
-/// and it decides between the JSON and the multipart variant of the debugger
-/// intake. RFC 2231 continuations (`name*0=`) are not decoded.
-module private MediaType =
-    type Parsed =
-        { /// Lower case, without parameters; "" when the header has no usable type.
-          Type: string
-          Parameters: Map<string, string>
-          /// Why the header is malformed, in Go's words; "" when it is not.
-          Error: string }
-
-    let private specials = "()<>@,;:\\\"/[]?="
-
-    let private isTokenChar (c: char) : bool =
-        c > ' ' && c < '\127' && not (specials.Contains c)
-
-    /// The token the text starts with, and what follows it.
-    let private token (text: string) : string * string =
-        let mutable length = 0
-
-        while length < text.Length && isTokenChar text[length] do
-            length <- length + 1
-
-        text.Substring(0, length), text.Substring length
-
-    let private typeProblem (mediaType: string) : string =
-        let kind, rest = token mediaType
-
-        if kind = "" then
-            "mime: no media type"
-        elif rest = "" then
-            ""
-        elif not (rest.StartsWith '/') then
-            "mime: expected slash after first token"
-        else
-            let subtype, rest = token (rest.Substring 1)
-
-            if subtype = "" then "mime: expected token after slash"
-            elif rest <> "" then "mime: unexpected content after media subtype"
-            else ""
-
-    /// A parameter's value — a token or a quoted string — and what follows it.
-    let private value (text: string) : (string * string) option =
-        if text = "" then
-            None
-        elif text[0] <> '"' then
-            match token text with
-            | "", _ -> None
-            | found, rest -> Some(found, rest)
-        else
-            let unquoted = StringBuilder()
-            let mutable i = 1
-            let mutable result = None
-            let mutable broken = false
-
-            while result.IsNone && not broken && i < text.Length do
-                let c = text[i]
-
-                if c = '"' then
-                    result <- Some(unquoted.ToString(), text.Substring(i + 1))
-                elif c = '\\' && i + 1 < text.Length && specials.Contains text[i + 1] then
-                    // Only specials are escaped: a backslash before anything
-                    // else is a literal one (Windows paths in file names).
-                    unquoted.Append text[i + 1] |> ignore
-                    i <- i + 2
-                elif c = '\r' || c = '\n' then
-                    broken <- true
-                else
-                    unquoted.Append c |> ignore
-                    i <- i + 1
-
-            result
-
-    /// `; name=value` at the start of the text, and what follows it.
-    type private Parameter =
-        { Name: string
-          Value: string
-          Rest: string }
-
-    let private parameter (text: string) : Parameter option =
-        let text = text.TrimStart()
-
-        if not (text.StartsWith ';') then
-            None
-        else
-            let name, rest = token (text.Substring(1).TrimStart())
-            let rest = rest.TrimStart()
-
-            if name = "" || not (rest.StartsWith '=') then
-                None
-            else
-                match value (rest.Substring(1).TrimStart()) with
-                | Some(found, after) ->
-                    Some
-                        { Name = name.ToLowerInvariant()
-                          Value = found
-                          Rest = after }
-                | None -> None
-
-    let parse (header: string) : Parsed =
-        let beforeParameters =
-            match header.IndexOf ';' with
-            | -1 -> header
-            | i -> header.Substring(0, i)
-
-        let mediaType = beforeParameters.ToLowerInvariant().Trim()
-        let problem = typeProblem mediaType
-
-        if problem <> "" then
-            { Type = ""; Parameters = Map.empty; Error = problem }
-        else
-            let mutable rest = header.Substring beforeParameters.Length
-            let mutable parameters = Map.empty
-            let mutable result = None
-
-            while result.IsNone do
-                rest <- rest.TrimStart()
-
-                if rest = "" then
-                    result <- Some { Type = mediaType; Parameters = parameters; Error = "" }
-                else
-                    match parameter rest with
-                    | None when rest.Trim() = ";" ->
-                        // A trailing semicolon is not an error.
-                        result <- Some { Type = mediaType; Parameters = parameters; Error = "" }
-                    | None -> result <- Some { Type = mediaType; Parameters = Map.empty; Error = "mime: invalid media parameter" }
-                    | Some found ->
-                        match parameters.TryFind found.Name with
-                        | Some earlier when earlier <> found.Value ->
-                            result <- Some { Type = ""; Parameters = Map.empty; Error = "mime: duplicate parameter name" }
-                        | _ ->
-                            if not (found.Name.Contains '*') then
-                                parameters <- parameters.Add(found.Name, found.Value)
-
-                            rest <- found.Rest
-
-            result.Value
-
-/// The elements of a JSON array, each as the bytes it had on the wire; None
-/// when the data is not exactly one JSON array.
-let private arrayElements (data: byte[]) : byte[] list option =
-    let elements = ResizeArray<byte[]>()
-    let mutable reader = Utf8JsonReader(ReadOnlySpan data, JsonReaderOptions(MaxDepth = Lenient.jsonDepth))
-
-    try
-        if not (reader.Read()) || reader.TokenType <> JsonTokenType.StartArray then
-            None
-        else
-            while reader.Read() && reader.TokenType <> JsonTokenType.EndArray do
-                let start = int reader.TokenStartIndex
-                reader.Skip()
-                elements.Add data[start .. int reader.BytesConsumed - 1]
-
-            // Reading on proves nothing follows the array: more data throws.
-            reader.Read() |> ignore
-            Some(List.ofSeq elements)
-    with :? JsonException ->
-        None
-
-/// A member of a decoded object. None when the object did not decode, the
-/// member is absent, or it is null: the Go intake read all three as "not sent".
-let private field (name: string) (decoded: JsonElement option) : JsonElement option =
-    match decoded with
-    | Some object when object.ValueKind = JsonValueKind.Object ->
-        Lenient.property name object |> Option.filter (fun value -> value.ValueKind <> JsonValueKind.Null)
-    | _ -> None
-
-/// A string member's value; "" when the producer sent another type.
-let private asString (value: JsonElement option) : string =
-    match value with
-    | Some v when v.ValueKind = JsonValueKind.String -> Lenient.text v
-    | _ -> ""
-
-/// A value as Go's `%v` prints it once decoded: what the Go intake stored
-/// for a value that is neither text nor a number. Past `levels` of nesting
-/// the JSON is left as it is, so depth cannot exhaust the stack.
-let rec private goText (levels: int) (value: JsonElement) : string =
-    match value.ValueKind with
-    | JsonValueKind.String -> Lenient.text value
-    | JsonValueKind.Null -> "<nil>"
-    | JsonValueKind.Array when levels > 0 ->
-        "[" + String.Join(" ", value.EnumerateArray() |> Seq.map (goText (levels - 1))) + "]"
-    | JsonValueKind.Object when levels > 0 ->
-        let members = value.EnumerateObject() |> Seq.map (fun p -> Lenient.nameOf p, p.Value) |> Map.ofSeq
-        "map[" + String.Join(" ", members |> Seq.map (fun pair -> pair.Key + ":" + goText (levels - 1) pair.Value)) + "]"
-    | _ -> value.GetRawText()
-
-/// A value as the text it had on the wire: a string without its quotes, a
-/// number digit for digit (never through a float). "" when not sent.
-let private rawText (value: JsonElement option) : string =
-    match value with
-    | Some v -> goText 100 v
-    | None -> ""
-
-/// A boolean as 1 or 0; None when it was not sent or is not a boolean, so
-/// "not sent" and "sent false" stay apart.
-let private asFlag (value: JsonElement option) : uint8 option =
-    match value with
-    | Some v when v.ValueKind = JsonValueKind.True -> Some 1uy
-    | Some v when v.ValueKind = JsonValueKind.False -> Some 0uy
-    | _ -> None
-
-/// A byte count; None when it was not sent, is not an integer, or is negative.
-let private asCount (value: JsonElement option) : uint64 option =
-    match value with
-    | Some v when v.ValueKind = JsonValueKind.Number ->
-        match v.TryGetInt64() with
-        | true, n when n >= 0L -> Some(uint64 n)
-        | _ -> None
-    | _ -> None
-
 /// An epoch number as a time. Producers send seconds, milliseconds,
 /// microseconds or nanoseconds; the magnitude says which, as it would to a
 /// person reading the number.
-let private epochTime (n: int64) : DateTime option =
-    try
-        if n >= 1_000_000_000_000_000_000L then
-            Some((Time.fromUnixSeconds (n / 1_000_000_000L)).AddTicks(n % 1_000_000_000L / 100L))
-        elif n >= 1_000_000_000_000_000L then
-            Some((Time.fromUnixSeconds (n / 1_000_000L)).AddTicks(n % 1_000_000L * 10L))
-        elif n >= 1_000_000_000_000L then
-            Some(Time.fromUnixMillis n)
-        else
-            Some(Time.fromUnixSeconds n)
-    with :? ArgumentOutOfRangeException ->
-        // Past the year 9999, which a DateTime cannot hold.
-        None
+let private epochTime (n: int64) : DateTime =
+    if n >= 1_000_000_000_000_000_000L then
+        (Time.fromUnixSeconds (n / 1_000_000_000L)).AddTicks(n % 1_000_000_000L / 100L)
+    elif n >= 1_000_000_000_000_000L then
+        (Time.fromUnixSeconds (n / 1_000_000L)).AddTicks(n % 1_000_000L * 10L)
+    elif n >= 1_000_000_000_000L then
+        Time.fromUnixMillis n
+    else
+        Time.fromUnixSeconds n
 
 /// A profiler event's start or end, or a diagnostic's timestamp: RFC 3339
 /// text from Datadog's profiler, an epoch number from other producers. None
@@ -264,10 +48,10 @@ let private epochTime (n: int64) : DateTime option =
 /// value next to this one.
 let parseTimestamp (value: JsonElement option) : DateTime option =
     match value with
-    | Some v when v.ValueKind = JsonValueKind.String -> Lenient.rfc3339 (Lenient.text v)
+    | Some v when v.ValueKind = JsonValueKind.String -> Time.tryRfc3339 (v.GetString())
     | Some v when v.ValueKind = JsonValueKind.Number ->
         match v.TryGetInt64() with
-        | true, n when n > 0L -> epochTime n
+        | true, n when n > 0L -> Some(epochTime n)
         | _ -> None
     | _ -> None
 
@@ -286,8 +70,8 @@ let private gunzip (limit: int64) (data: byte[]) : byte[] option =
             read <- inflater.Read(buffer, 0, buffer.Length)
 
         // GZipStream reads a stream that breaks off, or has bytes after its
-        // end, without complaint; Go's reader refuses both. A whole stream
-        // ends with the size of what it inflates to.
+        // end, without complaint, and half a profile must not pass for a
+        // whole one. A whole stream ends with the size of what it inflates to.
         let declaredSize =
             if data.Length < 18 then None else Some(BinaryPrimitives.ReadUInt32LittleEndian(ReadOnlySpan(data, data.Length - 4, 4)))
 
@@ -343,16 +127,16 @@ let profileRow
       DDEvpOrigin = origin
       DDEvpOriginVersion = originVersion
       Event = parts.TryFind "event" |> Option.defaultValue [||]
-      StartRaw = rawText (field "start" event)
-      StartParsed = parseTimestamp (field "start" event)
-      EndRaw = rawText (field "end" event)
-      EndParsed = parseTimestamp (field "end" event)
-      Family = asString (field "family" event)
-      Version = asString (field "version" event)
-      Runtime = asString (field "runtime" event)
-      Language = asString (field "language" event)
+      StartRaw = Json.text (Json.child "start" event)
+      StartParsed = parseTimestamp (Json.child "start" event)
+      EndRaw = Json.text (Json.child "end" event)
+      EndParsed = parseTimestamp (Json.child "end" event)
+      Family = Json.lenientString (Json.child "family" event)
+      Version = Json.lenientString (Json.child "version" event)
+      Runtime = Json.lenientString (Json.child "runtime" event)
+      Language = Json.lenientString (Json.child "language" event)
       // A third tag convention: one comma-joined string.
-      TagsProfiler = Tags.toMultiMap (Tags.splitDDTags (asString (field "tags_profiler" event)))
+      TagsProfiler = Tags.toMultiMap (Tags.splitDDTags (Json.lenientString (Json.child "tags_profiler" event)))
       AttachName = attachments |> Array.map fst
       AttachBytes = attachments |> Array.map snd
       AttachSize = attachments |> Array.map (fun (_, data) -> uint64 data.Length)
@@ -368,72 +152,38 @@ let profileRow
       AttachLocationCount = shapes |> Array.map _.LocationCount
       AttachFunctionCount = shapes |> Array.map _.FunctionCount }
 
-/// Datadog answers these intakes with an empty object and 202, whatever
-/// happened to the body.
-let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
-
 let private orUnknown (contentType: string) : string =
     if contentType = "" then "(no content-type)" else contentType
-
-/// The form name of a part, from its Content-Disposition.
-let private formName (contentDisposition: string) : string =
-    let disposition = MediaType.parse (if isNull contentDisposition then "" else contentDisposition)
-
-    if disposition.Type = "form-data" then
-        disposition.Parameters.TryFind "name" |> Option.defaultValue ""
-    else
-        ""
 
 /// The parts of a multipart request by form name, or why it could not be
 /// read. A repeated name keeps its last part; no producer here repeats one,
 /// so the warning is the alarm.
-///
-/// Unlike `Multipart.parts`, a body that breaks off is an error: the request
-/// is then kept whole in raw_payloads instead of stored as half a submission.
 let private readParts (body: byte[]) (ctx: HttpContext) (label: string) : Result<Map<string, byte[]>, string> =
     let log = Ctx.log ctx
 
-    let media = MediaType.parse (Ctx.header ctx "Content-Type")
+    match Multipart.tryParts (Ctx.header ctx "Content-Type") body with
+    | Error problem -> Error problem
+    | Ok parts ->
+        let mutable byName = Map.empty
 
-    if media.Error <> "" then
-        Error media.Error
-    elif not (media.Type.StartsWith "multipart/") then
-        Error("content-type is " + media.Type)
-    else
-        match media.Parameters.TryFind "boundary" with
-        | None
-        | Some "" -> Error "content-type is multipart without boundary"
-        | Some boundary ->
-            try
-                let reader = MultipartReader(boundary, new MemoryStream(body))
-                // The reader's defaults are for form posts; profiles and symbol files are larger.
-                reader.HeadersLengthLimit <- 1024 * 1024
-                reader.BodyLengthLimit <- Nullable()
-                let mutable parts = Map.empty
-                // Synchronous on purpose: the stream is memory, nothing waits.
-                let mutable section = reader.ReadNextSectionAsync().GetAwaiter().GetResult()
+        for part in parts do
+            if byName.ContainsKey part.Name then
+                log.LogWarning("[{Label}] part {Name} repeats, the later one replaces it", label, part.Name)
 
-                while not (isNull section) do
-                    use data = new MemoryStream()
-                    section.Body.CopyTo data
-                    let name = formName section.ContentDisposition
+            byName <- byName.Add(part.Name, part.Data)
 
-                    if parts.ContainsKey name then
-                        log.LogWarning("[{Label}] part {Name} repeats, the later one replaces it", label, name)
+        Ok byName
 
-                    parts <- parts.Add(name, data.ToArray())
-                    section <- reader.ReadNextSectionAsync().GetAwaiter().GetResult()
-
-                Ok parts
-            with
-            | :? IOException -> Error "the multipart body breaks off"
-            | :? InvalidDataException as e -> Error e.Message
+let private isMultipartForm (contentType: string) : bool =
+    match MediaTypeHeaderValue.TryParse contentType with
+    | true, media -> media.MediaType.Equals("multipart/form-data", StringComparison.OrdinalIgnoreCase)
+    | false, _ -> false
 
 /// A part that should be a JSON object, decoded; a warning when it is not.
 let private decodeObject (ctx: HttpContext) (what: string) (data: byte[]) : JsonElement option =
     let log = Ctx.log ctx
 
-    let decoded = Lenient.tryObject data
+    let decoded = Json.tryParseObject data
 
     if decoded.IsNone then
         log.LogWarning("[{What}] not a JSON object ({Bytes} B)", what, data.Length)
@@ -446,12 +196,10 @@ let handleProfile (label: string) : byte[] -> EndpointHandler =
     fun body ctx ->
         let tenant = Ctx.tenant ctx
         let log = Ctx.log ctx
-        let sink = Ctx.sink ctx
 
         match readParts body ctx label with
         | Error problem ->
             let contentType = Ctx.header ctx "Content-Type"
-            log.LogWarning("[{Label}] not multipart ({Problem}), kept raw", label, problem)
             Raw.store ctx "profiling" "decode_error" $"not multipart, content-type {orUnknown contentType}: {problem}" body
         | Ok parts ->
             // The event part carries the submission: which attachments
@@ -465,11 +213,10 @@ let handleProfile (label: string) : byte[] -> EndpointHandler =
                     | Some summary -> profiles <- profiles.Add(part.Key, summary)
                     | None -> log.LogDebug("[{Label}] {Part} is not pprof ({Bytes} B)", label, part.Key, part.Value.Length)
 
-            if tenant <> "" then
-                let row =
-                    profileRow tenant label (Ctx.header ctx "Dd-Evp-Origin") (Ctx.header ctx "Dd-Evp-Origin-Version") parts event profiles
+            let row =
+                profileRow tenant label (Ctx.header ctx "Dd-Evp-Origin") (Ctx.header ctx "Dd-Evp-Origin-Version") parts event profiles
 
-                Sink.write sink Profiles.table [| row |]
+            Ctx.write ctx Profiles.table [| row |]
 
         accepted ctx
 
@@ -511,7 +258,7 @@ let private trimSpace (data: byte[]) : byte[] =
 /// the first significant byte decides.
 let decodeLogs (body: byte[]) : byte[] list option =
     match body |> Array.tryFindIndex (fun b -> not (isJsonSpace b)) with
-    | Some start when body[start] = '['B -> arrayElements body
+    | Some start when body[start] = '['B -> Json.tryParseElementBytes body |> Result.toOption
     | Some start when body[start] = '{'B ->
         let lines = ResizeArray<byte[]>()
         let mutable lineStart = start
@@ -534,7 +281,7 @@ let private extraKeys (decoded: JsonElement option) : string[] =
     match decoded with
     | Some object ->
         object.EnumerateObject()
-        |> Seq.map Lenient.nameOf
+        |> Seq.map _.Name
         |> Seq.filter (fun name -> name <> "service" && name <> "ddsource")
         |> Seq.distinct
         |> Seq.sort
@@ -553,23 +300,23 @@ let diagnosticRow
     (message: byte[])
     (decoded: JsonElement option)
     : DebuggerDiagnosticRow =
-    let diagnostics = decoded |> field "debugger" |> field "diagnostics"
+    let diagnostics = decoded |> Json.child "debugger" |> Json.child "diagnostics"
 
     let failure =
-        field "exception" diagnostics |> Option.filter (fun e -> e.ValueKind = JsonValueKind.Object)
+        Json.child "exception" diagnostics |> Option.filter (fun e -> e.ValueKind = JsonValueKind.Object)
 
     { TenantID = tenant
       ReceivedAt = arrival
-      Timestamp = parseTimestamp (field "timestamp" decoded)
-      Service = asString (field "service" decoded)
-      DDSource = asString (field "ddsource" decoded)
+      Timestamp = parseTimestamp (Json.child "timestamp" decoded)
+      Service = Json.lenientString (Json.child "service" decoded)
+      DDSource = Json.lenientString (Json.child "ddsource" decoded)
       DDTags = tags
-      RuntimeID = asString (field "runtimeId" diagnostics)
-      ProbeID = asString (field "probeId" diagnostics)
-      Status = asString (field "status" diagnostics)
-      ProbeVersion = asString (field "probeVersion" diagnostics)
-      ExceptionType = failure |> Option.map (fun _ -> asString (field "type" failure))
-      ExceptionMessage = failure |> Option.map (fun _ -> asString (field "message" failure))
+      RuntimeID = Json.lenientString (Json.child "runtimeId" diagnostics)
+      ProbeID = Json.lenientString (Json.child "probeId" diagnostics)
+      Status = Json.lenientString (Json.child "status" diagnostics)
+      ProbeVersion = Json.lenientString (Json.child "probeVersion" diagnostics)
+      ExceptionType = failure |> Option.map (fun _ -> Json.lenientString (Json.child "type" failure))
+      ExceptionMessage = failure |> Option.map (fun _ -> Json.lenientString (Json.child "message" failure))
       Message = message }
 
 /// What the file part of a symdb upload holds.
@@ -591,10 +338,10 @@ let decodeSymdbFile (file: byte[]) : SymdbFile =
     match gunzip symdbMaxInflated file with
     | None -> { Envelope = None; ScopeCount = None; InflatedSize = 0 }
     | Some inflated ->
-        let envelope = Lenient.tryObject inflated
+        let envelope = Json.tryParseObject inflated
 
         let scopeCount =
-            match field "scopes" envelope with
+            match Json.child "scopes" envelope with
             | Some scopes when scopes.ValueKind = JsonValueKind.Array ->
                 let scopes = List.ofSeq (scopes.EnumerateArray())
 
@@ -606,14 +353,6 @@ let decodeSymdbFile (file: byte[]) : SymdbFile =
             | _ -> None
 
         { Envelope = envelope; ScopeCount = scopeCount; InflatedSize = inflated.Length }
-
-/// A member of the file's envelope as text: a string without its quotes,
-/// anything else as the JSON it is.
-let private envelopeText (name: string) (envelope: JsonElement option) : string =
-    match field name envelope with
-    | Some value when value.ValueKind = JsonValueKind.String -> Lenient.text value
-    | Some value -> value.GetRawText()
-    | None -> ""
 
 /// One symdb_uploads row. `event` is the event part as it arrived, `decoded`
 /// what it decoded to (None when it is not a JSON object).
@@ -629,30 +368,29 @@ let symdbUploadRow
       ReceivedAt = DateTime.UtcNow
       Event = event
       DDTags = Tags.toMultiMap (Tags.splitDDTags ddtags)
-      Service = asString (field "service" decoded)
-      Version = asString (field "version" decoded)
-      Language = asString (field "language" decoded)
-      RuntimeID = asString (field "runtimeId" decoded)
+      Service = Json.lenientString (Json.child "service" decoded)
+      Version = Json.lenientString (Json.child "version" decoded)
+      Language = Json.lenientString (Json.child "language" decoded)
+      RuntimeID = Json.lenientString (Json.child "runtimeId" decoded)
       // Identifiers, read as the text on the wire: a producer that sends
       // uploadId as a bare number must not lose it.
-      UploadID = rawText (field "uploadId" decoded)
-      BatchNum = rawText (field "batchNum" decoded)
-      Final = asFlag (field "final" decoded)
-      AttachmentSize = asCount (field "attachmentSize" decoded)
+      UploadID = Json.text (Json.child "uploadId" decoded)
+      BatchNum = Json.text (Json.child "batchNum" decoded)
+      Final = Json.flag (Json.child "final" decoded)
+      AttachmentSize = Json.child "attachmentSize" decoded |> Option.bind Json.uint64Of
       File = file
       InflatedSize = uint64 symdb.InflatedSize
       ScopeCount = uint32 (defaultArg symdb.ScopeCount 0)
       ScopesOK = Text.flag symdb.ScopeCount.IsSome
-      EnvService = envelopeText "service" symdb.Envelope
-      EnvVersion = envelopeText "version" symdb.Envelope
-      EnvLanguage = envelopeText "language" symdb.Envelope
-      EnvUploadID = envelopeText "upload_id" symdb.Envelope
-      EnvBatchNum = envelopeText "batch_num" symdb.Envelope
-      EnvFinal = envelopeText "final" symdb.Envelope }
+      EnvService = Json.text (Json.child "service" symdb.Envelope)
+      EnvVersion = Json.text (Json.child "version" symdb.Envelope)
+      EnvLanguage = Json.text (Json.child "language" symdb.Envelope)
+      EnvUploadID = Json.text (Json.child "upload_id" symdb.Envelope)
+      EnvBatchNum = Json.text (Json.child "batch_num" symdb.Envelope)
+      EnvFinal = Json.text (Json.child "final" symdb.Envelope) }
 
 let private storeLogs (ctx: HttpContext) (ddtags: string) (entries: byte[] list) : unit =
     let tenant = Ctx.tenant ctx
-    let sink = Ctx.sink ctx
 
     let tags = Tags.toMultiMap (Tags.splitDDTags ddtags)
     let arrival = DateTime.UtcNow
@@ -662,22 +400,21 @@ let private storeLogs (ctx: HttpContext) (ddtags: string) (entries: byte[] list)
         |> List.map (fun entry ->
             // Best effort: an entry that is not an object keeps its bytes
             // and has no columns.
-            let decoded = Lenient.tryObject entry
+            let decoded = Json.tryParseObject entry
 
             { TenantID = tenant
               ReceivedAt = arrival
-              Service = asString (field "service" decoded)
-              DDSource = asString (field "ddsource" decoded)
+              Service = Json.lenientString (Json.child "service" decoded)
+              DDSource = Json.lenientString (Json.child "ddsource" decoded)
               DDTags = tags
               Entry = entry
               ExtraKeys = extraKeys decoded })
 
-    Sink.write sink DebuggerLogs.table (Array.ofList rows)
+    Ctx.write ctx DebuggerLogs.table (Array.ofList rows)
 
 let private storeDiagnostics (ctx: HttpContext) (ddtags: string) (messages: byte[] list) : unit =
     let tenant = Ctx.tenant ctx
     let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     let tags = Tags.toMultiMap (Tags.splitDDTags ddtags)
     let arrival = DateTime.UtcNow
@@ -685,14 +422,14 @@ let private storeDiagnostics (ctx: HttpContext) (ddtags: string) (messages: byte
     let rows =
         messages
         |> List.mapi (fun i message ->
-            let decoded = Lenient.tryObject message
+            let decoded = Json.tryParseObject message
 
             if decoded.IsNone then
                 log.LogWarning("[debugger] diagnostics: entry {Index} is not a JSON object", i)
 
             diagnosticRow tenant arrival tags message decoded)
 
-    Sink.write sink DebuggerDiagnostics.table (Array.ofList rows)
+    Ctx.write ctx DebuggerDiagnostics.table (Array.ofList rows)
 
 /// POST /api/v2/debugger: one path, three producers, told apart by
 /// Content-Type and part names.
@@ -706,23 +443,19 @@ let handleDebugger: byte[] -> EndpointHandler =
     fun body ctx ->
         let tenant = Ctx.tenant ctx
         let log = Ctx.log ctx
-        let sink = Ctx.sink ctx
 
         let contentType = Ctx.header ctx "Content-Type"
         let ddtags = Ctx.query ctx "ddtags"
 
-        if (MediaType.parse contentType).Type <> "multipart/form-data" then
+        if not (isMultipartForm contentType) then
             match decodeLogs body with
             | None ->
-                log.LogWarning("[debugger] logs: neither a JSON array nor NDJSON, kept raw")
                 Raw.store ctx "debugger" "decode_error" $"logs variant: not a JSON array or NDJSON, content-type {orUnknown contentType}" body
             | Some entries ->
-                if tenant <> "" then
-                    storeLogs ctx ddtags entries
+                storeLogs ctx ddtags entries
         else
             match readParts body ctx "debugger" with
             | Error problem ->
-                log.LogWarning("[debugger] multipart: {Problem}, kept raw", problem)
                 Raw.store ctx "debugger" "decode_error" $"multipart, content-type {orUnknown contentType}: {problem}" body
             | Ok parts ->
                 match parts.TryFind "file", parts.TryFind "event" with
@@ -733,21 +466,17 @@ let handleDebugger: byte[] -> EndpointHandler =
                     if symdb.Envelope.IsNone then
                         log.LogWarning("[debugger] symdb file is not a gzip-compressed JSON object ({Bytes} B)", file.Length)
 
-                    if tenant <> "" then
-                        Sink.write sink SymdbUploads.table [| symdbUploadRow tenant event file ddtags decoded symdb |]
+                    Ctx.write ctx SymdbUploads.table [| symdbUploadRow tenant event file ddtags decoded symdb |]
                 | None, Some event ->
-                    match arrayElements event with
+                    match Json.tryParseElementBytes event |> Result.toOption with
                     | None ->
                         // Not an array at all, unlike an empty batch: `[]`
                         // stores nothing and is not an error.
-                        log.LogWarning("[debugger] diagnostics: the event part is not a JSON array, kept raw")
                         Raw.store ctx "debugger" "decode_error" "diagnostics variant: event part is not a JSON array" body
                     | Some messages ->
-                        if tenant <> "" then
-                            storeDiagnostics ctx ddtags messages
+                        storeDiagnostics ctx ddtags messages
                 | _ ->
                     let names = String.Join(",", parts.Keys)
-                    log.LogWarning("[debugger] multipart with neither file nor event, parts: {Parts}", names)
                     Raw.store ctx "debugger" "unexpected_shape" $"multipart with neither file nor event parts: {names}" body
 
         accepted ctx
@@ -785,15 +514,15 @@ let symbolUploadRow (tenant: string) (parts: Map<string, byte[]>) (meta: JsonEle
 
     { TenantID = tenant
       ReceivedAt = DateTime.UtcNow
-      Type = asString (field "type" meta)
-      Arch = asString (field "arch" meta)
-      GNUBuildID = asString (field "gnu_build_id" meta)
-      GoBuildID = asString (field "go_build_id" meta)
-      FileHash = asString (field "file_hash" meta)
-      SymbolSource = asString (field "symbol_source" meta)
-      Origin = asString (field "origin" meta)
-      OriginVersion = asString (field "origin_version" meta)
-      Filename = asString (field "filename" meta)
+      Type = Json.lenientString (Json.child "type" meta)
+      Arch = Json.lenientString (Json.child "arch" meta)
+      GNUBuildID = Json.lenientString (Json.child "gnu_build_id" meta)
+      GoBuildID = Json.lenientString (Json.child "go_build_id" meta)
+      FileHash = Json.lenientString (Json.child "file_hash" meta)
+      SymbolSource = Json.lenientString (Json.child "symbol_source" meta)
+      Origin = Json.lenientString (Json.child "origin" meta)
+      OriginVersion = Json.lenientString (Json.child "origin_version" meta)
+      Filename = Json.lenientString (Json.child "filename" meta)
       Meta = parts.TryFind "event" |> Option.defaultValue [||]
       HasELF = Text.flag elf.IsSome
       ELFClass = elfClass
@@ -808,18 +537,14 @@ let symbolUploadRow (tenant: string) (parts: Map<string, byte[]>) (meta: JsonEle
 /// only after /api/v2/profiles/symbols/query said the symbols are missing.
 let handleSourcemap (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     match readParts body ctx "srcmap" with
     | Error problem ->
         let contentType = Ctx.header ctx "Content-Type"
-        log.LogWarning("[srcmap] multipart: {Problem}, kept raw", problem)
         Raw.store ctx "srcmap" "decode_error" $"multipart, content-type {orUnknown contentType}: {problem}" body
     | Ok parts ->
         let meta = parts.TryFind "event" |> Option.bind (decodeObject ctx "srcmap event")
 
-        if tenant <> "" then
-            Sink.write sink SymbolUploads.table [| symbolUploadRow tenant parts meta |]
+        Ctx.write ctx SymbolUploads.table [| symbolUploadRow tenant parts meta |]
 
     accepted ctx

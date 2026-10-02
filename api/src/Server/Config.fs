@@ -9,11 +9,11 @@ let private envOr (key: string) (fallback: string) =
     | "" -> fallback
     | v -> v
 
-/// A duration as Go wrote it ("15s"), or a bare number of seconds.
+/// A duration ("15s", "1m30s"), or a bare number of seconds.
 let private duration (key: string) (fallback: TimeSpan) : TimeSpan =
     let raw = envOr key ""
 
-    match Panel.parseDuration raw, Int32.TryParse raw with
+    match Duration.parse raw, Int32.TryParse raw with
     | Ok d, _ when d > TimeSpan.Zero -> d
     | _, (true, seconds) when seconds > 0 -> TimeSpan.FromSeconds(float seconds)
     | _ -> fallback
@@ -44,6 +44,9 @@ type Config =
       /// addresses or networks (`10.0.0.0/8`), comma-separated. Only what
       /// such a proxy says in X-Forwarded-For is believed.
       TrustedProxies: string list
+      /// The largest request body the intake reads (NINJACAT_MAX_BODY_BYTES).
+      /// A larger one is refused with 413.
+      MaxBodyBytes: int64
       /// Answer 202 on unknown intake paths (NINJACAT_ACK_UNKNOWN).
       AckUnknown: bool
       /// DEBUG=true: every intake request is also dumped to CaptureDir.
@@ -53,9 +56,8 @@ type Config =
       SelfMonitorTenant: string
       SelfMonitorHost: string }
 
-// The CLICKHOUSE_* names are the ones the Go server used, so one .env serves
-// both while they coexist. The address is the exception: Go spoke the native
-// protocol on :9000, the .NET driver speaks HTTP on :8123.
+// CLICKHOUSE_HTTP_ADDR is ClickHouse's HTTP interface (:8123), which the
+// driver speaks; not the native protocol's port.
 let load () =
     { IntakeAddr = envOr "NINJACAT_ADDR" ":8080"
       InternalAddr = envOr "NINJACAT_INTERNAL_ADDR" ":8081"
@@ -78,6 +80,11 @@ let load () =
       TrustedProxies =
         (envOr "NINJACAT_TRUSTED_PROXIES" "").Split(',', StringSplitOptions.RemoveEmptyEntries ||| StringSplitOptions.TrimEntries)
         |> List.ofArray
+      // Agents send a few megabytes; a flare or a profile is tens of them.
+      MaxBodyBytes =
+        match Int64.TryParse(envOr "NINJACAT_MAX_BODY_BYTES" "") with
+        | true, bytes when bytes > 0L -> bytes
+        | _ -> 64L * 1024L * 1024L
       AckUnknown = envOr "NINJACAT_ACK_UNKNOWN" "" = "true"
       Debug = envOr "DEBUG" "" = "true"
       CaptureDir = envOr "NINJACAT_CAPTURE_DIR" "captures"

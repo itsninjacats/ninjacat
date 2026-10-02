@@ -1,6 +1,9 @@
 # Production image for the server, built in two stages.
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS builder
 
+# The SDK reports its use to Microsoft unless told not to.
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
+
 WORKDIR /src
 
 # Project files first: the restore layer is reused until a dependency changes.
@@ -18,6 +21,13 @@ RUN dotnet publish src/Server/Server.fsproj -c Release --no-restore -o /out
 # aspnet, not runtime-deps: the service is framework-dependent, which keeps
 # the image layer shared with every other ASP.NET image on the host.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
+
+# Npgsql asks for GSS encryption before anything else and loads this library
+# to do it. Without it every start prints "Cannot load library
+# libgssapi_krb5.so.2", and Kerberos authentication to Postgres cannot work.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /out /app
 

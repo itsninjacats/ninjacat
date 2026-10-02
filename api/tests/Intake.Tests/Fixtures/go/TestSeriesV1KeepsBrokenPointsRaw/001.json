@@ -64,7 +64,7 @@
      {},
      "[null,2]",
      8,
-     "v1 series #0 (m) point #1 has a nil timestamp or value"
+     "series[0].points[1]: expected a [timestamp, value] pair of numbers"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -78,7 +78,7 @@
      "Host": "example.com",
      "Intake": "series",
      "Method": "POST",
-     "Note": "v1 series #0 (m) point #1 has a nil timestamp or value",
+     "Note": "series[0].points[1]: expected a [timestamp, value] pair of numbers",
      "Path": "/api/v1/series",
      "Query": {},
      "Reason": "unexpected_shape",
@@ -157,5 +157,6 @@
  "volatile": [
   "/sends/0/args/0/1",
   "/sends/0/rows/0/ReceivedAt"
- ]
+ ],
+ "edited": "The notes say which member did not fit and what was found there, in one wording for every intake. They used to be the Go server's, naming the Go API client's model types."
 }

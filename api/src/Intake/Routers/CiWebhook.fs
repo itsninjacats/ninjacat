@@ -156,12 +156,9 @@ let webhookRow (tenant: string) (receivedAt: DateTime) (delivery: Delivery) (bod
 
 let private store (body: byte[]) (ctx: HttpContext) : unit =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
-    match GoJson.parse body with
+    match Json.tryParse body with
     | Error e ->
-        log.LogWarning("[ciwebhook] json: {Error} ({Bytes} bytes)", e, body.Length)
         Raw.store ctx "webhook" "decode_error" $"batch: {e}" body
     | Ok root ->
         // A batch is an array; a provider that skipped the batcher sends one
@@ -192,11 +189,10 @@ let private store (body: byte[]) (ctx: HttpContext) : unit =
 
             match Value.ofJson written with
             | Value.Object _ as element ->
-                if tenant <> "" then
-                    rows.Add(webhookRow tenant now delivery body element)
+                rows.Add(webhookRow tenant now delivery body element)
             | _ -> Raw.store ctx "webhook" "unexpected_shape" "element is not a JSON object" (Encoding.UTF8.GetBytes body)
 
-        Sink.write sink CIWebhookEvents.table (rows.ToArray())
+        Ctx.write ctx CIWebhookEvents.table (rows.ToArray())
 
 /// A batch of CI pipeline, stage and job events.
 ///
@@ -206,7 +202,7 @@ let handle (body: byte[]) (ctx: HttpContext) : Task =
     if body.Length > 0 then
         store body ctx
 
-    (setStatusCode 202 >=> json {||}) ctx
+    accepted ctx
 /// intake.synthetics.<site> — the agent's synthetics test poller
 /// (synthetics.collector.enabled).
 ///

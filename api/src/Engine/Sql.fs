@@ -36,3 +36,18 @@ type Sql =
 module Sql =
     /// The placeholder for a parameter, typed from its value.
     let param (name: string) (value: SqlValue) = $"{{{name}:{value.ClickHouseType}}}"
+
+/// Collects the values a query binds and hands out their placeholders, each
+/// under a name of its own (the prefix, then its place in the list).
+type SqlParams() =
+    let values = ResizeArray<string * SqlValue>()
+
+    member _.Add(prefix: string, value: SqlValue) : string =
+        let name = $"{prefix}{values.Count}"
+        values.Add((name, value))
+        Sql.param name value
+
+    /// Under the prefix "p".
+    member this.Add(value: SqlValue) : string = this.Add("p", value)
+
+    member _.All: (string * SqlValue) list = List.ofSeq values

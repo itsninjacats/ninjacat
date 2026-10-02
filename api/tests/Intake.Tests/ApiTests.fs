@@ -1,8 +1,4 @@
 /// Tests of Routers/Api.fs beyond the golden fixtures.
-///
-/// The expectations in the "as the Go server did" tests were taken from the
-/// Go server itself: the same requests were sent through its handlers and the
-/// answers and rows recorded.
 module NinjaCat.Api.Intake.Tests.ApiTests
 
 open System
@@ -19,36 +15,12 @@ open NinjaCat.Api.Intake.Routers
 open NinjaCat.Api.Intake.Routers.ApiPayloads
 open NinjaCat.Api.Storage.Rows
 open NinjaCat.Api.Intake.Tests.Golden
-
-let private utf8 (text: string) : byte[] = Encoding.UTF8.GetBytes text
+open NinjaCat.Api.Intake.Tests.Golden.Requests
 
 /// Sends one request to the api.<site> routes with the test key; returns the
 /// answer and the sink that took the writes.
 let private send (method: string) (url: string) (headers: (string * string) list) (body: byte[]) : Response * CapturingSink =
-    let sink = CapturingSink()
-
-    let deps: Deps =
-        { Store = Replay.testStore ()
-          Sink = sink
-          Log = NullLogger.Instance
-          AckUnknown = false }
-
-    let path, query =
-        match url.IndexOf '?' with
-        | -1 -> url, ""
-        | i -> url.Substring(0, i), url.Substring i
-
-    let http = DefaultHttpContext()
-    http.Request.Method <- method
-    http.Request.Host <- HostString "example.com"
-    http.Request.Path <- PathString path
-    http.Request.QueryString <- QueryString query
-    http.Request.Headers["Dd-Api-Key"] <- StringValues Replay.testKey
-
-    for name, value in headers do
-        http.Request.Headers[name] <- StringValues value
-
-    Replay.byGoNames deps [ "routeAPI" ] http body, sink
+    Requests.send [ "routeAPI" ] method url (Requests.withKey @ headers) body
 
 let private post (path: string) (json: string) : Response * CapturingSink =
     send "POST" path [ "Content-Type", "application/json" ] (utf8 json)
@@ -59,79 +31,74 @@ let private text (response: Response) : string = Encoding.UTF8.GetString respons
 let private raws (sink: CapturingSink) : (string * string * string) list =
     sink.Rows<RawPayloadRow>() |> List.map (fun raw -> raw.Reason, raw.Note, Encoding.UTF8.GetString raw.Body)
 
-let private parsed (json: string) : JsonElement =
-    match GoJson.parse (utf8 json) with
-    | Ok root -> root
-    | Error e -> failwith e
+let private parsed = Requests.json
 
 // ---------------------------------------------------------------------------
-// Reading JSON as Go does
+// Reading JSON
 // ---------------------------------------------------------------------------
 
 [<Fact>]
-let ``a struct field is found whatever the case of the key, the last match wins, null is absent`` () =
-    let root = parsed """{"Metric":"a","metric":"b","host":null}"""
-    Assert.Equal(Some "b", GoJson.field "metric" root |> Option.bind GoJson.asString)
-    Assert.Equal(Some "b", GoJson.field "METRIC" root |> Option.bind GoJson.asString)
-    Assert.True((GoJson.field "host" root).IsNone)
-    Assert.Equal<string list>([ "Metric"; "host"; "metric" ], GoJson.members root |> Map.toList |> List.map fst)
+let ``a member is found by its exact name, the last of two counts, null is absent`` () =
+    let root = parsed """{"Metric":"a","metric":"b","metric":"c","host":null}"""
+    Assert.Equal(Some "c", Json.field "metric" root |> Option.bind Json.stringOf)
+    Assert.True((Json.field "METRIC" root).IsNone)
+    Assert.True((Json.field "host" root).IsNone)
+    Assert.Equal<string list>([ "Metric"; "host"; "metric" ], Json.members root |> Map.toList |> List.map fst)
 
 [<Fact>]
 let ``an integer written with a fraction or an exponent is not one`` () =
     let numbers = parsed """[5, 5.0, 5e0, -1, 12345678901234567890, "5"]"""
-    let read = [ for n in numbers.EnumerateArray() -> GoJson.asInt64 n ]
+    let read = [ for n in numbers.EnumerateArray() -> Json.int64Of n ]
     Assert.Equal<int64 option list>([ Some 5L; None; None; Some -1L; None; None ], read)
-    Assert.True((GoJson.asUInt32 numbers[3]).IsNone)
-    Assert.True((GoJson.asInt32 numbers[1]).IsNone)
+    Assert.True((Json.uint64Of numbers[3]).IsNone)
+    Assert.True((Json.int32Of numbers[1]).IsNone)
 
 [<Fact>]
-let ``a number beyond float64 does not fit a float, and is found wherever it hides`` () =
-    let root = parsed """{"a":[1,{"b":1e999}],"c":1e308}"""
-    Assert.Equal(Some "1e999", GoJson.overflowingNumber root)
-    let list = root.GetProperty "a"
-    Assert.True((GoJson.asFloat (list[1].GetProperty "b")).IsNone)
-    Assert.True((GoJson.overflowingNumber (root.GetProperty "c")).IsNone)
+let ``a number beyond float64 does not fit a float`` () =
+    let root = parsed """{"b":1e999,"c":1e308}"""
+    Assert.True((Json.floatOf (root.GetProperty "b")).IsNone)
+    Assert.Equal(Some 1e308, Json.floatOf (root.GetProperty "c"))
 
 [<Fact>]
 let ``re-encoding keeps the digits of a number and drops the whitespace`` () =
     let root = parsed """{ "id": 12345678901234567891, "n": 1.50, "list": [1, 2], "s": "zażółć <é>" }"""
-    Assert.Equal("""{"id":12345678901234567891,"n":1.50,"list":[1,2],"s":"zażółć <é>"}""", GoJson.compact root)
-    Assert.Equal("""[1,2]""", GoJson.compactArray (root.GetProperty("list").EnumerateArray()))
-    Assert.Equal("{}", GoJson.compactObject Map.empty)
+    Assert.Equal("""{"id":12345678901234567891,"n":1.50,"list":[1,2],"s":"zażółć <é>"}""", Json.compact root)
+    Assert.Equal("""[1,2]""", Json.compactArray (root.GetProperty("list").EnumerateArray()))
+    Assert.Equal("{}", Json.compactObject Map.empty)
 
 [<Fact>]
-let ``the lenient readers keep what fits and leave the rest at zero`` () =
+let ``the lenient readers keep what fits and leave the rest empty`` () =
     let root = parsed """{"lists":{"a":["x",5,null],"b":7,"c":null},"list":["a",5,{"x":1}],"notalist":"s"}"""
 
     Assert.Equal<(string * string[]) list>(
         [ "a", [| "x"; ""; "" |]; "b", [||]; "c", [||] ],
-        GoJson.lenientStringLists (Some(root.GetProperty "lists")) |> Map.toList
+        Json.lenientStringLists (Some(root.GetProperty "lists")) |> Map.toList
     )
 
-    Assert.Equal<string[] option>(Some [| "a"; ""; "" |], GoJson.lenientStrings (Some(root.GetProperty "list")))
-    Assert.True((GoJson.lenientStrings (Some(root.GetProperty "notalist"))).IsNone)
-    Assert.True((GoJson.lenientStrings None).IsNone)
-    Assert.Equal("", GoJson.lenientString (Some(root.GetProperty "list")))
+    Assert.Equal<string[] option>(Some [| "a"; ""; "" |], Json.lenientStrings (Some(root.GetProperty "list")))
+    Assert.True((Json.lenientStrings (Some(root.GetProperty "notalist"))).IsNone)
+    Assert.True((Json.lenientStrings None).IsNone)
+    Assert.Equal("", Json.lenientString (Some(root.GetProperty "list")))
 
 [<Fact>]
-let ``half a surrogate pair and invalid UTF-8 are read as U+FFFD, as Go reads them`` () =
+let ``half a surrogate pair and invalid UTF-8 are read as U+FFFD`` () =
     let lone = parsed """{"a":"x\ud800y","b":"\ud83d\ude00","c":"\\ud800","d":"\udc00"}"""
-    Assert.Equal("x\uFFFDy", GoJson.lenientString (Some(lone.GetProperty "a")))
-    Assert.Equal("😀", GoJson.lenientString (Some(lone.GetProperty "b")))
-    Assert.Equal("\\ud800", GoJson.lenientString (Some(lone.GetProperty "c")))
-    Assert.Equal("\uFFFD", GoJson.lenientString (Some(lone.GetProperty "d")))
+    Assert.Equal("x\uFFFDy", Json.lenientString (Some(lone.GetProperty "a")))
+    Assert.Equal("😀", Json.lenientString (Some(lone.GetProperty "b")))
+    Assert.Equal("\\ud800", Json.lenientString (Some(lone.GetProperty "c")))
+    Assert.Equal("\uFFFD", Json.lenientString (Some(lone.GetProperty "d")))
 
-    match GoJson.parse (Array.concat [ utf8 """{"host":"h"""; [| 0xFFuy |]; utf8 "\"}" ]) with
-    | Ok root -> Assert.Equal("h\uFFFD", GoJson.lenientString (Some(root.GetProperty "host")))
+    match Json.tryParse (Array.concat [ utf8 """{"host":"h"""; [| 0xFFuy |]; utf8 "\"}" ]) with
+    | Ok root -> Assert.Equal("h\uFFFD", Json.lenientString (Some(root.GetProperty "host")))
     | Error e -> Assert.Fail e
 
 [<Fact>]
 let ``nesting deeper than System.Text.Json's default is still read`` () =
     let deep = String('[', 200) + String(']', 200)
-    Assert.True((GoJson.parse (utf8 deep)).IsOk)
+    Assert.True((Json.tryParse (utf8 deep)).IsOk)
 
 // ---------------------------------------------------------------------------
-// payloads_test.go
+// The JSON bodies of the v1 API
 // ---------------------------------------------------------------------------
 
 [<Fact>]
@@ -147,7 +114,7 @@ let ``check runs without tags are decoded, and their neighbours with them`` () =
     match parseCheckRuns body with
     | Error problem -> Assert.Fail $"batch rejected: {problem}"
     | Ok checks ->
-        Assert.Empty checks.Undecodable
+        Assert.Empty checks.Rejected
 
         Assert.Equal<string list>(
             [ "with.tags"; "containerd.health"; "kubernetes.kubelet.check.ping" ],
@@ -160,73 +127,52 @@ let ``check runs without tags are decoded, and their neighbours with them`` () =
         Assert.Equal("slow", checks.Runs[2].Message)
 
 [<Fact>]
-let ``check runs hand back the items that are not checks, and each check keeps its own bytes`` () =
+let ``check runs hand back the items that do not fit, each with its place, its bytes and why`` () =
     let body =
         utf8
             """[
               "containerd.health",
-              {"check":"ok.check","host_name":"h1","status":0,"tags":["a:1"]}
+              null,
+              {"check":"ok.check","host_name":"h1","status":0,"tags":["a:1"]},
+              {"check":"b","host_name":"h","status":9,"id":12345678901234567891}
             ]"""
 
     match parseCheckRuns body with
     | Error problem -> Assert.Fail $"batch rejected: {problem}"
     | Ok checks ->
         Assert.Equal<string list>([ "ok.check" ], checks.Runs |> List.map _.Check)
-        // The skipped item must not shift the bytes kept for the check after it.
-        Assert.Contains("ok.check", checks.Runs[0].Raw.GetRawText())
-        Assert.Equal<string list>([ "\"containerd.health\"" ], checks.Undecodable |> List.map _.GetRawText())
 
-[<Fact>]
-let ``a list of events reports the event's own error, not that a list is not an object`` () =
-    Assert.Equal(Error "JSON events: required field text missing", parseEvents (utf8 """[{"title":"t"}]"""))
-    Assert.Equal(Error "JSON events: required field title missing", parseEvents (utf8 """[{"title":"t","text":"x"},{"text":"x"}]"""))
-
-    Assert.Equal(
-        Error "JSON events: json: cannot unmarshal string into Go value of type map[string]interface {}",
-        parseEvents (utf8 """[{"title":"t","text":"x"},"x"]""")
-    )
-
-[<Fact>]
-let ``an item keeps the bytes it arrived as`` () =
-    // An array gives its elements, whitespace and digits untouched.
-    match parseCheckRuns (utf8 """[{"check":"a","host_name":"h","status":0}, {"check":"b","host_name":"h","status":9,"id":12345678901234567891}]""") with
-    | Ok checks ->
-        Assert.Equal<string list>(
-            [ """{"check":"a","host_name":"h","status":0}"""
-              """{"check":"b","host_name":"h","status":9,"id":12345678901234567891}""" ],
-            checks.Runs |> List.map _.Raw.GetRawText()
+        Assert.Equal<(int * string * string) list>(
+            [ 0, "\"containerd.health\"", "[0]: expected an object, got string"
+              3, """{"check":"b","host_name":"h","status":9,"id":12345678901234567891}""", "[3].status: expected 0 to 3, got 9" ],
+            checks.Rejected |> List.map (fun (at, item, why) -> at, item.GetRawText(), why)
         )
-    | Error problem -> Assert.Fail $"{problem}"
 
-    // A bare object gives itself, without the whitespace around it.
-    match parseEvents (utf8 """  {"title":"t","text":"x"}  """) with
-    | Ok [ event ] -> Assert.Equal("""{"title":"t","text":"x"}""", event.Raw.GetRawText())
-    | other -> Assert.Fail $"{other}"
-
-    Assert.Equal(Ok { Runs = []; Undecodable = [] }, parseCheckRuns (utf8 "[]"))
+    Assert.Equal(Ok { Runs = []; Rejected = [] }, parseCheckRuns (utf8 "[]"))
     Assert.True((parseCheckRuns (utf8 """[{"a":1}""")).IsError)
+
+[<Fact>]
+let ``one event that does not fit refuses the body, and the error says which and why`` () =
+    let refused (body: string) = parseEvents (utf8 body) |> Result.map ignore
+    Assert.Equal(Error "JSON events: [0].text: missing", refused """[{"title":"t"}]""")
+    Assert.Equal(Error "JSON events: [1].title: missing", refused """[{"title":"t","text":"x"},{"text":"x"}]""")
+    Assert.Equal(Error "JSON events: [1]: expected an object, got string", refused """[{"title":"t","text":"x"},"x"]""")
+    Assert.Equal(Error "JSON events: date_happened: expected an integer, got string", refused """{"title":"t","text":"x","date_happened":"soon"}""")
+    Assert.Equal(Error "JSON events: related_event_id: expected an integer, got number", refused """{"title":"t","text":"x","related_event_id":12345678901234567890}""")
+    Assert.Equal(Error "JSON events: text: missing; title: missing", refused "{}")
+    Assert.Equal(Ok [], parseEvents (utf8 "null"))
 
 [<Fact>]
 let ``only a series list gives series`` () =
     match parseSeriesV1 (utf8 """{"series":[{"metric":"a","points":[]},{"metric":"b","points":[]}]}""") with
-    | Ok payload ->
-        Assert.False payload.Unparsed
-        Assert.Equal<string[]>([| """{"metric":"a","points":[]}"""; """{"metric":"b","points":[]}""" |], payload.Series |> Array.map _.Raw.GetRawText())
+    | Ok payload -> Assert.Equal<string[]>([| "a"; "b" |], payload.Series |> Array.map _.Metric)
     | Error e -> Assert.Fail e
 
-    // A dict where the list should be: the body is kept whole instead.
-    match parseSeriesV1 (utf8 """{"series":{"a":[]}}""") with
-    | Ok payload ->
-        Assert.True payload.Unparsed
-        Assert.Empty payload.Series
-    | Error e -> Assert.Fail e
-
-    Assert.Equal(Error "JSON v1 series: required field series missing", parseSeriesV1 (utf8 """{"other":[]}""") |> Result.map ignore)
-
-    Assert.Equal(
-        Error "JSON v1 series: json: cannot unmarshal array into Go value of type map[string]interface {}",
-        parseSeriesV1 (utf8 "[1,2]") |> Result.map ignore
-    )
+    let refused (body: string) = parseSeriesV1 (utf8 body) |> Result.map ignore
+    Assert.Equal(Error "JSON v1 series: series: expected a list, got object", refused """{"series":{"a":[]}}""")
+    Assert.Equal(Error "JSON v1 series: series: missing", refused """{"other":[]}""")
+    Assert.Equal(Error "JSON v1 series: series: missing", refused """{"Series":[]}""")
+    Assert.Equal(Error "JSON v1 series: expected an object, got array", refused "[1,2]")
 
 [<Fact>]
 let ``log items arrive as an array, a bare object or one object per line`` () =
@@ -248,22 +194,25 @@ let ``a broken line of logs is named by its number`` () =
     | Error e -> Assert.Contains("item 1", e)
     | Ok _ -> Assert.Fail "expected an error"
 
-// ---------------------------------------------------------------------------
-// The datadogV1 models, as their UnmarshalJSON behaves
-// ---------------------------------------------------------------------------
-
 [<Fact>]
 let ``a v1 element that is not a series is set aside alone, a null is left out`` () =
     let good = """{"metric":"ok","points":[[1790151330,1]]}"""
 
-    for bad in [ "\"x\""; """{"points":[]}"""; """{"metric":"m","points":null}""" ] do
+    let cases =
+        [ "\"x\"", "series[0]: expected an object, got string"
+          """{"points":[]}""", "series[0].metric: missing"
+          """{"metric":"m","points":null}""", "series[0].points: missing"
+          """{"metric":"m","points":[[1,2]],"interval":1.5}""", "series[0].interval: expected an integer, got number"
+          """{"metric":"m","points":"x"}""", "series[0].points: expected a list of [timestamp, value] pairs, got string"
+          """{"metric":"m","points":[[1e999,2]]}""", "series[0].points: expected a list of [timestamp, value] pairs, got array" ]
+
+    for bad, why in cases do
         match parseSeriesV1 (utf8 $"""{{"series":[{bad},null,{good}]}}""") with
         | Ok payload ->
-            Assert.False payload.Unparsed
             Assert.Equal<string[]>([| "ok" |], payload.Series |> Array.map _.Metric)
             // The good series stood third in the list as sent.
             Assert.Equal<int[]>([| 2 |], payload.Positions)
-            Assert.Equal<(int * string) list>([ 0, bad ], payload.Rejected |> List.map (fun (at, item) -> at, item.GetRawText()))
+            Assert.Equal<(int * string * string) list>([ 0, bad, why ], payload.Rejected |> List.map (fun (at, item, why) -> at, item.GetRawText(), why))
         | Error e -> Assert.Fail $"{bad}: {e}"
 
 [<Fact>]
@@ -274,49 +223,19 @@ let ``v1 series: one element that is not a series is kept raw, the others are st
     Assert.Equal<string list>([ "a"; "b" ], sink.Rows<MetricPoint>() |> List.map _.Metric)
 
     Assert.Equal<(string * string * string) list>(
-        [ "unexpected_shape", "v1 series #1 is not a datadogV1.Series", "\"x\"" ],
+        [ "unexpected_shape", "series[1]: expected an object, got string", "\"x\"" ],
         raws sink
     )
 
 [<Fact>]
-let ``a series with a field of the wrong type is unparsed, with its fields empty`` () =
-    match decodeSeriesV1 (parsed """{"metric":"m","points":[[1,2]],"interval":1.5}""") with
-    | Ok series ->
-        Assert.True series.Unparsed
-        Assert.Equal("", series.Metric)
-        Assert.Empty series.Points
-    | Error e -> Assert.Fail e
-
-[<Fact>]
-let ``a series read through keys of another case keeps those keys among the undeclared`` () =
-    match parseSeriesV1 (utf8 """{"Series":[{"Metric":"m","POINTS":[[1,2]]}]}""") with
-    | Ok payload ->
-        Assert.Equal<string list>([ "Series" ], payload.Additional |> Map.toList |> List.map fst)
-        Assert.Equal("m", payload.Series[0].Metric)
-        Assert.Equal<float option[]>([| Some 1.0; Some 2.0 |], payload.Series[0].Points[0].Pair)
-        Assert.Equal<string list>([ "Metric"; "POINTS" ], payload.Series[0].Additional |> Map.toList |> List.map fst)
-    | Error e -> Assert.Fail e
-
-[<Fact>]
-let ``a number beyond float64 fails the body only where the model would keep the item whole`` () =
-    // Among the undeclared keys it is kept as written.
+let ``a number beyond float64 among the members without a field is kept as written`` () =
     match parseSeriesV1 (utf8 """{"series":[{"metric":"m","points":[[1,2]],"big":1e999}]}""") with
     | Ok payload -> Assert.Equal("1e999", payload.Series[0].Additional["big"].GetRawText())
     | Error e -> Assert.Fail e
 
-    // Where the item itself does not fit, it is set aside alone.
-    let rejected (result: Result<SeriesPayload<'a>, string>) =
-        match result with
-        | Ok payload -> payload.Series.Length, payload.Rejected |> List.map fst
-        | Error e -> failwith e
-
-    Assert.Equal((0, [ 0 ]), rejected (parseSeriesV1 (utf8 """{"series":[{"metric":"m","points":"x","big":1e999}]}""")))
-    Assert.Equal((0, [ 0 ]), rejected (parseSeriesV1 (utf8 """{"series":[{"metric":"m","points":[[1e999,2]]}]}""")))
-    Assert.Equal((0, [ 0 ]), rejected (parseDistributionPoints (utf8 """{"series":[{"metric":"m","points":[[1,[1e999]]]}]}""")))
-
 [<Fact>]
 let ``a v1 point keeps its nulls, and a null pair is an empty one`` () =
-    match decodeSeriesV1 (parsed """{"metric":"m","points":[[1,2],null,[null,3],[1,2,3]],"tags":[null,"a"],"interval":null}""") with
+    match decodeSeriesV1 "" (parsed """{"metric":"m","points":[[1,2],null,[null,3],[1,2,3]],"tags":[null,"a"],"interval":null}""") with
     | Ok series ->
         Assert.Equal<float option[][]>(
             [| [| Some 1.0; Some 2.0 |]; [||]; [| None; Some 3.0 |]; [| Some 1.0; Some 2.0; Some 3.0 |] |],
@@ -328,76 +247,48 @@ let ``a v1 point keeps its nulls, and a null pair is an empty one`` () =
     | Error e -> Assert.Fail e
 
 [<Fact>]
-let ``a check outside the model is unparsed or an error, as the model has it`` () =
-    let decode (json: string) = decodeServiceCheck true (parsed json)
+let ``a check that does not fit says which member and why`` () =
+    let refused (json: string) = decodeServiceCheck true "" (parsed json) |> Result.map ignore
 
-    // A status outside 0..3: unparsed, the other fields kept, the status left at 0.
-    match decode """{"check":"c","host_name":"h","status":42,"tags":[]}""" with
-    | Ok check -> Assert.True(check.Unparsed && check.Check = "c" && check.Status = 0)
-    | Error e -> Assert.Fail e
-
-    for wrongType in [ """{"check":"c","host_name":"h","status":"x","tags":[]}"""; """{"check":"c","host_name":"h","status":1.0,"tags":[]}""" ] do
-        match decode wrongType with
-        | Ok check -> Assert.True(check.Unparsed && check.Check = "", wrongType)
-        | Error e -> Assert.Fail e
-
-    Assert.Equal(Error "required field status missing", decode """{"check":"c","host_name":"h","status":null,"tags":[]}""" |> Result.map ignore)
-    Assert.Equal(Error "required field host_name missing", decode """{"check":"c","status":1,"tags":[]}""" |> Result.map ignore)
-
-    Assert.Equal(
-        Error "json: cannot unmarshal number into Go value of type map[string]interface {}",
-        decode "5" |> Result.map ignore
-    )
+    // An unreadable check must never be stored as OK.
+    Assert.Equal(Error "status: expected 0 to 3, got 42", refused """{"check":"c","host_name":"h","status":42,"tags":[]}""")
+    Assert.Equal(Error "status: expected a 32-bit integer, got string", refused """{"check":"c","host_name":"h","status":"x","tags":[]}""")
+    Assert.Equal(Error "status: expected a 32-bit integer, got number", refused """{"check":"c","host_name":"h","status":1.0,"tags":[]}""")
+    Assert.Equal(Error "status: missing", refused """{"check":"c","host_name":"h","status":null,"tags":[]}""")
+    Assert.Equal(Error "host_name: missing", refused """{"check":"c","status":1,"tags":[]}""")
+    Assert.Equal(Error "expected an object, got number", refused "5")
 
 [<Fact>]
-let ``tags under a key of another case do not count as tags in a batch, and do for a bare check`` () =
-    let item = parsed """{"check":"c","host_name":"h","status":1,"Tags":["a"]}"""
+let ``a check in a batch may come without tags, a bare one may not`` () =
+    let item = parsed """{"check":"c","host_name":"h","status":1}"""
 
-    match decodeServiceCheck true item with
-    | Ok check ->
-        Assert.Empty check.Tags
-        Assert.True(check.Additional.ContainsKey "Tags")
+    match decodeServiceCheck true "" item with
+    | Ok check -> Assert.Empty check.Tags
     | Error e -> Assert.Fail e
 
-    match decodeServiceCheck false item with
-    | Ok check -> Assert.Equal<string[]>([| "a" |], check.Tags)
-    | Error e -> Assert.Fail e
+    Assert.Equal(Error "tags: missing", decodeServiceCheck false "" item |> Result.map ignore)
 
 [<Fact>]
-let ``an event outside the enums is unparsed and keeps the rest of what it said`` () =
-    match decodeEvent (parsed """{"title":"t","text":"x","alert_type":"Warning","priority":"low"}""") with
-    | Ok event -> Assert.True(event.Unparsed && event.Title = "t" && event.AlertType = "" && event.Priority = Some "low")
-    | Error e -> Assert.Fail e
-
-    match decodeEvent (parsed """{"title":"t","text":"x","priority":"urgent","host":"h"}""") with
-    | Ok event -> Assert.True(event.Unparsed && event.Host = "h" && event.Priority.IsNone)
-    | Error e -> Assert.Fail e
-
-    match decodeEvent (parsed """{"title":"t","text":"x","date_happened":"soon"}""") with
-    | Ok event -> Assert.True(event.Unparsed && event.Title = "")
-    | Error e -> Assert.Fail e
-
-    match decodeEvent (parsed """{"title":"t","text":"x","related_event_id":12345678901234567890}""") with
-    | Ok event -> Assert.True event.Unparsed
+let ``an event keeps the alert type and priority it was sent with, whatever they say`` () =
+    match decodeEvent "" (parsed """{"title":"t","text":"x","alert_type":"Warning","priority":"urgent","host":"h"}""") with
+    | Ok event -> Assert.Equal(("t", "Warning", Some "urgent", "h"), (event.Title, event.AlertType, event.Priority, event.Host))
     | Error e -> Assert.Fail e
 
 [<Fact>]
 let ``an event's tags are absent, or a list that may be empty`` () =
-    match decodeEvent (parsed """{"title":"t","text":"x","priority":null,"tags":[]}"""), decodeEvent (parsed """{"title":"t","text":"x"}""") with
+    match decodeEvent "" (parsed """{"title":"t","text":"x","priority":null,"tags":[]}"""), decodeEvent "" (parsed """{"title":"t","text":"x"}""") with
     | Ok withTags, Ok without ->
-        Assert.False withTags.Unparsed
         Assert.Equal<string[] option>(Some [||], withTags.Tags)
+        Assert.True withTags.Priority.IsNone
         Assert.True without.Tags.IsNone
     | other -> Assert.Fail $"{other}"
-
-    Assert.Equal(Error "required field text missing", decodeEvent (parsed "null") |> Result.map ignore)
 
 [<Fact>]
 let ``each element of a distribution point is a timestamp, a value list, or neither`` () =
     let series =
-        decodeDistributionSeries (
-            parsed """{"metric":"m","points":[[1,[1,null,3]],[null,[1]],["x",[1]],[1,[]],[1,["a"]],null,[1,{"a":1}],[[1],[2],5,6]]}"""
-        )
+        decodeDistributionSeries
+            ""
+            (parsed """{"metric":"m","points":[[1,[1,null,3]],[null,[1]],["x",[1]],[1,[]],[1,["a"]],null,[1,{"a":1}],[[1],[2],5,6],[1e999,[1e999]]]}""")
 
     match series with
     | Error e -> Assert.Fail e
@@ -410,20 +301,20 @@ let ``each element of a distribution point is a timestamp, a value list, or neit
                [| Timestamp 1.0; Unfit |]
                [||]
                [| Timestamp 1.0; Unfit |]
-               [| Values [| 1.0 |]; Values [| 2.0 |]; Timestamp 5.0; Timestamp 6.0 |] |],
+               [| Values [| 1.0 |]; Values [| 2.0 |]; Timestamp 5.0; Timestamp 6.0 |]
+               [| Unfit; Unfit |] |],
             series.Points |> Array.map _.Items
         )
 
 [<Fact>]
-let ``a distribution series with another type word is unparsed but keeps its points`` () =
-    match decodeDistributionSeries (parsed """{"metric":"m","type":"histogram","points":[[1,[2]]]}""") with
-    | Ok series -> Assert.True(series.Unparsed && series.Metric = "m" && series.Points.Length = 1)
+let ``a distribution series keeps its type word and its points; other wrong types refuse it`` () =
+    match decodeDistributionSeries "" (parsed """{"metric":"m","type":"histogram","points":[[1,[2]]]}""") with
+    | Ok series -> Assert.Equal(("m", "histogram", 1), (series.Metric, series.Type, series.Points.Length))
     | Error e -> Assert.Fail e
 
-    for body in [ """{"metric":"m","type":5,"points":[]}"""; """{"metric":"m","points":[5]}""" ] do
-        match decodeDistributionSeries (parsed body) with
-        | Ok series -> Assert.True(series.Unparsed && series.Metric = "", body)
-        | Error e -> Assert.Fail e
+    let refused (json: string) = decodeDistributionSeries "" (parsed json) |> Result.map ignore
+    Assert.Equal(Error "type: expected a string, got number", refused """{"metric":"m","type":5,"points":[]}""")
+    Assert.Equal(Error "points: expected a list of [timestamp, [values]] pairs, got array", refused """{"metric":"m","points":[5]}""")
 
 [<Fact>]
 let ``of a distribution point the last timestamp and the last values count`` () =
@@ -500,26 +391,26 @@ let ``the small conversions`` () =
     Assert.True(Api.tenantOrgId "" > 0L && Api.tenantOrgId "" % 2L = 1L)
 
 // ---------------------------------------------------------------------------
-// The handlers, as the Go server did
+// The handlers
 // ---------------------------------------------------------------------------
 
 [<Fact>]
-let ``v2 series as JSON: nulls, repeated resources and bare tags`` () =
+let ``v2 series as JSON: repeated resources, bare tags, a field named either way`` () =
     let response, sink =
         post
             "/api/v2/series"
-            """{"series":[{"metric":"m","type":3,"unit":"byte","source_type_name":"src","interval":10,
-                "resources":[{"type":"host","name":"h"},{"type":"device","name":"eth0"},{"type":"device","name":"eth1"},null],
-                "points":[null,{"timestamp":1790151330,"value":2},{"value":3}],"tags":[null,"a:b","c"]}]}"""
+            """{"series":[{"metric":"m","type":3,"unit":"byte","sourceTypeName":"src","interval":10,"not_in_the_schema":1,
+                "resources":[{"type":"host","name":"h"},{"type":"device","name":"eth0"},{"type":"device","name":"eth1"}],
+                "points":[{"timestamp":1790151330,"value":2},{"value":3}],"tags":["","a:b","c"]}]}"""
 
     Assert.Equal((202, """{"errors":[]}"""), (response.Status, text response))
+    Assert.Empty(raws sink)
     let points = sink.Rows<MetricPoint>()
-    // The null point is left out.
     Assert.Equal<float list>([ 2.0; 3.0 ], points |> List.map _.Value)
     let second = points[0]
     Assert.Equal(("h", "GAUGE", "byte", "src", 10u), (second.Host, second.MetricType, second.Unit, second.SourceType, second.Interval))
     Assert.Equal(DateTime(2026, 9, 23, 8, 15, 30, DateTimeKind.Utc), second.Timestamp)
-    // The null resource is left out; of two devices the last one stays.
+    // Of two devices the last one stays.
     Assert.Equal<(string * string) list>([ "device", "eth1" ], second.Resources |> Map.toList)
     Assert.Equal<(string * string[]) list>([ "", [| "" |]; "a", [| "b" |]; "c", [| "" |] ], second.Tags |> Map.toList)
     // A point without a timestamp is stamped on arrival.
@@ -537,29 +428,13 @@ let ``v2 series: the format is taken from Content-Type, then from the first byte
     Assert.Equal<string list>([ "decode_error" ], raws lied |> List.map (fun (reason, _, _) -> reason))
 
 [<Fact>]
-let ``v2 series: a null series or resource is left out, what stands beside it is stored`` () =
-    let stored (body: string) =
-        let response, sink = post "/api/v2/series" body
-        Assert.Equal((202, """{"errors":[]}"""), (response.Status, text response))
-        Assert.Empty(raws sink)
-        sink.Rows<MetricPoint>() |> List.map (fun point -> point.Metric, point.Host)
-
-    Assert.Equal<(string * string) list>(
-        [ "ok", "" ],
-        stored """{"series":[null,{"metric":"ok","points":[{"timestamp":1790151330,"value":1}]},null]}"""
-    )
-
-    Assert.Equal<(string * string) list>(
-        [ "m", "h" ],
-        stored """{"series":[{"metric":"m","resources":[null,{"type":"host","name":"h"}],"points":[{"timestamp":1790151330,"value":1}]}]}"""
-    )
-
-[<Fact>]
 let ``v2 series: wrong types are a decode error, kept raw`` () =
     for body in
-        [ """{"series":[{"metric":"m","type":"GAUGE"}]}"""
-          """{"series":[{"metric":"m","interval":1e1}]}"""
-          """{"series":[{"metric":"m","points":[{"timestamp":1790151330,"value":"NaN"}]}]}"""
+        [ """{"series":[{"metric":"m","type":{}}]}"""
+          """{"series":[{"metric":"m","interval":1.5}]}"""
+          """{"series":[{"metric":"m","points":[{"timestamp":1790151330,"value":"x"}]}]}"""
+          // Protobuf's JSON has no null inside a list.
+          """{"series":[null,{"metric":"ok","points":[{"timestamp":1790151330,"value":1}]}]}"""
           "[1]" ] do
         let response, sink = post "/api/v2/series" body
         Assert.Equal(202, response.Status)
@@ -567,15 +442,12 @@ let ``v2 series: wrong types are a decode error, kept raw`` () =
 
         match raws sink with
         | [ "decode_error", note, kept ] ->
-            Assert.StartsWith("JSON v2 series: ", note)
+            Assert.StartsWith("JSON MetricPayload: ", note)
             Assert.Equal(body, kept)
         | other -> Assert.Fail $"{body}: {other}"
 
-    let _, array = post "/api/v2/series" "[1]"
-    Assert.Equal<string list>([ "JSON v2 series: json: cannot unmarshal array into Go value of type gogen.MetricPayload" ], raws array |> List.map (fun (_, note, _) -> note))
-
-    // null is an empty payload, and the agent's probe bodies are not kept.
-    for body in [ "null"; "[]"; "{}"; "" ] do
+    // The agent's probe bodies are not kept.
+    for body in [ "[]"; "{}"; "" ] do
         let _, sink = post "/api/v2/series" body
         Assert.Empty sink.Writes
 
@@ -627,16 +499,7 @@ let ``protobuf: a known field with another wire type is skipped, as protobuf say
         Assert.True((parseSketchesProtobuf (wrapped.ToByteArray())).IsOk)
 
 [<Fact>]
-let ``an origin carrying the reserved field 3 has unknown fields`` () =
-    // Field 3 (varint 9, "do not index") and origin_product = 10.
-    let flagged = Origin.Parser.ParseFrom [| 0x18uy; 0x09uy; 0x20uy; 0x0Auy |]
-    Assert.Equal(10u, flagged.OriginProduct)
-    Assert.True(hasUnknownFields Origin.Parser flagged)
-    Assert.False(hasUnknownFields Origin.Parser (Origin(OriginProduct = 10u)))
-    Assert.False(hasUnknownFields Origin.Parser (Origin()))
-
-[<Fact>]
-let ``v1 series: what the agent's encoder adds, what is kept raw, and what Go loses`` () =
+let ``v1 series: what the agent's encoder adds, and what is kept raw`` () =
     let _, sink =
         post
             "/api/v1/series"
@@ -644,8 +507,8 @@ let ``v1 series: what the agent's encoder adds, what is kept raw, and what Go lo
 
     Assert.Equal<(string * string) list>(
         [ "unexpected_shape", "v1 payload carried undeclared top-level keys: another, batch"
-          "unexpected_shape", "v1 series #0 (m) point #2 has a nil timestamp or value"
-          "unexpected_shape", "v1 series #0 (m) point #3 has a nil timestamp or value" ],
+          "unexpected_shape", "series[0].points[2]: expected a [timestamp, value] pair of numbers"
+          "unexpected_shape", "series[0].points[3]: expected a [timestamp, value] pair of numbers" ],
         raws sink |> List.map (fun (reason, note, _) -> reason, note)
     )
 
@@ -734,18 +597,18 @@ let ``sketches over protobuf: a legacy distribution is kept raw, the sender's ke
     Assert.Empty(sink.Rows<AgentBatchMetadataRow>())
 
 [<Fact>]
-let ``sketches as JSON: a null sketch, dogsketch or distribution is left out`` () =
+let ``sketches as JSON are read as the protobuf message`` () =
     let _, sink =
         post
             "/api/beta/sketches"
-            """{"sketches":[null,{"metric":"m","host":"h","dogsketches":[null,{"ts":1790151330,"cnt":3,"k":[1,null],"n":[2]}],"distributions":[null],"tags":["a:b"]}],"metadata":{"timezone":"UTC"}}"""
+            """{"sketches":[{"metric":"m","host":"h","dogsketches":[{"ts":1790151330,"cnt":3,"k":[1,0],"n":[2]}],"tags":["a:b"]}],"metadata":{"timezone":"UTC"}}"""
 
     Assert.Empty(raws sink)
     Assert.Equal<int32[] list>([ [| 1; 0 |] ], sink.Rows<SketchRow>() |> List.map _.BucketKeys)
     Assert.Equal<string list>([ "UTC" ], sink.Rows<AgentBatchMetadataRow>() |> List.map _.Timezone)
 
 [<Fact>]
-let ``check_run: the notes of the two kinds of rejected check count separately`` () =
+let ``check_run: a check that does not fit is kept raw with its place and the reason`` () =
     let _, sink =
         post
             "/api/v1/check_run"
@@ -755,14 +618,12 @@ let ``check_run: the notes of the two kinds of rejected check count separately``
                 5,
                 {"check":"f","status":1}]"""
 
-    Assert.Equal<string list>(
-        [ "check #0 is not a datadogV1.ServiceCheck"
-          "check #1 is not a datadogV1.ServiceCheck"
-          "check #2 did not fit datadogV1.ServiceCheck" ],
-        raws sink |> List.map (fun (_, note, _) -> note)
+    Assert.Equal<(string * string) list>(
+        [ "[2].status: expected 0 to 3, got 4", """{"check":"c","host_name":"h","status":4,"tags":[]}"""
+          "[3]: expected an object, got number", "5"
+          "[4].host_name: missing", """{"check":"f","status":1}""" ],
+        raws sink |> List.map (fun (_, note, body) -> note, body)
     )
-
-    Assert.Equal<string list>([ "5"; """{"check":"f","status":1}"""; """{"check":"c","host_name":"h","status":4,"tags":[]}""" ], raws sink |> List.map (fun (_, _, body) -> body))
 
     match sink.Rows<CheckRunRow>() with
     | [ a; b ] ->
@@ -775,36 +636,41 @@ let ``check_run: the notes of the two kinds of rejected check count separately``
 [<Fact>]
 let ``check_run: a bare check without tags is rejected, and a null in a batch is left out`` () =
     let _, bare = post "/api/v1/check_run" """{"check":"c","host_name":"h","status":1}"""
-    Assert.Equal<(string * string) list>([ "decode_error", "JSON check_run: required field tags missing" ], raws bare |> List.map (fun (reason, note, _) -> reason, note))
+    Assert.Equal<(string * string) list>([ "decode_error", "JSON check_run: tags: missing" ], raws bare |> List.map (fun (reason, note, _) -> reason, note))
 
     let response, withNull = post "/api/v1/check_run" """[{"check":"a","host_name":"h","status":0,"tags":[]},null,"x"]"""
     Assert.Equal((202, """{"errors":[]}"""), (response.Status, text response))
     Assert.Equal<string list>([ "a" ], withNull.Rows<CheckRunRow>() |> List.map _.CheckName)
-    Assert.Equal<(string * string) list>([ "unexpected_shape", "\"x\"" ], raws withNull |> List.map (fun (reason, _, body) -> reason, body))
+    Assert.Equal<(string * string * string) list>([ "unexpected_shape", "[2]: expected an object, got string", "\"x\"" ], raws withNull)
 
     let _, nothing = post "/api/v1/check_run" "null"
     Assert.Empty nothing.Writes
 
 [<Fact>]
-let ``events: a body with no event, or with an event that is an error, is answered 400`` () =
+let ``events: a body with no event, or with an event that does not fit, is answered 400`` () =
     for body in [ "[]"; "null" ] do
         let response, sink = post "/api/v1/events" body
         Assert.Equal(400, response.Status)
         Assert.Equal("no event with a title", (parsed (text response)).GetProperty("error").GetString())
         Assert.Empty sink.Writes
 
-    let response, sink = post "/api/v1/events" """{"title":"t"}"""
-    Assert.Equal(400, response.Status)
-    let reply = parsed (text response)
-    Assert.Equal(("error", "JSON events: required field text missing"), (reply.GetProperty("status").GetString(), reply.GetProperty("error").GetString()))
-    Assert.Equal<(string * string * string) list>([ "decode_error", "JSON events: required field text missing", """{"title":"t"}""" ], raws sink)
+    let refused (body: string) (error: string) =
+        let response, sink = post "/api/v1/events" body
+        Assert.Equal(400, response.Status)
+        let reply = parsed (text response)
+        Assert.Equal(("error", error), (reply.GetProperty("status").GetString(), reply.GetProperty("error").GetString()))
+        Assert.Equal<(string * string * string) list>([ "decode_error", error, body ], raws sink)
+
+    refused """{"title":"t"}""" "JSON events: text: missing"
+    // One event that does not fit refuses the ones beside it too.
+    refused """[{"title":"a","text":"b"},{"title":"c","text":"d","tags":"x"}]""" "JSON events: [1].tags: expected a list of strings, got string"
 
 [<Fact>]
-let ``events: the reply describes the first event even when that one was kept raw`` () =
+let ``events: an invented alert type is coerced and kept beside the coerced one`` () =
     let response, sink =
         post
             "/api/v1/events"
-            """[{"title":"a","text":"b","alert_type":"catastrophe","host":"h1"},
+            """[{"title":"a","text":"b","alert_type":"catastrophe","priority":"URGENT","host":"h1"},
                 {"title":"c","text":"d","tags":[],"priority":null,"aggregation_key":"k","source_type_name":"s","device_name":"d","date_happened":0,"alert_type":"error"}]"""
 
     Assert.Equal(202, response.Status)
@@ -812,14 +678,14 @@ let ``events: the reply describes the first event even when that one was kept ra
     Assert.Equal(("a", "b", "h1", "info", "normal"), (event.GetProperty("title").GetString(), event.GetProperty("text").GetString(), event.GetProperty("host").GetString(), event.GetProperty("alert_type").GetString(), event.GetProperty("priority").GetString()))
     Assert.Equal(JsonValueKind.Null, event.GetProperty("tags").ValueKind)
     Assert.Equal(string (event.GetProperty("id").GetUInt64()), event.GetProperty("id_str").GetString())
-
-    Assert.Equal<string list>([ "event #0 did not fit datadogV1.EventCreateRequest" ], raws sink |> List.map (fun (_, note, _) -> note))
+    Assert.Empty(raws sink)
 
     match sink.Rows<EventRow>() with
-    | [ row ] ->
-        Assert.Equal(("c", "error", "error", "normal", "", "k", "s", "d"), (row.Title, row.AlertType, row.AlertTypeRaw, row.Priority, row.PriorityRaw, row.AggregationKey, row.SourceTypeName, row.DeviceName))
-        // The reply's id is the first event's, which has no row.
-        Assert.NotEqual(event.GetProperty("id").GetUInt64(), row.EventIDNum)
+    | [ first; second ] ->
+        Assert.Equal(("a", "info", "catastrophe", "normal", "URGENT"), (first.Title, first.AlertType, first.AlertTypeRaw, first.Priority, first.PriorityRaw))
+        // The reply's id is the first event's.
+        Assert.Equal(event.GetProperty("id").GetUInt64(), first.EventIDNum)
+        Assert.Equal(("c", "error", "error", "normal", "", "k", "s", "d"), (second.Title, second.AlertType, second.AlertTypeRaw, second.Priority, second.PriorityRaw, second.AggregationKey, second.SourceTypeName, second.DeviceName))
     | other -> Assert.Fail $"{other}"
 
 [<Fact>]
@@ -830,11 +696,11 @@ let ``distribution points: every pair that cannot be split is kept raw, the rest
             """{"series":[{"metric":"m","host":"h","points":[[1790151330,[1,null,3]],[null,[1]],["x",[1]],[1790151330,[]],[1790151330,["a"]],null,[1790151330,{"a":1}],[[1],[2],5,1790151330]],"k":"v"}]}"""
 
     Assert.Equal<(string * string) list>(
-        [ "series #0 (m) point #2 is not a [timestamp, [values]] pair", """["x",[1]]"""
-          "series #0 (m) point #3 is not a [timestamp, [values]] pair", """[1790151330,[]]"""
-          "series #0 (m) point #4 is not a [timestamp, [values]] pair", """[1790151330,["a"]]"""
-          "series #0 (m) point #5 is not a [timestamp, [values]] pair", "null"
-          "series #0 (m) point #6 is not a [timestamp, [values]] pair", """[1790151330,{"a":1}]""" ],
+        [ "series[0].points[2]: expected a [timestamp, [values]] pair", """["x",[1]]"""
+          "series[0].points[3]: expected a [timestamp, [values]] pair", """[1790151330,[]]"""
+          "series[0].points[4]: expected a [timestamp, [values]] pair", """[1790151330,["a"]]"""
+          "series[0].points[5]: expected a [timestamp, [values]] pair", "null"
+          "series[0].points[6]: expected a [timestamp, [values]] pair", """[1790151330,{"a":1}]""" ],
         raws sink |> List.map (fun (_, note, body) -> note, body)
     )
 
@@ -852,7 +718,7 @@ let ``intake: a body of no known shape is kept, with the keys it had`` () =
         raws sink |> List.map (fun (reason, note, _) -> reason, note)
 
     Assert.Equal<(string * string) list>([ "unexpected_shape", "no known /intake/ variant key, keys: (none)" ], notes "null")
-    Assert.Equal<(string * string) list>([ "decode_error", "json: cannot unmarshal array into Go value of type map[string]jsontext.Value" ], notes "[1]")
+    Assert.Equal<(string * string) list>([ "decode_error", "expected an object, got array" ], notes "[1]")
     // A resources snapshot with nothing in it is not an error and stores nothing.
     Assert.Empty(notes """{"resources":{"processes":{"snaps":[]}}}""")
     Assert.Equal<(string * string) list>([ "unexpected_shape", "resources without processes.snaps" ], notes """{"resources":{"meta":{"host":"h"}}}""")
@@ -883,24 +749,23 @@ let ``intake events: sources in sorted order, a null event is an empty one, odd 
     | other -> Assert.Fail $"{other}"
 
 [<Fact>]
-let ``intake events: a shape that is not source to events is kept raw, with Go's reason`` () =
+let ``intake events: a shape that is not source to events is kept raw, with what did not fit`` () =
     let note (body: string) =
         let _, sink = post "/intake/" body
         raws sink |> List.map (fun (_, note, kept) -> note, kept)
 
     Assert.Equal<(string * string) list>(
-        [ "events is not a source -> events map: json: cannot unmarshal array into Go value of type map[string][]map[string]interface {}", "[1]" ],
+        [ "events: expected an object, got array", "[1]" ],
         note """{"events":[1]}"""
     )
 
     Assert.Equal<(string * string) list>(
-        [ "events is not a source -> events map: json: cannot unmarshal string into .a.2 of type map[string]interface {}",
-          """{"a":[{"msg_title":"t"},null,"s"],"b":5}""" ],
+        [ "events.a[2]: expected an object, got string", """{"a":[{"msg_title":"t"},null,"s"],"b":5}""" ],
         note """{"events":{"a":[{"msg_title":"t"},null,"s"],"b":5}}"""
     )
 
     Assert.Equal<string list>(
-        [ "events is not a source -> events map: json: cannot unmarshal number into Go struct field .b of type []map[string]interface {}" ],
+        [ "events.b: expected a list, got number" ],
         note """{"events":{"b":5,"a":[{"msg_title":"t"}]}}""" |> List.map fst
     )
 
@@ -947,9 +812,10 @@ let ``intake host: loose sections are read leniently, and a host without a name 
 
     match sink.Rows<HostRow>() with
     | [ host ] ->
+        // A section kept as JSON text keeps the null that was sent.
         Assert.Equal(("h", "", "null"), (host.Host, host.OS, host.Meta))
-        // null reads as false; a value that is no boolean is absent.
-        Assert.Equal((Some 0uy, None), (host.FIPSMode, host.FIPSProxyEnabled))
+        // null is the same as absent, and so is a value that is no boolean.
+        Assert.Equal((None, None), (host.FIPSMode, host.FIPSProxyEnabled))
         Assert.Equal<(string * string[]) list>([ "system", [| "a:b"; "" |]; "x", [||] ], host.HostTags |> Map.toList)
         Assert.Equal<(string * string[]) list>([ "", [| "" |]; "a", [| "b" |] ], host.Tags |> Map.toList)
         Assert.Equal<(string * string) list>([ "a", "1" ], host.SystemStats |> Map.toList)
@@ -962,7 +828,8 @@ let ``intake host: loose sections are read leniently, and a host without a name 
 
     match gohai.Rows<HostRow>() with
     | [ host ] ->
-        // One value that is not a string drops the section; null is "".
+        // One value that is not a string drops the section. A null among
+        // strings is ""; in what is kept as JSON text it stays null.
         Assert.True host.Platform.IsEmpty
         Assert.Equal<(string * string) list>([ "a", "" ], host.CPU |> Map.toList)
         Assert.Equal("null", host.Filesystem)
@@ -973,11 +840,11 @@ let ``intake host: loose sections are read leniently, and a host without a name 
     Assert.Empty nameless.Writes
 
 [<Fact>]
-let ``metadata: one row per variant, the envelope read without regard to case`` () =
+let ``metadata: one row per variant, a key in another case is only an extra`` () =
     let _, sink =
         post
             "/api/v1/metadata"
-            """{"hostname":"h","Timestamp":5,"agent_metadata":{"a": 1},"host_metadata":null,"clustercheck_status":{"x":1},"UUID":"u","clustername":"c","cluster_id":"cid"}"""
+            """{"hostname":"h","timestamp":5,"agent_metadata":{"a": 1},"host_metadata":null,"clustercheck_status":{"x":1},"uuid":"u","UUID":"other","clustername":"c","cluster_id":"cid"}"""
 
     let rows = sink.Rows<AgentMetadataRow>()
     Assert.Equal<(string * string) list>([ "agent_metadata", """{"a": 1}"""; "host_metadata", "null" ], rows |> List.map (fun row -> row.Variant, row.Payload))
@@ -986,14 +853,14 @@ let ``metadata: one row per variant, the envelope read without regard to case`` 
         rows,
         (fun row ->
             Assert.Equal(("h", "c", "cid", "u", Some(DateTime(1970, 1, 1, 0, 0, 5, DateTimeKind.Utc))), (row.Hostname, row.ClusterName, row.ClusterID, row.UUID, row.Timestamp))
-            Assert.Equal<(string * string) list>([ "Timestamp", "5"; "UUID", "\"u\""; "clustercheck_status", """{"x":1}""" ], row.EnvelopeExtra |> Map.toList))
+            Assert.Equal<(string * string) list>([ "UUID", "\"other\""; "clustercheck_status", """{"x":1}""" ], row.EnvelopeExtra |> Map.toList))
     )
 
     let _, odd = post "/api/v1/metadata" """{"hostname":5,"timestamp":1.5,"ha_agent_metadata":{}}"""
     Assert.Equal<(string * DateTime option) list>([ "", None ], odd.Rows<AgentMetadataRow>() |> List.map (fun row -> row.Hostname, row.Timestamp))
 
     let _, array = post "/api/v1/metadata" "[1]"
-    Assert.Equal<(string * string) list>([ "decode_error", "json: cannot unmarshal array into Go value of type map[string]jsontext.Value" ], raws array |> List.map (fun (reason, note, _) -> reason, note))
+    Assert.Equal<(string * string) list>([ "decode_error", "expected an object, got array" ], raws array |> List.map (fun (reason, note, _) -> reason, note))
 
 [<Fact>]
 let ``GET /api/v1/query answers a well-formed empty result and stores nothing`` () =

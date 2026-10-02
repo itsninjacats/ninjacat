@@ -62,7 +62,7 @@
      {},
      "{\"action_id\":5}",
      15,
-     "batch element 4: json: cannot unmarshal number into Go struct field kubeActionResultEvent.action_id of type string"
+     "[4].action_id: expected a string, got number"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -76,7 +76,7 @@
      "Host": "example.com",
      "Intake": "kubeactions",
      "Method": "POST",
-     "Note": "batch element 4: json: cannot unmarshal number into Go struct field kubeActionResultEvent.action_id of type string",
+     "Note": "[4].action_id: expected a string, got number",
      "Path": "/api/v2/kubeactions",
      "Query": {},
      "Reason": "decode_error",
@@ -121,7 +121,7 @@
      {},
      "{\"org_id\":5.0}",
      14,
-     "batch element 5: json: cannot unmarshal number 5.0 into Go struct field kubeActionResultEvent.org_id of type int64"
+     "[5].org_id: expected an integer, got number"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -135,7 +135,7 @@
      "Host": "example.com",
      "Intake": "kubeactions",
      "Method": "POST",
-     "Note": "batch element 5: json: cannot unmarshal number 5.0 into Go struct field kubeActionResultEvent.org_id of type int64",
+     "Note": "[5].org_id: expected an integer, got number",
      "Path": "/api/v2/kubeactions",
      "Query": {},
      "Reason": "decode_error",
@@ -180,7 +180,7 @@
      {},
      "{\"org_id\":\"5\"}",
      14,
-     "batch element 6: json: cannot unmarshal string into Go struct field kubeActionResultEvent.org_id of type int64"
+     "[6].org_id: expected an integer, got string"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -194,7 +194,7 @@
      "Host": "example.com",
      "Intake": "kubeactions",
      "Method": "POST",
-     "Note": "batch element 6: json: cannot unmarshal string into Go struct field kubeActionResultEvent.org_id of type int64",
+     "Note": "[6].org_id: expected an integer, got string",
      "Path": "/api/v2/kubeactions",
      "Query": {},
      "Reason": "decode_error",
@@ -239,7 +239,7 @@
      {},
      "{\"org_id\":9223372036854775808}",
      30,
-     "batch element 7: json: cannot unmarshal number 9223372036854775808 into Go struct field kubeActionResultEvent.org_id of type int64"
+     "[7].org_id: expected an integer, got number"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -253,7 +253,7 @@
      "Host": "example.com",
      "Intake": "kubeactions",
      "Method": "POST",
-     "Note": "batch element 7: json: cannot unmarshal number 9223372036854775808 into Go struct field kubeActionResultEvent.org_id of type int64",
+     "Note": "[7].org_id: expected an integer, got number",
      "Path": "/api/v2/kubeactions",
      "Query": {},
      "Reason": "decode_error",
@@ -298,7 +298,7 @@
      {},
      "{\"payloads\":{\"a\":\"YmE\"}}",
      24,
-     "batch element 8: json: cannot unmarshal string into Go struct field kubeActionResultEvent.payloads.a of type []uint8: illegal base64 data at input byte 0"
+     "[8].payloads.a: not base64"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -312,7 +312,7 @@
      "Host": "example.com",
      "Intake": "kubeactions",
      "Method": "POST",
-     "Note": "batch element 8: json: cannot unmarshal string into Go struct field kubeActionResultEvent.payloads.a of type []uint8: illegal base64 data at input byte 0",
+     "Note": "[8].payloads.a: not base64",
      "Path": "/api/v2/kubeactions",
      "Query": {},
      "Reason": "decode_error",
@@ -357,7 +357,7 @@
      {},
      "{\"payloads\":{\"a\":\"Y mFk\"}}",
      26,
-     "batch element 9: json: cannot unmarshal string into Go struct field kubeActionResultEvent.payloads.a of type []uint8: illegal base64 data at input byte 1"
+     "[9].payloads.a: not base64"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -371,7 +371,7 @@
      "Host": "example.com",
      "Intake": "kubeactions",
      "Method": "POST",
-     "Note": "batch element 9: json: cannot unmarshal string into Go struct field kubeActionResultEvent.payloads.a of type []uint8: illegal base64 data at input byte 1",
+     "Note": "[9].payloads.a: not base64",
      "Path": "/api/v2/kubeactions",
      "Query": {},
      "Reason": "decode_error",
@@ -416,7 +416,7 @@
      {},
      "{\"payloads\":\"x\"}",
      16,
-     "batch element 11: json: cannot unmarshal string into Go struct field kubeActionResultEvent.payloads of type map[string][]uint8"
+     "[11].payloads: expected an object, got string"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -430,7 +430,7 @@
      "Host": "example.com",
      "Intake": "kubeactions",
      "Method": "POST",
-     "Note": "batch element 11: json: cannot unmarshal string into Go struct field kubeActionResultEvent.payloads of type map[string][]uint8",
+     "Note": "[11].payloads: expected an object, got string",
      "Path": "/api/v2/kubeactions",
      "Query": {},
      "Reason": "decode_error",
@@ -475,7 +475,7 @@
      {},
      "{\"timestamp\":123}",
      17,
-     "batch element 13: json: cannot unmarshal number into Go struct field kubeActionResultEvent.timestamp of type string"
+     "[13].timestamp: expected a string, got number"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -489,7 +489,7 @@
      "Host": "example.com",
      "Intake": "kubeactions",
      "Method": "POST",
-     "Note": "batch element 13: json: cannot unmarshal number into Go struct field kubeActionResultEvent.timestamp of type string",
+     "Note": "[13].timestamp: expected a string, got number",
      "Path": "/api/v2/kubeactions",
      "Query": {},
      "Reason": "decode_error",
@@ -534,7 +534,7 @@
      {},
      "5",
      1,
-     "batch element 15: json: cannot unmarshal number into Go value of type intake.kubeActionResultEvent"
+     "[15]: expected an object, got number"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -548,7 +548,7 @@
      "Host": "example.com",
      "Intake": "kubeactions",
      "Method": "POST",
-     "Note": "batch element 15: json: cannot unmarshal number into Go value of type intake.kubeActionResultEvent",
+     "Note": "[15]: expected an object, got number",
      "Path": "/api/v2/kubeactions",
      "Query": {},
      "Reason": "decode_error",
@@ -593,7 +593,7 @@
      {},
      "\"str\"",
      5,
-     "batch element 16: json: cannot unmarshal string into Go value of type intake.kubeActionResultEvent"
+     "[16]: expected an object, got string"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -607,7 +607,7 @@
      "Host": "example.com",
      "Intake": "kubeactions",
      "Method": "POST",
-     "Note": "batch element 16: json: cannot unmarshal string into Go value of type intake.kubeActionResultEvent",
+     "Note": "[16]: expected an object, got string",
      "Path": "/api/v2/kubeactions",
      "Query": {},
      "Reason": "decode_error",
@@ -652,7 +652,7 @@
      {},
      "{\"action_id\":\"x\",\"org_id\":\"bad\",\"status\":\"after\"}",
      49,
-     "batch element 19: json: cannot unmarshal string into Go struct field kubeActionResultEvent.org_id of type int64"
+     "[19].org_id: expected an integer, got string"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -666,7 +666,7 @@
      "Host": "example.com",
      "Intake": "kubeactions",
      "Method": "POST",
-     "Note": "batch element 19: json: cannot unmarshal string into Go struct field kubeActionResultEvent.org_id of type int64",
+     "Note": "[19].org_id: expected an integer, got string",
      "Path": "/api/v2/kubeactions",
      "Query": {},
      "Reason": "decode_error",
@@ -983,16 +983,16 @@
       "nul": "",
       "stdout": "hello"
      },
-     "{\"alpha\":{\"nested\":[1,2,{\"x\":\"\\u003c\\u0026\\u003e\"}]},\"big\":12345678901234567890,\"zeta\":1}",
+     "{\"alpha\":{\"nested\":[1,2,{\"x\":\"<&>\"}]},\"big\":12345678901234567890,\"zeta\":1}",
      "2026-09-20T08:30:00Z"
     ],
     [
      "test",
-     "2026-09-20T08:30:00.123456789Z",
-     "upper",
+     "2026-09-20T08:30:00.1234567Z",
+     "",
      0,
      "",
-     "mixed",
+     "",
      "",
      "",
      "",
@@ -1093,7 +1093,6 @@
      "",
      [],
      {
-      "a": "a",
       "b": "b"
      },
      "",
@@ -1255,7 +1254,7 @@
      "ClusterID": "cid",
      "ClusterName": "prod",
      "EventType": "action_executed",
-     "Extra": "{\"alpha\":{\"nested\":[1,2,{\"x\":\"\\u003c\\u0026\\u003e\"}]},\"big\":12345678901234567890,\"zeta\":1}",
+     "Extra": "{\"alpha\":{\"nested\":[1,2,{\"x\":\"<&>\"}]},\"big\":12345678901234567890,\"zeta\":1}",
      "ExtraKeys": [
       "alpha",
       "big",
@@ -1282,7 +1281,7 @@
      "TimestampRaw": "2026-09-20T08:30:00Z"
     },
     {
-     "ActionID": "upper",
+     "ActionID": "",
      "ActionType": "",
      "ClusterID": "",
      "ClusterName": "",
@@ -1300,9 +1299,9 @@
      "ResourceKind": "",
      "ResourceName": "",
      "ResourceNamespace": "",
-     "Status": "mixed",
+     "Status": "",
      "TenantID": "test",
-     "Timestamp": "2026-09-20T08:30:00.123456789Z",
+     "Timestamp": "2026-09-20T08:30:00.1234567Z",
      "TimestampRaw": "2026-09-20T10:30:00.123456789+02:00"
     },
     {
@@ -1381,7 +1380,6 @@
      "Message": "",
      "OrgID": 0,
      "Payloads": {
-      "a": "a",
       "b": "b"
      },
      "RequestedBy": "",
@@ -1589,5 +1587,6 @@
   "/sends/11/rows/8/Timestamp",
   "/sends/11/rows/9/Timestamp",
   "/sends/11/rows/11/Timestamp"
- ]
+ ],
+ "edited": "A member is found by its exact name, and of a repeated name the last one counts. Go matched names without regard to case (\"ACTION_ID\" filled action_id) and let a repeated `payloads` add to the earlier one."
 }

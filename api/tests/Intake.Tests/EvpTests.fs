@@ -16,45 +16,21 @@ open NinjaCat.Api.Intake
 open NinjaCat.Api.Intake.Routers
 open NinjaCat.Api.Storage.Rows
 open NinjaCat.Api.Intake.Tests.Golden
+open NinjaCat.Api.Intake.Tests.Golden.Requests
 
 let private now = DateTime(2026, 9, 23, 10, 30, 0, DateTimeKind.Utc)
-
-let private utf8 (text: string) : byte[] = Encoding.UTF8.GetBytes text
 
 let private parse (json: string) : JsonElement =
     match Evp.parseObject (utf8 json) with
     | Some value -> value
     | None -> failwith "the test's JSON is not an object"
 
-let private withKey = [ "Dd-Api-Key", Replay.testKey ]
+let private withKey = Requests.withKey
 
-/// Sends one POST through the engine of a Go route set, as the Go handler
-/// tests did, and returns the answer with what was written.
+/// Sends one POST to one Go route set and returns the answer with what was
+/// written.
 let private post (routeSet: string) (url: string) (headers: (string * string) list) (body: byte[]) : Response * CapturingSink =
-    let sink = CapturingSink()
-
-    let deps: Deps =
-        { Store = Replay.testStore ()
-          Sink = sink
-          Log = NullLogger.Instance
-          AckUnknown = false }
-
-    let http = DefaultHttpContext()
-
-    let path, query =
-        match url.IndexOf '?' with
-        | -1 -> url, ""
-        | i -> url.Substring(0, i), url.Substring i
-
-    http.Request.Method <- "POST"
-    http.Request.Host <- HostString "example.com"
-    http.Request.Path <- PathString path
-    http.Request.QueryString <- QueryString query
-
-    for name, value in headers do
-        http.Request.Headers[name] <- StringValues value
-
-    Replay.byGoNames deps [ routeSet ] http body, sink
+    Requests.send [ routeSet ] "POST" url headers body
 
 let private assertAccepted (response: Response) =
     Assert.Equal(202, response.Status)
@@ -419,48 +395,29 @@ let ``a health report decodes snake_case keys and enums sent as numbers`` () =
     Assert.Equal("l", issue.LastSeen)
     Assert.Equal(Some "r", issue.ResolvedAt)
 
-// What Go's encoding/json does with the same bodies, checked against Go.
 [<Fact>]
-let ``a health report's keys match ignoring case, and null leaves a field empty`` () =
+let ``a health report's keys are the schema's names in either spelling, and null leaves a field empty`` () =
     let report =
         decoded
-            """{"Schema_Version": "1.0", "HOST": {"hostname": "h", "agent_version": ""},
-                "issues": {"a": null,
-                           "b": {"severity": 7, "extra": null, "tags": ["x", null],
-                                 "remediation": {"steps": [null, {"order": 1, "text": "t"}], "script": null},
-                                 "persisted_issue": {"state": 4, "resolved_at": null}}}}"""
+            """{"schemaVersion": "1.0", "host": {"hostname": "h", "agent_version": ""}, "not_in_the_schema": 1,
+                "issues": {"b": {"severity": 7, "extra": null, "tags": ["x"],
+                                 "remediation": {"steps": [{"order": 1, "text": "t"}], "script": null},
+                                 "persisted_issue": {"state": "ISSUE_STATE_ACTIVE", "resolved_at": null}}}}"""
 
-    let body = utf8 """{"issues": {"a": null, "b": {"extra": null}}}"""
+    let body = utf8 """{"issues": {"b": {"extra": null}}}"""
     let reportRow, issues = Evp.healthReportRows "acme" now reportID report (Evp.healthIssuesRaw body)
     Assert.Equal("1.0", reportRow.SchemaVersion)
     Assert.Equal("h", reportRow.Host)
     // Sent, though empty: not the same as never sent.
     Assert.Equal(Some "", reportRow.AgentVersion)
-    Assert.Equal(2u, reportRow.IssueCount)
 
-    let nullIssue = issues[0]
-    Assert.Equal("a", nullIssue.IssueKey)
-    Assert.Equal("", nullIssue.ID)
-    Assert.Equal("ISSUE_SEVERITY_UNSPECIFIED", nullIssue.Severity)
-    Assert.Equal("", nullIssue.PersistedState)
-    Assert.Equal("", nullIssue.Extra)
-
-    let issue = issues[1]
+    let issue = Assert.Single issues
     Assert.Equal("7", issue.Severity)
     Assert.Equal("", issue.Extra)
-    // A null tag reads as an empty one.
-    Assert.Equal<string list>([ ""; "x" ], issue.Tags.Keys |> List.ofSeq)
     Assert.Equal<int[]>([| 1 |], issue.RemediationStepOrder)
     Assert.Equal(None, issue.ScriptRequiresRoot)
     Assert.Equal("ISSUE_STATE_ACTIVE", issue.PersistedState)
     Assert.Equal(None, issue.ResolvedAt)
-
-[<Fact>]
-let ``a health report of null decodes to an empty report`` () =
-    let reportRow, issues = Evp.healthReportRows "acme" now reportID (decoded "null") (Evp.healthIssuesRaw (utf8 "null"))
-    Assert.Equal("", reportRow.SchemaVersion)
-    Assert.Equal(0u, reportRow.IssueCount)
-    Assert.Empty issues
 
 [<Theory>]
 [<InlineData("""[1]""")>]
@@ -470,8 +427,10 @@ let ``a health report of null decodes to an empty report`` () =
 [<InlineData("""{"host": {"par_ids": "p1"}}""")>]
 [<InlineData("""{"issues": []}""")>]
 [<InlineData("""{"issues": {"a": 1}}""")>]
-[<InlineData("""{"issues": {"a": {"severity": "ISSUE_SEVERITY_HIGH"}}}""")>]
-[<InlineData("""{"issues": {"a": {"severity": 1.0}}}""")>]
+// Protobuf's JSON has no null inside a map or a list.
+[<InlineData("""{"issues": {"a": null}}""")>]
+[<InlineData("""{"issues": {"a": {"tags": [null]}}}""")>]
+[<InlineData("""null""")>]
 [<InlineData("""{"issues": {"a": {"severity": 4294967296}}}""")>]
 [<InlineData("""{"issues": {"a": {"tags": "x"}}}""")>]
 [<InlineData("""{"issues": {"a": {"tags": [1]}}}""")>]
@@ -479,7 +438,6 @@ let ``a health report of null decodes to an empty report`` () =
 [<InlineData("""{"issues": {"a": {"extra": [1]}}}""")>]
 [<InlineData("""{"issues": {"a": {"remediation": {"steps": [1]}}}}""")>]
 [<InlineData("""{"issues": {"a": {"remediation": {"script": {"requires_root": "yes"}}}}}""")>]
-[<InlineData("""{"issues": {"a": {"persisted_issue": {"state": "ISSUE_STATE_ACTIVE"}}}}""")>]
 [<InlineData("""{"schema_version": """)>]
 let ``a health report with a value of the wrong type is refused whole`` (body: string) =
     Assert.True((Evp.decodeHealthReport (utf8 body)).IsError)
@@ -515,7 +473,7 @@ let ``a health report without issues stores only the report`` () =
 
 [<Fact>]
 let ``a health report that does not decode is kept raw as a decode error`` () =
-    let body = utf8 """{"issues": {"a": {"severity": "ISSUE_SEVERITY_HIGH"}}}"""
+    let body = utf8 """{"issues": {"a": {"tags": "x"}}}"""
     let response, sink = post "routeAgentHealth" "/api/v2/agenthealth" withKey body
     assertAccepted response
 
@@ -595,8 +553,6 @@ let ``an event's undeclared keys of all three levels land in outer_extra, prefix
 let ``an event envelope without a data.attributes object gives no row`` (json: string) =
     Assert.Equal(None, Evp.eventManagementRow "acme" now (parse json))
 
-// Go marshals a nil map here, which is the text "null". Pinned so that the
-// port keeps storing what the Go server stored.
 [<Fact>]
 let ``an event with half a surrogate pair, or nested deeper than 64, is stored and not a 500`` () =
     let halfPair = Text.Encoding.UTF8.GetBytes """{"data":{"attributes":{"title":"a\ud800","attributes":{}}}}"""
@@ -640,8 +596,8 @@ let ``event values that are not strings are stored as sent`` () =
     Assert.Equal<string[]>([| "prod" |], row.Tags["env"])
     Assert.Equal("", row.AggregationKey)
     Assert.Equal("", row.NotableEventType)
-    // An undeclared key whose value is null is kept, with nothing in it.
-    Assert.Equal("", row.OuterExtra["extra_null"])
+    // An undeclared key whose value is null is kept as it was sent.
+    Assert.Equal("null", row.OuterExtra["extra_null"])
 
 [<Fact>]
 let ``an event sent through the route is stored with the key's tenant`` () =

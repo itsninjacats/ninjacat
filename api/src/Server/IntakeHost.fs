@@ -34,8 +34,7 @@ let run (cfg: Config.Config) (args: string[]) : int =
     let builder = Hosting.createBuilder args
 
     builder.WebHost.ConfigureKestrel(fun options ->
-        // Flares and profiles are tens of megabytes; the agent decides the size.
-        options.Limits.MaxRequestBodySize <- Nullable()
+        options.Limits.MaxRequestBodySize <- Nullable cfg.MaxBodyBytes
 
         Hosting.listen options cfg.IntakeAddr ignore
 

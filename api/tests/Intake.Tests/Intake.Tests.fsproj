@@ -8,6 +8,7 @@
     <Compile Include="Golden/Encode.fs" />
     <Compile Include="Golden/Compare.fs" />
     <Compile Include="Golden/Replay.fs" />
+    <Compile Include="Golden/Requests.fs" />
     <Compile Include="GoldenTests.fs" />
     <Compile Include="DDSketchTests.fs" />
     <Compile Include="MsgpackTests.fs" />
@@ -23,7 +24,7 @@
     <Compile Include="InstallTests.fs" />
     <Compile Include="ContainersTests.fs" />
     <Compile Include="KubeopsTests.fs" />
-    <Compile Include="GoCompatTests.fs" />
+    <Compile Include="JsonFieldsTests.fs" />
     <Compile Include="DbmTests.fs" />
     <Compile Include="NdmTests.fs" />
     <Compile Include="MiscTests.fs" />

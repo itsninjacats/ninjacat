@@ -80,7 +80,7 @@
      },
      "\u0003\u00005\u0000\u0007\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\n\u0006host-a",
      24,
-     "/api/v1/collector decoded to *process.CollectorProcDiscovery (frame type 53)"
+     "/api/v1/collector decoded to CollectorProcDiscovery (frame type 53)"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -98,7 +98,7 @@
      "Host": "example.com",
      "Intake": "process",
      "Method": "POST",
-     "Note": "/api/v1/collector decoded to *process.CollectorProcDiscovery (frame type 53)",
+     "Note": "/api/v1/collector decoded to CollectorProcDiscovery (frame type 53)",
      "Path": "/api/v1/collector",
      "Query": {},
      "Reason": "unexpected_shape",
@@ -115,5 +115,6 @@
  "volatile": [
   "/sends/0/args/0/1",
   "/sends/0/rows/0/ReceivedAt"
- ]
+ ],
+ "edited": "The note names the protobuf message that arrived by its own name; it no longer spells it as a Go type (*process.…)."
 }

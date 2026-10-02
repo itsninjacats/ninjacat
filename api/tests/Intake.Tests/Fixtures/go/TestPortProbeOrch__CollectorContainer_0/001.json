@@ -64,7 +64,7 @@
       "$b64": "AwAnCZIQAAAAAAAAAAAAAAoCczISjwEKAnM3Ei0KA3MxMBINczEyIDwmPiAiw6kiChoDczE0Ig1zMTYgPCY+ICLDqSIKKgNzMTgaKggVEgNzMjMaA3MyNSIDczI3KgNzMjkyA3MzMTghQN3//////////wFIJRolCCcSA3M0MRoDczQzIgNzNDUqA3M0NzIDczQ5ODNAteLPqgZINyi6gICAgICAEBrLAwoNczYwIDwmPiAiw6kiChIDczYyGg1zNjQgPCY+ICLDqSIKIgNzNjYtMzOIQjC5//////////8BQAFIAVDMrpmkD10zM5xCZTMzoEJo0tCs8w51MzOoQn0zM6xChQEzM7BCjQEzM7RClQEzM7hCnQEzM7xCpQEzM8BCqAGd//////////8BsAGb//////////8BugFbCOiAgICAgIAQEGkaBHMxMDcyCWsxMDk6djEwOTIWazEwOTpvdGhlcjp3aXRoOmNvbG9uczIHYmFyZTEwOTIJejEwOTpsYXN0OG9A8oCAgICAgBBIc1D14s+qBsAB9+LPqgbKAQ9raW5kOiBUaGluZzEyMQrSAQlrMTIzOnYxMjPSARZrMTIzOm90aGVyOndpdGg6Y29sb25z0gEHYmFyZTEyM9IBCXoxMjM6bGFzdNoBEwoEczEyNhCA//////////8BGAHaARUKDnMxMzIgPCY+ICLDqSIKEIYBGAHgAfX+/////////wHoAfP+/////////wHwAfH+/////////wH9AZoZEEOAAu3+/////////wGNApoZFEOQAun+/////////wGaAg5zMTUyIDwmPiAiw6kiChrNAwoEczE1NBIOczE1NiA8Jj4gIsOpIgoaBHMxNTgiDnMxNjAgPCY+ICLDqSIKLZoZIkMw2/7/////////AUABSAFQ1v7/////////AV2aGSxDZZoZLkNosNGs8w51mhkyQ32aGTRDhQGaGTZDjQGaGThDlQGaGTpDnQGaGTxDpQGaGT5DqAG//v////////8BsAG9/v////////8BugFeCMaBgICAgIAQEMcBGgRzMjAxMglrMjAzOnYyMDMyFmsyMDM6b3RoZXI6d2l0aDpjb2xvbnMyB2JhcmUyMDMyCXoyMDM6bGFzdDjNAUDQgYCAgICAEEjRAVDTr5mkD8AB1ePPqgbKAQ9raW5kOiBUaGluZzIxNQrSAQlrMjE3OnYyMTfSARZrMjE3Om90aGVyOndpdGg6Y29sb25z0gEHYmFyZTIxN9IBCXoyMTc6bGFzdNoBFQoOczIyMCA8Jj4gIsOpIgoQ3gEYAdoBEwoEczIyNhCc/v////////8BGAHgAZf+/////////wHoAZX+/////////wHwAZP+/////////wH9AZoZbkOAAo/+/////////wGNApoZckOQAov+/////////wGaAgRzMjQ2IIj+/////////wEo+gFCXgj+gYCAgICAEBD/ARoEczI1NzIJazI1OTp2MjU5MhZrMjU5Om90aGVyOndpdGg6Y29sb25zMgdiYXJlMjU5Mgl6MjU5Omxhc3Q4hQJAiIKAgICAgBBIiQJQi+TPqgZIAloMczQgPCY+ICLDqSIK"
      },
      1218,
-     "orch: *process.CollectorContainer on an orchestrator intake"
+     "orch: CollectorContainer on an orchestrator intake"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -80,7 +80,7 @@
      "Host": "example.com",
      "Intake": "orchestrator",
      "Method": "POST",
-     "Note": "orch: *process.CollectorContainer on an orchestrator intake",
+     "Note": "orch: CollectorContainer on an orchestrator intake",
      "Path": "/api/v2/orch",
      "Query": {},
      "Reason": "unexpected_shape",
@@ -97,5 +97,6 @@
  "volatile": [
   "/sends/0/args/0/1",
   "/sends/0/rows/0/ReceivedAt"
- ]
+ ],
+ "edited": "The note names the protobuf message that arrived by its own name; it no longer spells it as a Go type (*process.…)."
 }

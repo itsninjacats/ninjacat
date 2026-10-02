@@ -25,19 +25,15 @@ module NinjaCat.Api.Intake.Routers.Rum
 
 open System
 open System.Globalization
-open System.IO
 open System.Net
 open System.Text
-open System.Text.Encodings.Web
 open System.Text.Json
-open System.Text.Unicode
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Cors.Infrastructure
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.WebUtilities
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Logging.Abstractions
-open Microsoft.Net.Http.Headers
 open Oxpecker
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
@@ -45,8 +41,6 @@ open NinjaCat.Api.Storage.Rows
 
 /// The label of this intake in raw_payloads.
 let private intake = "rum"
-
-let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
 
 /// What a preflight is told it may send. DD-API-KEY and DD-EVP-* are for the
 /// mobile SDKs and for a browser deployment that chose headers over the query
@@ -117,7 +111,8 @@ let unwrapForward (log: ILogger) (http: HttpContext) : unit =
         if not (path.StartsWith '/') then
             // Left alone: a 404 naming the path that was actually sent is more
             // use to whoever misconfigured this than a guess would be.
-            log.LogWarning("[rum] ddforward={Forward} is not a path+query, routing the request as it came", forward)
+            // Not the value: it may carry the key in its query.
+            log.LogWarning("[rum] ddforward ({Length} characters) is not a path+query, routing the request as it came", forward.Length)
         else
             let merged = QueryHelpers.ParseQuery query
 
@@ -130,152 +125,18 @@ let unwrapForward (log: ILogger) (http: HttpContext) : unit =
             http.Request.Path <- PathString(Uri.UnescapeDataString path)
             http.Request.QueryString <- QueryString.Create merged
 
-// One path-walking reader over JsonElement serves every event variant: their
-// `view` and `session` objects are the same JSON whatever the variant, and a
-// field no schema declares yet is read like any other. No number passes
+// Every event variant is read with `Json.at`, a path through nested objects:
+// their `view` and `session` objects are the same JSON whatever the variant,
+// and a field no schema declares yet is read like any other. No number passes
 // through a float unless it was written as one.
 
 let private emptyObject: JsonElement = JsonDocument.Parse("{}").RootElement.Clone()
 
-let private jsonText (write: Utf8JsonWriter -> unit) : string =
-    use buffer = new MemoryStream()
-
-    do
-        use writer = new Utf8JsonWriter(buffer, JsonWriterOptions(Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping))
-        write writer
-
-    Encoding.UTF8.GetString(buffer.ToArray())
-
-/// JSON from bytes. Go read invalid UTF-8 as U+FFFD; System.Text.Json parses
-/// it and then throws when the string is read, so such bytes are repaired
-/// before parsing.
-let private parseJson (data: byte[]) : Result<JsonElement, string> =
-    if Utf8.IsValid(ReadOnlySpan data) then
-        Json.tryParse data
-    else
-        Json.tryParse (Encoding.UTF8.GetBytes(Text.utf8 data))
-
-/// The value at a key path: None when a step is missing or is not an object,
-/// and when the value is null.
-let private at (path: string list) (root: JsonElement) : JsonElement option =
-    let rec walk (current: JsonElement) (rest: string list) =
-        match rest with
-        | [] -> if current.ValueKind = JsonValueKind.Null then None else Some current
-        | key :: tail ->
-            if current.ValueKind <> JsonValueKind.Object then
-                None
-            else
-                match current.TryGetProperty key with
-                | true, next -> walk next tail
-                | false, _ -> None
-
-    walk root path
-
-/// A sub-object, or an empty one, so lookups on a missing branch are empty.
-let private objectAt (path: string list) (root: JsonElement) : JsonElement =
-    match at path root with
-    | Some value when value.ValueKind = JsonValueKind.Object -> value
-    | _ -> emptyObject
-
-/// A string field, or "". A value of another type is not coerced: it stays
-/// in the event column, visible as what it was.
-let private str (path: string list) (root: JsonElement) : string =
-    match at path root with
-    | Some value when value.ValueKind = JsonValueKind.String -> value.GetString()
-    | _ -> ""
-
-/// A value as text: a string as it is, a number with the digits it arrived
-/// with, an object or array as JSON.
-let private textOf (value: JsonElement) : string =
-    match value.ValueKind with
-    | JsonValueKind.String -> value.GetString()
-    | JsonValueKind.Number -> value.GetRawText()
-    | JsonValueKind.True -> "true"
-    | JsonValueKind.False -> "false"
-    | JsonValueKind.Object
-    | JsonValueKind.Array -> jsonText value.WriteTo
-    | _ -> ""
-
-/// For fields one SDK writes as text and another as a number: the span ids.
-let private text (path: string list) (root: JsonElement) : string =
-    match at path root with
-    | Some value -> textOf value
-    | None -> ""
-
-/// A JSON number as an integer. One written with a fraction or an exponent is
-/// truncated rather than lost.
-let private integerOf (value: JsonElement) : int64 option =
-    match value.TryGetInt64() with
-    | true, n -> Some n
-    | false, _ ->
-        let f = value.GetDouble()
-        if Double.IsFinite f then Some(int64 f) else None
-
-/// An integer field; None when absent, so a Nullable column gets NULL and
-/// "not measured" never turns into a zero somebody averages.
-let private tryInt (path: string list) (root: JsonElement) : int64 option =
-    match at path root with
-    | Some value when value.ValueKind = JsonValueKind.Number -> integerOf value
-    | _ -> None
-
-let private intOrZero (path: string list) (root: JsonElement) : int64 =
-    tryInt path root |> Option.defaultValue 0L
-
-let private tryFloat (path: string list) (root: JsonElement) : float option =
-    match at path root with
-    | Some value when value.ValueKind = JsonValueKind.Number ->
-        let f = value.GetDouble()
-        if Double.IsFinite f then Some f else None
-    | _ -> None
-
-let private tryBool (path: string list) (root: JsonElement) : bool option =
-    match at path root with
-    | Some value when value.ValueKind = JsonValueKind.True -> Some true
-    | Some value when value.ValueKind = JsonValueKind.False -> Some false
-    | _ -> None
-
-/// An array of strings in wire order. A lone string counts as a list of one:
-/// several SDK fields are documented as arrays and sent as scalars.
-let private strings (path: string list) (root: JsonElement) : string[] =
-    match at path root with
-    | Some value when value.ValueKind = JsonValueKind.Array -> value.EnumerateArray() |> Seq.map textOf |> Array.ofSeq
-    | Some value when value.ValueKind = JsonValueKind.String -> [| value.GetString() |]
+/// The whole numbers of a list; anything else in it is passed over.
+let private int64s (value: JsonElement option) : int64[] =
+    match value with
+    | Some list when list.ValueKind = JsonValueKind.Array -> list.EnumerateArray() |> Seq.choose Json.int64Of |> Array.ofSeq
     | _ -> [||]
-
-let private int64s (path: string list) (root: JsonElement) : int64[] =
-    match at path root with
-    | Some value when value.ValueKind = JsonValueKind.Array ->
-        value.EnumerateArray()
-        |> Seq.choose (fun item ->
-            if item.ValueKind = JsonValueKind.Number then
-                match item.TryGetInt64() with
-                | true, n -> Some n
-                | false, _ -> None
-            else
-                None)
-        |> Array.ofSeq
-    | _ -> [||]
-
-/// A sub-object or array as JSON text for a String column; "" when absent.
-let private jsonAt (path: string list) (root: JsonElement) : string =
-    match at path root with
-    | Some value -> jsonText value.WriteTo
-    | None -> ""
-
-let private maxMillis = DateTimeOffset.MaxValue.ToUnixTimeMilliseconds()
-let private minMillis = DateTimeOffset.MinValue.ToUnixTimeMilliseconds()
-
-/// DateTime ends at year 9999 and the conversion throws beyond it. A garbage
-/// date must not turn the 202 into a 500 the SDK retries forever, so it is
-/// clamped.
-let private fromMillis (ms: int64) : DateTime =
-    Time.fromUnixMillis (max minMillis (min ms maxMillis))
-
-let private tryMillis (path: string list) (root: JsonElement) : DateTime option =
-    tryInt path root |> Option.map fromMillis
-
-/// `date` is milliseconds; a missing one is the arrival time, never 1970.
-let private wireMillis (ms: int64) : DateTime = Time.wireMillis (min ms maxMillis)
 
 /// Timeseries and span starts are NANOSECONDS, unlike `date`.
 let private wireNanos (nanos: int64) : UnixNanos =
@@ -303,7 +164,7 @@ let private queryExtra (ctx: HttpContext) : string =
     if extra.IsEmpty then
         ""
     else
-        jsonText (fun writer ->
+        Json.write (fun writer ->
             writer.WriteStartObject()
 
             for pair in extra do
@@ -357,7 +218,7 @@ let requestInfo (ctx: HttpContext) : RumRequest =
       RequestID = Text.firstNonEmpty [ Ctx.query ctx "dd-request-id"; Ctx.header ctx "Dd-Request-Id" ]
       IdempotencyKey = Ctx.header ctx "Dd-Idempotency-Key"
       DDAPI = Ctx.query ctx "_dd.api"
-      BatchTime = tryParseInt64 (Ctx.query ctx "batch_time") |> Option.map fromMillis
+      BatchTime = tryParseInt64 (Ctx.query ctx "batch_time") |> Option.map Time.fromUnixMillis
       RetryCount = retry "retry_count" |> Option.filter (fun n -> n >= 0L) |> Option.map uint32
       RetryAfter = retry "retry_after"
       RemoteAddr = clientIP ctx
@@ -477,209 +338,206 @@ let classify (event: JsonElement) : Result<EventKind, string> =
 /// view_update is the newer wire spelling of an update this table already
 /// models as a replacement.
 let viewRow (request: RumRequest) (eventType: string) (o: JsonElement) (raw: string) : RumViewRow =
-    let view = objectAt [ "view" ] o
-    let performance = objectAt [ "performance" ] view
+    let view = Json.at [ "view" ] o |> Option.bind Json.objectOf |> Option.defaultValue emptyObject
+    let performance = Json.at [ "performance" ] view |> Option.bind Json.objectOf |> Option.defaultValue emptyObject
 
     // Web Vitals moved from flat view.* fields into view.performance.* and
     // both spellings are still on the wire: the modern one first, the
     // deprecated one as the fallback.
     let vital (modern: string list) (deprecated: string) : int64 option =
-        tryInt modern performance |> Option.orElse (tryInt [ deprecated ] view)
+        Json.at modern performance
+        |> Option.orElse (Json.at [ deprecated ] view)
+        |> Option.bind Json.truncatedInt64Of
 
     { Req = request
-      Date = wireMillis (intOrZero [ "date" ] o)
-      ApplicationID = str [ "application"; "id" ] o
-      SessionID = str [ "session"; "id" ] o
-      ViewID = str [ "view"; "id" ] o
-      DocumentVersion = uint64 (max (intOrZero [ "_dd"; "document_version" ] o) 0L)
+      Date = Time.wireMillis (Json.at [ "date" ] o |> Option.bind Json.truncatedInt64Of |> Option.defaultValue 0L)
+      ApplicationID = Json.lenientString (Json.at [ "application"; "id" ] o)
+      SessionID = Json.lenientString (Json.at [ "session"; "id" ] o)
+      ViewID = Json.lenientString (Json.at [ "view"; "id" ] o)
+      DocumentVersion = uint64 (max (Json.at [ "_dd"; "document_version" ] o |> Option.bind Json.truncatedInt64Of |> Option.defaultValue 0L) 0L)
       EventType = eventType
-      Service = str [ "service" ] o
-      Version = str [ "version" ] o
-      BuildVersion = str [ "build_version" ] o
-      BuildID = str [ "build_id" ] o
-      Source = str [ "source" ] o
-      SessionType = str [ "session"; "type" ] o
-      SessionHasReplay = tryBool [ "session"; "has_replay" ] o
-      SessionIsActive = tryBool [ "session"; "is_active" ] o
-      SessionSampledForReplay = tryBool [ "session"; "sampled_for_replay" ] o
-      UsrID = str [ "usr"; "id" ] o
-      UsrName = str [ "usr"; "name" ] o
-      UsrEmail = str [ "usr"; "email" ] o
-      UsrAnonymousID = str [ "usr"; "anonymous_id" ] o
-      AccountID = str [ "account"; "id" ] o
-      AccountName = str [ "account"; "name" ] o
-      ViewURL = str [ "url" ] view
-      ViewName = str [ "name" ] view
-      ViewReferrer = str [ "referrer" ] view
-      ViewLoadingType = str [ "loading_type" ] view
-      ViewLoadingTime = tryInt [ "loading_time" ] view
-      ViewTimeSpent = intOrZero [ "time_spent" ] view
-      ViewIsActive = tryBool [ "is_active" ] view
-      ViewIsSlowRendered = tryBool [ "is_slow_rendered" ] view
-      ActionCount = tryInt [ "action"; "count" ] view
-      ErrorCount = tryInt [ "error"; "count" ] view
-      CrashCount = tryInt [ "crash"; "count" ] view
-      LongTaskCount = tryInt [ "long_task"; "count" ] view
-      FrozenFrameCount = tryInt [ "frozen_frame"; "count" ] view
-      ResourceCount = tryInt [ "resource"; "count" ] view
-      FrustrationCount = tryInt [ "frustration"; "count" ] view
+      Service = Json.lenientString (Json.at [ "service" ] o)
+      Version = Json.lenientString (Json.at [ "version" ] o)
+      BuildVersion = Json.lenientString (Json.at [ "build_version" ] o)
+      BuildID = Json.lenientString (Json.at [ "build_id" ] o)
+      Source = Json.lenientString (Json.at [ "source" ] o)
+      SessionType = Json.lenientString (Json.at [ "session"; "type" ] o)
+      SessionHasReplay = Json.at [ "session"; "has_replay" ] o |> Option.bind Json.boolOf
+      SessionIsActive = Json.at [ "session"; "is_active" ] o |> Option.bind Json.boolOf
+      SessionSampledForReplay = Json.at [ "session"; "sampled_for_replay" ] o |> Option.bind Json.boolOf
+      UsrID = Json.lenientString (Json.at [ "usr"; "id" ] o)
+      UsrName = Json.lenientString (Json.at [ "usr"; "name" ] o)
+      UsrEmail = Json.lenientString (Json.at [ "usr"; "email" ] o)
+      UsrAnonymousID = Json.lenientString (Json.at [ "usr"; "anonymous_id" ] o)
+      AccountID = Json.lenientString (Json.at [ "account"; "id" ] o)
+      AccountName = Json.lenientString (Json.at [ "account"; "name" ] o)
+      ViewURL = Json.lenientString (Json.at [ "url" ] view)
+      ViewName = Json.lenientString (Json.at [ "name" ] view)
+      ViewReferrer = Json.lenientString (Json.at [ "referrer" ] view)
+      ViewLoadingType = Json.lenientString (Json.at [ "loading_type" ] view)
+      ViewLoadingTime = Json.at [ "loading_time" ] view |> Option.bind Json.truncatedInt64Of
+      ViewTimeSpent = Json.at [ "time_spent" ] view |> Option.bind Json.truncatedInt64Of |> Option.defaultValue 0L
+      ViewIsActive = Json.at [ "is_active" ] view |> Option.bind Json.boolOf
+      ViewIsSlowRendered = Json.at [ "is_slow_rendered" ] view |> Option.bind Json.boolOf
+      ActionCount = Json.at [ "action"; "count" ] view |> Option.bind Json.truncatedInt64Of
+      ErrorCount = Json.at [ "error"; "count" ] view |> Option.bind Json.truncatedInt64Of
+      CrashCount = Json.at [ "crash"; "count" ] view |> Option.bind Json.truncatedInt64Of
+      LongTaskCount = Json.at [ "long_task"; "count" ] view |> Option.bind Json.truncatedInt64Of
+      FrozenFrameCount = Json.at [ "frozen_frame"; "count" ] view |> Option.bind Json.truncatedInt64Of
+      ResourceCount = Json.at [ "resource"; "count" ] view |> Option.bind Json.truncatedInt64Of
+      FrustrationCount = Json.at [ "frustration"; "count" ] view |> Option.bind Json.truncatedInt64Of
       LCP = vital [ "lcp"; "timestamp" ] "largest_contentful_paint"
       CLS =
-        tryFloat [ "cls"; "score" ] performance
-        |> Option.orElse (tryFloat [ "cumulative_layout_shift" ] view)
+        (Json.at [ "cls"; "score" ] performance |> Option.bind Json.floatOf)
+        |> Option.orElse (Json.at [ "cumulative_layout_shift" ] view |> Option.bind Json.floatOf)
       INP = vital [ "inp"; "duration" ] "interaction_to_next_paint"
       FCP = vital [ "fcp"; "timestamp" ] "first_contentful_paint"
       FID = vital [ "fid"; "duration" ] "first_input_delay"
-      FBC = tryInt [ "fbc"; "timestamp" ] performance
-      TTFB = tryInt [ "first_byte" ] view
-      DeviceType = str [ "device"; "type" ] o
-      DeviceBrand = str [ "device"; "brand" ] o
-      DeviceModel = str [ "device"; "model" ] o
-      DeviceName = str [ "device"; "name" ] o
-      OSName = str [ "os"; "name" ] o
-      OSVersion = str [ "os"; "version" ] o
-      ConnectivityStatus = str [ "connectivity"; "status" ] o
-      Context = jsonAt [ "context" ] o
-      FeatureFlags = jsonAt [ "feature_flags" ] o
-      Tags = Tags.toMultiMap (Tags.splitDDTags (str [ "ddtags" ] o))
+      FBC = Json.at [ "fbc"; "timestamp" ] performance |> Option.bind Json.truncatedInt64Of
+      TTFB = Json.at [ "first_byte" ] view |> Option.bind Json.truncatedInt64Of
+      DeviceType = Json.lenientString (Json.at [ "device"; "type" ] o)
+      DeviceBrand = Json.lenientString (Json.at [ "device"; "brand" ] o)
+      DeviceModel = Json.lenientString (Json.at [ "device"; "model" ] o)
+      DeviceName = Json.lenientString (Json.at [ "device"; "name" ] o)
+      OSName = Json.lenientString (Json.at [ "os"; "name" ] o)
+      OSVersion = Json.lenientString (Json.at [ "os"; "version" ] o)
+      ConnectivityStatus = Json.lenientString (Json.at [ "connectivity"; "status" ] o)
+      Context = Json.compactOrEmpty (Json.at [ "context" ] o)
+      FeatureFlags = Json.compactOrEmpty (Json.at [ "feature_flags" ] o)
+      Tags = Tags.toMultiMap (Tags.splitDDTags (Json.lenientString (Json.at [ "ddtags" ] o)))
       Event = raw }
 
 /// An action, error, resource, long_task, vital or transition. Each kind
 /// fills its own block of columns and leaves the others empty.
 let eventRow (request: RumRequest) (eventType: string) (o: JsonElement) (raw: string) : RumEventRow =
     { Req = request
-      Date = wireMillis (intOrZero [ "date" ] o)
-      ApplicationID = str [ "application"; "id" ] o
-      SessionID = str [ "session"; "id" ] o
-      ViewID = str [ "view"; "id" ] o
+      Date = Time.wireMillis (Json.at [ "date" ] o |> Option.bind Json.truncatedInt64Of |> Option.defaultValue 0L)
+      ApplicationID = Json.lenientString (Json.at [ "application"; "id" ] o)
+      SessionID = Json.lenientString (Json.at [ "session"; "id" ] o)
+      ViewID = Json.lenientString (Json.at [ "view"; "id" ] o)
       EventType = eventType
-      Service = str [ "service" ] o
-      Version = str [ "version" ] o
-      BuildVersion = str [ "build_version" ] o
-      BuildID = str [ "build_id" ] o
-      Source = str [ "source" ] o
-      SessionType = str [ "session"; "type" ] o
-      SessionHasReplay = tryBool [ "session"; "has_replay" ] o
-      UsrID = str [ "usr"; "id" ] o
-      UsrName = str [ "usr"; "name" ] o
-      UsrEmail = str [ "usr"; "email" ] o
-      UsrAnonymousID = str [ "usr"; "anonymous_id" ] o
-      AccountID = str [ "account"; "id" ] o
-      AccountName = str [ "account"; "name" ] o
-      ViewURL = str [ "view"; "url" ] o
-      ViewName = str [ "view"; "name" ] o
-      ViewReferrer = str [ "view"; "referrer" ] o
-      DeviceType = str [ "device"; "type" ] o
-      DeviceBrand = str [ "device"; "brand" ] o
-      DeviceModel = str [ "device"; "model" ] o
-      DeviceName = str [ "device"; "name" ] o
-      OSName = str [ "os"; "name" ] o
-      OSVersion = str [ "os"; "version" ] o
-      ConnectivityStatus = str [ "connectivity"; "status" ] o
-      ActionType = str [ "action"; "type" ] o
+      Service = Json.lenientString (Json.at [ "service" ] o)
+      Version = Json.lenientString (Json.at [ "version" ] o)
+      BuildVersion = Json.lenientString (Json.at [ "build_version" ] o)
+      BuildID = Json.lenientString (Json.at [ "build_id" ] o)
+      Source = Json.lenientString (Json.at [ "source" ] o)
+      SessionType = Json.lenientString (Json.at [ "session"; "type" ] o)
+      SessionHasReplay = Json.at [ "session"; "has_replay" ] o |> Option.bind Json.boolOf
+      UsrID = Json.lenientString (Json.at [ "usr"; "id" ] o)
+      UsrName = Json.lenientString (Json.at [ "usr"; "name" ] o)
+      UsrEmail = Json.lenientString (Json.at [ "usr"; "email" ] o)
+      UsrAnonymousID = Json.lenientString (Json.at [ "usr"; "anonymous_id" ] o)
+      AccountID = Json.lenientString (Json.at [ "account"; "id" ] o)
+      AccountName = Json.lenientString (Json.at [ "account"; "name" ] o)
+      ViewURL = Json.lenientString (Json.at [ "view"; "url" ] o)
+      ViewName = Json.lenientString (Json.at [ "view"; "name" ] o)
+      ViewReferrer = Json.lenientString (Json.at [ "view"; "referrer" ] o)
+      DeviceType = Json.lenientString (Json.at [ "device"; "type" ] o)
+      DeviceBrand = Json.lenientString (Json.at [ "device"; "brand" ] o)
+      DeviceModel = Json.lenientString (Json.at [ "device"; "model" ] o)
+      DeviceName = Json.lenientString (Json.at [ "device"; "name" ] o)
+      OSName = Json.lenientString (Json.at [ "os"; "name" ] o)
+      OSVersion = Json.lenientString (Json.at [ "os"; "version" ] o)
+      ConnectivityStatus = Json.lenientString (Json.at [ "connectivity"; "status" ] o)
+      ActionType = Json.lenientString (Json.at [ "action"; "type" ] o)
       // The label a user sees is action.target.name, not a field on action.
-      ActionName = str [ "action"; "target"; "name" ] o
-      ActionID = str [ "action"; "id" ] o
-      ActionFrustrationTypes = strings [ "action"; "frustration"; "type" ] o
-      ErrorID = str [ "error"; "id" ] o
-      ErrorMessage = str [ "error"; "message" ] o
-      ErrorType = str [ "error"; "type" ] o
-      ErrorSource = str [ "error"; "source" ] o
-      ErrorStack = str [ "error"; "stack" ] o
+      ActionName = Json.lenientString (Json.at [ "action"; "target"; "name" ] o)
+      ActionID = Json.lenientString (Json.at [ "action"; "id" ] o)
+      ActionFrustrationTypes = Json.textList (Json.at [ "action"; "frustration"; "type" ] o)
+      ErrorID = Json.lenientString (Json.at [ "error"; "id" ] o)
+      ErrorMessage = Json.lenientString (Json.at [ "error"; "message" ] o)
+      ErrorType = Json.lenientString (Json.at [ "error"; "type" ] o)
+      ErrorSource = Json.lenientString (Json.at [ "error"; "source" ] o)
+      ErrorStack = Json.lenientString (Json.at [ "error"; "stack" ] o)
       // The crash and ANR reports the mobile SDKs write at the NEXT launch
       // are ordinary errors with this flag set, which is why their date can
       // predate the session they belong to.
-      ErrorIsCrash = tryBool [ "error"; "is_crash" ] o
-      ErrorHandling = str [ "error"; "handling" ] o
-      ErrorFingerprint = str [ "error"; "fingerprint" ] o
-      ResourceID = str [ "resource"; "id" ] o
-      ResourceType = str [ "resource"; "type" ] o
-      ResourceURL = str [ "resource"; "url" ] o
-      ResourceMethod = str [ "resource"; "method" ] o
-      ResourceStatusCode = tryInt [ "resource"; "status_code" ] o
-      ResourceDuration = tryInt [ "resource"; "duration" ] o
-      ResourceSize = tryInt [ "resource"; "size" ] o
-      LongTaskID = str [ "long_task"; "id" ] o
-      LongTaskDuration = tryInt [ "long_task"; "duration" ] o
-      VitalID = str [ "vital"; "id" ] o
-      VitalType = str [ "vital"; "type" ] o
-      VitalName = str [ "vital"; "name" ] o
-      VitalDuration = tryInt [ "vital"; "duration" ] o
-      Context = jsonAt [ "context" ] o
-      Tags = Tags.toMultiMap (Tags.splitDDTags (str [ "ddtags" ] o))
+      ErrorIsCrash = Json.at [ "error"; "is_crash" ] o |> Option.bind Json.boolOf
+      ErrorHandling = Json.lenientString (Json.at [ "error"; "handling" ] o)
+      ErrorFingerprint = Json.lenientString (Json.at [ "error"; "fingerprint" ] o)
+      ResourceID = Json.lenientString (Json.at [ "resource"; "id" ] o)
+      ResourceType = Json.lenientString (Json.at [ "resource"; "type" ] o)
+      ResourceURL = Json.lenientString (Json.at [ "resource"; "url" ] o)
+      ResourceMethod = Json.lenientString (Json.at [ "resource"; "method" ] o)
+      ResourceStatusCode = Json.at [ "resource"; "status_code" ] o |> Option.bind Json.truncatedInt64Of
+      ResourceDuration = Json.at [ "resource"; "duration" ] o |> Option.bind Json.truncatedInt64Of
+      ResourceSize = Json.at [ "resource"; "size" ] o |> Option.bind Json.truncatedInt64Of
+      LongTaskID = Json.lenientString (Json.at [ "long_task"; "id" ] o)
+      LongTaskDuration = Json.at [ "long_task"; "duration" ] o |> Option.bind Json.truncatedInt64Of
+      VitalID = Json.lenientString (Json.at [ "vital"; "id" ] o)
+      VitalType = Json.lenientString (Json.at [ "vital"; "type" ] o)
+      VitalName = Json.lenientString (Json.at [ "vital"; "name" ] o)
+      VitalDuration = Json.at [ "vital"; "duration" ] o |> Option.bind Json.truncatedInt64Of
+      Context = Json.compactOrEmpty (Json.at [ "context" ] o)
+      Tags = Tags.toMultiMap (Tags.splitDDTags (Json.lenientString (Json.at [ "ddtags" ] o)))
       Event = raw }
 
 /// A type:"telemetry" event: the SDK reporting on itself. Every SDK sends
 /// these on the RUM track, including one configured for Logs only.
 let telemetryRow (request: RumRequest) (o: JsonElement) (raw: string) : RumTelemetryRow =
-    let telemetry = objectAt [ "telemetry" ] o
+    let telemetry = Json.at [ "telemetry" ] o |> Option.bind Json.objectOf |> Option.defaultValue emptyObject
 
     { Req = request
-      Date = wireMillis (intOrZero [ "date" ] o)
-      ApplicationID = str [ "application"; "id" ] o
-      SessionID = str [ "session"; "id" ] o
-      ViewID = str [ "view"; "id" ] o
-      ActionID = str [ "action"; "id" ] o
-      Type = str [ "type" ] o
-      Status = str [ "status" ] telemetry
-      TelemetryType = str [ "type" ] telemetry
-      Message = str [ "message" ] telemetry
-      ErrorStack = str [ "error"; "stack" ] telemetry
-      ErrorKind = str [ "error"; "kind" ] telemetry
+      Date = Time.wireMillis (Json.at [ "date" ] o |> Option.bind Json.truncatedInt64Of |> Option.defaultValue 0L)
+      ApplicationID = Json.lenientString (Json.at [ "application"; "id" ] o)
+      SessionID = Json.lenientString (Json.at [ "session"; "id" ] o)
+      ViewID = Json.lenientString (Json.at [ "view"; "id" ] o)
+      ActionID = Json.lenientString (Json.at [ "action"; "id" ] o)
+      Type = Json.lenientString (Json.at [ "type" ] o)
+      Status = Json.lenientString (Json.at [ "status" ] telemetry)
+      TelemetryType = Json.lenientString (Json.at [ "type" ] telemetry)
+      Message = Json.lenientString (Json.at [ "message" ] telemetry)
+      ErrorStack = Json.lenientString (Json.at [ "error"; "stack" ] telemetry)
+      ErrorKind = Json.lenientString (Json.at [ "error"; "kind" ] telemetry)
       // ~150 optional keys that change with every SDK release: worth
       // keeping whole, not worth a column each.
-      Configuration = jsonAt [ "configuration" ] telemetry
-      UsageFeature = str [ "usage"; "feature" ] telemetry
-      Service = str [ "service" ] o
-      Version = str [ "version" ] o
-      Source = str [ "source" ] o
-      EffectiveSampleRate = tryFloat [ "effective_sample_rate" ] o
-      ExperimentalFeatures = strings [ "experimental_features" ] o
-      DeviceBrand = str [ "device"; "brand" ] telemetry
-      DeviceModel = str [ "device"; "model" ] telemetry
-      DeviceArchitecture = str [ "device"; "architecture" ] telemetry
-      OSName = str [ "os"; "name" ] telemetry
-      OSVersion = str [ "os"; "version" ] telemetry
-      OSBuild = str [ "os"; "build" ] telemetry
+      Configuration = Json.compactOrEmpty (Json.at [ "configuration" ] telemetry)
+      UsageFeature = Json.lenientString (Json.at [ "usage"; "feature" ] telemetry)
+      Service = Json.lenientString (Json.at [ "service" ] o)
+      Version = Json.lenientString (Json.at [ "version" ] o)
+      Source = Json.lenientString (Json.at [ "source" ] o)
+      EffectiveSampleRate = Json.at [ "effective_sample_rate" ] o |> Option.bind Json.floatOf
+      ExperimentalFeatures = Json.textList (Json.at [ "experimental_features" ] o)
+      DeviceBrand = Json.lenientString (Json.at [ "device"; "brand" ] telemetry)
+      DeviceModel = Json.lenientString (Json.at [ "device"; "model" ] telemetry)
+      DeviceArchitecture = Json.lenientString (Json.at [ "device"; "architecture" ] telemetry)
+      OSName = Json.lenientString (Json.at [ "os"; "name" ] telemetry)
+      OSVersion = Json.lenientString (Json.at [ "os"; "version" ] telemetry)
+      OSBuild = Json.lenientString (Json.at [ "os"; "build" ] telemetry)
       Event = raw }
 
 /// A type:"timeseries" event: a mobile-only run of cpu or memory samples,
 /// timestamps in one array and the measured quantities in a parallel one.
 let timeseriesRow (request: RumRequest) (o: JsonElement) (raw: string) : RumTimeseriesRow =
-    let series = objectAt [ "timeseries" ] o
+    let series = Json.at [ "timeseries" ] o |> Option.bind Json.objectOf |> Option.defaultValue emptyObject
 
     { Req = request
-      Date = wireMillis (intOrZero [ "date" ] o)
-      ApplicationID = str [ "application"; "id" ] o
-      SessionID = str [ "session"; "id" ] o
-      ViewID = str [ "view"; "id" ] o
-      Name = str [ "name" ] series
-      ID = str [ "id" ] series
-      Schema = str [ "schema" ] series
-      Start = wireNanos (intOrZero [ "start" ] series)
-      End = wireNanos (intOrZero [ "end" ] series)
-      Timestamps = int64s [ "data"; "timestamps" ] series
-      Values = jsonAt [ "data"; "values" ] series
-      Service = str [ "service" ] o
-      Version = str [ "version" ] o
-      Source = str [ "source" ] o
-      Context = jsonAt [ "context" ] o
-      Tags = Tags.toMultiMap (Tags.splitDDTags (str [ "ddtags" ] o))
+      Date = Time.wireMillis (Json.at [ "date" ] o |> Option.bind Json.truncatedInt64Of |> Option.defaultValue 0L)
+      ApplicationID = Json.lenientString (Json.at [ "application"; "id" ] o)
+      SessionID = Json.lenientString (Json.at [ "session"; "id" ] o)
+      ViewID = Json.lenientString (Json.at [ "view"; "id" ] o)
+      Name = Json.lenientString (Json.at [ "name" ] series)
+      ID = Json.lenientString (Json.at [ "id" ] series)
+      Schema = Json.lenientString (Json.at [ "schema" ] series)
+      Start = wireNanos (Json.at [ "start" ] series |> Option.bind Json.truncatedInt64Of |> Option.defaultValue 0L)
+      End = wireNanos (Json.at [ "end" ] series |> Option.bind Json.truncatedInt64Of |> Option.defaultValue 0L)
+      Timestamps = int64s (Json.at [ "data"; "timestamps" ] series)
+      Values = Json.compactOrEmpty (Json.at [ "data"; "values" ] series)
+      Service = Json.lenientString (Json.at [ "service" ] o)
+      Version = Json.lenientString (Json.at [ "version" ] o)
+      Source = Json.lenientString (Json.at [ "source" ] o)
+      Context = Json.compactOrEmpty (Json.at [ "context" ] o)
+      Tags = Tags.toMultiMap (Tags.splitDDTags (Json.lenientString (Json.at [ "ddtags" ] o)))
       Event = raw }
 
 /// POST /api/v2/rum: NDJSON, one event per line, from every SDK.
 let handleRum (body: byte[]) (ctx: HttpContext) : Task =
-    let tenant = Ctx.tenant ctx
-    let sink = Ctx.sink ctx
-
     if Diagnose.isSweep ctx then
         accepted ctx
     else
         let body = inflated body ctx
 
-        // No tenant means no key, which authentication already refused: nothing is
-        // stored, because a guessed tenant puts rows where no query looks.
-        if body.Length = 0 || tenant = "" then
+        if body.Length = 0 then
             accepted ctx
         else
             let request = requestInfo ctx
@@ -689,7 +547,7 @@ let handleRum (body: byte[]) (ctx: HttpContext) : Task =
             let series = ResizeArray<RumTimeseriesRow>()
 
             for line in ndjsonLines body do
-                match parseJson line with
+                match Json.tryParse line with
                 | Error problem -> Raw.store ctx intake "decode_error" $"not a JSON object: {problem}" line
                 | Ok event when event.ValueKind <> JsonValueKind.Object ->
                     Raw.store ctx intake "decode_error" "not a JSON object" line
@@ -706,70 +564,18 @@ let handleRum (body: byte[]) (ctx: HttpContext) : Task =
                     | Ok Telemetry -> telemetry.Add(telemetryRow request event raw)
                     | Ok Timeseries -> series.Add(timeseriesRow request event raw)
 
-            Sink.write sink RumViews.table (views.ToArray())
-            Sink.write sink RumEvents.table (events.ToArray())
-            Sink.write sink RumTelemetry.table (telemetry.ToArray())
-            Sink.write sink RumTimeseries.table (series.ToArray())
+            Ctx.write ctx RumViews.table (views.ToArray())
+            Ctx.write ctx RumEvents.table (events.ToArray())
+            Ctx.write ctx RumTelemetry.table (telemetry.ToArray())
+            Ctx.write ctx RumTimeseries.table (series.ToArray())
             accepted ctx
-
-/// A multipart body as its parts, in order and with repeats; an error when
-/// the content type is not multipart or the body breaks off.
-///
-/// Order and repeats both carry meaning here: the mobile canvas-resource
-/// variant sends several parts all named "image", and metadata entry i
-/// describes blob i.
-let private replayParts (contentType: string) (body: byte[]) : Result<MultipartPart list, string> =
-    let mediaType = (contentType.Split ';' |> Array.head).Trim().ToLowerInvariant()
-
-    if mediaType = "" then
-        Error "mime: no media type"
-    elif not (mediaType.StartsWith "multipart/") then
-        Error $"content-type is {mediaType}"
-    else
-        match Multipart.boundary contentType with
-        | None -> Error "multipart without boundary"
-        | Some boundary ->
-            let reader = MultipartReader(boundary, new MemoryStream(body))
-            reader.HeadersLengthLimit <- 1024 * 1024
-            reader.BodyLengthLimit <- Nullable()
-            let parts = ResizeArray<MultipartPart>()
-
-            try
-                let mutable section = reader.ReadNextSectionAsync().GetAwaiter().GetResult()
-
-                while not (isNull section) do
-                    use data = new MemoryStream()
-                    section.Body.CopyTo data
-
-                    let name, fileName =
-                        match ContentDispositionHeaderValue.TryParse section.ContentDisposition with
-                        | true, disposition ->
-                            let file =
-                                if disposition.FileNameStar.HasValue then disposition.FileNameStar.Value
-                                elif disposition.FileName.HasValue then HeaderUtilities.RemoveQuotes(disposition.FileName).Value
-                                else ""
-
-                            HeaderUtilities.RemoveQuotes(disposition.Name).Value |> Option.ofObj |> Option.defaultValue "", file
-                        | _ -> "", ""
-
-                    parts.Add
-                        { Name = name
-                          FileName = fileName
-                          ContentType = (if isNull section.ContentType then "" else section.ContentType)
-                          Data = data.ToArray() }
-
-                    section <- reader.ReadNextSectionAsync().GetAwaiter().GetResult()
-
-                Ok(List.ofSeq parts)
-            with e ->
-                Error e.Message
 
 /// The `event` part: one object from the browser, an array from iOS and
 /// Android, because a mobile batch spans several views and ships a segment
 /// for each. Every entry comes back decoded and as the JSON text stored with
 /// its row; None when the part is neither shape.
 let replayMetadata (data: byte[]) : (JsonElement * string) list option =
-    match parseJson data with
+    match Json.tryParse data with
     | Ok root when root.ValueKind = JsonValueKind.Array ->
         root.EnumerateArray()
         |> Seq.map (fun entry ->
@@ -778,7 +584,7 @@ let replayMetadata (data: byte[]) : (JsonElement * string) list option =
         |> List.ofSeq
         |> Some
     | Ok root when root.ValueKind = JsonValueKind.Object -> Some [ root, Text.utf8 data ]
-    // Go decoded `null` into an empty object without complaint.
+    // `null` stands for an object with nothing in it.
     | Ok root when root.ValueKind = JsonValueKind.Null -> Some [ emptyObject, Text.utf8 data ]
     | _ -> None
 
@@ -789,32 +595,32 @@ let replayMetadata (data: byte[]) : (JsonElement * string) list option =
 let replayVariant (partName: string) (meta: JsonElement) : string =
     if partName.StartsWith "image" then "resource"
     elif partName = "segment" || partName.StartsWith "file" then "segment"
-    elif str [ "type" ] meta = "resource" then "resource"
+    elif Json.lenientString (Json.at [ "type" ] meta) = "resource" then "resource"
     else "segment"
 
 let replayRow (request: RumRequest) (part: MultipartPart) (meta: JsonElement) (metaRaw: string) : RumReplaySegmentRow =
     let variant = replayVariant part.Name meta
 
     { Req = request
-      ApplicationID = str [ "application"; "id" ] meta
-      SessionID = str [ "session"; "id" ] meta
-      ViewID = str [ "view"; "id" ] meta
-      Source = str [ "source" ] meta
+      ApplicationID = Json.lenientString (Json.at [ "application"; "id" ] meta)
+      SessionID = Json.lenientString (Json.at [ "session"; "id" ] meta)
+      ViewID = Json.lenientString (Json.at [ "view"; "id" ] meta)
+      Source = Json.lenientString (Json.at [ "source" ] meta)
       Variant = variant
       PartName = part.Name
       PartFilename = part.FileName
       // None, never the epoch: a resource has no window at all, and 1970
       // would put it on a timeline.
-      Start = tryMillis [ "start" ] meta
-      End = tryMillis [ "end" ] meta
-      RecordsCount = tryInt [ "records_count" ] meta
-      HasFullSnapshot = tryBool [ "has_full_snapshot" ] meta
+      Start = Json.at [ "start" ] meta |> Option.bind Json.truncatedInt64Of |> Option.map Time.fromUnixMillis
+      End = Json.at [ "end" ] meta |> Option.bind Json.truncatedInt64Of |> Option.map Time.fromUnixMillis
+      RecordsCount = Json.at [ "records_count" ] meta |> Option.bind Json.truncatedInt64Of
+      HasFullSnapshot = Json.at [ "has_full_snapshot" ] meta |> Option.bind Json.boolOf
       // The browser sends an index, Android an explicit null, iOS omits the
       // key: three states, so an option.
-      IndexInView = tryInt [ "index_in_view" ] meta
-      CreationReason = str [ "creation_reason" ] meta
-      RawSegmentSize = tryInt [ "raw_segment_size" ] meta
-      CompressedSegmentSize = tryInt [ "compressed_segment_size" ] meta
+      IndexInView = Json.at [ "index_in_view" ] meta |> Option.bind Json.truncatedInt64Of
+      CreationReason = Json.lenientString (Json.at [ "creation_reason" ] meta)
+      RawSegmentSize = Json.at [ "raw_segment_size" ] meta |> Option.bind Json.truncatedInt64Of
+      CompressedSegmentSize = Json.at [ "compressed_segment_size" ] meta |> Option.bind Json.truncatedInt64Of
       // The bytes go in the column that says what they are, untouched.
       Segment = (if variant = "resource" then [||] else part.Data)
       Image = (if variant = "resource" then part.Data else [||])
@@ -831,9 +637,7 @@ let replayRow (request: RumRequest) (part: MultipartPart) (meta: JsonElement) (m
 /// unprocessed, and the SDK emits zlib streams meant to be concatenated
 /// later, which inflating and re-deflating would throw away.
 let handleReplay (body: byte[]) (ctx: HttpContext) : Task =
-    let tenant = Ctx.tenant ctx
     let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     if Diagnose.isSweep ctx then
         accepted ctx
@@ -843,12 +647,10 @@ let handleReplay (body: byte[]) (ctx: HttpContext) : Task =
         if body.Length = 0 then
             accepted ctx
         else
-            match replayParts (Ctx.header ctx "Content-Type") body with
+            match Multipart.tryParts (Ctx.header ctx "Content-Type") body with
             | Error problem ->
-                log.LogWarning("[rum-replay] not multipart ({Problem}), kept raw", problem)
                 Raw.store ctx intake "unexpected_shape" $"replay body is not multipart: {problem}" body
                 accepted ctx
-            | Ok _ when tenant = "" -> accepted ctx
             | Ok parts ->
                 let request = requestInfo ctx
                 let mutable metadata: (JsonElement * string) list = []
@@ -879,7 +681,7 @@ let handleReplay (body: byte[]) (ctx: HttpContext) : Task =
                         metadata.Length
                     )
 
-                Sink.write sink RumReplaySegments.table (Array.ofList rows)
+                Ctx.write ctx RumReplaySegments.table (Array.ofList rows)
                 accepted ctx
 
 /// The span's meta as a flat map with dotted keys. meta.device and meta.os
@@ -898,7 +700,7 @@ let flattenMeta (meta: JsonElement) : Map<string, string> =
             else
                 // A null keeps its key with no value: "sent as null" stays
                 // distinct from "not sent".
-                result <- result.Add(key, textOf property.Value)
+                result <- result.Add(key, Json.text (Some property.Value))
 
         result
 
@@ -918,19 +720,19 @@ let spanRow (request: RumRequest) (env: string) (envelopeExtra: string) (o: Json
     { Req = request
       // Text, never a number: iOS writes the low 64 bits as hex, Android
       // types all three as strings.
-      TraceID = text [ "trace_id" ] o
-      SpanID = text [ "span_id" ] o
-      ParentID = text [ "parent_id" ] o
-      Name = str [ "name" ] o
-      Service = str [ "service" ] o
-      Resource = str [ "resource" ] o
-      Type = str [ "type" ] o
+      TraceID = Json.text (Json.at [ "trace_id" ] o)
+      SpanID = Json.text (Json.at [ "span_id" ] o)
+      ParentID = Json.text (Json.at [ "parent_id" ] o)
+      Name = Json.lenientString (Json.at [ "name" ] o)
+      Service = Json.lenientString (Json.at [ "service" ] o)
+      Resource = Json.lenientString (Json.at [ "resource" ] o)
+      Type = Json.lenientString (Json.at [ "type" ] o)
       Env = env
-      Start = wireNanos (intOrZero [ "start" ] o)
-      DurationNS = intOrZero [ "duration" ] o
-      Error = sbyte (intOrZero [ "error" ] o)
-      Meta = flattenMeta (objectAt [ "meta" ] o)
-      Metrics = spanMetrics (objectAt [ "metrics" ] o)
+      Start = wireNanos (Json.at [ "start" ] o |> Option.bind Json.truncatedInt64Of |> Option.defaultValue 0L)
+      DurationNS = Json.at [ "duration" ] o |> Option.bind Json.truncatedInt64Of |> Option.defaultValue 0L
+      Error = sbyte (Json.at [ "error" ] o |> Option.bind Json.truncatedInt64Of |> Option.defaultValue 0L)
+      Meta = flattenMeta (Json.at [ "meta" ] o |> Option.bind Json.objectOf |> Option.defaultValue emptyObject)
+      Metrics = spanMetrics (Json.at [ "metrics" ] o |> Option.bind Json.objectOf |> Option.defaultValue emptyObject)
       Span = raw
       EnvelopeExtra = envelopeExtra }
 
@@ -945,7 +747,7 @@ let private envelopeExtra (envelope: JsonElement) : string =
     if extra.IsEmpty then
         ""
     else
-        jsonText (fun writer ->
+        Json.write (fun writer ->
             writer.WriteStartObject()
 
             for property in extra do
@@ -959,28 +761,25 @@ let private envelopeExtra (envelope: JsonElement) : string =
 /// envelopes with a flat, hand-rolled span shape that only dd-sdk-ios and
 /// dd-sdk-android produce, with no published schema.
 let handleSpans (body: byte[]) (ctx: HttpContext) : Task =
-    let tenant = Ctx.tenant ctx
-    let sink = Ctx.sink ctx
-
     if Diagnose.isSweep ctx then
         accepted ctx
     else
         let body = inflated body ctx
 
-        if body.Length = 0 || tenant = "" then
+        if body.Length = 0 then
             accepted ctx
         else
             let request = requestInfo ctx
             let rows = ResizeArray<RumSpanRow>()
 
             for line in ndjsonLines body do
-                match parseJson line with
+                match Json.tryParse line with
                 | Error problem -> Raw.store ctx intake "decode_error" problem line
                 | Ok envelope when envelope.ValueKind <> JsonValueKind.Object && envelope.ValueKind <> JsonValueKind.Null ->
                     Raw.store ctx intake "decode_error" "span envelope is not an object" line
                 | Ok envelope ->
-                    // Go decoded a `null` envelope, a `null` spans array and
-                    // a `null` span without complaint: as empty.
+                    // A `null` envelope, a `null` spans array and a `null`
+                    // span are each read as empty.
                     let envelope = if envelope.ValueKind = JsonValueKind.Null then emptyObject else envelope
 
                     match envelope.TryGetProperty "spans" with
@@ -989,7 +788,7 @@ let handleSpans (body: byte[]) (ctx: HttpContext) : Task =
                     | true, spans when spans.ValueKind <> JsonValueKind.Array ->
                         Raw.store ctx intake "decode_error" "spans is not an array" line
                     | true, spans ->
-                        let env = Json.string "env" envelope
+                        let env = Json.lenientString (Json.field "env" envelope)
                         let extra = envelopeExtra envelope
 
                         for span in spans.EnumerateArray() do
@@ -1003,7 +802,7 @@ let handleSpans (body: byte[]) (ctx: HttpContext) : Task =
                             else
                                 Raw.store ctx intake "decode_error" "span is not an object" (Encoding.UTF8.GetBytes raw)
 
-            Sink.write sink RumSpans.table (rows.ToArray())
+            Ctx.write ctx RumSpans.table (rows.ToArray())
             accepted ctx
 
 /// GET /api/v2/profiling/quota?session_id=… — the browser profiler asks

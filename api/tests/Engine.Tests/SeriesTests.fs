@@ -166,7 +166,7 @@ let ``the window grid and zero alignment`` () =
 [<Fact>]
 let ``extras appear only when asked, as ninjacat_ fields`` () =
     let s = { Series.Series.GroupTags = [ "host:a" ]; Series.Series.Points = Map [ 0L, 1.0; 20000L, 2.0 ] }
-    let plain = NinjaCat.Api.Engine.Json.options |> fun o -> System.Text.Json.JsonSerializer.Serialize(Series.response [ 0, [ s ] ], o)
+    let plain = NinjaCat.Api.Engine.Serialization.options |> fun o -> System.Text.Json.JsonSerializer.Serialize(Series.response [ 0, [ s ] ], o)
     Assert.DoesNotContain("ninjacat_", plain)
 
     let extra: Series.SeriesExtra =
@@ -174,7 +174,7 @@ let ``extras appear only when asked, as ninjacat_ fields`` () =
           Forecast = Some [ { TimeMs = 40000L; Value = 3.0; Range = { Lower = 2.0; Upper = 4.0 } } ] }
 
     let outputs: Series.OutputResult list = [ { QueryIndex = 0; Lines = [ { Data = s; Extra = extra } ] } ]
-    let json = System.Text.Json.JsonSerializer.Serialize(Series.responseWith outputs, NinjaCat.Api.Engine.Json.options)
+    let json = System.Text.Json.JsonSerializer.Serialize(Series.responseWith outputs, NinjaCat.Api.Engine.Serialization.options)
     Assert.Contains("\"times\":[0,20000]", json)
     Assert.Contains("\"ninjacat_bounds\":[{\"upper\":[null,2.5],\"lower\":[null,1.5]}]", json)
     Assert.Contains("\"ninjacat_forecast\":[{\"times\":[40000],\"values\":[3],\"upper\":[4],\"lower\":[2]}]", json)

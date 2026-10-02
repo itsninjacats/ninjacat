@@ -27,7 +27,7 @@ let run (cfg: Config.Config) (args: string[]) : int =
         .AddOxpecker()
         // Registered after AddOxpecker so it wins: responses are written
         // with the same options requests are read with.
-        .AddSingleton<IJsonSerializer>(SystemTextJsonSerializer(NinjaCat.Api.Engine.Json.options))
+        .AddSingleton<IJsonSerializer>(SystemTextJsonSerializer(NinjaCat.Api.Engine.Serialization.options))
     |> ignore
 
     let app = builder.Build()

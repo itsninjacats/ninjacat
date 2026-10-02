@@ -27,7 +27,8 @@ Grafana's Datadog plugin can all point at it unchanged.
   (`Sql.fs`) and nothing else, so it is tested without a server.
   `Api/V2/Wire.fs` holds Datadog's v2 query shapes, each type named exactly
   after its schema in Datadog's OpenAPI spec; `Panel.fs` holds the panel's
-  own queries.
+  own queries (its metric series go through the same planner as the query
+  API).
 - `src/Storage` — the write path. `Rows/*.fs` has one record and one
   `Table` per ClickHouse table; `Writer.fs` buffers and flushes one table;
   `ClickHouseSink.fs` owns one writer per table; `Migrations.fs` applies
@@ -195,8 +196,27 @@ Where the Go server was wrong, this one is not held to it:
 - A connection's container and remote-service tags are read from
   `encodedTags`, where the agent writes them; Go read `encodedConnectionsTags`.
   The agent's placeholder set `"-"` at index 0 means "none".
-- A `null` in a list of series, points, resources, sketches or checks is left
-  out; Go lost the whole batch on it, or stored an empty element.
+- JSON is read by one rule (`JsonFields`): a member is found by its exact
+  name, the last of a repeated name counts, and null is the same as absent.
+  Go matched names without regard to case. Where a column keeps a
+  member's JSON text, an explicit null is kept as `null`: an empty string
+  is a value too, and not the one that was sent.
+- JSON of a protobuf message (`/api/v2/series`, `/api/beta/sketches`, the
+  agent's health report) is read by protobuf's own JSON parser: a field under
+  the schema's name or in camelCase, an enum by number or by name, unknown
+  keys passed over. A null inside a list or a map refuses the payload, which
+  is kept raw.
+- An event with an `alert_type` or `priority` outside Datadog's list is a row,
+  with the sender's word in `alert_type_raw`/`priority_raw`; Go kept it raw.
+- A time with a one-digit hour (`T1:30:00Z`) is not RFC 3339 and is not read
+  as one.
+- Notes on a kept payload say what the JSON was (`series[1].points: expected
+  a list of [timestamp, value] pairs, got string`); none quotes a Go error or
+  names a Go type.
+- The summaries of a trace-stats sketch are computed with `System.Math`; they
+  differ from Go's from about the 13th digit.
+- `HEAD /support/flare` answers 200 without a key: the agent's connectivity
+  check sends it with none.
 - One v1 series or distribution that is not a series is kept raw alone; Go
   kept the whole body raw and stored nothing.
 - `/api/v2/intake-key` gives back the key that came in the query string too.
@@ -258,6 +278,7 @@ Package versions live in `Directory.Packages.props` only.
 | `DATABASE_URL` | required — the same `postgres://` URL the panel uses |
 | `NINJACAT_AUTO_MIGRATE` | `true`; with several replicas set `false` and run `migrate` as a job |
 | `NINJACAT_TRUSTED_PROXIES` | none — reverse proxies in front of the intake, as addresses or networks (`10.0.0.0/8`), comma-separated. Only their `X-Forwarded-For` is believed; the loopback is always trusted |
+| `NINJACAT_MAX_BODY_BYTES` | the largest request body the intake reads, 64 MiB by default; a larger one is answered 413. A body may inflate to 64 MiB |
 | `NINJACAT_ACK_UNKNOWN` | `true` answers 202 instead of 404 on unknown intake paths |
 | `DEBUG` | `true` dumps every intake request to `NINJACAT_CAPTURE_DIR` (default `captures`) |
 | `NINJACAT_SELFMON_INTERVAL`, `NINJACAT_SELFMON_TENANT`, `NINJACAT_SELFMON_HOST` | `15s`, `default`, the machine's name |
@@ -270,7 +291,7 @@ Package versions live in `Directory.Packages.props` only.
 | `GET /health` | ClickHouse and Postgres reachability; 503 if either is down |
 | `GET /api/v1/metrics?from=<unix s>[&host=]` | Datadog's active metrics list; `tag_filter` not yet |
 | `POST /api/v2/query/timeseries`, `/api/v2/query/scalar` | Datadog's v2 query API: queries, formulas, functions |
-| `GET /internal/metrics/{names,hosts,tags,tag-values,query}` | the panel's metric pages |
+| `GET /internal/metrics/{names,tags,tag-values,query}` | the panel's metric pages |
 | `GET /internal/logs/{search,facets}` | the panel's log pages |
 
 Tenant is `"default"` on this port until requests carry one.

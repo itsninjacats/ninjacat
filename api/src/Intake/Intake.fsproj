@@ -9,6 +9,7 @@
     <Compile Include="ApiKeys.fs" />
     <Compile Include="Http.fs" />
     <Compile Include="Common.fs" />
+    <Compile Include="JsonFields.fs" />
     <Compile Include="Msgpack.fs" />
     <Compile Include="DDSketch.fs" />
     <Compile Include="ProcessFrame.fs" />
@@ -22,11 +23,9 @@
     <Compile Include="Routers/Install.fs" />
     <Compile Include="Routers/Containers.fs" />
     <Compile Include="Routers/Kubeops.fs" />
-    <Compile Include="Routers/GoCompat.fs" />
     <Compile Include="Routers/Dbm.fs" />
     <Compile Include="Routers/Ndm.fs" />
     <Compile Include="Routers/Misc.fs" />
-    <Compile Include="Routers/Lenient.fs" />
     <Compile Include="Routers/Pprof.fs" />
     <Compile Include="Routers/Profiling.fs" />
     <Compile Include="Routers/Security.fs" />
@@ -35,7 +34,6 @@
     <Compile Include="Routers/CiWebhook.fs" />
     <Compile Include="Routers/TraceSketch.fs" />
     <Compile Include="Routers/Trace.fs" />
-    <Compile Include="Routers/ProcessEnum.fs" />
     <Compile Include="Routers/ProcessBuffers.fs" />
     <Compile Include="Routers/Usm.fs" />
     <Compile Include="Routers/Process.fs" />

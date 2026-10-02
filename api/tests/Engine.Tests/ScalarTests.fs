@@ -65,7 +65,7 @@ let private run queries formulas =
         | Error es -> failwith (String.Join("\n", es))
         | Ok p ->
             match (Execute.runScalar execute (TenantId "t") p r).Result with
-            | Ok response -> JsonSerializer.Serialize(response, Json.options)
+            | Ok response -> JsonSerializer.Serialize(response, Serialization.options)
             | Error es -> failwith (String.Join("\n", es))
 
 [<Fact>]

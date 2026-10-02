@@ -15,7 +15,8 @@
     <Compile Include="Rows/Checks.fs" />
     <Compile Include="Rows/Events.fs" />
     <Compile Include="Rows/Hosts.fs" />
-    <Compile Include="Rows/ApiExtra.fs" />
+    <Compile Include="Rows/Agent.fs" />
+    <Compile Include="Rows/Runner.fs" />
     <Compile Include="Rows/Containers.fs" />
     <Compile Include="Rows/Ecs.fs" />
     <Compile Include="Rows/K8s.fs" />
@@ -29,7 +30,6 @@
     <Compile Include="Rows/Ci.fs" />
     <Compile Include="Rows/Traces.fs" />
     <Compile Include="Rows/Process.fs" />
-    <Compile Include="Rows/ProcessExtra.fs" />
     <Compile Include="Rows/Usm.fs" />
     <Compile Include="Rows/Rum.fs" />
     <Compile Include="Writer.fs" />

@@ -62,40 +62,20 @@ let private keyList (values: Map<string, 'a>) : string =
 /// string, a number and an object alike, and a string that looks like a
 /// number stays a string.
 let private extraEncoded (skip: string list) (values: Map<string, JsonElement>) : Map<string, string> =
-    values
-    |> Map.filter (fun name _ -> not (List.contains name skip))
-    |> Map.map (fun _ value -> GoJson.compact value)
+    values |> Map.filter (fun name _ -> not (List.contains name skip)) |> Json.memberTexts Json.compact
 
 /// The same for an envelope read one level down: the values byte for byte.
 let private extraRaw (skip: string list) (values: Map<string, JsonElement>) : Map<string, string> =
-    values
-    |> Map.filter (fun name _ -> not (List.contains name skip))
-    |> Map.map (fun _ value -> value.GetRawText())
+    values |> Map.filter (fun name _ -> not (List.contains name skip)) |> Json.memberTexts _.GetRawText()
 
 /// Folds a nested object's extras into the outer ones under a prefix, so two
 /// levels of one document share a column without colliding.
 let private mergeExtra (outer: Map<string, string>) (prefix: string) (nested: Map<string, string>) : Map<string, string> =
     nested |> Map.fold (fun merged name value -> merged.Add(prefix + name, value)) outer
 
-/// The text of a member as it arrived; "" when the key is absent, which is
-/// not the same statement as "{}".
-let private rawText (name: string) (values: Map<string, JsonElement>) : string =
-    match values.TryFind name with
-    | Some value -> value.GetRawText()
-    | None -> ""
-
-/// Go's time holds any int64 of seconds; DateTime stops at the year 9999, so
-/// a later value becomes the last second there is.
-let private lastSecond = 253402300799L
-
-let private unixSeconds (seconds: int64) : DateTime =
-    Time.fromUnixSeconds (min seconds lastSecond)
-
-let private wireSeconds (seconds: int64) : DateTime = Time.wireSeconds (min seconds lastSecond)
-
-/// A float timestamp as whole seconds, the way Go's int64() converts on
-/// amd64: the fraction dropped, and anything an int64 cannot hold becomes
-/// the minimum — which wireSeconds then reads as "not supplied".
+/// A float timestamp as whole seconds: the fraction dropped, and NaN or
+/// anything an int64 cannot hold becomes the minimum, which Time.wireSeconds
+/// then reads as "not supplied".
 let private wholeSeconds (value: float) : int64 =
     if Double.IsNaN value || value >= 9.2233720368547758e18 || value < -9.2233720368547758e18 then
         Int64.MinValue
@@ -114,8 +94,6 @@ let private wholeSeconds (value: float) : int64 =
 /// device series stays distinguishable from a host one.
 let handleSeriesV2 (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     if Diagnose.isSweep ctx then
         ackSeries ctx
@@ -128,64 +106,46 @@ let handleSeriesV2 (body: byte[]) (ctx: HttpContext) : Task =
 
         match decoded with
         | Error error ->
-            log.LogWarning("[v2/series] {Error}", error)
             Raw.store ctx "series" "decode_error" error body
         | Ok payload ->
-            if tenant <> "" then
-                let points = ResizeArray<MetricPoint>()
+            let points = ResizeArray<MetricPoint>()
 
-                for series in payload.Series do
-                    let host =
-                        series.Resources
-                        |> Seq.tryFind (fun resource -> resource.Type = "host")
-                        |> Option.map _.Name
-                        |> Option.defaultValue ""
+            for series in payload.Series do
+                let host =
+                    series.Resources
+                    |> Seq.tryFind (fun resource -> resource.Type = "host")
+                    |> Option.map _.Name
+                    |> Option.defaultValue ""
 
-                    let resources =
-                        series.Resources
-                        |> Seq.filter (fun resource -> resource.Type <> "host")
-                        |> Seq.map (fun resource -> resource.Type, resource.Name)
-                        |> Map.ofSeq
+                let resources =
+                    series.Resources
+                    |> Seq.filter (fun resource -> resource.Type <> "host")
+                    |> Seq.map (fun resource -> resource.Type, resource.Name)
+                    |> Map.ofSeq
 
-                    let origin =
-                        if isNull series.Metadata || isNull series.Metadata.Origin then
-                            Origin()
-                        else
-                            series.Metadata.Origin
+                let origin =
+                    if isNull series.Metadata || isNull series.Metadata.Origin then
+                        Origin()
+                    else
+                        series.Metadata.Origin
 
-                    let tags = Tags.toMultiMap series.Tags
+                let tags = Tags.toMultiMap series.Tags
 
-                    for point in series.Points do
-                        points.Add
-                            { Metrics.point tenant (wireSeconds point.Timestamp) series.Metric point.Value with
-                                Host = host
-                                MetricType = Wire.metricTypeName (int series.Type)
-                                SourceType = series.SourceTypeName
-                                Unit = series.Unit
-                                Interval = uint32 series.Interval
-                                Tags = tags
-                                OriginProduct = origin.OriginProduct
-                                OriginCategory = origin.OriginCategory
-                                OriginService = origin.OriginService
-                                Resources = resources }
+                for point in series.Points do
+                    points.Add
+                        { Metrics.point tenant (Time.wireSeconds point.Timestamp) series.Metric point.Value with
+                            Host = host
+                            MetricType = Wire.metricTypeName (int series.Type)
+                            SourceType = series.SourceTypeName
+                            Unit = series.Unit
+                            Interval = uint32 series.Interval
+                            Tags = tags
+                            OriginProduct = origin.OriginProduct
+                            OriginCategory = origin.OriginCategory
+                            OriginService = origin.OriginService
+                            Resources = resources }
 
-                if log.IsEnabled LogLevel.Debug then
-                    // The agent also writes Origin field 3 (metric_type = 9,
-                    // "do not index"), which the published proto reserves. A
-                    // reserved field has no name to decode into, so it is
-                    // counted, not stored.
-                    let doNotIndex =
-                        payload.Series
-                        |> Seq.filter (fun series ->
-                            not (isNull series.Metadata)
-                            && not (isNull series.Metadata.Origin)
-                            && hasUnknownFields Origin.Parser series.Metadata.Origin)
-                        |> Seq.length
-
-                    if doNotIndex > 0 then
-                        log.LogDebug("[v2/series] {Count} series flagged do-not-index by the agent (Origin field 3)", doNotIndex)
-
-                Sink.write sink Metrics.table (points.ToArray())
+            Ctx.write ctx Metrics.table (points.ToArray())
 
         ackSeries ctx
 
@@ -198,30 +158,20 @@ let normalizeTypeWord (word: string) : string =
     | "gauge" -> "GAUGE"
     | _ -> "UNSPECIFIED"
 
-let private additionalString (name: string) (values: Map<string, JsonElement>) : string =
-    GoJson.lenientString (values.TryFind name)
-
 /// /api/v1/series: the older public API, JSON only. The agent's v1 encoder
-/// also writes device, source_type_name and unit, which the model does not
-/// declare: the last two have columns, device goes into the resources map
-/// under the name v2 uses for it, anything else undeclared into `extra`.
+/// also writes device, source_type_name and unit, which the API does not
+/// have: the last two have columns, device goes into the resources map under
+/// the name v2 uses for it, anything else the API does not have into `extra`.
 let handleSeriesV1 (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     if Diagnose.isSweep ctx then
         ackSeries ctx
     else
         match parseSeriesV1 body with
         | Error error ->
-            log.LogWarning("[v1/series] {Error}", error)
             Raw.store ctx "series" "decode_error" error body
         | Ok payload ->
-            if payload.Unparsed then
-                log.LogWarning("[v1/series] the payload did not fit datadogV1.MetricsPayload, kept raw")
-                Raw.store ctx "series" "unexpected_shape" "v1 payload did not fit datadogV1.MetricsPayload" body
-
             if not payload.Additional.IsEmpty then
                 // A key beside `series` belongs to the batch, not to a point:
                 // copying it onto every row would multiply it. The body is
@@ -233,67 +183,55 @@ let handleSeriesV1 (body: byte[]) (ctx: HttpContext) : Task =
                     ("v1 payload carried undeclared top-level keys: " + keyList payload.Additional)
                     body
 
-            for at, item in payload.Rejected do
-                log.LogWarning("[v1/series] series #{Index} is not a datadogV1.Series, kept raw", at)
-                Raw.store ctx "series" "unexpected_shape" $"v1 series #{at} is not a datadogV1.Series" (GoJson.rawBytes item)
+            for _, item, why in payload.Rejected do
+                Raw.store ctx "series" "unexpected_shape" why (Json.rawBytes item)
 
-            if tenant <> "" then
-                let points = ResizeArray<MetricPoint>()
-                let mutable badPoints = 0
+            let points = ResizeArray<MetricPoint>()
 
-                for i in 0 .. payload.Series.Length - 1 do
-                    let series = payload.Series[i]
-                    let at = payload.Positions[i]
+            for i in 0 .. payload.Series.Length - 1 do
+                let series = payload.Series[i]
+                let at = payload.Positions[i]
 
-                    if series.Unparsed then
-                        log.LogWarning("[v1/series] series #{Index} did not fit datadogV1.Series, kept raw", at)
-                        Raw.store ctx "series" "unexpected_shape" $"v1 series #{at} did not fit datadogV1.Series" (GoJson.rawBytes series.Raw)
-                    else
-                        let interval =
-                            match series.Interval with
-                            | Some seconds -> uint32 seconds
-                            | None -> 0u
+                let interval =
+                    match series.Interval with
+                    | Some seconds -> uint32 seconds
+                    | None -> 0u
 
-                        let resources =
-                            match additionalString "device" series.Additional with
-                            | "" -> Map.empty
-                            | device -> Map.ofList [ "device", device ]
+                let resources =
+                    match Json.lenientString (series.Additional.TryFind "device") with
+                    | "" -> Map.empty
+                    | device -> Map.ofList [ "device", device ]
 
-                        let extra = extraEncoded [ "device"; "source_type_name"; "unit" ] series.Additional
-                        let tags = Tags.toMultiMap series.Tags
+                let extra = extraEncoded [ "device"; "source_type_name"; "unit" ] series.Additional
+                let tags = Tags.toMultiMap series.Tags
 
-                        for j in 0 .. series.Points.Length - 1 do
-                            let point = series.Points[j]
+                for j in 0 .. series.Points.Length - 1 do
+                    let point = series.Points[j]
 
-                            match point.Pair |> Array.truncate 2 with
-                            | [| Some timestamp; Some value |] ->
-                                points.Add
-                                    { Metrics.point tenant (wireSeconds (wholeSeconds timestamp)) series.Metric value with
-                                        Host = series.Host
-                                        MetricType = normalizeTypeWord series.Type
-                                        SourceType = additionalString "source_type_name" series.Additional
-                                        Unit = additionalString "unit" series.Additional
-                                        Interval = interval
-                                        Tags = tags
-                                        Resources = resources
-                                        Extra = extra }
-                            | _ ->
-                                // The series is stored through its other
-                                // points; the pair is the smallest thing
-                                // worth keeping.
-                                badPoints <- badPoints + 1
+                    match point.Pair |> Array.truncate 2 with
+                    | [| Some timestamp; Some value |] ->
+                        points.Add
+                            { Metrics.point tenant (Time.wireSeconds (wholeSeconds timestamp)) series.Metric value with
+                                Host = series.Host
+                                MetricType = normalizeTypeWord series.Type
+                                SourceType = Json.lenientString (series.Additional.TryFind "source_type_name")
+                                Unit = Json.lenientString (series.Additional.TryFind "unit")
+                                Interval = interval
+                                Tags = tags
+                                Resources = resources
+                                Extra = extra }
+                    | _ ->
+                        // The series is stored through its other
+                        // points; the pair is the smallest thing
+                        // worth keeping.
+                        Raw.store
+                            ctx
+                            "series"
+                            "unexpected_shape"
+                            $"series[{at}].points[{j}]: expected a [timestamp, value] pair of numbers"
+                            (Json.rawBytes point.Raw)
 
-                                Raw.store
-                                    ctx
-                                    "series"
-                                    "unexpected_shape"
-                                    $"v1 series #{at} ({series.Metric}) point #{j} has a nil timestamp or value"
-                                    (GoJson.rawBytes point.Raw)
-
-                if badPoints > 0 then
-                    log.LogWarning("[v1/series] {Count} points had a nil timestamp or value, kept raw", badPoints)
-
-                Sink.write sink Metrics.table (points.ToArray())
+            Ctx.write ctx Metrics.table (points.ToArray())
 
         ackSeries ctx
 
@@ -302,7 +240,6 @@ let handleSeriesV1 (body: byte[]) (ctx: HttpContext) : Task =
 /// credential and is not carried over. An all-empty block is not stored.
 let private storeBatchMetadata (ctx: HttpContext) (intake: string) (sender: CommonMetadata) : unit =
     let tenant = Ctx.tenant ctx
-    let sink = Ctx.sink ctx
 
     let empty =
         sender.AgentVersion = ""
@@ -311,7 +248,7 @@ let private storeBatchMetadata (ctx: HttpContext) (intake: string) (sender: Comm
         && sender.InternalIp = ""
         && sender.PublicIp = ""
 
-    if tenant <> "" && not empty then
+    if not empty then
         let row: AgentBatchMetadataRow =
             { TenantID = tenant
               ReceivedAt = DateTime.UtcNow
@@ -322,7 +259,7 @@ let private storeBatchMetadata (ctx: HttpContext) (intake: string) (sender: Comm
               InternalIP = sender.InternalIp
               PublicIP = sender.PublicIp }
 
-        Sink.write sink AgentBatchMetadata.table [| row |]
+        Ctx.write ctx AgentBatchMetadata.table [| row |]
 
 /// /api/beta/sketches: DDSketch histograms the agent has already built. One
 /// row per dogsketch, not per metric: each is its own point in time.
@@ -333,8 +270,6 @@ let private storeBatchMetadata (ctx: HttpContext) (intake: string) (sender: Comm
 /// whole.
 let handleSketches (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     if Diagnose.isSweep ctx then
         ackSeries ctx
@@ -347,53 +282,49 @@ let handleSketches (body: byte[]) (ctx: HttpContext) : Task =
 
         match decoded with
         | Error error ->
-            log.LogWarning("[sketches] {Error}", error)
             Raw.store ctx "sketches" "decode_error" error body
         | Ok payload ->
-            if tenant <> "" then
-                let rows = ResizeArray<SketchRow>()
+            let rows = ResizeArray<SketchRow>()
 
-                for sketch in payload.Sketches do
-                    if sketch.Distributions.Count > 0 then
-                        log.LogWarning("[sketches] legacy Distribution for {Metric}, kept raw", sketch.Metric)
+            for sketch in payload.Sketches do
+                if sketch.Distributions.Count > 0 then
+                    Raw.store
+                        ctx
+                        "sketches"
+                        "no_schema"
+                        $"legacy pre-DDSketch Distribution for {sketch.Metric} has no row shape"
+                        (Encoding.UTF8.GetBytes(ProtoJson.message sketch))
 
-                        Raw.store
-                            ctx
-                            "sketches"
-                            "no_schema"
-                            $"legacy pre-DDSketch Distribution for {sketch.Metric} has no row shape"
-                            (Encoding.UTF8.GetBytes(ProtoJson.message sketch))
+                let origin =
+                    if isNull sketch.Metadata || isNull sketch.Metadata.Origin then
+                        Origin()
+                    else
+                        sketch.Metadata.Origin
 
-                    let origin =
-                        if isNull sketch.Metadata || isNull sketch.Metadata.Origin then
-                            Origin()
-                        else
-                            sketch.Metadata.Origin
+                let tags = Tags.toMultiMap sketch.Tags
 
-                    let tags = Tags.toMultiMap sketch.Tags
+                for dogsketch in sketch.Dogsketches do
+                    rows.Add
+                        { TenantID = tenant
+                          Timestamp = Time.wireSeconds dogsketch.Ts
+                          Metric = sketch.Metric
+                          Host = sketch.Host
+                          Tags = tags
+                          Count = uint64 dogsketch.Cnt
+                          Min = dogsketch.Min
+                          Max = dogsketch.Max
+                          Avg = dogsketch.Avg
+                          Sum = dogsketch.Sum
+                          BucketKeys = Array.ofSeq dogsketch.K
+                          BucketCounts = Array.ofSeq dogsketch.N
+                          OriginProduct = origin.OriginProduct
+                          OriginCategory = origin.OriginCategory
+                          OriginService = origin.OriginService
+                          Resources = Map.empty
+                          Extra = Map.empty }
 
-                    for dogsketch in sketch.Dogsketches do
-                        rows.Add
-                            { TenantID = tenant
-                              Timestamp = wireSeconds dogsketch.Ts
-                              Metric = sketch.Metric
-                              Host = sketch.Host
-                              Tags = tags
-                              Count = uint64 dogsketch.Cnt
-                              Min = dogsketch.Min
-                              Max = dogsketch.Max
-                              Avg = dogsketch.Avg
-                              Sum = dogsketch.Sum
-                              BucketKeys = Array.ofSeq dogsketch.K
-                              BucketCounts = Array.ofSeq dogsketch.N
-                              OriginProduct = origin.OriginProduct
-                              OriginCategory = origin.OriginCategory
-                              OriginService = origin.OriginService
-                              Resources = Map.empty
-                              Extra = Map.empty }
-
-                Sink.write sink Sketches.table (rows.ToArray())
-                storeBatchMetadata ctx "sketches" (if isNull payload.Metadata then CommonMetadata() else payload.Metadata)
+            Ctx.write ctx Sketches.table (rows.ToArray())
+            storeBatchMetadata ctx "sketches" (if isNull payload.Metadata then CommonMetadata() else payload.Metadata)
 
         ackSeries ctx
 
@@ -411,39 +342,26 @@ let distributionPoint (items: DistributionItem[]) : (DateTime * float[]) option 
         | Absent
         | Unfit -> ()
 
-    if values.Length = 0 then None else Some(wireSeconds (wholeSeconds timestamp), values)
+    if values.Length = 0 then None else Some(Time.wireSeconds (wholeSeconds timestamp), values)
 
 /// /api/v1/distribution_points. The agent never calls this — it sends
 /// finished sketches. Clients send RAW VALUES here, so the sketch is built on
 /// our side, with the agent's own bucketing so both sources merge by key.
 ///
 /// The raw values are not kept: a distribution exists to be merged with the
-/// agent's sketches, which arrive already bucketed. What the model could not
-/// fit is kept whole: a body with no series list, a series that fit no
-/// series, a pair that could not be split.
+/// agent's sketches, which arrive already bucketed. What does not fit is kept
+/// whole: a body with no series list, an element that is not a series, a
+/// pair that could not be split.
 let handleDistributionPoints (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     if Diagnose.isSweep ctx then
         ackSeries ctx
     else
         match parseDistributionPoints body with
         | Error error ->
-            log.LogWarning("[distribution_points] {Error}", error)
             Raw.store ctx "distribution_points" "decode_error" error body
         | Ok payload ->
-            if payload.Unparsed then
-                log.LogWarning("[distribution_points] the payload did not fit the model, kept raw")
-
-                Raw.store
-                    ctx
-                    "distribution_points"
-                    "unexpected_shape"
-                    "payload did not fit datadogV1.DistributionPointsPayload"
-                    body
-
             if not payload.Additional.IsEmpty then
                 Raw.store
                     ctx
@@ -452,81 +370,64 @@ let handleDistributionPoints (body: byte[]) (ctx: HttpContext) : Task =
                     ("payload carried undeclared top-level keys: " + keyList payload.Additional)
                     body
 
-            for at, item in payload.Rejected do
-                log.LogWarning("[distribution_points] series #{Index} is not a series, kept raw", at)
+            for _, item, why in payload.Rejected do
+                Raw.store ctx "distribution_points" "unexpected_shape" why (Json.rawBytes item)
 
-                Raw.store
-                    ctx
-                    "distribution_points"
-                    "unexpected_shape"
-                    $"series #{at} is not a datadogV1.DistributionPointsSeries"
-                    (GoJson.rawBytes item)
+            let rows = ResizeArray<SketchRow>()
 
-            if tenant <> "" then
-                let rows = ResizeArray<SketchRow>()
-                let mutable badPairs = 0
+            for i in 0 .. payload.Series.Length - 1 do
+                let series = payload.Series[i]
+                let at = payload.Positions[i]
 
-                for i in 0 .. payload.Series.Length - 1 do
-                    let series = payload.Series[i]
-                    let at = payload.Positions[i]
+                if series.Type <> "" && series.Type <> "distribution" then
+                    // Noted, and the points still become rows: a typo in
+                    // that one word must not cost a host its distribution.
+                    Raw.store
+                        ctx
+                        "distribution_points"
+                        "unexpected_shape"
+                        $"series[{at}].type: expected \"distribution\", got \"{series.Type}\""
+                        (Json.rawBytes series.Raw)
 
-                    if series.Unparsed then
-                        // When only the `type` word was wrong the points came
-                        // through and still become rows: a typo there must
-                        // not cost a host its distribution.
-                        log.LogWarning("[distribution_points] series #{Index} did not fit the model, kept raw", at)
+                let extra = extraEncoded [] series.Additional
+                let tags = Tags.toMultiMap series.Tags
 
+                for j in 0 .. series.Points.Length - 1 do
+                    let point = series.Points[j]
+                    let unfit = point.Items |> Array.exists (fun item -> item = Unfit)
+
+                    match distributionPoint point.Items with
+                    | Some(timestamp, values) when not unfit ->
+                        let sketch = DDSketch.build values
+                        let stats = sketch.Stats
+
+                        rows.Add
+                            { TenantID = tenant
+                              Timestamp = timestamp
+                              Metric = series.Metric
+                              Host = series.Host
+                              Tags = tags
+                              Count = uint64 stats.Count
+                              Min = stats.Min
+                              Max = stats.Max
+                              Avg = stats.Avg
+                              Sum = stats.Sum
+                              BucketKeys = sketch.Keys
+                              BucketCounts = sketch.Counts
+                              OriginProduct = 0u
+                              OriginCategory = 0u
+                              OriginService = 0u
+                              Resources = Map.empty
+                              Extra = extra }
+                    | _ ->
                         Raw.store
                             ctx
                             "distribution_points"
                             "unexpected_shape"
-                            $"series #{at} did not fit datadogV1.DistributionPointsSeries"
-                            (GoJson.rawBytes series.Raw)
+                            $"series[{at}].points[{j}]: expected a [timestamp, [values]] pair"
+                            (Json.rawBytes point.Raw)
 
-                    let extra = extraEncoded [] series.Additional
-                    let tags = Tags.toMultiMap series.Tags
-
-                    for j in 0 .. series.Points.Length - 1 do
-                        let point = series.Points[j]
-                        let unfit = point.Items |> Array.exists (fun item -> item = Unfit)
-
-                        match distributionPoint point.Items with
-                        | Some(timestamp, values) when not unfit ->
-                            let sketch = DDSketch.build values
-                            let stats = sketch.Stats
-
-                            rows.Add
-                                { TenantID = tenant
-                                  Timestamp = timestamp
-                                  Metric = series.Metric
-                                  Host = series.Host
-                                  Tags = tags
-                                  Count = uint64 stats.Count
-                                  Min = stats.Min
-                                  Max = stats.Max
-                                  Avg = stats.Avg
-                                  Sum = stats.Sum
-                                  BucketKeys = sketch.Keys
-                                  BucketCounts = sketch.Counts
-                                  OriginProduct = 0u
-                                  OriginCategory = 0u
-                                  OriginService = 0u
-                                  Resources = Map.empty
-                                  Extra = extra }
-                        | _ ->
-                            badPairs <- badPairs + 1
-
-                            Raw.store
-                                ctx
-                                "distribution_points"
-                                "unexpected_shape"
-                                $"series #{at} ({series.Metric}) point #{j} is not a [timestamp, [values]] pair"
-                                (GoJson.rawBytes point.Raw)
-
-                if badPairs > 0 then
-                    log.LogWarning("[distribution_points] {Count} points were not [timestamp, [values]] pairs, kept raw", badPairs)
-
-                Sink.write sink Sketches.table (rows.ToArray())
+            Ctx.write ctx Sketches.table (rows.ToArray())
 
         ackSeries ctx
 
@@ -545,50 +446,29 @@ let statusName (status: int) : string =
 /// of it is there"; monitors of the "service is down" kind are built on these.
 let handleCheckRun (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     if Diagnose.isSweep ctx then
         ackSeries ctx
     else
         match parseCheckRuns body with
         | Error error ->
-            log.LogWarning("[check_run] {Error}", error)
             Raw.store ctx "check_run" "decode_error" error body
         | Ok checks ->
-            if not checks.Undecodable.IsEmpty then
-                log.LogWarning("[check_run] {Count} checks could not be decoded, kept raw", checks.Undecodable.Length)
+            for _, item, why in checks.Rejected do
+                Raw.store ctx "check_run" "unexpected_shape" why (Json.rawBytes item)
 
-            checks.Undecodable
-            |> List.iteri (fun i item ->
-                Raw.store ctx "check_run" "unexpected_shape" $"check #{i} is not a datadogV1.ServiceCheck" (GoJson.rawBytes item))
+            let rows =
+                [| for run in checks.Runs ->
+                       { TenantID = tenant
+                         Timestamp = Time.wireSeconds run.Timestamp
+                         CheckName = run.Check
+                         Host = run.HostName
+                         Status = statusName run.Status
+                         Message = run.Message
+                         Tags = Tags.toMultiMap run.Tags
+                         Extra = extraEncoded [] run.Additional } |]
 
-            if tenant <> "" then
-                let rows = ResizeArray<CheckRunRow>()
-
-                checks.Runs
-                |> List.iteri (fun i run ->
-                    if run.Unparsed then
-                        log.LogWarning("[check_run] check #{Index} did not fit datadogV1.ServiceCheck, kept raw", i)
-
-                        Raw.store
-                            ctx
-                            "check_run"
-                            "unexpected_shape"
-                            $"check #{i} did not fit datadogV1.ServiceCheck"
-                            (GoJson.rawBytes run.Raw)
-                    else
-                        rows.Add
-                            { TenantID = tenant
-                              Timestamp = wireSeconds run.Timestamp
-                              CheckName = run.Check
-                              Host = run.HostName
-                              Status = statusName run.Status
-                              Message = run.Message
-                              Tags = Tags.toMultiMap run.Tags
-                              Extra = extraEncoded [] run.Additional })
-
-                Sink.write sink Checks.table (rows.ToArray())
+            Ctx.write ctx Checks.table rows
 
         ackSeries ctx
 
@@ -619,62 +499,42 @@ let private newEventId () : Guid * uint64 =
 /// id.
 let handleEvents (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     if Diagnose.isSweep ctx then
         (setStatusCode 202 >=> json {| status = "ok" |}) ctx
     else
         match parseEvents body with
         | Error error ->
-            log.LogWarning("[events] {Error}", error)
             Raw.store ctx "events" "decode_error" error body
             (setStatusCode 400 >=> json {| status = "error"; error = error |}) ctx
         | Ok [] -> (setStatusCode 400 >=> json {| status = "error"; error = "no event with a title" |}) ctx
         | Ok events ->
-            let rows = ResizeArray<EventRow>()
-            // Every event gets an id, stored or not: the reply carries the
-            // first one's.
+            // Every event gets an id; the reply carries the first one's.
             let ids = events |> List.map (fun _ -> newEventId ())
             let firstId = snd ids.Head
 
-            List.zip events ids
-            |> List.iteri (fun i (event, (id, number)) ->
-                if event.Unparsed then
-                    // Nothing decoded, or an alert_type or priority outside
-                    // the enum. Coercing an event whose own words could not
-                    // be read would put a guess in a column.
-                    log.LogWarning("[events] event #{Index} did not fit datadogV1.EventCreateRequest, kept raw", i)
+            let rows =
+                [| for event, (id, number) in List.zip events ids ->
+                       { TenantID = tenant
+                         Timestamp = Time.wireSeconds event.DateHappened
+                         EventID = id
+                         EventIDNum = number
+                         Title = event.Title
+                         Text = event.Text
+                         Host = event.Host
+                         AlertType = coerceAlertType event.AlertType
+                         Priority = coercePriority (defaultArg event.Priority "")
+                         AggregationKey = event.AggregationKey
+                         SourceTypeName = event.SourceTypeName
+                         DeviceName = event.DeviceName
+                         Tags = Tags.toMultiMap (defaultArg event.Tags [||])
+                         EventType = ""
+                         RelatedEventID = event.RelatedEventId
+                         AlertTypeRaw = event.AlertType
+                         PriorityRaw = defaultArg event.Priority ""
+                         Extra = extraEncoded [] event.Additional } |]
 
-                    Raw.store
-                        ctx
-                        "events"
-                        "unexpected_shape"
-                        $"event #{i} did not fit datadogV1.EventCreateRequest"
-                        (GoJson.rawBytes event.Raw)
-                else
-                    rows.Add
-                        { TenantID = tenant
-                          Timestamp = wireSeconds event.DateHappened
-                          EventID = id
-                          EventIDNum = number
-                          Title = event.Title
-                          Text = event.Text
-                          Host = event.Host
-                          AlertType = coerceAlertType event.AlertType
-                          Priority = coercePriority (defaultArg event.Priority "")
-                          AggregationKey = event.AggregationKey
-                          SourceTypeName = event.SourceTypeName
-                          DeviceName = event.DeviceName
-                          Tags = Tags.toMultiMap (defaultArg event.Tags [||])
-                          EventType = ""
-                          RelatedEventID = event.RelatedEventId
-                          AlertTypeRaw = event.AlertType
-                          PriorityRaw = defaultArg event.Priority ""
-                          Extra = extraEncoded [] event.Additional })
-
-            if tenant <> "" then
-                Sink.write sink Events.table (rows.ToArray())
+            Ctx.write ctx Events.table rows
 
             let first = events.Head
 
@@ -685,7 +545,7 @@ let handleEvents (body: byte[]) (ctx: HttpContext) : Task =
                        id_str = string firstId
                        title = first.Title
                        text = first.Text
-                       date_happened = DateTimeOffset(wireSeconds first.DateHappened).ToUnixTimeSeconds()
+                       date_happened = DateTimeOffset(Time.wireSeconds first.DateHappened).ToUnixTimeSeconds()
                        host = first.Host
                        alert_type = coerceAlertType first.AlertType
                        priority = coercePriority (defaultArg first.Priority "")
@@ -700,9 +560,6 @@ let handleEvents (body: byte[]) (ctx: HttpContext) : Task =
 // /intake/: the Agent v5 endpoint
 // ---------------------------------------------------------------------------
 
-let private eventText (name: string) (fields: Map<string, JsonElement>) : string =
-    GoJson.lenientString (fields.TryFind name)
-
 /// One agent event (pkg/metrics/event.Event) as the shared events row. The
 /// agent's names differ from the public API's for the same three things:
 /// msg_title, msg_text and timestamp against title, text and date_happened.
@@ -711,30 +568,30 @@ let private eventText (name: string) (fields: Map<string, JsonElement>) : string
 /// the event does not repeat it; likewise the payload's host stands in for an
 /// event with none of its own.
 let intakeEventRow (tenant: string) (source: string) (payloadHost: string) (event: JsonElement) : EventRow =
-    let fields = GoJson.members event
+    let fields = Json.members event
     let id, number = newEventId ()
-    let alertRaw = eventText "alert_type" fields
-    let priorityRaw = eventText "priority" fields
+    let alertRaw = Json.lenientString (fields.TryFind "alert_type")
+    let priorityRaw = Json.lenientString (fields.TryFind "priority")
 
     let tags =
         match fields.TryFind "tags" with
-        | Some list when list.ValueKind = JsonValueKind.Array -> list.EnumerateArray() |> Seq.choose GoJson.asString |> List.ofSeq
+        | Some list when list.ValueKind = JsonValueKind.Array -> list.EnumerateArray() |> Seq.choose Json.stringOf |> List.ofSeq
         | _ -> []
 
     { TenantID = tenant
-      Timestamp = wireSeconds (GoJson.lenientInt64 (fields.TryFind "timestamp"))
+      Timestamp = Time.wireSeconds (Json.lenientInt64 (fields.TryFind "timestamp"))
       EventID = id
       EventIDNum = number
-      Title = eventText "msg_title" fields
-      Text = eventText "msg_text" fields
-      Host = Text.firstNonEmpty [ eventText "host" fields; payloadHost ]
+      Title = Json.lenientString (fields.TryFind "msg_title")
+      Text = Json.lenientString (fields.TryFind "msg_text")
+      Host = Text.firstNonEmpty [ Json.lenientString (fields.TryFind "host"); payloadHost ]
       AlertType = coerceAlertType alertRaw
       Priority = coercePriority priorityRaw
-      AggregationKey = eventText "aggregation_key" fields
-      SourceTypeName = Text.firstNonEmpty [ eventText "source_type_name" fields; source ]
+      AggregationKey = Json.lenientString (fields.TryFind "aggregation_key")
+      SourceTypeName = Text.firstNonEmpty [ Json.lenientString (fields.TryFind "source_type_name"); source ]
       DeviceName = ""
       Tags = Tags.toMultiMap tags
-      EventType = eventText "event_type" fields
+      EventType = Json.lenientString (fields.TryFind "event_type")
       RelatedEventID = None
       AlertTypeRaw = alertRaw
       PriorityRaw = priorityRaw
@@ -750,7 +607,6 @@ let private eventsBySource (events: JsonElement) : Result<Map<string, JsonElemen
     match events.ValueKind with
     | JsonValueKind.Null -> Ok Map.empty
     | JsonValueKind.Object ->
-        // The texts are Go's own, path included, for the raw row's note.
         let problem (source: string) (list: JsonElement) : string option =
             match list.ValueKind with
             | JsonValueKind.Null -> None
@@ -758,45 +614,38 @@ let private eventsBySource (events: JsonElement) : Result<Map<string, JsonElemen
                 list.EnumerateArray()
                 |> Seq.indexed
                 |> Seq.tryFind (fun (_, event) -> event.ValueKind <> JsonValueKind.Object && event.ValueKind <> JsonValueKind.Null)
-                |> Option.map (fun (i, event) ->
-                    $"json: cannot unmarshal {GoJson.kindName event} into .{source}.{i} of type map[string]interface {{}}")
-            | _ ->
-                Some
-                    $"json: cannot unmarshal {GoJson.kindName list} into Go struct field .{source} of type []map[string]interface {{}}"
+                |> Option.map (fun (i, event) -> $"events.{source}[{i}]: expected an object, got {Json.kind event}")
+            | _ -> Some $"events.{source}: expected a list, got {Json.kind list}"
 
         match events.EnumerateObject() |> Seq.tryPick (fun source -> problem source.Name source.Value) with
         | Some error -> Error error
         | None ->
-            GoJson.members events
+            Json.members events
             |> Map.map (fun _ list -> if list.ValueKind = JsonValueKind.Array then List.ofSeq (list.EnumerateArray()) else [])
             |> Ok
-    | _ -> Error(GoJson.mismatch events "map[string][]map[string]interface {}")
+    | _ -> Error $"events: expected an object, got {Json.kind events}"
 
 /// The events variant: {"events": {<source>: [...]}, "internalHostname"}.
 /// The rows go to the same table as /api/v1/events.
 let private intakeEvents (ctx: HttpContext) (envelope: Map<string, JsonElement>) : unit =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     let events = envelope["events"]
 
     match eventsBySource events with
     | Error error ->
-        log.LogWarning("[intake] events: {Error}", error)
-        Raw.store ctx "intake" "unexpected_shape" ("events is not a source -> events map: " + error) (GoJson.rawBytes events)
+        Raw.store ctx "intake" "unexpected_shape" error (Json.rawBytes events)
     | Ok bySource ->
-        if tenant <> "" then
-            let host = GoJson.lenientString (envelope.TryFind "internalHostname")
+        let host = Json.lenientString (envelope.TryFind "internalHostname")
 
-            // By source in sorted order, so two replays of one payload give
-            // the same rows.
-            let rows =
-                [| for pair in bySource do
-                       for event in pair.Value do
-                           intakeEventRow tenant pair.Key host event |]
+        // By source in sorted order, so two replays of one payload give
+        // the same rows.
+        let rows =
+            [| for pair in bySource do
+                   for event in pair.Value do
+                       intakeEventRow tenant pair.Key host event |]
 
-            Sink.write sink Events.table rows
+        Ctx.write ctx Events.table rows
 
 /// One positional agent_checks entry: 0 check name, 1 source type, 2 instance
 /// id, 3 status, 4 message. A shorter array is normal, which is why Status is
@@ -813,7 +662,7 @@ let agentCheckRow
     (positional: JsonElement[])
     : AgentCheckRow =
     let text (i: int) : string =
-        if i < positional.Length then GoJson.lenientString (Some positional[i]) else ""
+        if i < positional.Length then Json.lenientString (Some positional[i]) else ""
 
     { TenantID = tenant
       ReceivedAt = at
@@ -823,15 +672,10 @@ let agentCheckRow
       CheckName = text 0
       SourceType = text 1
       InstanceID = text 2
-      Status = if positional.Length > 3 then GoJson.asInt64 positional[3] else None
+      Status = if positional.Length > 3 then Json.int64Of positional[3] else None
       Message = text 4
-      PositionalExtra = if positional.Length > 5 then GoJson.compactArray (Array.skip 5 positional) else ""
+      PositionalExtra = if positional.Length > 5 then Json.compactArray (Array.skip 5 positional) else ""
       Meta = meta }
-
-let private arrayItems (value: JsonElement option) : JsonElement list =
-    match value with
-    | Some list when list.ValueKind = JsonValueKind.Array -> List.ofSeq (list.EnumerateArray())
-    | _ -> []
 
 /// The agent_checks variant (the V5 collector's payload): check statuses as
 /// positional arrays, and external_host_tags, [[hostname, {source: [tags]}]]
@@ -839,61 +683,55 @@ let private arrayItems (value: JsonElement option) : JsonElement list =
 /// table of their own.
 let private intakeAgentChecks (ctx: HttpContext) (envelope: Map<string, JsonElement>) : unit =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
-    let checks = arrayItems (envelope.TryFind "agent_checks")
+    let checks = Json.lenientItems (envelope.TryFind "agent_checks")
 
     let externalTags =
-        arrayItems (envelope.TryFind "external_host_tags")
+        Json.lenientItems (envelope.TryFind "external_host_tags")
         |> List.mapi (fun i entry ->
             if entry.ValueKind = JsonValueKind.Array && entry.GetArrayLength() = 2 then
-                Some(GoJson.lenientString (Some entry[0]), GoJson.lenientStringLists (Some entry[1]))
+                Some(Json.lenientString (Some entry[0]), Json.lenientStringLists (Some entry[1]))
             else
-                log.LogWarning("[intake] external_host_tags[{Index}] is not a [hostname, tags] pair", i)
-
                 Raw.store
                     ctx
                     "intake"
                     "unexpected_shape"
                     $"external_host_tags[{i}] is not a [hostname, tags] pair"
-                    (GoJson.rawBytes entry)
+                    (Json.rawBytes entry)
 
                 None)
 
-    if tenant <> "" then
-        let now = DateTime.UtcNow
-        let host = GoJson.lenientString (envelope.TryFind "internalHostname")
-        let version = GoJson.lenientString (envelope.TryFind "agentVersion")
-        let uuid = GoJson.lenientString (envelope.TryFind "uuid")
-        let meta = rawText "meta" envelope
-        let checkRows = ResizeArray<AgentCheckRow>()
+    let now = DateTime.UtcNow
+    let host = Json.lenientString (envelope.TryFind "internalHostname")
+    let version = Json.lenientString (envelope.TryFind "agentVersion")
+    let uuid = Json.lenientString (envelope.TryFind "uuid")
+    let meta = Json.rawOrEmpty (envelope.TryFind "meta")
+    let checkRows = ResizeArray<AgentCheckRow>()
 
-        checks
-        |> List.iteri (fun i check ->
-            if check.ValueKind = JsonValueKind.Array then
-                checkRows.Add(agentCheckRow tenant now host version uuid meta (Array.ofSeq (check.EnumerateArray())))
-            else
-                log.LogWarning("[intake] agent_checks[{Index}] is not an array", i)
-                Raw.store ctx "intake" "unexpected_shape" $"agent_checks[{i}] is not a positional array" (GoJson.rawBytes check))
+    checks
+    |> List.iteri (fun i check ->
+        if check.ValueKind = JsonValueKind.Array then
+            checkRows.Add(agentCheckRow tenant now host version uuid meta (Array.ofSeq (check.EnumerateArray())))
+        else
+            Raw.store ctx "intake" "unexpected_shape" $"agent_checks[{i}] is not a positional array" (Json.rawBytes check))
 
-        Sink.write sink AgentChecks.table (checkRows.ToArray())
+    Ctx.write ctx AgentChecks.table (checkRows.ToArray())
 
-        // One row per SOURCE: a host carries several at once, and flattening
-        // them would lose which of them said what.
-        let tagRows: ExternalHostTagsRow[] =
-            [| for entry in externalTags do
-                   match entry with
-                   | None -> ()
-                   | Some(describedHost, bySource) ->
-                       for pair in bySource do
-                           { TenantID = tenant
-                             ReceivedAt = now
-                             Host = describedHost
-                             Source = pair.Key
-                             Tags = Tags.toMultiMap pair.Value } |]
+    // One row per SOURCE: a host carries several at once, and flattening
+    // them would lose which of them said what.
+    let tagRows: ExternalHostTagsRow[] =
+        [| for entry in externalTags do
+               match entry with
+               | None -> ()
+               | Some(describedHost, bySource) ->
+                   for pair in bySource do
+                       { TenantID = tenant
+                         ReceivedAt = now
+                         Host = describedHost
+                         Source = pair.Key
+                         Tags = Tags.toMultiMap pair.Value } |]
 
-        Sink.write sink ExternalHostTags.table tagRows
+    Ctx.write ctx ExternalHostTags.table tagRows
 
 /// The envelope keys hostRow reads by name; the rest go to intake_extra.
 /// apiKey is in the list so that a credential cannot reach a column by way of
@@ -934,17 +772,10 @@ let hostRow
     // gohai reports every value as a string, even numbers. A section that is
     // absent or shaped differently is left empty rather than failing the row.
     let section (name: string) : Map<string, string> =
-        gohai.TryFind name |> Option.bind GoJson.asStringMap |> Option.defaultValue Map.empty
-
-    // Absent stays None; null reads as false, as Go's decoder leaves it.
-    let flag (name: string) : uint8 option =
-        match envelope.TryFind name with
-        | Some value when value.ValueKind = JsonValueKind.True -> Some 1uy
-        | Some value when value.ValueKind = JsonValueKind.False || value.ValueKind = JsonValueKind.Null -> Some 0uy
-        | _ -> None
+        gohai.TryFind name |> Option.bind Json.stringMapOf |> Option.defaultValue Map.empty
 
     let objectMap (name: string) : Map<string, string> =
-        extraRaw [] (GoJson.lenientMembers (envelope.TryFind name))
+        extraRaw [] (Json.lenientMembers (envelope.TryFind name))
 
     { TenantID = tenant
       Host = hostname
@@ -955,54 +786,53 @@ let hostRow
       CPU = section "cpu"
       Memory = section "memory"
       Tags = Tags.toMultiMap (hostTags.TryFind "system" |> Option.defaultValue [||])
-      UUID = GoJson.lenientString (envelope.TryFind "uuid")
-      AgentFlavor = GoJson.lenientString (envelope.TryFind "agent-flavor")
-      PythonVersion = GoJson.lenientString (envelope.TryFind "python")
-      Meta = rawText "meta" envelope
-      Network = rawText "network" envelope
-      Filesystem = rawText "filesystem" gohai
-      Logs = rawText "logs" envelope
-      OTLP = rawText "otlp" envelope
+      UUID = Json.lenientString (envelope.TryFind "uuid")
+      AgentFlavor = Json.lenientString (envelope.TryFind "agent-flavor")
+      PythonVersion = Json.lenientString (envelope.TryFind "python")
+      Meta = Json.rawOrEmpty (envelope.TryFind "meta")
+      Network = Json.rawOrEmpty (envelope.TryFind "network")
+      Filesystem = Json.rawOrEmpty (gohai.TryFind "filesystem")
+      Logs = Json.rawOrEmpty (envelope.TryFind "logs")
+      OTLP = Json.rawOrEmpty (envelope.TryFind "otlp")
       SystemStats = objectMap "systemStats"
       InstallMethod = objectMap "install-method"
       ProxyInfo = objectMap "proxy-info"
       ContainerMeta = objectMap "container-meta"
-      FIPSMode = flag "fips_mode"
-      FIPSProxyEnabled = flag "fips_proxy_enabled"
+      FIPSMode = Json.flag (envelope.TryFind "fips_mode")
+      FIPSProxyEnabled = Json.flag (envelope.TryFind "fips_proxy_enabled")
       HostTags = hostTags
       GohaiExtra = extraRaw gohaiKnownSections gohai
       IntakeExtra = extraRaw hostKnownKeys envelope
-      Resources = rawText "resources" envelope }
+      Resources = Json.rawOrEmpty (envelope.TryFind "resources") }
 
 /// The host metadata variant. The payload is loose and shifts between agent
 /// versions, so fields are read by name.
 let private intakeHost (ctx: HttpContext) (envelope: Map<string, JsonElement>) : unit =
     let tenant = Ctx.tenant ctx
-    let sink = Ctx.sink ctx
 
-    let hostname = GoJson.lenientString (envelope.TryFind "internalHostname")
+    let hostname = Json.lenientString (envelope.TryFind "internalHostname")
 
-    if tenant <> "" && hostname <> "" then
+    if hostname <> "" then
         let gohai =
-            match GoJson.lenientString (envelope.TryFind "gohai") with
+            match Json.lenientString (envelope.TryFind "gohai") with
             | "" -> Map.empty
             | inner ->
-                match GoJson.parse (Encoding.UTF8.GetBytes inner) with
-                | Ok sections -> GoJson.members sections
+                match Json.tryParse (Encoding.UTF8.GetBytes inner) with
+                | Ok sections -> Json.members sections
                 | Error _ -> Map.empty
 
         let row =
             hostRow
                 tenant
                 hostname
-                (GoJson.lenientString (envelope.TryFind "agentVersion"))
-                (GoJson.lenientString (envelope.TryFind "os"))
+                (Json.lenientString (envelope.TryFind "agentVersion"))
+                (Json.lenientString (envelope.TryFind "os"))
                 DateTime.UtcNow
                 envelope
                 gohai
-                (GoJson.lenientStringLists (envelope.TryFind "host-tags"))
+                (Json.lenientStringLists (envelope.TryFind "host-tags"))
 
-        Sink.write sink Hosts.table [| row |]
+        Ctx.write ctx Hosts.table [| row |]
 
 /// One row of a resources snapshot, as gohai writes it:
 /// [usernames, cpu %, memory %, vms, rss, name, number of pids]
@@ -1013,7 +843,7 @@ let private processGroup (tenant: string) (host: string) (at: DateTime) (fields:
     else
         let field (i: int) = fields[i]
 
-        match GoJson.asString (field 0), GoJson.asFloat (field 1), GoJson.asFloat (field 2), GoJson.asString (field 5) with
+        match Json.stringOf (field 0), Json.floatOf (field 1), Json.floatOf (field 2), Json.stringOf (field 5) with
         | Some usernames, Some cpu, Some mem, Some name ->
             let unsigned (i: int) : uint64 =
                 match (field i).TryGetUInt64() with
@@ -1039,14 +869,12 @@ let private processGroup (tenant: string) (host: string) (at: DateTime) (fields:
 /// Whatever of it is not that shape keeps the body raw, once.
 let private intakeResources (body: byte[]) (ctx: HttpContext) (resources: JsonElement) : unit =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     let host =
-        GoJson.field "meta" resources |> Option.bind (GoJson.field "host") |> Option.bind GoJson.asString |> Option.defaultValue ""
+        Json.field "meta" resources |> Option.bind (Json.field "host") |> Option.bind Json.stringOf |> Option.defaultValue ""
 
     let snaps =
-        match GoJson.field "processes" resources |> Option.bind (GoJson.field "snaps") with
+        match Json.field "processes" resources |> Option.bind (Json.field "snaps") with
         | Some list when list.ValueKind = JsonValueKind.Array -> Some(List.ofSeq (list.EnumerateArray()))
         | _ -> None
 
@@ -1059,7 +887,7 @@ let private intakeResources (body: byte[]) (ctx: HttpContext) (resources: JsonEl
         for snap in snaps do
             let groups =
                 if snap.ValueKind = JsonValueKind.Array && snap.GetArrayLength() = 2 && snap[1].ValueKind = JsonValueKind.Array then
-                    GoJson.asInt64 snap[0] |> Option.map (fun seconds -> Time.fromUnixSeconds seconds, snap[1])
+                    Json.int64Of snap[0] |> Option.map (fun seconds -> Time.fromUnixSeconds seconds, snap[1])
                 else
                     None
 
@@ -1072,11 +900,9 @@ let private intakeResources (body: byte[]) (ctx: HttpContext) (resources: JsonEl
                     | None -> unread <- unread + 1
 
         if unread > 0 then
-            log.LogWarning("[intake] resources: {Count} snapshots or rows not read, kept raw", unread)
             Raw.store ctx "intake" "unexpected_shape" $"resources: {unread} snapshots or rows are not the resources check's shape" body
 
-        if tenant <> "" then
-            Sink.write sink ProcessGroups.table (rows.ToArray())
+        Ctx.write ctx ProcessGroups.table (rows.ToArray())
 
 /// Four producers share /intake/ and nothing but the path; they are told
 /// apart by their top-level keys, in this order:
@@ -1086,18 +912,16 @@ let private intakeResources (body: byte[]) (ctx: HttpContext) (resources: JsonEl
 ///   gohai or systemStats   host metadata
 ///   resources alone        the resources check's process groups
 let private decodeIntake (body: byte[]) (ctx: HttpContext) : unit =
-    let log = Ctx.log ctx
 
     let undecodable (error: string) =
-        log.LogWarning("[intake] JSON: {Error}", error)
         Raw.store ctx "intake" "decode_error" error body
 
-    match GoJson.parse body with
+    match Json.tryParse body with
     | Error error -> undecodable error
     | Ok root when root.ValueKind <> JsonValueKind.Object && root.ValueKind <> JsonValueKind.Null ->
-        undecodable (GoJson.mismatch root "map[string]jsontext.Value")
+        undecodable $"expected an object, got {Json.kind root}"
     | Ok root ->
-        let envelope = GoJson.members root
+        let envelope = Json.members root
 
         if envelope.ContainsKey "events" then
             intakeEvents ctx envelope
@@ -1108,7 +932,6 @@ let private decodeIntake (body: byte[]) (ctx: HttpContext) : unit =
         elif envelope.ContainsKey "resources" && envelope.Count = 1 then
             intakeResources body ctx envelope["resources"]
         else
-            log.LogWarning("[intake] unrecognised shape, keys: {Keys}", keyList envelope)
             Raw.store ctx "intake" "unexpected_shape" ("no known /intake/ variant key, keys: " + keyList envelope) body
 
 let handleIntake (body: byte[]) (ctx: HttpContext) : Task =
@@ -1131,34 +954,29 @@ let private metadataEnvelopeKeys = [ "hostname"; "clustername"; "cluster_id"; "t
 
 let private storeMetadata (body: byte[]) (ctx: HttpContext) : unit =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     let undecodable (error: string) =
-        log.LogWarning("[metadata] JSON: {Error}", error)
         Raw.store ctx "metadata" "decode_error" error body
 
-    match GoJson.parse body with
+    match Json.tryParse body with
     | Error error -> undecodable error
     | Ok root when root.ValueKind <> JsonValueKind.Object && root.ValueKind <> JsonValueKind.Null ->
-        undecodable (GoJson.mismatch root "map[string]jsontext.Value")
+        undecodable $"expected an object, got {Json.kind root}"
     | Ok root ->
-        let envelope = GoJson.members root
+        let envelope = Json.members root
         let found = metadataVariants |> List.filter envelope.ContainsKey
 
         if found.IsEmpty then
             // A producer we have never seen, or a variant key renamed
             // between releases.
-            log.LogWarning("[metadata] no known variant key, keys: {Keys}", keyList envelope)
-
             Raw.store
                 ctx
                 "metadata"
                 "no_schema"
                 ("no known /api/v1/metadata variant key, keys: " + keyList envelope)
                 body
-        elif tenant <> "" then
-            let timestamp = GoJson.lenientInt64 (GoJson.field "timestamp" root)
+        else
+            let timestamp = Json.lenientInt64 (Json.field "timestamp" root)
             let now = DateTime.UtcNow
             // Every key that is neither the shared envelope nor a variant of
             // this request — clustercheck_status and its sibling among them.
@@ -1170,15 +988,15 @@ let private storeMetadata (body: byte[]) (ctx: HttpContext) : unit =
                        { TenantID = tenant
                          ReceivedAt = now
                          Variant = variant
-                         Hostname = GoJson.lenientString (GoJson.field "hostname" root)
-                         ClusterName = GoJson.lenientString (GoJson.field "clustername" root)
-                         ClusterID = GoJson.lenientString (GoJson.field "cluster_id" root)
-                         Timestamp = if timestamp > 0L then Some(unixSeconds timestamp) else None
-                         UUID = GoJson.lenientString (GoJson.field "uuid" root)
-                         Payload = rawText variant envelope
+                         Hostname = Json.lenientString (Json.field "hostname" root)
+                         ClusterName = Json.lenientString (Json.field "clustername" root)
+                         ClusterID = Json.lenientString (Json.field "cluster_id" root)
+                         Timestamp = if timestamp > 0L then Some(Time.fromUnixSeconds timestamp) else None
+                         UUID = Json.lenientString (Json.field "uuid" root)
+                         Payload = Json.rawOrEmpty (envelope.TryFind variant)
                          EnvelopeExtra = extra } |]
 
-            Sink.write sink AgentMetadata.table rows
+            Ctx.write ctx AgentMetadata.table rows
 
 /// /api/v1/metadata: the inventory payloads. Each is an envelope of hostname,
 /// timestamp and uuid plus ONE variant key; the cluster-agent's carry
@@ -1222,7 +1040,6 @@ let private proofFingerprint (proof: string) : string =
 /// credential, so only its fingerprint is stored.
 let handleIntakeKey (_: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let sink = Ctx.sink ctx
 
     let authorization = Ctx.header ctx "Authorization"
 
@@ -1234,7 +1051,7 @@ let handleIntakeKey (_: byte[]) (ctx: HttpContext) : Task =
     // The key the request was admitted with, as the authentication left it.
     match ctx.User.FindFirst "key_id" with
     | null -> ()
-    | keyId when tenant <> "" ->
+    | keyId ->
         let row: DelegatedAuthRow =
             { TenantID = tenant
               At = DateTime.UtcNow
@@ -1242,8 +1059,7 @@ let handleIntakeKey (_: byte[]) (ctx: HttpContext) : Task =
               ProofFingerprint = proofFingerprint proof
               APIKeyID = keyId.Value }
 
-        Sink.write sink DelegatedAuth.table [| row |]
-    | _ -> ()
+        Ctx.write ctx DelegatedAuth.table [| row |]
 
     let admittedWith = Text.firstNonEmpty [ Ctx.header ctx "Dd-Api-Key"; Ctx.query ctx "api_key" ]
     json {| data = {| attributes = {| api_key = admittedWith |} |} |} ctx
@@ -1267,31 +1083,29 @@ type private JsonApiResource =
       Attributes: Map<string, JsonElement> }
 
     member resource.Text(name: string) : string =
-        GoJson.lenientString (resource.Attributes.TryFind name)
+        Json.lenientString (resource.Attributes.TryFind name)
 
 /// None when the body is not a JSON:API document.
 let private tryJsonApi (body: byte[]) : JsonApiResource option =
-    match GoJson.parse body with
+    match Json.tryParse body with
     | Ok root when root.ValueKind = JsonValueKind.Object ->
-        match (GoJson.members root).TryFind "data" with
+        match (Json.members root).TryFind "data" with
         | Some data when data.ValueKind = JsonValueKind.Object || data.ValueKind = JsonValueKind.Null ->
-            let fields = GoJson.members data
+            let fields = Json.members data
 
             Some
-                { Id = GoJson.lenientString (fields.TryFind "id")
-                  Attributes = GoJson.lenientMembers (fields.TryFind "attributes") }
+                { Id = Json.lenientString (fields.TryFind "id")
+                  Attributes = Json.lenientMembers (fields.TryFind "attributes") }
         | _ -> None
     | _ -> None
 
 /// The request's JSON:API resource. A body that is not one is kept raw, with
 /// `note`, and gives None.
 let private decodeJsonApi (body: byte[]) (ctx: HttpContext) (intake: string) (note: string) : JsonApiResource option =
-    let log = Ctx.log ctx
 
     match tryJsonApi body with
     | Some resource -> Some resource
     | None ->
-        log.LogWarning("[{Intake}] {Note}", intake, note)
         Raw.store ctx intake "decode_error" note body
         None
 
@@ -1303,20 +1117,18 @@ let private decodeJsonApi (body: byte[]) (ctx: HttpContext) (intake: string) (no
 /// fleet.
 let handleSymbolsQuery (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let sink = Ctx.sink ctx
 
     match decodeJsonApi body ctx "symbols" "not a JSON:API document" with
     | None -> ()
     | Some resource ->
-        if tenant <> "" then
-            let row: SymbolQueryRow =
-                { TenantID = tenant
-                  At = DateTime.UtcNow
-                  Arch = resource.Text "arch"
-                  BuildIDs = GoJson.lenientStrings (resource.Attributes.TryFind "buildIds") |> Option.defaultValue [||]
-                  Resource = Text.utf8 body }
+        let row: SymbolQueryRow =
+            { TenantID = tenant
+              At = DateTime.UtcNow
+              Arch = resource.Text "arch"
+              BuildIDs = Json.lenientStrings (resource.Attributes.TryFind "buildIds") |> Option.defaultValue [||]
+              Resource = Text.utf8 body }
 
-            Sink.write sink SymbolQueries.table [| row |]
+        Ctx.write ctx SymbolQueries.table [| row |]
 
     json {| data = List.empty<string> |} ctx
 
@@ -1344,31 +1156,29 @@ let tenantOrgId (tenant: string) : int64 =
 /// "createRunnerResponse".
 let handleRunnerEnroll (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let sink = Ctx.sink ctx
 
     match decodeJsonApi body ctx "par" "enroll: not a JSON:API document" with
     | None -> setStatusCode 400 ctx
     | Some resource ->
-        let modes = GoJson.lenientStrings (resource.Attributes.TryFind "runner_modes")
+        let modes = Json.lenientStrings (resource.Attributes.TryFind "runner_modes")
         let runnerId = Guid.NewGuid().ToString()
         let orgId = tenantOrgId tenant
 
-        if tenant <> "" then
-            let row: RunnerEnrollmentRow =
-                { TenantID = tenant
-                  RunnerID = runnerId
-                  EnrolledAt = DateTime.UtcNow
-                  Name = resource.Text "runner_name"
-                  Modes = defaultArg modes [||]
-                  Host = resource.Text "runner_host"
-                  PublicKeyPEM = resource.Text "public_key_pem"
-                  AgentHostname = resource.Text "agent_hostname"
-                  OrchClusterID = resource.Text "orch_cluster_id"
-                  AgentFlavor = resource.Text "agent_flavor"
-                  OrgID = orgId
-                  Attributes = GoJson.compactObject resource.Attributes }
+        let row: RunnerEnrollmentRow =
+            { TenantID = tenant
+              RunnerID = runnerId
+              EnrolledAt = DateTime.UtcNow
+              Name = resource.Text "runner_name"
+              Modes = defaultArg modes [||]
+              Host = resource.Text "runner_host"
+              PublicKeyPEM = resource.Text "public_key_pem"
+              AgentHostname = resource.Text "agent_hostname"
+              OrchClusterID = resource.Text "orch_cluster_id"
+              AgentFlavor = resource.Text "agent_flavor"
+              OrgID = orgId
+              Attributes = Json.compactObject resource.Attributes }
 
-            Sink.write sink RunnerEnrollments.table [| row |]
+        Ctx.write ctx RunnerEnrollments.table [| row |]
 
         let reply =
                 {| data =
@@ -1391,23 +1201,21 @@ let handleRunnerEnroll (body: byte[]) (ctx: HttpContext) : Task =
 /// runner with no tasks produces.
 let handleRunnerDequeue (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let sink = Ctx.sink ctx
 
     match decodeJsonApi body ctx "par" "dequeue: not a JSON:API document" with
     | None -> ()
     | Some resource ->
-        if tenant <> "" then
-            // Both timestamps stay strings: their format is undocumented and
-            // an unparseable value must not become 1970.
-            let row: RunnerDequeueRow =
-                { TenantID = tenant
-                  At = DateTime.UtcNow
-                  RunnerStartedAt = resource.Text "runner_started_at"
-                  LastTaskReceivedAt = resource.Text "last_task_received_at"
-                  Version = Ctx.header ctx "X-Datadog-OnPrem-Version"
-                  Modes = Ctx.header ctx "X-Datadog-OnPrem-Modes" }
+        // Both timestamps stay strings: their format is undocumented and
+        // an unparseable value must not become 1970.
+        let row: RunnerDequeueRow =
+            { TenantID = tenant
+              At = DateTime.UtcNow
+              RunnerStartedAt = resource.Text "runner_started_at"
+              LastTaskReceivedAt = resource.Text "last_task_received_at"
+              Version = Ctx.header ctx "X-Datadog-OnPrem-Version"
+              Modes = Ctx.header ctx "X-Datadog-OnPrem-Modes" }
 
-            Sink.write sink RunnerDequeues.table [| row |]
+        Ctx.write ctx RunnerDequeues.table [| row |]
 
     setStatusCode 200 ctx
 /// publish-task-update: the outcome of a task. The document id is
@@ -1415,65 +1223,61 @@ let handleRunnerDequeue (body: byte[]) (ctx: HttpContext) : Task =
 /// result, arbitrary JSON of any size. The runner accepts any status.
 let handleRunnerTaskUpdate (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let sink = Ctx.sink ctx
 
     match decodeJsonApi body ctx "par" "task-update: not a JSON:API document" with
     | None -> ()
     | Some resource ->
-        if tenant <> "" then
-            let payload = GoJson.lenientMembers (resource.Attributes.TryFind "payload")
+        let payload = Json.lenientMembers (resource.Attributes.TryFind "payload")
 
-            // A numeric enum on the runner's side, and a succeeded task sends
-            // none: absent must not become a 0 that reads as an error code.
-            let errorCode =
-                match payload.TryFind "error_code" with
-                | Some code when code.ValueKind = JsonValueKind.Null -> Some 0L
-                | Some code -> GoJson.asInt64 code
-                | None -> None
+        // A numeric enum on the runner's side, and a succeeded task sends
+        // none: absent must not become a 0 that reads as an error code.
+        let errorCode =
+            match payload.TryFind "error_code" with
+            | Some code when code.ValueKind = JsonValueKind.Null -> Some 0L
+            | Some code -> Json.int64Of code
+            | None -> None
 
-            let row: RunnerTaskUpdateRow =
-                { TenantID = tenant
-                  At = DateTime.UtcNow
-                  Outcome = resource.Id
-                  TaskID = resource.Text "task_id"
-                  ActionFQN = resource.Text "action_fqn"
-                  JobID = resource.Text "job_id"
-                  Client = rawText "client" resource.Attributes
-                  Branch = GoJson.lenientString (payload.TryFind "branch")
-                  Outputs = rawText "outputs" payload
-                  ErrorCode = errorCode
-                  ErrorDetails = GoJson.lenientString (payload.TryFind "error_details")
-                  APIError = GoJson.lenientString (payload.TryFind "api_error")
-                  Extra =
-                    mergeExtra
-                        (extraRaw [ "task_id"; "client"; "action_fqn"; "job_id"; "payload" ] resource.Attributes)
-                        "payload."
-                        (extraRaw [ "branch"; "outputs"; "error_code"; "error_details"; "api_error" ] payload) }
+        let row: RunnerTaskUpdateRow =
+            { TenantID = tenant
+              At = DateTime.UtcNow
+              Outcome = resource.Id
+              TaskID = resource.Text "task_id"
+              ActionFQN = resource.Text "action_fqn"
+              JobID = resource.Text "job_id"
+              Client = Json.rawOrEmpty (resource.Attributes.TryFind "client")
+              Branch = Json.lenientString (payload.TryFind "branch")
+              Outputs = Json.rawOrEmpty (payload.TryFind "outputs")
+              ErrorCode = errorCode
+              ErrorDetails = Json.lenientString (payload.TryFind "error_details")
+              APIError = Json.lenientString (payload.TryFind "api_error")
+              Extra =
+                mergeExtra
+                    (extraRaw [ "task_id"; "client"; "action_fqn"; "job_id"; "payload" ] resource.Attributes)
+                    "payload."
+                    (extraRaw [ "branch"; "outputs"; "error_code"; "error_details"; "api_error" ] payload) }
 
-            Sink.write sink RunnerTaskUpdates.table [| row |]
+        Ctx.write ctx RunnerTaskUpdates.table [| row |]
 
-    (setStatusCode 202 >=> json {||}) ctx
+    accepted ctx
 /// The per-task heartbeat. It must be answered with exactly 200: a 404 tells
 /// the runner the job is gone and it stops heartbeating. The rows answer
 /// "when did this job stop making progress" — a job that hangs never sends a
 /// task update.
 let handleRunnerHeartbeat (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let sink = Ctx.sink ctx
 
     match decodeJsonApi body ctx "par" "heartbeat: not a JSON:API document" with
     | None -> ()
     | Some resource ->
-        if tenant <> "" then
-            let row: RunnerHeartbeatRow =
-                { TenantID = tenant
-                  At = DateTime.UtcNow
-                  TaskID = resource.Text "task_id"
-                  ActionFQN = resource.Text "action_fqn"
-                  JobID = resource.Text "job_id"
-                  Client = rawText "client" resource.Attributes }
+        let row: RunnerHeartbeatRow =
+            { TenantID = tenant
+              At = DateTime.UtcNow
+              TaskID = resource.Text "task_id"
+              ActionFQN = resource.Text "action_fqn"
+              JobID = resource.Text "job_id"
+              Client = Json.rawOrEmpty (resource.Attributes.TryFind "client") }
 
-            Sink.write sink RunnerHeartbeats.table [| row |]
+        Ctx.write ctx RunnerHeartbeats.table [| row |]
 
     json {||} ctx
 /// GET runner/health-check. The runner ignores the body and reads
@@ -1488,29 +1292,27 @@ let handleRunnerHealthCheck (_: byte[]) (ctx: HttpContext) : Task =
 /// must never be logged.
 let handleActionConnections (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let sink = Ctx.sink ctx
 
     match decodeJsonApi body ctx "par" "connections: not a JSON:API document" with
     | None -> ()
     | Some resource ->
-        if tenant <> "" then
-            let integration = GoJson.lenientMembers (resource.Attributes.TryFind "integration")
-            let tags = GoJson.lenientStrings (resource.Attributes.TryFind "tags") |> Option.defaultValue [||]
+        let integration = Json.lenientMembers (resource.Attributes.TryFind "integration")
+        let tags = Json.lenientStrings (resource.Attributes.TryFind "tags") |> Option.defaultValue [||]
 
-            let row: ActionConnectionRow =
-                { TenantID = tenant
-                  At = DateTime.UtcNow
-                  Name = resource.Text "name"
-                  RunnerID = resource.Text "runner_id"
-                  Tags = Tags.toMultiMap tags
-                  IntegrationType = GoJson.lenientString (integration.TryFind "type")
-                  Credentials = rawText "credentials" integration
-                  Extra =
-                    mergeExtra
-                        (extraRaw [ "name"; "runner_id"; "tags"; "integration" ] resource.Attributes)
-                        "integration."
-                        (extraRaw [ "type"; "credentials" ] integration) }
+        let row: ActionConnectionRow =
+            { TenantID = tenant
+              At = DateTime.UtcNow
+              Name = resource.Text "name"
+              RunnerID = resource.Text "runner_id"
+              Tags = Tags.toMultiMap tags
+              IntegrationType = Json.lenientString (integration.TryFind "type")
+              Credentials = Json.rawOrEmpty (integration.TryFind "credentials")
+              Extra =
+                mergeExtra
+                    (extraRaw [ "name"; "runner_id"; "tags"; "integration" ] resource.Attributes)
+                    "integration."
+                    (extraRaw [ "type"; "credentials" ] integration) }
 
-            Sink.write sink ActionConnections.table [| row |]
+        Ctx.write ctx ActionConnections.table [| row |]
 
-    (setStatusCode 202 >=> json {||}) ctx
+    accepted ctx

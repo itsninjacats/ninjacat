@@ -21,7 +21,6 @@ open System
 open System.Globalization
 open System.IO
 open System.Text
-open System.Text.Encodings.Web
 open System.Text.Json
 open System.Threading.Tasks
 open Cyclonedx.V14
@@ -36,93 +35,16 @@ open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
 
-/// Datadog answers these intakes with an empty object and 202, whatever
-/// happened to the body.
-let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
-
-/// A member of a JSON object, exactly as it was written. None when the
-/// value is not an object or has no such member.
-let private property (name: string) (value: JsonElement) : JsonElement option =
-    if value.ValueKind = JsonValueKind.Object then Lenient.property name value else None
-
-/// A JSON string's value; "" for anything else, a missing value included.
-let private text (value: JsonElement option) : string =
-    match value with
-    | Some v when v.ValueKind = JsonValueKind.String -> Lenient.text v
-    | _ -> ""
-
-/// The string at the end of a path through nested objects; "" when a step
-/// is missing or the end is not a string.
-let private nestedText (path: string list) (object: JsonElement) : string =
-    let mutable current = Some object
-
-    for name in path do
-        current <- current |> Option.bind (property name)
-
-    text current
-
-/// A list of strings: a JSON array of them, or one comma-separated string
-/// (some producers send ddtags that way). Anything else is no list at all.
-let private strings (value: JsonElement option) : string list =
-    match value with
-    | Some v when v.ValueKind = JsonValueKind.Array ->
-        let items = List.ofSeq (v.EnumerateArray())
-
-        if items |> List.forall (fun i -> i.ValueKind = JsonValueKind.String || i.ValueKind = JsonValueKind.Null) then
-            items |> List.map (fun i -> if i.ValueKind = JsonValueKind.String then Lenient.text i else "")
-        else
-            []
-    | Some v when v.ValueKind = JsonValueKind.String && Lenient.text v <> "" -> List.ofArray ((Lenient.text v).Split ',')
-    | _ -> []
-
-/// The members of an object without a column of their own, each as the JSON
-/// text it arrived as: nothing is converted, nothing is dropped.
-let private otherMembers (known: Set<string>) (object: JsonElement) : Map<string, string> =
-    object.EnumerateObject()
-    |> Seq.map (fun p -> Lenient.nameOf p, p.Value.GetRawText())
-    |> Seq.filter (fun (name, _) -> not (known.Contains name))
-    |> Map.ofSeq
-
-let private relaxedWriter =
-    JsonWriterOptions(Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping)
-
-/// A JSON object written again: keys sorted, a repeated key keeping its
-/// last value, every value as it was written.
-let private rewritten (object: JsonElement) : string =
-    let members =
-        object.EnumerateObject() |> Seq.map (fun p -> Lenient.nameOf p, p.Value.GetRawText()) |> Map.ofSeq
-
-    use buffer = new MemoryStream()
-
-    do
-        use writer = new Utf8JsonWriter(buffer, relaxedWriter)
-        writer.WriteStartObject()
-
-        for pair in members do
-            writer.WritePropertyName pair.Key
-            writer.WriteRawValue(pair.Value, true)
-
-        writer.WriteEndObject()
-
-    Encoding.UTF8.GetString(buffer.ToArray())
-
 /// A message as protobuf JSON; None when it cannot be written as JSON.
 let private protoJson (message: IMessage) : string option =
     try
-        let formatted = JsonFormatter.Default.Format message
         // The formatter escapes < and >. Written again without that, so the
         // text stays searchable in ClickHouse.
-        use document = JsonDocument.Parse(formatted, JsonDocumentOptions(MaxDepth = Lenient.jsonDepth))
-        use buffer = new MemoryStream()
-
-        do
-            use writer = new Utf8JsonWriter(buffer, relaxedWriter)
-            document.RootElement.WriteTo writer
-
-        Some(Encoding.UTF8.GetString(buffer.ToArray()))
-    with
-    | :? InvalidOperationException
-    | :? JsonException -> None
+        match Json.tryParse (Encoding.UTF8.GetBytes(JsonFormatter.Default.Format message)) with
+        | Ok value -> Some(Json.compact value)
+        | Error _ -> None
+    with :? InvalidOperationException ->
+        None
 
 /// A repeated field as a JSON array of protobuf JSON objects; "" when empty.
 /// An element that cannot be written as JSON still gets an entry, holding
@@ -137,39 +59,6 @@ let private protoJsonArray (items: seq<#IMessage>) : string =
         |> List.ofSeq
 
     if entries.IsEmpty then "" else "[" + String.Join(",", entries) + "]"
-
-/// The value's name as the .proto spells it; an unknown number as digits.
-let private enumName (enumType: Reflection.EnumDescriptor) (number: int) : string =
-    match enumType.FindValueByNumber number with
-    | null -> string number
-    | value -> value.Name
-
-let private sbomEnum (name: string) = SbomReflection.Descriptor.FindTypeByName<Reflection.EnumDescriptor> name
-let private cyclonedxEnum (name: string) = Bom14Reflection.Descriptor.FindTypeByName<Reflection.EnumDescriptor> name
-
-let private generationTypes = ActivityDumpReflection.Descriptor.FindTypeByName<Reflection.EnumDescriptor> "GenerationType"
-let private sbomSourceTypes = sbomEnum "SBOMSourceType"
-let private sbomStatuses = sbomEnum "SBOMStatus"
-let private classifications = cyclonedxEnum "Classification"
-let private scopes = cyclonedxEnum "Scope"
-let private hashAlgorithms = cyclonedxEnum "HashAlg"
-let private analysisStates = cyclonedxEnum "ImpactAnalysisState"
-let private analysisJustifications = cyclonedxEnum "ImpactAnalysisJustification"
-let private vulnerabilityResponses = cyclonedxEnum "VulnerabilityResponse"
-
-/// None when the time is outside what a DateTime holds.
-let private fromMillis (ms: int64) : DateTime option =
-    try
-        Some(Time.fromUnixMillis ms)
-    with :? ArgumentOutOfRangeException ->
-        None
-
-/// A protobuf Timestamp as a time; None outside what a DateTime holds.
-let private timestampTime (timestamp: WellKnownTypes.Timestamp) : DateTime option =
-    try
-        Some((Time.fromUnixSeconds timestamp.Seconds).AddTicks(int64 timestamp.Nanos / 100L))
-    with :? ArgumentOutOfRangeException ->
-        None
 
 /// Header keys with a column of their own; the rest go to header_extra.
 let private knownHeaderKeys = set [ "host"; "service"; "ddsource"; "ddtags"; "dns_names" ]
@@ -237,15 +126,15 @@ let dumpRow
         | None -> empty
         | Some h ->
             { empty with
-                HeaderHost = text (property "host" h)
-                HeaderService = text (property "service" h)
-                HeaderSource = text (property "ddsource" h)
-                HeaderTags = Tags.toMultiMap (strings (property "ddtags" h))
+                HeaderHost = Json.lenientString (Json.field "host" h)
+                HeaderService = Json.lenientString (Json.field "service" h)
+                HeaderSource = Json.lenientString (Json.field "ddsource" h)
+                HeaderTags = Tags.toMultiMap (Json.tagList (Json.field "ddtags" h))
                 DNSNames =
-                    match property "dns_names" h with
+                    match Json.field "dns_names" h with
                     | Some names -> names.GetRawText()
                     | None -> ""
-                HeaderExtra = otherMembers knownHeaderKeys h }
+                HeaderExtra = Json.otherMembers knownHeaderKeys _.GetRawText() (Some h) }
 
     let withDump =
         match dump with
@@ -311,7 +200,7 @@ let private nodeRow
       Args = Array.ofSeq proc.Args
       ImageTags = Array.ofSeq node.ImageTags
       MatchedRuleIDs = node.MatchedRules |> Seq.map _.RuleId |> Array.ofSeq
-      GenerationType = enumName generationTypes (int node.GenerationType)
+      GenerationType = ProtoEnum.name node.GenerationType
       FilesCount = uint32 node.Files.Count
       DNSCount = uint32 node.DnsNames.Count
       SocketsCount = uint32 node.Sockets.Count
@@ -341,11 +230,9 @@ let flattenTree (tenant: string) (receivedAt: DateTime) (dumpId: Guid) (tree: Pr
 let handleSecDump (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
     let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     match Multipart.boundary (Ctx.header ctx "Content-Type") with
     | None ->
-        log.LogWarning("[secdump] not multipart: content-type {ContentType}", Ctx.header ctx "Content-Type")
         Raw.store ctx "secdump" "decode_error" "content-type is not multipart/form-data" body
     | Some boundary ->
         let parts = Multipart.parts boundary body
@@ -359,7 +246,7 @@ let handleSecDump (body: byte[]) (ctx: HttpContext) : Task =
 
         let headerBytes = partData "event"
         let dumpBytes = partData "dump"
-        let header = headerBytes |> Option.bind Lenient.tryObject
+        let header = headerBytes |> Option.bind Json.tryParseObject
         let dump = dumpBytes |> Option.bind decodeDump
 
         if headerBytes.IsSome && header.IsNone then
@@ -370,17 +257,17 @@ let handleSecDump (body: byte[]) (ctx: HttpContext) : Task =
 
         if header.IsNone && dump.IsNone then
             Raw.store ctx "secdump" "decode_error" "neither multipart part decoded" body
-        elif tenant <> "" then
+        else
             let receivedAt = DateTime.UtcNow
             let dumpId = Guid.NewGuid()
 
             let row =
                 dumpRow tenant receivedAt dumpId header (defaultArg headerBytes [||]) dump (defaultArg dumpBytes [||])
 
-            Sink.write sink CwsActivityDumps.table [| row |]
+            Ctx.write ctx CwsActivityDumps.table [| row |]
 
             match dump with
-            | Some d -> Sink.write sink CwsDumpNodes.table (flattenTree tenant receivedAt dumpId d.Tree)
+            | Some d -> Ctx.write ctx CwsDumpNodes.table (flattenTree tenant receivedAt dumpId d.Tree)
             | None -> ()
 
     accepted ctx
@@ -394,17 +281,17 @@ let private knownEnvelopeKeys =
 let parseTimestamp (value: JsonElement option) : DateTime option =
     match value with
     | Some v when v.ValueKind = JsonValueKind.String ->
-        let written = Lenient.text v
+        let written = v.GetString()
 
-        match Lenient.rfc3339 written with
+        match Time.tryRfc3339 written with
         | Some time -> Some time
         | None ->
             match Int64.TryParse(written, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture) with
-            | true, ms -> fromMillis ms
+            | true, ms -> Some(Time.fromUnixMillis ms)
             | false, _ -> None
     | Some v when v.ValueKind = JsonValueKind.Number ->
         match v.TryGetInt64() with
-        | true, ms -> fromMillis ms
+        | true, ms -> Some(Time.fromUnixMillis ms)
         | false, _ -> None
     | _ -> None
 
@@ -413,19 +300,15 @@ let parseTimestamp (value: JsonElement option) : DateTime option =
 let innerMessage (message: JsonElement option) : JsonElement option =
     match message with
     | Some m when m.ValueKind = JsonValueKind.Object -> Some m
-    | Some m when m.ValueKind = JsonValueKind.String -> Lenient.tryObject (Encoding.UTF8.GetBytes(Lenient.text m))
+    | Some m when m.ValueKind = JsonValueKind.String -> Json.tryParseObject (Encoding.UTF8.GetBytes(m.GetString()))
     | _ -> None
 
 /// A body as a list of envelopes, or why it is not one. A null entry is an
 /// empty envelope, a null body an empty batch.
 let decodeEnvelopes (body: byte[]) : Result<JsonElement list, string> =
-    match Lenient.tryJson body with
+    match Json.tryParseArray body with
     | Error problem -> Error problem
-    | Ok root when root.ValueKind = JsonValueKind.Null -> Ok []
-    | Ok root when root.ValueKind <> JsonValueKind.Array -> Error "the body is JSON, but not an array"
-    | Ok root ->
-        let envelopes = List.ofSeq (root.EnumerateArray())
-
+    | Ok envelopes ->
         let misfit =
             envelopes
             |> List.tryFindIndex (fun e -> e.ValueKind <> JsonValueKind.Object && e.ValueKind <> JsonValueKind.Null)
@@ -444,30 +327,26 @@ let decodeEnvelopes (body: byte[]) : Result<JsonElement list, string> =
 let eventRows (tenant: string) (receivedAt: DateTime) (track: string) (envelopes: JsonElement list) : SecurityEventRow[] =
     envelopes
     |> List.mapi (fun i envelope ->
-        let message = property "message" envelope
+        let message = Json.field "message" envelope
         let event = innerMessage message
-        let eventText (path: string list) = event |> Option.map (nestedText path) |> Option.defaultValue ""
+        let eventText (path: string list) = event |> Option.bind (Json.at path) |> Json.lenientString
 
         { TenantID = tenant
           ReceivedAt = receivedAt
           Track = track
           SeqInBatch = uint32 i
-          Timestamp = parseTimestamp (property "timestamp" envelope)
-          Hostname = text (property "hostname" envelope)
-          Service = text (property "service" envelope)
-          DDSource = text (property "ddsource" envelope)
-          Status = text (property "status" envelope)
-          DDTags = Tags.toMultiMap (strings (property "ddtags" envelope))
-          Extra =
-            (if envelope.ValueKind = JsonValueKind.Object then
-                 otherMembers knownEnvelopeKeys envelope
-             else
-                 Map.empty)
+          Timestamp = parseTimestamp (Json.field "timestamp" envelope)
+          Hostname = Json.lenientString (Json.field "hostname" envelope)
+          Service = Json.lenientString (Json.field "service" envelope)
+          DDSource = Json.lenientString (Json.field "ddsource" envelope)
+          Status = Json.lenientString (Json.field "status" envelope)
+          DDTags = Tags.toMultiMap (Json.tagList (Json.field "ddtags" envelope))
+          Extra = Json.otherMembers knownEnvelopeKeys _.GetRawText() (Some envelope)
           MessageRaw =
             (match message with
              | Some raw -> raw.GetRawText()
              | None -> "")
-          Message = event |> Option.map rewritten |> Option.defaultValue ""
+          Message = Json.compactSortedOrEmpty event
           MessageDecoded = Text.flag event.IsSome
           RuleID = eventText [ "agent"; "rule_id" ]
           PolicyName = eventText [ "agent"; "policy_name" ]
@@ -482,16 +361,12 @@ let eventRows (tenant: string) (receivedAt: DateTime) (track: string) (envelopes
 let handleTrack (track: string) : byte[] -> EndpointHandler =
     fun body ctx ->
         let tenant = Ctx.tenant ctx
-        let log = Ctx.log ctx
-        let sink = Ctx.sink ctx
 
         match decodeEnvelopes body with
         | Error problem ->
-            log.LogWarning("[{Track}] not a JSON array of envelopes: {Problem}", track, problem)
-            Raw.store ctx track "unexpected_shape" $"top-level body is not a JSON array: {problem}" body
+            Raw.store ctx track "unexpected_shape" $"the body is not a list of envelopes: {problem}" body
         | Ok envelopes ->
-            if tenant <> "" then
-                Sink.write sink SecurityEvents.table (eventRows tenant DateTime.UtcNow track envelopes)
+            Ctx.write ctx SecurityEvents.table (eventRows tenant DateTime.UtcNow track envelopes)
 
         accepted ctx
 
@@ -534,7 +409,7 @@ let rec private componentRows
               BomRef = c.BomRef
               ParentBomRef = parentBomRef
               Depth = depth
-              Type = enumName classifications (int c.Type)
+              Type = ProtoEnum.name c.Type
               Name = c.Name
               Version = c.Version
               // Optional on the wire: "never set" is NULL, not "".
@@ -544,9 +419,9 @@ let rec private componentRows
               Publisher = (if c.HasPublisher then Some c.Publisher else None)
               Author = (if c.HasAuthor then Some c.Author else None)
               Description = (if c.HasDescription then Some c.Description else None)
-              Scope = enumName scopes (int c.Scope)
+              Scope = ProtoEnum.name c.Scope
               Licenses = licenseNames c.Licenses
-              Hashes = c.Hashes |> Seq.map (fun h -> enumName hashAlgorithms (int h.Alg), h.Value) |> Map.ofSeq
+              Hashes = c.Hashes |> Seq.map (fun h -> ProtoEnum.name h.Alg, h.Value) |> Map.ofSeq
               Properties = propertyMultiMap c.Properties
               ExternalReferences = protoJsonArray c.ExternalReferences
               Evidence = protoJsonArray c.Evidence }
@@ -579,14 +454,14 @@ let private vulnerabilityRows
           Detail = (if v.HasDetail then Some v.Detail else None)
           Recommendation = (if v.HasRecommendation then Some v.Recommendation else None)
           Advisories = protoJsonArray v.Advisories
-          Created = Option.ofObj v.Created |> Option.bind timestampTime
-          Published = Option.ofObj v.Published |> Option.bind timestampTime
-          Updated = Option.ofObj v.Updated |> Option.bind timestampTime
-          AnalysisState = analysisText (fun a -> enumName analysisStates (int a.State))
-          AnalysisJustification = analysisText (fun a -> enumName analysisJustifications (int a.Justification))
+          Created = Time.ofTimestamp v.Created
+          Published = Time.ofTimestamp v.Published
+          Updated = Time.ofTimestamp v.Updated
+          AnalysisState = analysisText (fun a -> ProtoEnum.name a.State)
+          AnalysisJustification = analysisText (fun a -> ProtoEnum.name a.Justification)
           AnalysisResponse =
             (match analysis with
-             | Some a -> a.Response |> Seq.map (fun r -> enumName vulnerabilityResponses (int r)) |> Array.ofSeq
+             | Some a -> a.Response |> Seq.map (fun r -> ProtoEnum.name r) |> Array.ofSeq
              | None -> [||])
           AnalysisDetail = analysisText _.Detail
           AffectsRefs = v.Affects |> Seq.map _.Ref |> Array.ofSeq
@@ -594,8 +469,8 @@ let private vulnerabilityRows
           Properties = propertyMultiMap v.Properties })
     |> List.ofSeq
 
-/// A protobuf Duration in whole milliseconds, saturating as Go's
-/// AsDuration does when the value does not fit 64 bits of nanoseconds.
+/// A protobuf Duration in whole milliseconds. One that does not fit 64
+/// bits of nanoseconds is kept at that limit rather than wrapped around.
 let private durationMillis (duration: WellKnownTypes.Duration) : int64 =
     let seconds = duration.Seconds
     let nanos = int64 duration.Nanos
@@ -637,9 +512,9 @@ let sbomRows
               // by its entities: unset is NULL, not "".
               Source = (if payload.HasSource then Some payload.Source else None)
               DdEnv = (if payload.HasDdEnv then Some payload.DdEnv else None)
-              Type = enumName sbomSourceTypes (int entity.Type)
+              Type = ProtoEnum.name entity.Type
               ID = entity.Id
-              GeneratedAt = Option.ofObj entity.GeneratedAt |> Option.bind timestampTime
+              GeneratedAt = Time.ofTimestamp entity.GeneratedAt
               RepoTags = Array.ofSeq entity.RepoTags
               RepoDigests = Array.ofSeq entity.RepoDigests
               InUse = Text.flag entity.InUse
@@ -647,7 +522,7 @@ let sbomRows
               DDTags = Tags.toMultiMap entity.DdTags
               Heartbeat = Text.flag entity.Heartbeat
               Hash = entity.Hash
-              Status = enumName sbomStatuses (int entity.Status)
+              Status = ProtoEnum.name entity.Status
               KernelVersion = entity.KernelVersion
               CPUArchitecture = entity.CpuArchitecture
               Error = ""
@@ -680,8 +555,6 @@ let sbomRows
 /// POST /api/v2/sbom: one SBOMPayload per request, protobuf.
 let handleSbom (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     let payload =
         try
@@ -691,98 +564,31 @@ let handleSbom (body: byte[]) (ctx: HttpContext) : Task =
 
     match payload with
     | Error problem ->
-        log.LogWarning("[sbom] protobuf: {Problem} ({Bytes} B)", problem, body.Length)
         Raw.store ctx "sbom" "decode_error" problem body
     | Ok payload when payload.Entities.Count = 0 ->
         // Protobuf reads almost any bytes as some message.
-        log.LogWarning("[sbom] decoded to zero entities ({Bytes} B), wrong payload type?", body.Length)
         Raw.store ctx "sbom" "unexpected_shape" "decoded to zero entities" body
     | Ok payload ->
-        if tenant <> "" then
-            let entities, components, vulnerabilities = sbomRows tenant DateTime.UtcNow payload
-            Sink.write sink SbomEntities.table entities
-            Sink.write sink SbomComponents.table components
-            Sink.write sink SbomVulnerabilities.table vulnerabilities
+        let entities, components, vulnerabilities = sbomRows tenant DateTime.UtcNow payload
+        Ctx.write ctx SbomEntities.table entities
+        Ctx.write ctx SbomComponents.table components
+        Ctx.write ctx SbomVulnerabilities.table vulnerabilities
 
     accepted ctx
-
-/// A protobuf tag: the field's number and wire type, and how many bytes the
-/// tag itself took.
-type private WireTag =
-    { Field: int
-      WireType: int
-      Length: int }
-
-let private readTag (data: byte[]) (position: int) : WireTag option =
-    match Varint.read data position with
-    | Some(tag, length) when tag >>> 3 >= 1UL && tag >>> 3 <= uint64 Int32.MaxValue ->
-        Some
-            { Field = int (tag >>> 3)
-              WireType = int (tag &&& 7UL)
-              Length = length }
-    | _ -> None
-
-/// The position after a value that is not a group; None when it is cut short.
-let private skipScalar (data: byte[]) (position: int) (wireType: int) : int option =
-    let fixedWidth (width: int) =
-        if position + width <= data.Length then Some(position + width) else None
-
-    match wireType with
-    | 0 -> Varint.read data position |> Option.map (fun (_, length) -> position + length)
-    | 1 -> fixedWidth 8
-    | 5 -> fixedWidth 4
-    | 2 ->
-        match Varint.read data position with
-        | Some(size, length) when size <= uint64 (data.Length - position - length) -> Some(position + length + int size)
-        | _ -> None
-    | _ -> None
-
-/// As deep as Go's protowire follows nested groups.
-let private maxGroupDepth = 10_001
-
-/// The position after the value of a field; None when the value is
-/// malformed. A group (wire type 3) runs to the end-group tag of its own
-/// field number and may hold further groups: the open ones are kept on a
-/// stack, not walked by recursion, so hostile nesting cannot exhaust the
-/// thread's stack.
-let private skipValue (data: byte[]) (position: int) (number: int) (wireType: int) : int option =
-    if wireType <> 3 then
-        skipScalar data position wireType
-    else
-        let openGroups = Collections.Generic.Stack<int>()
-        openGroups.Push number
-        let mutable at = position
-        let mutable failed = false
-
-        while openGroups.Count > 0 && not failed do
-            match readTag data at with
-            | Some tag when tag.WireType = 4 && tag.Field = openGroups.Peek() ->
-                openGroups.Pop() |> ignore
-                at <- at + tag.Length
-            | Some tag when tag.WireType = 3 && openGroups.Count < maxGroupDepth ->
-                openGroups.Push tag.Field
-                at <- at + tag.Length
-            | Some tag when tag.WireType <> 3 && tag.WireType <> 4 ->
-                match skipScalar data (at + tag.Length) tag.WireType with
-                | Some next -> at <- next
-                | None -> failed <- true
-            | _ -> failed <- true
-
-        if failed then None else Some at
 
 /// Consecutive top-level fields of one number, as the layout prints them.
 type private FieldRun =
     { Field: int
-      WireType: int
+      WireType: WireFormat.WireType
       Count: int }
 
-let private wireTypeName (wireType: int) : string =
+let private wireTypeName (wireType: WireFormat.WireType) : string =
     match wireType with
-    | 0 -> "varint"
-    | 5 -> "fixed32"
-    | 1 -> "fixed64"
-    | 2 -> "bytes"
-    | other -> $"type{other}"
+    | WireFormat.WireType.Varint -> "varint"
+    | WireFormat.WireType.Fixed32 -> "fixed32"
+    | WireFormat.WireType.Fixed64 -> "fixed64"
+    | WireFormat.WireType.LengthDelimited -> "bytes"
+    | other -> $"type{int other}"
 
 /// A protobuf message's top-level fields in wire order, as
 /// "<number>:<wire type>[xN]" entries; a run of the same number is one
@@ -790,35 +596,28 @@ let private wireTypeName (wireType: int) : string =
 /// are not entered: without the schema they cannot be told from strings.
 let wireLayout (body: byte[]) : string option =
     let runs = ResizeArray<FieldRun>()
-    let mutable position = 0
-    let mutable failed = false
+    use input = new CodedInputStream(body)
 
-    while not failed && position < body.Length do
-        match readTag body position with
-        | None -> failed <- true
-        | Some tag ->
-            match skipValue body (position + tag.Length) tag.Field tag.WireType with
-            | None -> failed <- true
-            | Some next ->
-                position <- next
+    try
+        while not input.IsAtEnd do
+            let tag = input.ReadTag()
+            let field = WireFormat.GetTagFieldNumber tag
+            input.SkipLastField()
 
-                match Seq.tryLast runs with
-                | Some last when last.Field = tag.Field -> runs[runs.Count - 1] <- { last with Count = last.Count + 1 }
-                | _ -> runs.Add { Field = tag.Field; WireType = tag.WireType; Count = 1 }
+            match Seq.tryLast runs with
+            | Some last when last.Field = field -> runs[runs.Count - 1] <- { last with Count = last.Count + 1 }
+            | _ -> runs.Add { Field = field; WireType = WireFormat.GetTagWireType tag; Count = 1 }
 
-    if failed then
-        None
-    else
         runs
         |> Seq.map (fun run ->
             let entry = $"{run.Field}:{wireTypeName run.WireType}"
             if run.Count > 1 then $"{entry}x{run.Count}" else entry)
         |> String.concat " "
         |> Some
+    with :? InvalidProtocolBufferException ->
+        None
 
 let private sdsOptional (present: bool) (value: 'a) : 'a option = if present then Some value else None
-
-let private sdsTaskStatuses = SdsResultPayload.Types.ScanMetadata.Types.ScanTaskMetadata.Descriptor.EnumTypes[0]
 
 /// The deprecated rules map as one JSON object, rule id to rule; "" when empty.
 let private sdsRules (payload: SdsResultPayload) : string =
@@ -831,9 +630,6 @@ let private sdsRules (payload: SdsResultPayload) : string =
             |> Seq.map (fun entry -> JsonSerializer.Serialize entry.Key + ":" + JsonFormatter.Default.Format entry.Value)
 
         "{" + String.Join(",", entries) + "}"
-
-let private sdsTime (stamp: WellKnownTypes.Timestamp) : DateTime option =
-    if isNull stamp then None else Some(Time.fromUnixMillis (stamp.Seconds * 1000L + int64 (stamp.Nanos / 1_000_000)))
 
 /// The columns of a result's location. Each kind names its database, schema
 /// and table differently; everything else of it stays in the JSON.
@@ -1004,9 +800,9 @@ let sdsRows (tenant: string) (receivedAt: DateTime) (scanId: Guid) (payload: Sds
               Duration = result.Duration
               TaskID = (task |> Option.map _.TaskId |> Option.defaultValue "")
               SubTaskID = (task |> Option.map _.SubTaskId |> Option.defaultValue "")
-              TaskStartedAt = task |> Option.bind (fun t -> sdsTime t.StartedAt)
-              TaskEndedAt = task |> Option.bind (fun t -> sdsTime t.EndedAt)
-              TaskStatus = (task |> Option.map (fun t -> enumName sdsTaskStatuses (int t.Status)) |> Option.defaultValue "")
+              TaskStartedAt = task |> Option.bind (fun t -> Time.ofTimestamp t.StartedAt)
+              TaskEndedAt = task |> Option.bind (fun t -> Time.ofTimestamp t.EndedAt)
+              TaskStatus = (task |> Option.map (fun t -> ProtoEnum.name t.Status) |> Option.defaultValue "")
               FailureReason = (task |> Option.map _.FailureReason |> Option.defaultValue "")
               MatchCount = uint32 result.Matches.Count
               TableMatchCount = uint32 result.TableMatches.Count }
@@ -1083,8 +879,6 @@ let private sdsIsBlank (payload: SdsResultPayload) : bool =
 /// of becoming an empty scan.
 let handleSdsResult (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     let layout () =
         match wireLayout body with
@@ -1100,15 +894,13 @@ let handleSdsResult (body: byte[]) (ctx: HttpContext) : Task =
 
     match parsed with
     | Error problem ->
-        log.LogWarning("[sds] protobuf: {Error} ({Bytes} bytes)", problem, body.Length)
         Raw.store ctx "sds" "decode_error" $"protobuf SdsResultPayload: {problem}; {layout ()}" body
     | Ok payload when sdsIsBlank payload ->
         Raw.store ctx "sds" "unexpected_shape" $"not an SdsResultPayload: no resource and no results; {layout ()}" body
     | Ok payload ->
-        if tenant <> "" then
-            let rows = sdsRows tenant DateTime.UtcNow (Guid.NewGuid()) payload
-            Sink.write sink SdsScans.table [| rows.Scan |]
-            Sink.write sink SdsResults.table (Array.ofList rows.Results)
-            Sink.write sink SdsMatches.table (Array.ofList rows.Matches)
+        let rows = sdsRows tenant DateTime.UtcNow (Guid.NewGuid()) payload
+        Ctx.write ctx SdsScans.table [| rows.Scan |]
+        Ctx.write ctx SdsResults.table (Array.ofList rows.Results)
+        Ctx.write ctx SdsMatches.table (Array.ofList rows.Matches)
 
     accepted ctx

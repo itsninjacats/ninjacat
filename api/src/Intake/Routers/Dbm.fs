@@ -56,18 +56,10 @@ type Envelope =
 /// One event of a batch: its text exactly as sent, and that text parsed.
 type Event = { Text: string; Json: JsonElement }
 
-/// Splits a body into events. One bare object, which the agent never sends
-/// but a hand-made request might, is a batch of one.
+/// Splits a body into events, each with its text.
 let splitEvents (body: byte[]) : Result<Event list, string> =
-    match GoJson.parse body with
-    | Error e -> Error e
-    | Ok root ->
-        match root.ValueKind with
-        | JsonValueKind.Array ->
-            Ok(root.EnumerateArray() |> Seq.map (fun item -> { Text = item.GetRawText(); Json = item }) |> List.ofSeq)
-        | JsonValueKind.Object -> Ok [ { Text = Text.utf8 body; Json = root } ]
-        | JsonValueKind.Null -> Ok []
-        | _ -> Error $"the body is a JSON {GoJson.kind root}"
+    Json.tryParseList body
+    |> Result.map (List.map (fun item -> { Text = item.GetRawText(); Json = item }))
 
 /// A tag list in either spelling: one comma-joined string, or a list.
 let private tagsOf (value: JsonElement) : string list option =
@@ -78,14 +70,13 @@ let private tagsOf (value: JsonElement) : string list option =
         |> Array.filter (fun tag -> tag <> "")
         |> List.ofArray
         |> Some
-    | _ -> GoJson.stringsOf value |> Option.map List.ofArray
+    | _ -> Json.stringsOf value |> Option.map List.ofArray
 
 /// Reads the envelope field by field, so one malformed value cannot take the
 /// others down with it: its key is noted and left among the extra keys.
 let decodeEnvelope (event: JsonElement) : Result<Envelope, string> =
     match event.ValueKind with
-    // Without this, a null element would become a row of empty columns.
-    | JsonValueKind.Null -> Error "event is null, not a JSON object"
+    // A null element is refused too, or it would become a row of empty columns.
     | JsonValueKind.Object ->
         let left = Dictionary<string, JsonElement>()
 
@@ -98,7 +89,7 @@ let decodeEnvelope (event: JsonElement) : Result<Envelope, string> =
             match left.TryGetValue key with
             | false, _ -> None
             | true, value when value.ValueKind = JsonValueKind.Null ->
-                // Go reads null into any of these fields as "nothing sent".
+                // null is the same as nothing sent.
                 left.Remove key |> ignore
                 None
             | true, value ->
@@ -110,23 +101,10 @@ let decodeEnvelope (event: JsonElement) : Result<Envelope, string> =
                     undecoded.Add key
                     None
 
-        let text (key: string) : string = take key GoJson.stringOf |> Option.defaultValue ""
-
-        // Go's decoder allocates the interval before it finds that the value
-        // does not fit. So a malformed one reads as 0 (an infinity, when it
-        // is a number too large), not as absent; its key is noted all the same.
-        let interval (key: string) : float option =
-            match take key GoJson.floatOf with
-            | Some seconds -> Some seconds
-            | None ->
-                match left.TryGetValue key with
-                | true, value when value.ValueKind = JsonValueKind.Number ->
-                    Some(Double.Parse(value.GetRawText(), NumberStyles.Float, CultureInfo.InvariantCulture))
-                | true, _ -> Some 0.0
-                | false, _ -> None
+        let text (key: string) : string = take key Json.stringOf |> Option.defaultValue ""
 
         // The order is the order of `undecoded`.
-        let timestamp = take "timestamp" GoJson.numberText |> Option.defaultValue ""
+        let timestamp = take "timestamp" Json.numberText |> Option.defaultValue ""
         let host = text "host"
         let databaseInstance = text "database_instance"
         let agentHostname = text "ddagenthostname"
@@ -137,8 +115,8 @@ let decodeEnvelope (event: JsonElement) : Result<Envelope, string> =
         let dbmsVersion = text "dbms_version"
         let agentVersion = text "ddagentversion"
         let otherAgentVersion = text "agent_version"
-        let collectionInterval = interval "collection_interval"
-        let minInterval = interval "min_collection_interval"
+        let collectionInterval = take "collection_interval" Json.floatOf
+        let minInterval = take "min_collection_interval" Json.floatOf
         let ddtags = take "ddtags" tagsOf |> Option.defaultValue []
         let tags = take "tags" tagsOf |> Option.defaultValue []
 
@@ -157,7 +135,7 @@ let decodeEnvelope (event: JsonElement) : Result<Envelope, string> =
               Tags = ddtags @ tags
               Extra = left |> Seq.map (fun pair -> pair.Key, pair.Value) |> Map.ofSeq
               Undecoded = List.ofSeq undecoded }
-    | _ -> Error $"it is a JSON {GoJson.kind event}"
+    | _ -> Error $"expected an object, got {Json.kind event}"
 
 /// The envelope's timestamp as a time; None when it was not sent, which must
 /// never become 1970 or "now".
@@ -208,8 +186,8 @@ type private QuerySample =
 
 /// None when a field of the object has the wrong type: then none of it is used.
 let private querySample (db: JsonElement) : QuerySample option =
-    let bad = GoJson.Mismatches()
-    let fields = GoJson.fields bad "db" db
+    let bad = JsonFields.Mismatches()
+    let fields = JsonFields.fields bad "db" db
 
     let sample =
         { Instance = fields.String "instance"
@@ -265,14 +243,11 @@ let toRow (tenant: string) (track: string) (receivedAt: DateTime) (event: string
 /// say they arrived on.
 let handle (track: string) (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     match splitEvents body with
     // The agent's start-up probe: a row of it would be an event with nothing in it.
     | _ when Raw.isProbe body -> ()
     | Error e ->
-        log.LogWarning("[{Track}] not a JSON array: {Error}", track, e)
         Raw.store ctx "dbm" "decode_error" $"[{track}] not a JSON array or object: {e}" body
     | Ok events ->
         let receivedAt = DateTime.UtcNow
@@ -282,12 +257,10 @@ let handle (track: string) (body: byte[]) (ctx: HttpContext) : Task =
         |> List.iteri (fun i event ->
             match decodeEnvelope event.Json with
             | Error e ->
-                log.LogWarning("[{Track}] event {Index}: not an object ({Error}), kept raw", track, i, e)
-                Raw.store ctx "dbm" "decode_error" $"[{track}] event {i}: not an object: {e}" (Encoding.UTF8.GetBytes event.Text)
+                Raw.store ctx "dbm" "decode_error" $"[{track}] event {i}: {e}" (Encoding.UTF8.GetBytes event.Text)
             | Ok envelope ->
-                if tenant <> "" then
-                    rows.Add(toRow tenant track receivedAt event.Text envelope))
+                rows.Add(toRow tenant track receivedAt event.Text envelope))
 
-        Sink.write sink DbmEvents.table (rows.ToArray())
+        Ctx.write ctx DbmEvents.table (rows.ToArray())
 
-    (setStatusCode 202 >=> json {||}) ctx
+    accepted ctx

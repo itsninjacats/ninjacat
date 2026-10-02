@@ -30,56 +30,6 @@ open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
 
-let private accepted: EndpointHandler = setStatusCode 202 >=> json {||}
-
-/// One entry of a batch: its JSON text, and that text parsed.
-type Entry =
-    { Text: string
-      Json: Result<JsonElement, string> }
-
-/// A JSON array as its entries. A single object, which the event platform
-/// never sends but a curl might, is a batch of one; it is parsed only when
-/// the entry is read, so a broken one is refused as an entry.
-let entries (body: byte[]) : Result<Entry list, string> =
-    let trimmed = (Text.utf8 body).Trim()
-
-    if trimmed.StartsWith '{' then
-        Ok [ { Text = trimmed; Json = GoJson.parse (Encoding.UTF8.GetBytes trimmed) } ]
-    else
-        match GoJson.parse body with
-        | Error e -> Error e
-        | Ok root ->
-            match root.ValueKind with
-            | JsonValueKind.Array ->
-                Ok(root.EnumerateArray() |> Seq.map (fun item -> { Text = item.GetRawText(); Json = Ok item }) |> List.ofSeq)
-            | JsonValueKind.Null -> Ok []
-            | _ -> Error $"expected a JSON array, got {GoJson.kind root}"
-
-/// The elements of a body that must be a list of structs, a single object
-/// again being a batch of one.
-let private elements (body: byte[]) : Result<JsonElement list, string> =
-    let trimmed = (Text.utf8 body).Trim()
-    let text = if trimmed.StartsWith '{' then "[" + trimmed + "]" else trimmed
-
-    match GoJson.parse (Encoding.UTF8.GetBytes text) with
-    | Error e -> Error e
-    | Ok root ->
-        match root.ValueKind with
-        | JsonValueKind.Array -> Ok(List.ofSeq (root.EnumerateArray()))
-        | JsonValueKind.Null -> Ok []
-        | _ -> Error $"expected a JSON array, got {GoJson.kind root}"
-
-/// The root keys of an object that `known` does not list, as JSON text by
-/// name: an undeclared key is kept, not dropped.
-let extraTopLevel (known: Set<string>) (value: JsonElement) : Map<string, string> =
-    GoJson.members value
-    |> Map.filter (fun name _ -> not (known.Contains name))
-    |> Map.map (fun _ undeclared -> undeclared.GetRawText())
-
-/// An empty ddtags gives no tags, not one empty tag.
-let splitTags (ddtags: string) : string list =
-    if ddtags = "" then [] else List.ofArray (ddtags.Split ',')
-
 /// The value of the first `key:value` tag in a comma-joined ddtags, or "".
 let private tagValue (ddtags: string) (key: string) : string =
     ddtags.Split ','
@@ -114,17 +64,17 @@ type MetadataRows =
 
 /// The rows of one NetworkDevicesMetadata, or what did not fit.
 let metadataRows (tenant: string) (payload: JsonElement) : Result<MetadataRows, string> =
-    let bad = GoJson.Mismatches()
-    let p = GoJson.fields bad "" payload
+    let bad = JsonFields.Mismatches()
+    let p = JsonFields.fields bad "" payload
 
     let space = p.String "namespace"
     let subnet = p.String "subnet"
     let integration = p.String "integration"
     // Whole seconds: the agent fills it from time.Unix().
     let collected = Time.fromUnixSeconds (p.Int64 "collect_timestamp")
-    let extra = extraTopLevel metadataKeys payload
+    let extra = Json.otherMembers metadataKeys _.GetRawText() (Some payload)
 
-    let deviceRow (d: GoJson.Fields) : NDMDeviceRow =
+    let deviceRow (d: JsonFields.Fields) : NDMDeviceRow =
         { TenantID = tenant
           Namespace = space
           Subnet = subnet
@@ -160,7 +110,7 @@ let metadataRows (tenant: string) (payload: JsonElement) : Result<MetadataRows, 
     let statusNumber (number: string) : uint8 =
         wholeNumber number |> Option.map uint8 |> Option.defaultValue 0uy
 
-    let interfaceRow (i: GoJson.Fields) : NDMInterfaceRow =
+    let interfaceRow (i: JsonFields.Fields) : NDMInterfaceRow =
         { TenantID = tenant
           Namespace = space
           Subnet = subnet
@@ -183,7 +133,7 @@ let metadataRows (tenant: string) (payload: JsonElement) : Result<MetadataRows, 
           MerakiEnabled = i.OptionalBool "meraki_enabled" |> Option.map Text.flag
           MerakiStatus = i.String "meraki_status" }
 
-    let addressRow (a: GoJson.Fields) : NDMIPAddressRow =
+    let addressRow (a: JsonFields.Fields) : NDMIPAddressRow =
         { TenantID = tenant
           Namespace = space
           Subnet = subnet
@@ -198,7 +148,7 @@ let metadataRows (tenant: string) (payload: JsonElement) : Result<MetadataRows, 
     // device or an interface id; the ones that do not leave it empty, and a
     // malformed element still keeps its text.
     let objectRow (kind: string) (item: JsonElement) : NDMMetadataObjectRow =
-        let ids = GoJson.Fields(GoJson.Mismatches(), "", item)
+        let ids = JsonFields.Fields(JsonFields.Mismatches(), "", item)
 
         { TenantID = tenant
           Namespace = space
@@ -229,12 +179,9 @@ let metadataRows (tenant: string) (payload: JsonElement) : Result<MetadataRows, 
 
 let handleMetadata (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
-    match entries body with
+    match Json.tryParseList body with
     | Error e ->
-        log.LogWarning("[ndm] not a JSON array: {Error}", e)
         Raw.store ctx "ndm" "decode_error" e body
     | Ok batch ->
         let devices = ResizeArray<NDMDeviceRow>()
@@ -244,21 +191,19 @@ let handleMetadata (body: byte[]) (ctx: HttpContext) : Task =
 
         batch
         |> List.iteri (fun i entry ->
-            match entry.Json |> Result.bind (metadataRows tenant) with
+            match metadataRows tenant entry with
             | Error e ->
-                log.LogWarning("[ndm] entry {Index}: {Error}", i, e)
-                Raw.store ctx "ndm" "decode_error" $"entry {i}: {e}" (Encoding.UTF8.GetBytes entry.Text)
+                Raw.store ctx "ndm" "decode_error" $"entry {i}: {e}" (Json.rawBytes entry)
             | Ok rows ->
-                if tenant <> "" then
-                    devices.AddRange rows.Devices
-                    interfaces.AddRange rows.Interfaces
-                    addresses.AddRange rows.Addresses
-                    objects.AddRange rows.Objects)
+                devices.AddRange rows.Devices
+                interfaces.AddRange rows.Interfaces
+                addresses.AddRange rows.Addresses
+                objects.AddRange rows.Objects)
 
-        Sink.write sink NdmDevices.table (devices.ToArray())
-        Sink.write sink NdmInterfaces.table (interfaces.ToArray())
-        Sink.write sink NdmIpAddresses.table (addresses.ToArray())
-        Sink.write sink NdmMetadataObjects.table (objects.ToArray())
+        Ctx.write ctx NdmDevices.table (devices.ToArray())
+        Ctx.write ctx NdmInterfaces.table (interfaces.ToArray())
+        Ctx.write ctx NdmIpAddresses.table (addresses.ToArray())
+        Ctx.write ctx NdmMetadataObjects.table (objects.ToArray())
 
     accepted ctx
 
@@ -269,15 +214,15 @@ let private configKeys =
 
 /// The rows of one NCMPayload, or what did not fit.
 let configRows (tenant: string) (payload: JsonElement) : Result<NDMDeviceConfigRow list, string> =
-    let bad = GoJson.Mismatches()
-    let p = GoJson.fields bad "" payload
+    let bad = JsonFields.Mismatches()
+    let p = JsonFields.fields bad "" payload
 
     let space = p.String "namespace"
     // Seconds, like a config's own timestamp below: both are time.Unix().
     let collected = Time.fromUnixSeconds (p.Int64 "collect_timestamp")
     let agentHostname = p.String "agent_hostname"
     let inventories = p.Raw "inventories"
-    let extra = extraTopLevel configKeys payload
+    let extra = Json.otherMembers configKeys _.GetRawText() (Some payload)
 
     let rows =
         p.Objects "configs"
@@ -300,27 +245,22 @@ let configRows (tenant: string) (payload: JsonElement) : Result<NDMDeviceConfigR
 
 let handleConfig (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
-    match entries body with
+    match Json.tryParseList body with
     | Error e ->
-        log.LogWarning("[ndmconfig] not a JSON array: {Error}", e)
         Raw.store ctx "ndmconfig" "decode_error" e body
     | Ok batch ->
         let rows = ResizeArray<NDMDeviceConfigRow>()
 
         batch
         |> List.iteri (fun i entry ->
-            match entry.Json |> Result.bind (configRows tenant) with
+            match configRows tenant entry with
             | Error e ->
-                log.LogWarning("[ndmconfig] entry {Index}: {Error}", i, e)
-                Raw.store ctx "ndmconfig" "decode_error" $"entry {i}: {e}" (Encoding.UTF8.GetBytes entry.Text)
+                Raw.store ctx "ndmconfig" "decode_error" $"entry {i}: {e}" (Json.rawBytes entry)
             | Ok configs ->
-                if tenant <> "" then
-                    rows.AddRange configs)
+                rows.AddRange configs)
 
-        Sink.write sink NdmDeviceConfigs.table (rows.ToArray())
+        Ctx.write ctx NdmDeviceConfigs.table (rows.ToArray())
 
     accepted ctx
 
@@ -333,8 +273,8 @@ let private trapKeys =
 
 /// The row of one trap (the object under "trap"), or what did not fit.
 let trapRow (tenant: string) (trap: JsonElement) : Result<SNMPTrapRow, string> =
-    let bad = GoJson.Mismatches()
-    let t = GoJson.fields bad "" trap
+    let bad = JsonFields.Mismatches()
+    let t = JsonFields.fields bad "" trap
     let ddtags = t.String "ddtags"
     let variables = t.Objects "variables"
 
@@ -344,7 +284,7 @@ let trapRow (tenant: string) (trap: JsonElement) : Result<SNMPTrapRow, string> =
           // stamps a trap with UnixMilli().
           Timestamp = Time.fromUnixMillis (t.Int64 "timestamp")
           DDSource = t.String "ddsource"
-          DDTags = Tags.toMultiMap (splitTags ddtags)
+          DDTags = Tags.toMultiMap (Tags.splitDDTags ddtags)
           Device = tagValue ddtags "snmp_device"
           Uptime = wholeNumber (t.Number "uptime") |> Option.map uint32 |> Option.defaultValue 0u
           SNMPTrapOID = t.String "snmpTrapOID"
@@ -357,19 +297,16 @@ let trapRow (tenant: string) (trap: JsonElement) : Result<SNMPTrapRow, string> =
           VarTypes = variables |> List.map (fun v -> v.String "type") |> Array.ofList
           // A variable's value has the type of its OID, so it stays JSON.
           VarValues = variables |> List.map (fun v -> v.Raw "value") |> Array.ofList
-          Enriched = extraTopLevel trapKeys trap
+          Enriched = Json.otherMembers trapKeys _.GetRawText() (Some trap)
           Raw = trap.GetRawText() }
 
     if bad.Count = 0 then Ok row else Error bad[0]
 
 let handleTraps (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
-    match entries body with
+    match Json.tryParseList body with
     | Error e ->
-        log.LogWarning("[ndmtraps] not a JSON array: {Error}", e)
         Raw.store ctx "ndmtraps" "decode_error" e body
     | Ok batch ->
         let rows = ResizeArray<SNMPTrapRow>()
@@ -377,29 +314,20 @@ let handleTraps (body: byte[]) (ctx: HttpContext) : Task =
         batch
         |> List.iteri (fun i entry ->
             let keep (reason: string) (note: string) =
-                let body = Encoding.UTF8.GetBytes entry.Text
+                Raw.store ctx "ndmtraps" reason note (Json.rawBytes entry)
 
-                // The agent's start-up probe is `{}`: not worth a warning.
-                if not (Raw.isProbe body) then
-                    log.LogWarning("[ndmtraps] {Note}", note)
-
-                Raw.store ctx "ndmtraps" reason note body
-
-            match entry.Json with
-            | Error e -> keep "decode_error" $"entry {i}: {e}"
-            | Ok envelope when envelope.ValueKind <> JsonValueKind.Object && envelope.ValueKind <> JsonValueKind.Null ->
-                keep "decode_error" $"entry {i}: expected an object, got {GoJson.kind envelope}"
-            | Ok envelope ->
-                match (GoJson.members envelope).TryFind "trap" with
+            if entry.ValueKind <> JsonValueKind.Object && entry.ValueKind <> JsonValueKind.Null then
+                keep "decode_error" $"entry {i}: expected an object, got {Json.kind entry}"
+            else
+                match (Json.members entry).TryFind "trap" with
                 | None -> keep "unexpected_shape" $"entry {i}: no trap object"
                 | Some trap ->
                     match trapRow tenant trap with
                     | Error e -> keep "decode_error" $"entry {i}: trap: {e}"
                     | Ok row ->
-                        if tenant <> "" then
-                            rows.Add row)
+                        rows.Add row)
 
-        Sink.write sink SnmpTraps.table (rows.ToArray())
+        Ctx.write ctx SnmpTraps.table (rows.ToArray())
 
     accepted ctx
 
@@ -416,20 +344,20 @@ let flowKeys =
 /// "source". They are collected back here, each value as JSON text with its
 /// numbers digit for digit. A hand-made request may spell the map out.
 let private additionalFields (flow: JsonElement) : Map<string, string> =
-    let mutable found: Map<string, string> = Map.empty
+    let mutable found: Map<string, JsonElement> = Map.empty
 
     if flow.ValueKind = JsonValueKind.Object then
         for property in flow.EnumerateObject() do
             if property.Name = "additional_fields" then
-                for nested in GoJson.members property.Value do
-                    found <- found.Add(nested.Key, GoJson.compact nested.Value)
+                for nested in Json.members property.Value do
+                    found <- found.Add(nested.Key, nested.Value)
             elif not (flowKeys.Contains property.Name) then
-                found <- found.Add(property.Name, GoJson.compact property.Value)
+                found <- found.Add(property.Name, property.Value)
 
-    found
+    Json.memberTexts Json.compactSorted found
 
-let private flowRow (bad: GoJson.Mismatches) (tenant: string) (index: int) (flow: JsonElement) : NetflowFlowRow =
-    let f = GoJson.fields bad (string index) flow
+let private flowRow (bad: JsonFields.Mismatches) (tenant: string) (index: int) (flow: JsonElement) : NetflowFlowRow =
+    let f = JsonFields.fields bad (string index) flow
     let source = f.Object "source"
     let destination = f.Object "destination"
     // The struct's own map: nothing is read from it here, but a value that
@@ -473,25 +401,21 @@ let private flowRow (bad: GoJson.Mismatches) (tenant: string) (index: int) (flow
 /// The rows of a batch of flows. One value that does not fit refuses the
 /// whole batch.
 let decodeFlows (tenant: string) (body: byte[]) : Result<NetflowFlowRow[], string> =
-    match elements body with
+    match Json.tryParseList body with
     | Error e -> Error e
     | Ok flows ->
-        let bad = GoJson.Mismatches()
+        let bad = JsonFields.Mismatches()
         let rows = flows |> List.mapi (flowRow bad tenant) |> Array.ofList
         if bad.Count = 0 then Ok rows else Error bad[0]
 
 let handleFlow (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     match decodeFlows tenant body with
     | Error e ->
-        log.LogWarning("[ndmflow] not a list of flows: {Error}", e)
         Raw.store ctx "ndmflow" "decode_error" e body
     | Ok rows ->
-        if tenant <> "" then
-            Sink.write sink NetflowFlows.table rows
+        Ctx.write ctx NetflowFlows.table rows
 
     accepted ctx
 
@@ -521,18 +445,18 @@ let ipText (text: string) : string option =
     else
         None
 
-let private ip (fields: GoJson.Fields) (name: string) : string =
-    fields.Read(name, "an IP address", "", (fun value -> GoJson.stringOf value |> Option.bind ipText))
+let private ip (fields: JsonFields.Fields) (name: string) : string =
+    fields.Read(name, "an IP address", "", (fun value -> Json.stringOf value |> Option.bind ipText))
 
 /// One traceroute run, with the parts of it that are read more than once.
 type private Run =
-    { Run: GoJson.Fields
-      From: GoJson.Fields
-      To: GoJson.Fields
-      Hops: GoJson.Fields list }
+    { Run: JsonFields.Fields
+      From: JsonFields.Fields
+      To: JsonFields.Fields
+      Hops: JsonFields.Fields list }
 
-let private pathRow (bad: GoJson.Mismatches) (tenant: string) (index: int) (path: JsonElement) : NetworkPathRow =
-    let p = GoJson.fields bad (string index) path
+let private pathRow (bad: JsonFields.Mismatches) (tenant: string) (index: int) (path: JsonElement) : NetworkPathRow =
+    let p = JsonFields.fields bad (string index) path
     let source = p.Object "source"
     let via = source.OptionalObject "via"
     let destination = p.Object "destination"
@@ -552,7 +476,7 @@ let private pathRow (bad: GoJson.Mismatches) (tenant: string) (index: int) (path
 
     let perRun (read: Run -> 'a) : 'a[] = runs |> Array.map read
 
-    let perHop (read: GoJson.Fields -> 'a) : 'a[][] =
+    let perHop (read: JsonFields.Fields -> 'a) : 'a[][] =
         runs |> Array.map (fun run -> run.Hops |> List.map read |> Array.ofList)
 
     { TenantID = tenant
@@ -609,24 +533,20 @@ let private pathRow (bad: GoJson.Mismatches) (tenant: string) (index: int) (path
 /// The rows of a batch of network paths. One value that does not fit refuses
 /// the whole batch.
 let decodePaths (tenant: string) (body: byte[]) : Result<NetworkPathRow[], string> =
-    match elements body with
+    match Json.tryParseList body with
     | Error e -> Error e
     | Ok paths ->
-        let bad = GoJson.Mismatches()
+        let bad = JsonFields.Mismatches()
         let rows = paths |> List.mapi (pathRow bad tenant) |> Array.ofList
         if bad.Count = 0 then Ok rows else Error bad[0]
 
 let handleNetpath (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
-    let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     match decodePaths tenant body with
     | Error e ->
-        log.LogWarning("[netpath] not a list of network paths: {Error}", e)
         Raw.store ctx "netpath" "decode_error" e body
     | Ok rows ->
-        if tenant <> "" then
-            Sink.write sink NetworkPaths.table rows
+        Ctx.write ctx NetworkPaths.table rows
 
     accepted ctx

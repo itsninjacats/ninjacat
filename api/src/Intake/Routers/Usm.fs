@@ -12,6 +12,7 @@ module NinjaCat.Api.Intake.Routers.Usm
 
 open Google.Protobuf
 open Datadog.ProcessAgent
+open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage.Rows
 
 /// A latency sketch as its columns. One that does not decode is kept as
@@ -37,7 +38,7 @@ let private httpStat
     : ConnectionHttpStatRow =
     { Connection = connection
       Protocol = protocol
-      Method = ProcessEnum.name stats.Method
+      Method = ProtoEnum.name stats.Method
       Path = stats.Path
       FullPath = (if stats.FullPath then 1uy else 0uy)
       StatusCode = statusCode
@@ -110,7 +111,7 @@ let database (connection: ConnectionKey) (bytes: ByteString) : Result<Connection
 
                       { Connection = connection
                         DBMS = "postgres"
-                        Operation = ProcessEnum.name postgres.Operation
+                        Operation = ProtoEnum.name postgres.Operation
                         TableName = postgres.TableName
                         KeyName = ""
                         KeyTruncated = 0uy
@@ -124,11 +125,11 @@ let database (connection: ConnectionKey) (bytes: ByteString) : Result<Connection
                       for entry in redis.ErrorToStats do
                           { Connection = connection
                             DBMS = "redis"
-                            Operation = ProcessEnum.name redis.Command
+                            Operation = ProtoEnum.name redis.Command
                             TableName = ""
                             KeyName = redis.KeyName
                             KeyTruncated = (if redis.Truncated then 1uy else 0uy)
-                            ErrorType = ProcessEnum.name (enum<RedisErrorType> entry.Key)
+                            ErrorType = ProtoEnum.name (enum<RedisErrorType> entry.Key)
                             Count = entry.Value.Count
                             FirstLatencySample = entry.Value.FirstLatencySample
                             Latencies = sketch entry.Value.Latencies }

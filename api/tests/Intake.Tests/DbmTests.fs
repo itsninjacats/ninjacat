@@ -11,11 +11,8 @@ open Xunit
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Intake.Routers
 open NinjaCat.Api.Intake.Tests.Golden
+open NinjaCat.Api.Intake.Tests.Golden.Requests
 open NinjaCat.Api.Storage.Rows
-
-let private json (text: string) : JsonElement =
-    use doc = JsonDocument.Parse text
-    doc.RootElement.Clone()
 
 let private envelope (event: string) : Dbm.Envelope =
     match Dbm.decodeEnvelope (json event) with
@@ -27,23 +24,9 @@ let private receivedAt = DateTime(2026, 9, 23, 12, 0, 0, DateTimeKind.Utc)
 let private row (track: string) (event: string) : DBMEventRow =
     Dbm.toRow "test-tenant" track receivedAt event (envelope event)
 
-/// Posts a body through the engine with the test key; returns the answer and
-/// what was written.
+/// Posts a body with the test key; returns the answer and what was written.
 let private post (path: string) (body: string) : Response * CapturingSink =
-    let sink = CapturingSink()
-
-    let deps: Deps =
-        { Store = Replay.testStore ()
-          Sink = sink
-          Log = NullLogger.Instance
-          AckUnknown = false }
-
-    let http = DefaultHttpContext()
-    http.Request.Method <- "POST"
-    http.Request.Host <- HostString "example.com"
-    http.Request.Path <- PathString path
-    http.Request.Headers["Dd-Api-Key"] <- StringValues Replay.testKey
-    Replay.byGoNames deps [ "routeDBM" ] http (Encoding.UTF8.GetBytes body), sink
+    Requests.send [ "routeDBM" ] "POST" path Requests.withKey (utf8 body)
 
 [<Fact>]
 let ``ddtags as one comma-joined string becomes a tag list, and the db object stays an extra key`` () =
@@ -104,16 +87,15 @@ let ``null leaves a field empty without marking it undecoded`` () =
     Assert.True e.Extra.IsEmpty
 
 [<Fact>]
-let ``a malformed interval reads as zero, not as absent, and is noted`` () =
-    // What Go's decoder did: it allocated the *float64 before refusing the value.
+let ``a malformed interval is absent, and is noted`` () =
     let text = envelope """{"collection_interval":"x","min_collection_interval":3}"""
-    Assert.Equal(Some 0.0, text.CollectionInterval)
+    Assert.Equal(Some 3.0, text.CollectionInterval)
     Assert.Equal<string list>([ "collection_interval" ], text.Undecoded)
     Assert.True(text.Extra.ContainsKey "collection_interval")
 
-    Assert.Equal(Some 0.0, (envelope """{"min_collection_interval":true}""").CollectionInterval)
+    Assert.Equal(None, (envelope """{"min_collection_interval":true}""").CollectionInterval)
     Assert.Equal(Some 5.0, (envelope """{"collection_interval":5,"min_collection_interval":"x"}""").CollectionInterval)
-    Assert.Equal(Some Double.PositiveInfinity, (envelope """{"collection_interval":1e999}""").CollectionInterval)
+    Assert.Equal(None, (envelope """{"collection_interval":1e999}""").CollectionInterval)
     Assert.Equal(Some 7.0, (envelope """{"collection_interval":null,"min_collection_interval":7}""").CollectionInterval)
 
 [<Fact>]
@@ -130,9 +112,9 @@ let ``the timestamp is kept as written, a number inside a string included`` () =
     Assert.Equal("", (envelope """{"host":"db1"}""").Timestamp)
 
 [<Fact>]
-let ``an event that is not an object is refused, null by name`` () =
-    Assert.Equal(Error "event is null, not a JSON object", Dbm.decodeEnvelope (json "null") |> Result.map ignore)
-    Assert.True((Dbm.decodeEnvelope (json "\"text\"")).IsError)
+let ``an event that is not an object is refused, null too`` () =
+    Assert.Equal(Error "expected an object, got null", Dbm.decodeEnvelope (json "null") |> Result.map ignore)
+    Assert.Equal(Error "expected an object, got string", Dbm.decodeEnvelope (json "\"text\"") |> Result.map ignore)
     Assert.True((Dbm.decodeEnvelope (json "42")).IsError)
 
 [<Fact>]
@@ -314,12 +296,12 @@ let ``an event without a timestamp gives a row without one`` () =
     Assert.Equal(None, (row "dbmhealth" """{"host":"db1"}""").Timestamp)
 
 [<Fact>]
-let ``a bare object is stored with its text exactly as sent`` () =
+let ``a bare object is a batch of one, stored with its text as sent`` () =
     let body = " {\"host\": \"db1\",\n  \"status\": \"ok\"}\n"
     let response, sink = post "/api/v2/dbmhealth" body
     Assert.Equal(202, response.Status)
     let stored = Assert.Single(sink.Rows<DBMEventRow>())
-    Assert.Equal(body, stored.Event)
+    Assert.Equal(body.Trim(), stored.Event)
     Assert.Equal(Replay.testTenant, stored.TenantID)
 
 [<Fact>]
@@ -343,8 +325,7 @@ let ``without a tenant nothing is stored and the answer is still 202`` () =
     let sink = CapturingSink()
 
     // The handler itself, with no key behind the request.
-    let deps: Deps = { Store = Replay.testStore (); Sink = sink; Log = NullLogger.Instance; AckUnknown = false }
-    let ctx = Replay.contextFor deps ""
+    let ctx = Replay.contextFor (Requests.deps sink) ""
     (Dbm.handle "dbmmetrics" (Encoding.UTF8.GetBytes """{"host":"db1","database_instance":"db1/orcl"}""") ctx).Wait()
     let response = Replay.answerOf ctx
     Assert.Equal(202, response.Status)

@@ -13,67 +13,13 @@ open NinjaCat.Api.Intake.Routers.CiVisibility
 open NinjaCat.Api.Intake.Tests.Golden
 open NinjaCat.Api.Storage.Rows
 
-/// Sends one request, with the test key, to the engine of one Go route set.
+/// Sends one request, with the test key, to one Go route set.
 let send (routeSet: string) (method: string) (url: string) (headers: (string * string) list) (body: byte[]) : Response * CapturingSink =
-    let sink = CapturingSink()
+    Requests.send [ routeSet ] method url (Requests.withKey @ headers) body
 
-    let deps: Deps =
-        { Store = Replay.testStore ()
-          Sink = sink
-          Log = NullLogger.Instance
-          AckUnknown = false }
+let utf8 = Requests.utf8
 
-    let path, query =
-        match url.IndexOf '?' with
-        | -1 -> url, ""
-        | i -> url.Substring(0, i), url.Substring i
-
-    let http = DefaultHttpContext()
-    http.Request.Method <- method
-    http.Request.Host <- HostString "example.com"
-    http.Request.Path <- PathString path
-    http.Request.QueryString <- QueryString query
-    http.Request.Headers["Dd-Api-Key"] <- StringValues Replay.testKey
-
-    for name, value in headers do
-        http.Request.Headers[name] <- StringValues value
-
-    Replay.byGoNames deps [ routeSet ] http body, sink
-
-let utf8 (text: string) : byte[] = Encoding.UTF8.GetBytes text
-
-type private Part =
-    { Name: string
-      FileName: string
-      ContentType: string
-      Data: byte[] }
-
-/// A multipart body and its Content-Type.
-let private multipart (parts: Part list) : string * byte[] =
-    use body = new MemoryStream()
-
-    let write (text: string) =
-        let bytes = utf8 text
-        body.Write(bytes, 0, bytes.Length)
-
-    for part in parts do
-        write "--frontier\r\n"
-        write $"Content-Disposition: form-data; name=\"{part.Name}\""
-
-        if part.FileName <> "" then
-            write $"; filename=\"{part.FileName}\""
-
-        write "\r\n"
-
-        if part.ContentType <> "" then
-            write $"Content-Type: {part.ContentType}\r\n"
-
-        write "\r\n"
-        body.Write(part.Data, 0, part.Data.Length)
-        write "\r\n"
-
-    write "--frontier--\r\n"
-    "multipart/form-data; boundary=frontier", body.ToArray()
+let private multipart (parts: Requests.Part list) : string * byte[] = Requests.multipart "frontier" parts
 
 let private json (text: string) : Value =
     match decodeAny "application/json" (utf8 text) with
@@ -81,7 +27,7 @@ let private json (text: string) : Value =
     | _, Error e -> failwith e
 
 [<Fact>]
-let ``a float where text was expected is written as Go wrote it`` () =
+let ``a float where text was expected is written in the layout the columns hold`` () =
     let cases =
         [ 1234567.0, "1.234567e+06"
           100000.0, "100000"
@@ -181,7 +127,7 @@ let ``a metric is read from every numeric form`` () =
     Assert.Equal(0.0, Value.toFloat (Value.String " 3"))
     Assert.Equal(0.0, Value.toFloat (Value.String "abc"))
     Assert.Equal(0.0, Value.toFloat (Value.Bool true))
-    // The words Go's ParseFloat takes.
+    // Infinity and NaN in words.
     Assert.Equal(infinity, Value.toFloat (Value.String "inf"))
     Assert.Equal(infinity, Value.toFloat (Value.String "+Inf"))
     Assert.Equal(-infinity, Value.toFloat (Value.String "-Infinity"))
@@ -267,9 +213,9 @@ let ``what follows the first JSON value is not looked at`` () =
     Assert.True(Result.isError (snd (decodeAny "application/json" (utf8 "[1,2"))))
 
 [<Fact>]
-let ``JSON that Go took and .NET refuses still decodes`` () =
+let ``JSON holding half a surrogate pair or bytes that are not UTF-8 still decodes`` () =
     // Half a surrogate pair written as an escape, and a byte that is not
-    // UTF-8: Go read both as U+FFFD.
+    // UTF-8: both are read as U+FFFD.
     let body =
         Array.concat
             [ utf8 """{"half":"x\ud83dy","low":"\udc00","pair":"\ud83d\ude00","slash":"\\ud83d","k\ud800":1,"byte":"z"""
@@ -359,7 +305,7 @@ let ``a truncated coverage upload is kept raw, not stored in part`` () =
 
 [<Fact>]
 let ``a JSON coverage payload of the wrong shape is kept raw`` () =
-    for payload in [ """[1,2]"""; """{"version":2,"coverages":{"not":"an array"}}"""; """{"version":"two","coverages":[]}""" ] do
+    for payload in [ """[1,2]"""; """{"version":2,"coverages":{"not":"an array"}}""" ] do
         let contentType, body =
             multipart [ { Name = "coverage1"; FileName = ""; ContentType = "application/json"; Data = utf8 payload } ]
 
@@ -368,15 +314,20 @@ let ``a JSON coverage payload of the wrong shape is kept raw`` () =
         Assert.Empty(sink.Rows<CICoverageRow>())
         Assert.Equal("decode_error", (Assert.Single(sink.Rows<RawPayloadRow>())).Reason)
 
-[<Fact>]
-let ``a JSON coverage version past int64 is the nearest limit, as Go's ParseInt gave`` () =
+[<Theory>]
+[<InlineData("2", 2)>]
+[<InlineData("\"2\"", 2)>]
+[<InlineData("2.0", 0)>]
+[<InlineData("99999999999999999999", 0)>]
+[<InlineData("\"two\"", 0)>]
+let ``a JSON coverage version that cannot be read is 0 and costs no coverage`` (version: string, expected: int) =
     let contentType, body =
         multipart
-            [ { Name = "c"; FileName = ""; ContentType = "application/json"; Data = utf8 """{"version":99999999999999999999,"coverages":[{}]}""" } ]
+            [ { Name = "c"; FileName = ""; ContentType = "application/json"; Data = utf8 $"""{{"version":{version},"coverages":[{{}}]}}""" } ]
 
     let _, sink = send "routeCITestCov" "POST" "/api/v2/citestcov" [ "Content-Type", contentType ] body
-    // int32 of Int64.MaxValue.
-    Assert.Equal(-1, (Assert.Single(sink.Rows<CICoverageRow>())).PayloadVersion)
+    Assert.Empty(sink.Rows<RawPayloadRow>())
+    Assert.Equal(expected, (Assert.Single(sink.Rows<CICoverageRow>())).PayloadVersion)
 
 [<Fact>]
 let ``a JSON coverage entry keeps the base64 text of its bitmap and its unknown keys`` () =
@@ -385,7 +336,7 @@ let ``a JSON coverage entry keeps the base64 text of its bitmap and its unknown 
             [ { Name = "coverage1"
                 FileName = ""
                 ContentType = ""
-                Data = utf8 """{"version":"2","coverages":[{"test_session_id":1,"span_id":0,"files":[{"filename":"a.go","bitmap":"AQID"}],"later":[1]}]}""" } ]
+                Data = utf8 """{"version":2,"coverages":[{"test_session_id":1,"span_id":0,"files":[{"filename":"a.go","bitmap":"AQID"}],"later":[1]}]}""" } ]
 
     let _, sink = send "routeCITestCov" "POST" "/api/v2/citestcov" [ "Content-Type", contentType ] body
     let row = Assert.Single(sink.Rows<CICoverageRow>())
@@ -481,10 +432,9 @@ let ``a question keeps what decoded when a field has the wrong type`` () =
     Assert.Equal(Some "attributes", problem |> Option.map fst)
 
 [<Fact>]
-let ``a question is read as Go read it`` () =
-    // Names match whatever their case.
-    let request, problem = readConfigRequest (utf8 """{"DATA":{"ID":"upper","Attributes":{"Service":"s"}}}""")
-    Assert.Equal("upper", request.ID)
+let ``a question's members are read by exact name, and null is the same as absent`` () =
+    let request, problem = readConfigRequest (utf8 """{"DATA":{"id":"upper"},"data":{"id":"exact","Attributes":{"service":"x"},"attributes":{"service":"s"}}}""")
+    Assert.Equal("exact", request.ID)
     Assert.Equal("s", request.Service)
     Assert.True problem.IsNone
 
@@ -495,6 +445,7 @@ let ``a question is read as Go read it`` () =
 
     let request, problem = readConfigRequest (utf8 """{"data":{"id":null,"attributes":{"configurations":null,"page_info":null}}}""")
     Assert.Equal("", request.ID)
+    // Kept as JSON text, so the null that was sent stays.
     Assert.Equal("null", request.Configurations)
     Assert.True problem.IsNone
 
@@ -504,28 +455,21 @@ let ``a question is read as Go read it`` () =
         Assert.Equal(Some "envelope", problem |> Option.map fst)
 
     let _, problem = readConfigRequest (utf8 """{"data":{"attributes":[1]}}""")
-    Assert.Equal(Some "attributes", problem |> Option.map fst)
+    Assert.Equal(Some("attributes", "data.attributes: expected an object, got array"), problem)
 
 [<Fact>]
-let ``a repeated key is applied in order, as Go applied it`` () =
-    // The wrong type is an error, and leaves what the earlier one set.
+let ``of a repeated key the last one counts`` () =
     let request, problem = readConfigRequest (utf8 """{"data":{"id":"a","id":5}}""")
-    Assert.Equal("a", request.ID)
-    Assert.Equal(Some "envelope", problem |> Option.map fst)
+    Assert.Equal("", request.ID)
+    Assert.Equal(Some("envelope", "data.id: expected a string, got number"), problem)
 
     let request, problem = readConfigRequest (utf8 """{"data":{"id":"a","id":null}}""")
-    Assert.Equal("a", request.ID)
+    Assert.Equal("", request.ID)
     Assert.True problem.IsNone
 
-    // A repeated object adds to the earlier one.
     let request, problem = readConfigRequest (utf8 """{"data":{"id":"a"},"data":{"type":"t"}}""")
-    Assert.Equal("a", request.ID)
-    Assert.Equal("t", request.Type)
+    Assert.Equal(("", "t"), (request.ID, request.Type))
     Assert.True problem.IsNone
-
-    let request, problem = readConfigRequest (utf8 """{"data":{"attributes":{"service":"s","Service":null,"SERVICE":7}}}""")
-    Assert.Equal("s", request.Service)
-    Assert.Equal(Some "attributes", problem |> Option.map fst)
 
 [<Fact>]
 let ``an id that needs escaping is echoed as valid JSON`` () =
@@ -562,7 +506,7 @@ let ``a packfile upload that is not multipart is kept raw and still answered 204
     Assert.Empty response.Body
     let raw = Assert.Single(sink.Rows<RawPayloadRow>())
     Assert.Equal("gitmeta", raw.Intake)
-    Assert.Equal("packfile multipart, content-type application/octet-stream: content-type application/octet-stream is not multipart", raw.Note)
+    Assert.Equal("packfile multipart, content-type application/octet-stream: the content type is application/octet-stream, not multipart", raw.Note)
     Assert.Empty(sink.Rows<GitPackfileRow>())
 
 [<Fact>]
@@ -594,7 +538,7 @@ let ``a pushedSha part that does not decode is kept beside the pack`` () =
     // What did decode is kept: the sha was readable, the repository was not.
     Assert.Equal("abc", pack.PushedSHA)
     Assert.Equal("", pack.RepositoryURL)
-    Assert.Equal("pack-1.pack", pack.Filename)
+    Assert.Equal("objects/pack-1.pack", pack.Filename)
     Assert.Equal<byte[]>([| 0xffuy; 0x00uy |], pack.Packfile)
     Assert.Equal<Map<string, byte[]>>(Map [ "pushedSha.undecodable", pushedSha; "note", utf8 "hello" ], pack.OtherParts)
 

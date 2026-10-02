@@ -18,6 +18,7 @@ open NinjaCat.Api.Intake.Routers
 open Datadog.Sds
 open NinjaCat.Api.Intake.Tests
 open NinjaCat.Api.Intake.Tests.Golden
+open NinjaCat.Api.Intake.Tests.Golden.Requests
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
 
@@ -29,11 +30,7 @@ type private Vulnerability = Cyclonedx.V14.Vulnerability
 type private SbomPayload = Datadog.Sbom.SBOMPayload
 type private SbomEntity = Datadog.Sbom.SBOMEntity
 
-let private utf8 (text: string) : byte[] = Encoding.UTF8.GetBytes text
-
-let private jsonValue (text: string) : JsonElement =
-    use document = JsonDocument.Parse text
-    document.RootElement.Clone()
+let private jsonValue = Requests.json
 
 let private time (text: string) : DateTime =
     DateTime.Parse(text, Globalization.CultureInfo.InvariantCulture, Globalization.DateTimeStyles.RoundtripKind)
@@ -41,41 +38,14 @@ let private time (text: string) : DateTime =
 let private dumpId = Guid.Parse "01020304-0506-0708-090a-0b0c0d0e0f10"
 let private now = DateTime(2026, 9, 23, 10, 0, 0, DateTimeKind.Utc)
 
-/// A multipart/form-data body of the given parts, and its Content-Type.
+/// A multipart/form-data body of the given form fields, and its Content-Type.
 let private multipart (parts: (string * byte[]) list) : string * byte[] =
-    let boundary = "security-tests-boundary"
-    use body = new MemoryStream()
-    let write (data: byte[]) = body.Write(data, 0, data.Length)
+    Requests.multipart "security-tests-boundary" [ for name, data in parts -> Requests.field name data ]
 
-    for name, data in parts do
-        write (utf8 $"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n")
-        write data
-        write (utf8 "\r\n")
-
-    write (utf8 $"--{boundary}--\r\n")
-    $"multipart/form-data; boundary={boundary}", body.ToArray()
-
-/// One POST through a route set, as the Go tests sent them: the answer and
-/// what was written.
+/// One POST with the test key: the answer and what was written.
 let private post (routeSet: string) (path: string) (contentType: string) (body: byte[]) : Response * CapturingSink =
-    let sink = CapturingSink()
-
-    let deps: Deps =
-        { Store = Replay.testStore ()
-          Sink = sink
-          Log = NullLogger.Instance
-          AckUnknown = false }
-
-    let http = DefaultHttpContext()
-    http.Request.Method <- "POST"
-    http.Request.Host <- HostString "example.com"
-    http.Request.Path <- PathString path
-    http.Request.Headers["Dd-Api-Key"] <- StringValues Replay.testKey
-
-    if contentType <> "" then
-        http.Request.Headers["Content-Type"] <- StringValues contentType
-
-    Replay.byGoNames deps [ routeSet ] http body, sink
+    let contentTypeHeader = if contentType = "" then [] else [ "Content-Type", contentType ]
+    Requests.send [ routeSet ] "POST" path (Requests.withKey @ contentTypeHeader) body
 
 /// init → bash (-c "cat file", matched by r1) → cat: one root, one child
 /// with a rule match and args, one grandchild.
@@ -316,7 +286,8 @@ let ``a message is decoded when it is an object or holds one`` (message: string,
 
     Assert.Equal(uint8 decoded, row.MessageDecoded)
     Assert.Equal(ruleId, row.RuleID)
-    Assert.Equal(message, row.MessageRaw)
+    // A null message is the same as none.
+    Assert.Equal((if message = "null" then "" else message), row.MessageRaw)
     Assert.Equal((decoded = 1), (row.Message <> ""))
 
 [<Theory>]
@@ -366,7 +337,9 @@ let ``an envelope with text that is not valid Unicode keeps its row`` () =
     Assert.Equal("t\uFFFD", row.Title)
     Assert.Equal("r\uFFFD", row.RuleID)
     Assert.Equal(1uy, row.MessageDecoded)
-    Assert.Equal("{\"a\\ud800\":1}", row.Extra["k\uFFFD"])
+    // Raw JSON kept in a column is repaired too: half a pair in it would
+    // stop the next reader of that column.
+    Assert.Equal("{\"a\\ufffd\":1}", row.Extra["k\uFFFD"])
     Assert.Equal(2, (jsonValue row.Message).GetProperty("k\uFFFD").GetInt32())
 
 [<Fact>]
@@ -403,9 +376,9 @@ let ``each track stores its envelopes under its own name`` (routeSet: string, pa
     Assert.Equal("remediation", row.EventKind)
 
 [<Theory>]
-[<InlineData("""{"hostname":"h1"}""", "top-level body is not a JSON array: the body is JSON, but not an array")>]
-[<InlineData("\"text\"", "top-level body is not a JSON array: the body is JSON, but not an array")>]
-[<InlineData("""[{"hostname":"h1"}, 7]""", "top-level body is not a JSON array: entry 1 is not a JSON object")>]
+[<InlineData("""{"hostname":"h1"}""", "the body is not a list of envelopes: expected a list, got object")>]
+[<InlineData("\"text\"", "the body is not a list of envelopes: expected a list, got string")>]
+[<InlineData("""[{"hostname":"h1"}, 7]""", "the body is not a list of envelopes: entry 1 is not a JSON object")>]
 let ``a batch that is not a list of envelopes is kept raw under its track`` (body: string, note: string) =
     let response, sink = post "routeCSPM" "/api/v2/compliance" "application/json" (utf8 body)
 
@@ -423,7 +396,7 @@ let ``a batch that is not JSON is kept raw with the parser's reason`` () =
     let raw = Assert.Single(sink.Rows<RawPayloadRow>())
     Assert.Equal("secinfo", raw.Intake)
     Assert.Equal("unexpected_shape", raw.Reason)
-    Assert.StartsWith("top-level body is not a JSON array: ", raw.Note)
+    Assert.StartsWith("the body is not a list of envelopes: ", raw.Note)
 
 [<Theory>]
 [<InlineData("null")>]
@@ -574,7 +547,7 @@ let ``what the payload and the entity say about themselves reaches the row`` () 
     // Neither arm of the oneof.
     Assert.Equal<string list>([ ""; "" ], [ row.Error; row.Bom ])
 
-/// What Go's Duration.AsDuration().Milliseconds() gives for these.
+/// Whole milliseconds; a duration past 64 bits of nanoseconds stays at that limit.
 [<Theory>]
 [<InlineData(2L, 345678901, 2345L)>]
 [<InlineData(-1L, 999999, -999L)>]
@@ -747,13 +720,13 @@ let ``the wire layout lists top-level fields in order, runs folded`` (body: stri
     let layout = Security.wireLayout (Convert.FromHexString body)
     Assert.Equal(expected, defaultArg layout "malformed")
 
-/// Go's wire walk follows groups 10 001 deep and no further. Here the open
-/// groups are counted, not recursed into, so depth costs no stack.
+/// The protobuf library stops following nested groups at its recursion
+/// limit, so hostile nesting is malformed, not a stack overflow.
 [<Theory>]
-[<InlineData(10001, "1:type3")>]
+[<InlineData(50, "1:type3")>]
 [<InlineData(10002, "malformed")>]
 [<InlineData(200000, "malformed")>]
-let ``nested groups are followed as deep as Go follows them`` (depth: int, expected: string) =
+let ``nested groups are followed as deep as the protobuf library follows them`` (depth: int, expected: string) =
     let body = Array.append (Array.create depth 0x0Buy) (Array.create depth 0x0Cuy)
     Assert.Equal(expected, defaultArg (Security.wireLayout body) "malformed")
 

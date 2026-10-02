@@ -19,23 +19,26 @@ open NinjaCat.Api.Intake.Routers
 
 // ---- every host ----
 
-/// /ping and /_health, which ask for no key on any host.
+/// What asks for no key on any host: /ping, /_health, and the HEAD an agent
+/// sends to learn whether a flare could be uploaded. Its connectivity check
+/// sends that one without a key and reports anything but 200 or a redirect
+/// as a failure (pkg/diagnose/connectivity, agent 7.84.0).
 let probes: Endpoint list =
     [ GET
           [ route "/ping" (json {| message = "pong" |})
-            route "/_health" (json {| status = "ok" |}) ] ]
+            route "/_health" (json {| status = "ok" |}) ]
+      HEAD
+          [ route "/support/flare" (setStatusCode 200)
+            routef "/support/flare/{%s}" (fun (_: string) -> setStatusCode 200) ] ]
 
 /// What the agent sweeps at startup on whatever host it talks to, before it
 /// knows which intake that is; and a flare, which goes to whichever host
 /// dd_url resolves to. They ask for the key the host asks for.
 let onEveryHost: Endpoint list =
-    let flare =
-        [ route "/support/flare" (bindBody (Flare.handle ""))
-          routef "/support/flare/{%s}" (fun (caseId: string) -> bindBody (Flare.handle caseId)) ]
-
     [ GET [ route "/api/v1/validate" (json {| valid = true |}) ]
-      HEAD flare
-      POST flare ]
+      POST
+          [ route "/support/flare" (bindBody (Flare.handle ""))
+            routef "/support/flare/{%s}" (fun (caseId: string) -> bindBody (Flare.handle caseId)) ] ]
 
 // ---- the core agent: dd_url ----
 
@@ -323,7 +326,7 @@ let private logUnhandled (ctx: HttpContext) : unit =
     (Ctx.log ctx).LogWarning(
         "UNHANDLED ENDPOINT: {Method} {Path} (Content-Type: {ContentType}, User-Agent: {UserAgent})",
         ctx.Request.Method,
-        ctx.Request.Path.Value,
+        Secrets.pathWithoutKey ctx.Request.Path.Value,
         ctx.Request.ContentType,
         ctx.Request.Headers.UserAgent.ToString()
     )
@@ -334,7 +337,7 @@ let private unknownEndpoint: EndpointHandler =
         logUnhandled ctx
 
         if ctx.GetService<IntakeSettings>().AckUnknown then
-            (setStatusCode 202 >=> json {||}) ctx
+            accepted ctx
         else
             (setStatusCode 404 >=> json {| errors = [ "unknown endpoint" ] |}) ctx
 
@@ -351,17 +354,28 @@ let private unknownHost: EndpointHandler =
 /// for anything else. `scheme` is the authentication scheme its routes ask
 /// for (Auth.fs); None for a host whose clients are anonymous.
 let mount (app: IApplicationBuilder) (scheme: string option) (endpoints: Endpoint list) : unit =
-    let served = endpoints @ onEveryHost
-
     let guarded =
         match scheme with
-        | None -> served
+        // A host that asks for no key serves its own routes and nothing
+        // else: a flare upload there would be a body anyone could send.
+        | None -> endpoints
         | Some scheme ->
-            served
+            endpoints @ onEveryHost
             |> List.map (configureEndpoint (fun endpoint -> endpoint.RequireAuthorization(AuthorizeAttribute(AuthenticationSchemes = scheme))))
 
-    // A handler that throws is a 500 and a line in the log, not a crash.
-    app.UseExceptionHandler(fun (failed: IApplicationBuilder) -> failed.Run(setStatusCode 500))
+    // A handler that throws is a 500 and a line in the log, not a crash. A
+    // request Kestrel refuses while its body is read (one over the size
+    // limit) keeps the status Kestrel gives it, 413.
+    app.UseExceptionHandler(
+        ExceptionHandlerOptions(
+            ExceptionHandler = RequestDelegate(fun _ -> Task.CompletedTask),
+            StatusCodeSelector =
+                fun (error: exn) ->
+                    match error with
+                    | :? BadHttpRequestException as refused -> refused.StatusCode
+                    | _ -> 500
+        )
+    )
     |> ignore
 
     // A known path with the wrong method is answered by the router itself,

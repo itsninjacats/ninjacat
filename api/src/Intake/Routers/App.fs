@@ -539,8 +539,8 @@ let decode (tenant: string) (payload: Payload) : Decoded =
                 fail $"series {i} sourceTypeNameRef {sourceRef}: {badReference}"
                 ""
 
-        // Checked but not stored: as in the Go intake, a v3 row carries
-        // neither its origin nor its non-host resources yet.
+        // Checked but not stored: a v3 row carries neither its origin nor
+        // its non-host resources yet.
         if originRef < 0L || originRef >= int64 originDict.Length then
             fail $"series {i} originInfoRef {originRef}: {badReference}"
 
@@ -631,11 +631,9 @@ let private parse (body: byte[]) : Result<Payload, string> =
 let handle (label: string) (body: byte[]) (ctx: HttpContext) : Task =
     let tenant = Ctx.tenant ctx
     let log = Ctx.log ctx
-    let sink = Ctx.sink ctx
 
     match parse body with
     | Error message ->
-        log.LogWarning("[{Label}] protobuf: {Error} ({Bytes} bytes)", label, message, body.Length)
         Raw.store ctx label "decode_error" message body
     | Ok payload ->
         let series = if isNull payload.MetricData then 0 else payload.MetricData.Types_.Count
@@ -660,17 +658,16 @@ let handle (label: string) (body: byte[]) (ctx: HttpContext) : Task =
                 "unexpected_shape"
                 $"protobuf decoded but MetricData carries no series; metadata tags={tags} resources={resources}"
                 body
-        elif tenant <> "" then
+        else
             let decoded = decode tenant payload
-            Sink.write sink Metrics.table decoded.Points
-            Sink.write sink Sketches.table decoded.Sketches
+            Ctx.write ctx Metrics.table decoded.Points
+            Ctx.write ctx Sketches.table decoded.Sketches
 
             // The rows above are what the walk could read; the two notes
             // below keep what it could not. A payload that decodes cleanly is
             // never mirrored into raw_payloads.
             match decoded.Problem with
             | Some problem ->
-                log.LogWarning("[{Label}] columnar walk: {Problem} — payload kept raw", label, problem)
                 Raw.store ctx label "unexpected_shape" problem body
             | None -> ()
 
@@ -686,4 +683,4 @@ let handle (label: string) (body: byte[]) (ctx: HttpContext) : Task =
 
                 Raw.store ctx label "int64_precision" $"{decoded.WideInts} sint64 values beyond 2^53 widened to Float64" body
 
-    (setStatusCode 202 >=> json {||}) ctx
+    accepted ctx

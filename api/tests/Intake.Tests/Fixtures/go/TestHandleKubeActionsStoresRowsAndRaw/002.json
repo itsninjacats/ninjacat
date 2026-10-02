@@ -62,7 +62,7 @@
      {},
      "{\"not\":\"an array\"}",
      18,
-     "json: cannot unmarshal object into Go value of type []jsontext.Value"
+     "expected a list, got object"
     ]
    ],
    "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
@@ -76,7 +76,7 @@
      "Host": "example.com",
      "Intake": "kubeactions",
      "Method": "POST",
-     "Note": "json: cannot unmarshal object into Go value of type []jsontext.Value",
+     "Note": "expected a list, got object",
      "Path": "/api/v2/kubeactions",
      "Query": {},
      "Reason": "decode_error",
@@ -93,5 +93,6 @@
  "volatile": [
   "/sends/0/args/0/1",
   "/sends/0/rows/0/ReceivedAt"
- ]
+ ],
+ "edited": "The notes say which member did not fit and what was found there, in one wording for every intake. They used to be the Go server's, quoting Go's encoding/json. A body that is not a list is refused in one wording for every intake (\"expected a list, got …\"); the note no longer quotes Go's encoding/json."
 }

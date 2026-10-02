@@ -27,6 +27,18 @@ let ``an unhosted blob is the registry's own BLOB_UNKNOWN, with no API key asked
     Assert.Empty sink.Writes
 
 [<Fact>]
+let ``a host that asks for no key takes no upload and answers no key check`` () =
+    // What every keyed host also serves (a flare, /api/v1/validate) is not
+    // served here: it would be a body anyone could make the intake read.
+    let flare, sink = AppTests.send [ "routeInstall" ] "POST" "/support/flare" [] (Encoding.UTF8.GetBytes "x")
+    // 405, not 404: the path exists here only as the HEAD probe.
+    Assert.Equal(405, flare.Status)
+    Assert.Empty sink.Writes
+
+    let validate, _ = AppTests.send [ "routeInstall" ] "GET" "/api/v1/validate" [] [||]
+    Assert.Equal(404, validate.Status)
+
+[<Fact>]
 let ``a BTF archive is not hosted, so system-probe falls back to its next source`` () =
     let response, sink =
         AppTests.send [ "routeInstall" ] "GET" "/btfs/ubuntu/22.04/x86_64/5.15.0-91-generic.btf.tar.xz" [] [||]
@@ -50,7 +62,7 @@ let ``an llmobs body sent by the diagnose sweep is a probe, not a payload`` () =
     Assert.Empty sink.Writes
 
 [<Fact>]
-let ``the note of an aiusage payload quotes the proxy's origin headers as Go's %q does`` () =
+let ``the note of an aiusage payload quotes the proxy's origin headers`` () =
     let _, sink =
         AppTests.send
             [ "routeAIUsage" ]
@@ -73,11 +85,6 @@ let ``the note of an aiusage payload quotes the proxy's origin headers as Go's %
 [<InlineData("", "\"\"")>]
 [<InlineData("plain text", "\"plain text\"")>]
 [<InlineData("a\"b\\c", "\"a\\\"b\\\\c\"")>]
-[<InlineData("tab\there\n", "\"tab\\there\\n\"")>]
-[<InlineData("bell\u0007 esc\u001b del\u007f", "\"bell\\a esc\\x1b del\\x7f\"")>]
 [<InlineData("zażółć — ✓", "\"zażółć — ✓\"")>]
-[<InlineData("nbsp  zwsp​", "\"nbsp\\u00a0 zwsp\\u200b\"")>]
-[<InlineData("😀", "\"😀\"")>]
-[<InlineData("\u0085 \u2028 \ue000 \U000e0001 \u0378", "\"\\u0085 \\u2028 \\ue000 \\U000e0001 \\u0378\"")>]
-let ``goQuote writes what Go's strconv.Quote writes`` (text: string, expected: string) =
-    Assert.Equal(expected, Install.goQuote text)
+let ``a header in a note is quoted as a JSON string`` (text: string, expected: string) =
+    Assert.Equal(expected, Json.quoted text)

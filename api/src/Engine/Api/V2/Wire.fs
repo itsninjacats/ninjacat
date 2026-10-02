@@ -5,10 +5,10 @@
 /// it there and in every generated client. Nothing here is validated; that is
 /// what Timeseries.fs does with it.
 ///
-/// Field names become snake_case through Json.options. Unknown fields are
+/// Field names become snake_case through Serialization.options. Unknown fields are
 /// ignored — dashboards also send `semantic_mode`, `cross_org_uuids` and the
 /// like. Required strings may still arrive as null and `from`/`to` are options:
-/// the deserializer does not enforce presence (see Json.fs), so the reader of
+/// the deserializer does not enforce presence (see Serialization.fs), so the reader of
 /// each type does.
 module NinjaCat.Api.Engine.Api.V2.Wire
 

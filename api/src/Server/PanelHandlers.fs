@@ -11,7 +11,6 @@ open Microsoft.Extensions.Logging
 open Oxpecker
 open ClickHouse.Driver
 open NinjaCat.Api.Engine
-open NinjaCat.Api.Intake
 
 let private fail (status: int) (message: string) : EndpointHandler =
     setStatusCode status >=> json {| error = message |}
@@ -57,9 +56,6 @@ let private names (sql: Sql) (respond: string list -> obj) : EndpointHandler =
 let metricNames: EndpointHandler =
     fun ctx -> names (Panel.listMetrics (tenant ctx) (queryValue ctx "search") (queryInt ctx "limit")) (fun found -> {| metrics = found |}) ctx
 
-let metricHosts: EndpointHandler =
-    fun ctx -> names (Panel.listHosts (tenant ctx) (queryValue ctx "metric")) (fun found -> {| hosts = found |}) ctx
-
 let metricTagKeys: EndpointHandler =
     fun ctx -> names (Panel.listTagKeys (tenant ctx) (queryValue ctx "metric")) (fun found -> {| keys = found |}) ctx
 
@@ -83,11 +79,8 @@ let private timeRange (ctx: HttpContext) : Result<DateTimeOffset * DateTimeOffse
     | Ok from, Ok until when until <= from -> Error "to must be after from"
     | Ok from, Ok until -> Ok(from, until)
 
-type private SeriesRow =
-    { Groups: string list
-      Bucket: int64
-      Value: float }
-
+/// One metric over a time range, one series per host or per combination of
+/// the `by` keys. The query engine runs it, as it runs every other query.
 let metricQuery: EndpointHandler =
     fun ctx ->
         task {
@@ -98,62 +91,48 @@ let metricQuery: EndpointHandler =
             | _, Error e, _
             | _, _, Error e -> return! fail 400 e ctx
             | _, Ok(from, until), Ok tags ->
-                let step = Panel.resolveStep (queryValue ctx "step") (until - from)
-
                 let query: Panel.SeriesQuery =
-                    { Tenant = tenant ctx
-                      Metric = metric
+                    { Metric = metric
                       Hosts = queryValues ctx "host"
                       From = from
                       To = until
-                      Step = step
+                      Step =
+                        match Duration.parse (queryValue ctx "step") with
+                        | Ok asked when asked > TimeSpan.Zero -> Some asked
+                        | _ -> None
                       Aggregation = queryValue ctx "agg"
                       Tags = tags
                       GroupBy = queryValues ctx "by" }
 
-                match Panel.querySeries query with
-                | Error e -> return! fail 400 e ctx
-                | Ok(sql, groupKeys) ->
-                    let groupCount = max groupKeys.Length 1
+                let execute = ClickHouse.metricRows (ctx.GetService<ClickHouseClient>()) ctx.RequestAborted
 
-                    let read (r: Data.Common.DbDataReader) =
-                        { Groups = [ for i in 0 .. groupCount - 1 -> r.GetString i ]
-                          Bucket = r.GetInt64 groupCount
-                          Value = r.GetDouble(groupCount + 1) }
+                // A failure in ClickHouse is the caller's 400 with its
+                // reason, as for the other lookups.
+                let! answer =
+                    task {
+                        try
+                            return! Query.Engine.parsed execute (tenant ctx) [ "q" ] (Panel.seriesRequest query)
+                        with e ->
+                            ctx.GetService<ILoggerFactory>().CreateLogger("NinjaCat.Api.Panel").LogWarning("query: {Error}", e.Message)
+                            return Error [ e.Message ]
+                    }
 
-                    match! run ctx read sql with
-                    | Error e -> return! fail 400 e ctx
-                    | Ok rows ->
-                        // Rows arrive ordered by group, so each run of equal
-                        // groups is one series.
-                        let series =
-                            rows
-                            |> List.groupBy _.Groups
-                            |> List.map (fun (groups, points) ->
-                                let name, host, seriesTags =
-                                    if groupKeys.IsEmpty then
-                                        groups.Head, Some groups.Head, Map [ "host", groups.Head ]
-                                    else
-                                        List.map2 (fun key value -> $"{key}:{value}") groupKeys groups |> String.concat ", ",
-                                        None,
-                                        Map(List.zip groupKeys groups)
-
-                                {| metric = metric
-                                   host = host
-                                   name = name
-                                   tags = seriesTags
-                                   points =
-                                    [ for p in points ->
-                                          {| t = DateTimeOffset.FromUnixTimeSeconds(p.Bucket).UtcDateTime
-                                             v = p.Value |} ] |})
-
-                        return!
-                            ctx.WriteJson
-                                {| metric = metric
-                                   from = from.UtcDateTime
-                                   ``to`` = until.UtcDateTime
-                                   step = int step.TotalSeconds
-                                   series = series |}
+                match answer with
+                | Error problems -> return! fail 400 (String.concat "; " problems) ctx
+                | Ok results ->
+                    return!
+                        ctx.WriteJson
+                            {| metric = metric
+                               from = from.UtcDateTime
+                               ``to`` = until.UtcDateTime
+                               step = int (Query.Plan.step (until - from) query.Step).TotalSeconds
+                               series =
+                                [ for series in Panel.seriesOf query results ->
+                                      {| metric = metric
+                                         host = series.Host
+                                         name = series.Name
+                                         tags = series.Tags
+                                         points = [ for time, value in series.Points -> {| t = time.UtcDateTime; v = value |} ] |} ] |}
         }
 
 /// A `Map(String, Array(String))` column as the driver hands it over.
@@ -182,26 +161,25 @@ let logSearch: EndpointHandler =
                       To = until
                       Limit = queryInt ctx "limit" }
 
-                match Panel.searchLogs search with
-                | Error e -> return! fail 400 e ctx
-                | Ok(rowsSql, countSql) ->
-                    let read (r: Data.Common.DbDataReader) =
-                        {| timestamp = DateTimeOffset.FromUnixTimeMilliseconds(r.GetInt64 0).UtcDateTime
-                           host = r.GetString 1
-                           service = r.GetString 2
-                           source = r.GetString 3
-                           status = r.GetString 4
-                           message = r.GetString 5
-                           tags = tagMap (r.GetValue 6) |}
+                let rowsSql, countSql = Panel.searchLogs search
 
-                    let! logs = run ctx read rowsSql
-                    let! count = run ctx (fun r -> Convert.ToUInt64(r.GetValue 0)) countSql
+                let read (r: Data.Common.DbDataReader) =
+                    {| timestamp = DateTimeOffset.FromUnixTimeMilliseconds(r.GetInt64 0).UtcDateTime
+                       host = r.GetString 1
+                       service = r.GetString 2
+                       source = r.GetString 3
+                       status = r.GetString 4
+                       message = r.GetString 5
+                       tags = tagMap (r.GetValue 6) |}
 
-                    match logs, count with
-                    | Ok logs, Ok [ count ] -> return! ctx.WriteJson {| logs = logs; count = count |}
-                    | Error e, _
-                    | _, Error e -> return! fail 400 e ctx
-                    | _ -> return! fail 500 "unexpected answer to the count query" ctx
+                let! logs = run ctx read rowsSql
+                let! count = run ctx (fun r -> Convert.ToUInt64(r.GetValue 0)) countSql
+
+                match logs, count with
+                | Ok logs, Ok [ count ] -> return! ctx.WriteJson {| logs = logs; count = count |}
+                | Error e, _
+                | _, Error e -> return! fail 400 e ctx
+                | _ -> return! fail 500 "unexpected answer to the count query" ctx
         }
 
 let logFacets: EndpointHandler =
@@ -229,7 +207,6 @@ let endpoints =
           "/internal"
           [ GET
                 [ route "/metrics/names" metricNames
-                  route "/metrics/hosts" metricHosts
                   route "/metrics/tags" metricTagKeys
                   route "/metrics/tag-values" metricTagValues
                   route "/metrics/query" metricQuery

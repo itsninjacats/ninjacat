@@ -45,63 +45,52 @@
  ],
  "sends": [
   {
-   "arg_types": [
-    [
-     "string",
-     "time.Time",
-     "string",
-     "string",
-     "string",
-     "string",
-     "string",
-     "map[string][]string",
-     "string",
-     "string",
-     "map[string]string",
-     "string",
-     "uint64",
-     "string"
-    ]
+   "to": "storage_events",
+   "insert": "INSERT INTO events (tenant_id, timestamp, event_id, event_id_num, title, text, host, alert_type, priority, aggregation_key, source_type_name, device_name, tags, event_type, related_event_id, alert_type_raw, priority_raw, extra)",
+   "rows": [
+    {
+     "TenantID": "test",
+     "Timestamp": "2026-10-02T09:51:55.6439892Z",
+     "EventID": "2941fbbc-4236-4983-9282-26be81ce0068",
+     "EventIDNum": 1486467007512257729,
+     "Title": "deploy",
+     "Text": "v2 is out",
+     "Host": "",
+     "AlertType": "info",
+     "Priority": "normal",
+     "AggregationKey": "",
+     "SourceTypeName": "",
+     "DeviceName": "",
+     "Tags": {},
+     "EventType": "",
+     "RelatedEventID": null,
+     "AlertTypeRaw": "catastrophe",
+     "PriorityRaw": "",
+     "Extra": {}
+    }
    ],
    "args": [
     [
      "test",
-     "2026-10-01T15:21:14.03377995Z",
-     "events",
-     "unexpected_shape",
-     "POST",
-     "example.com",
-     "/api/v1/events",
-     {},
-     "application/json",
+     "2026-10-02T09:51:55.6439892Z",
+     "2941fbbc-4236-4983-9282-26be81ce0068",
+     1486467007512257729,
+     "deploy",
+     "v2 is out",
+     "",
+     "info",
+     "normal",
+     "",
+     "",
      "",
      {},
-     "{\"title\":\"deploy\",\"text\":\"v2 is out\",\"alert_type\":\"catastrophe\"}",
-     64,
-     "event #0 did not fit datadogV1.EventCreateRequest"
+     "",
+     null,
+     "catastrophe",
+     "",
+     {}
     ]
-   ],
-   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
-   "rows": [
-    {
-     "Body": "{\"title\":\"deploy\",\"text\":\"v2 is out\",\"alert_type\":\"catastrophe\"}",
-     "BodyBytes": 64,
-     "ContentEncoding": "",
-     "ContentType": "application/json",
-     "Headers": {},
-     "Host": "example.com",
-     "Intake": "events",
-     "Method": "POST",
-     "Note": "event #0 did not fit datadogV1.EventCreateRequest",
-     "Path": "/api/v1/events",
-     "Query": {},
-     "Reason": "unexpected_shape",
-     "ReceivedAt": "2026-10-01T15:21:14.03377995Z",
-     "TenantID": "test"
-    }
-   ],
-   "to": "storage_raw_payloads",
-   "type": "storage.WriteRawPayloads"
+   ]
   }
  ],
  "seq": 1,
@@ -111,6 +100,11 @@
   "/response/body_json/event/id",
   "/response/body_json/event/id_str",
   "/sends/0/args/0/1",
-  "/sends/0/rows/0/ReceivedAt"
- ]
+  "/sends/0/args/0/2",
+  "/sends/0/args/0/3",
+  "/sends/0/rows/0/Timestamp",
+  "/sends/0/rows/0/EventID",
+  "/sends/0/rows/0/EventIDNum"
+ ],
+ "edited": "An event whose alert_type is not one of Datadog's is stored, with the type coerced to info and the word as sent kept in alert_type_raw. The Go API client's model refused such an event, so the Go server kept it raw and stored no row."
 }

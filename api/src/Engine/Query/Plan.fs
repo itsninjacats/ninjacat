@@ -5,6 +5,7 @@ module NinjaCat.Api.Engine.Query.Plan
 
 open System
 open System.Text.RegularExpressions
+open NinjaCat.Api.Engine
 open NinjaCat.Api.Engine.MetricQuery.Ast
 open NinjaCat.Api.Engine.Api.V2.Timeseries
 
@@ -722,24 +723,11 @@ let rec private resolve (from: DateTimeOffset) (label: string) (byName: Map<stri
 
 // --- anomalies and forecast --------------------------------------------------------
 
-/// `4h`, `30m`, `1w`: a whole number and s, m, h, d or w.
+/// `4h`, `30m`, `1w`: a duration that is more than nothing.
 let private duration (text: string) : TimeSpan option =
-    let m = Regex.Match(text, "^(\\d+)(s|m|h|d|w)$")
-
-    if not m.Success then
-        None
-    else
-        let n = float m.Groups[1].Value
-
-        let span =
-            match m.Groups[2].Value with
-            | "s" -> TimeSpan.FromSeconds n
-            | "m" -> TimeSpan.FromMinutes n
-            | "h" -> TimeSpan.FromHours n
-            | "d" -> TimeSpan.FromDays n
-            | _ -> TimeSpan.FromDays(7.0 * n)
-
-        if span > TimeSpan.Zero then Some span else None
+    match Duration.parse text with
+    | Ok span when span > TimeSpan.Zero -> Some span
+    | _ -> None
 
 let private namedArg (name: string) (named: (string * Literal) list) : Literal option =
     named |> List.tryFind (fun (n, _) -> n = name) |> Option.map snd

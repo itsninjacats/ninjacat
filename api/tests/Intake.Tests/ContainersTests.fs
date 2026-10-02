@@ -47,20 +47,7 @@ let private imageWithLayers (id: string) (sizes: int64 list) : ContainerImage =
 
 /// Sends a body through the containers intake as the agent would.
 let private post (path: string) (body: byte[]) : Response * CapturingSink =
-    let sink = CapturingSink()
-
-    let deps: Deps =
-        { Store = Replay.testStore ()
-          Sink = sink
-          Log = NullLogger.Instance
-          AckUnknown = false }
-
-    let http = DefaultHttpContext()
-    http.Request.Method <- "POST"
-    http.Request.Host <- HostString "example.com"
-    http.Request.Path <- PathString path
-    http.Request.Headers["Dd-Api-Key"] <- StringValues Replay.testKey
-    Replay.byGoNames deps [ "routeContainers" ] http body, sink
+    Requests.send [ "routeContainers" ] "POST" path Requests.withKey body
 
 // ---- lifecycle events ----
 
