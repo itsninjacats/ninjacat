@@ -8,86 +8,190 @@ backend that receives it. What applications send (tracers, profiles, RUM, error 
 the panel come after. Sections 1 to 3 first; within 3, Kubernetes and containers before
 tracers.
 
+## 0. Before 0.1.0 faces the internet
+
+From a security review on 2026-10-02: three independent readings (panel, server, deployment
+and repository) and probes of the shipping images. No secret is committed, in the tree or
+its history; neither image calls out; the panel's pages load nothing from a third party.
+
+Fixed that day, each checked against the shipping image:
+
+- [x] **Anyone could read logs and metric names.** `/app` was guarded by its layout's load,
+      which a data request can skip (`__data.json?x-sveltekit-invalidated=001`). One guard
+      stands in front of every route now (`frontend/src/lib/server/guard.ts`): only `/login`
+      is public.
+- [x] **Anyone could write to Postgres** through the scaffolding routes (`/zadania`,
+      `/remote-demo`). They are gone, with `/demo`, the `task` table (migration 0003) and
+      the remote-functions flag.
+- [x] **No limit on a request body**, on the wire or inflated: a few megabytes of gzip took
+      the intake to an out-of-memory exception, and on the `install.` host no key was needed.
+      `NINJACAT_MAX_BODY_BYTES` (64 MiB, 413 above it), 64 MiB inflated, and a host that
+      asks for no key no longer serves the flare upload. The agent's own ceilings are far
+      below (7.84.0 defaults: 2.5 MiB compressed and 4 MiB inflated per payload, 5 MiB for
+      series, logs and the event-platform tracks, 10 MiB through `evp_proxy`); of 1 688
+      requests recorded from real agents the largest was 397 kB. Not measured: how large a
+      flare or a profile gets — those are not compressed as a body, so only the 64 MiB on
+      the wire applies to them.
+- [x] **Keys in the query string were stored**: `raw_payloads.query`, the path of
+      `/v1/input/<key>`, capture dumps, one RUM warning.
+- [x] The chart and `compose.prod.yaml` named images on Docker Hub under an account that is
+      not ours. The chart names GHCR, where CI publishes.
+- [x] CI published images with no test in front. `ci.yml`: server tests against a real
+      ClickHouse, panel type check and tests, chart lint, then both images or neither;
+      actions pinned to commits; `latest` only on a release. Not yet run on GitHub.
+
+- [x] **Any pod in the cluster could read every tenant's telemetry.** The chart has a
+      NetworkPolicy: the query port is reached from the panel's pods alone (it takes a
+      network plugin that enforces policies).
+- [x] **Chart defaults.** `domainRoot` is required, TLS is on, plain HTTP is answered with a
+      redirect: ingress-nginx does that for an Ingress with TLS, and for Traefik the chart
+      adds a redirect Middleware and a second Ingress on the HTTP entry point (when the
+      cluster has Traefik's CRDs). `trustedProxies` is one value for the intake and the
+      panel. `secrets.betterAuthSecret` shorter than 32 characters is refused. Pods have
+      memory limits, `seccompProfile`, a read-only root filesystem; the server logs JSON, so
+      nothing a request carries can forge a log line; NOTES say how the first account is made.
+- [x] **Sign-in is throttled.** The form signs in through Better Auth's own endpoint, so its
+      rate limiter counts: five attempts a minute per client address
+      (`frontend/src/lib/server/auth.ts`), in the process's memory. With more than one panel
+      pod, `storage: "database"`.
+- [x] **An agent through the chart's real Ingress.** The kind lab runs Traefik now and the
+      agent reaches the intake through the chart's Ingress with the lab's certificate. Run on
+      2026-10-02, agent 7.84.0 given only `site`: all 39 hosts answer over HTTPS; HTTP is
+      301/308 to HTTPS; the agent used 39 host names, `app.<site>` for the main one and no
+      `<version>-app.agent.<site>` (it prefixes its version only for Datadog's own domains,
+      `ddURLRegexp` in `pkg/config/utils/endpoints.go`); every answer 200 or 202, nothing in
+      `raw_payloads`, no warning; the intake saw the agents' pod addresses, not Traefik's;
+      an ordinary pod got no answer from the query port; install, upgrade, `helm test`, two
+      intake replicas and `create-user.js` all work on the read-only filesystem.
+
+Open, most urgent first:
+
+- [ ] **Merge and tag.** The chart on `main` is still the Go one. Merge this branch, tag
+      from `main`; `ci.yml` has not run on GitHub yet. (The owner does this.)
+- [ ] **A key has no kind** (decided 2026-10-02: do it, later). A RUM client token is a
+      full API key: copied from a page it writes metrics, logs and traces for its tenant.
+      A `kind` column on `api_key` (the panel's schema), carried as a claim by the keeper;
+      the browser scheme takes only client keys, the other three refuse them; the keys page
+      lets one be made. Until then, do not set `PUBLIC_NINJACAT_RUM_*` on a public panel.
+- [ ] Logs over TCP (:10516): on by default in the image (the chart turns it off), plain
+      text unless given a certificate, no limit on connections, no timeout, the key checked
+      only when a whole frame has arrived.
+- [ ] The panel sends no security headers (CSP, `frame-ancestors`, HSTS, nosniff).
+- [ ] `create-user.js` takes the password as an argument: it ends in shell history and in
+      a Job's spec. Read it from the environment or stdin.
+- [ ] The server falls back to the ClickHouse password `ninjacat` when none is set
+      (`Config.fs`); the chart and `compose.prod.yaml` always set one. Fail instead.
+- [ ] `compose.prod.yaml`: the panel on every interface as plain HTTP, no health checks on
+      the three services, logs not JSON (`Logging__Console__FormatterName=json`).
+- [ ] What the query process says in an error (ClickHouse's text) reaches the browser.
+- [ ] The chart's NetworkPolicy covers the query port only. The intake and the panel still
+      take a connection from any pod; admitting the Ingress controller alone needs to know
+      its namespace (a value).
+- [ ] The image build runs code fetched from jsdelivr (two inlang plugins at floating
+      majors, `frontend/project.inlang/settings.json`). Pin or vendor them.
+- [ ] Repository settings: `main` unprotected, no tag rules, secret scanning and push
+      protection off. Two old public images, `…/frontend` and `…/server`, from September.
+- [ ] 57 commits carry an employer's e-mail address as author, on a public repository.
+- [ ] The panel does not link to its source (AGPL section 13); `bun run lint` fails on 431
+      files, so CI does not run it.
+
 ## 1. Finish the move to one server
 
 The F# server (`api/`) is the only server: the Go one was removed on 2026-10-02, and its
 notes moved to `api/docs/`. What still names it:
 
-- [ ] `lab/k8s/`: its scripts build `server/`, which is gone, so the kind lab does not run.
-      Build and deploy `api/` instead (one image, two processes: `intake`, `query`;
-      `CLICKHOUSE_HTTP_ADDR`; `ninjacat-api migrate`), then run it. Also the first live
-      check of the Kubernetes intake on F#.
-- [ ] `helm/ninjacat`: the chart still deploys the Go image as one `server`
-      (`templates/server.yaml`, the migrate job, `values.yaml`). The same switch.
+- [x] `lab/k8s/`: builds `api/` and installs NinjaCat from `helm/ninjacat`
+      (`ninjacat-values.yaml`); its own manifests are only what the chart does not own
+      (data stores, the panel's NodePort), with Traefik in front and a NetworkPolicy that
+      lets nothing in the namespace reach the internet. Run on 2026-10-02 with agent 7.84.0: every table
+      of `verify.sh` filled except `container_events` (no container died), nothing in
+      `raw_payloads`. What it found is in section 3.
+- [x] `helm/ninjacat`: one image, two Deployments (`intake`, `query`), a hook Job per
+      schema (`node migrate.js`, `ninjacat-api migrate`), `CLICKHOUSE_HTTP_ADDR`, an
+      optional read-only ClickHouse user for `query`. Checked in the lab: install, upgrade,
+      `helm test`, two intake replicas.
 - [ ] `api/docs/**` describe Go files that no longer exist; say what the F# equivalent is
       as each note is translated.
-- [ ] An untracked `query/` directory at the root holds only IDE settings; it can go.
-- [ ] Consolidate what the parallel port wrote several times: section 1a.
-- [ ] Comments that explain a behaviour by "as Go did": say why the behaviour is right, or
+- [x] Consolidate what the parallel port wrote several times: section 1a.
+- [x] Comments that explain a behaviour by "as Go did": say why the behaviour is right, or
       change it.
 
 ## 1a. One copy of each helper
 
-From an independent audit of `api/` on 2026-10-01. About 1 300 to 1 450 lines of
-`src/Intake` and 320 of the tests can go. Where the copies differ, the difference is a bug or
-a decision; those come first. Before anything else: move `GoCompat.fs`, `Lenient.fs` and
-`ProcessEnum.fs` up beside `Common.fs` in `Intake.fsproj` — they compile too late for the
-routers that needed them, which is how the copies came about.
+From an independent audit of `api/` on 2026-10-01, done on 2026-10-02: `src/Intake` went
+from 17 383 to 14 779 lines. Where the copies differed, the difference was a bug or a
+decision; each item says which way it went.
 
-- [ ] **JSON parsing**: seven parsers, four depth limits (64, 512, 10 000), three repair
-      policies. One: `Common.Json` (repair, 10 000) plus `tryParseFirst` for "the first
-      value, whatever follows". `CiWebhook` uses the 512 one by accident of `open` order;
-      `Evp.healthIssuesRaw` re-parses a body with different rules than its own decoder.
-      Decide what `Lenient` keeps of a half surrogate pair in raw text (`a\ud800` today,
-      `a�` everywhere else).
-- [ ] **Go-style struct reading**: five implementations (`GoCompat.Fields`, ApiPayloads
-      `fill`/`Declared`, `CiVisibility.GoStruct`, Evp `go*`, `Kubeops.decodeAction`), five
-      wordings of the same note, and a real disagreement: for `{"v":"a","v":null}` three
-      give `""` or absent and two give `"a"`. Go leaves a scalar alone on null, so the two
-      are right. One reader, the rule fixed once; note texts change, fixtures get `edited`.
-- [ ] **Multipart**: four readers. They disagree on a body that breaks off (silently partial
-      or an error), on a part name without `form-data`, on directories in a file name.
-      One strict `Multipart.tryParts`, the lenient one as a wrapper where flares want it.
-      Profiling's private copy of Go's `mime.ParseMediaType` (125 lines) goes with it.
-- [ ] **Time**: clamps repeated in `Api`, `Rum`, `Process`, `Kubeops` that
-      `Time.fromUnix*` already does; `try/with ArgumentOutOfRangeException` around calls
-      that no longer throw, under comments promising `None` (`Security`, `Evp`,
-      `Profiling`); four protobuf-`Timestamp` readers with four rules (`sdsTime` can
-      overflow); `Lenient.rfc3339` beside `Time.tryRfc3339`, which wrongly refuses a
-      one-digit hour.
-- [ ] **`JsonElement` accessors**: every router has its own `text`, string list, flag,
-      integer, "keys without a column" (nine names). Decide first whether a null among the
-      extra keys is stored as `""` or `"null"`: both exist.
-- [ ] **Varints and wire walkers**: six varint readers of two semantics, four schema-less
-      protobuf walkers.
-- [ ] **Enum names**: five implementations; `ProcessEnum` throws for an enum outside its
-      two descriptor files; Evp has three hand-typed tables.
-- [ ] **Writing JSON**: the same writer block at thirteen sites; two functions both named
-      `GoJson.compact` that give different output (duplicate keys, order), picked by `open`
-      order.
-- [ ] Small ones: `accepted` defined eleven times; `if r.Tenant <> "" then Sink.write` 57
-      times; Go's `%q` twice with different escaping; `FormatFloat` twice; a body split into
-      items seven ways.
-- [ ] **Names**: five modules called `GoJson`, three things called `Json`, three called
-      `Engine`. `Rows/ApiExtra.fs` and `Rows/ProcessExtra.fs` are named after the porting
-      agents' file boundaries.
-- [ ] **Tests**: the request sender exists in fourteen copies (some add the API key, some do
-      not; some split the query string, some do not) → one in `Golden/Replay.fs`; the
-      multipart builder in four; string → `JsonElement` in ten with three parsers.
-- [ ] **Engine**: two SQL parameter collectors, two tag-filter models, three duration
-      parsers, `maxPoints` 2000 in `Panel` and 1500 in `Plan`. `Panel.querySeries`
-      aggregates in one pass, which `Compile.fs` itself calls wrong for multi-host series.
-- [ ] **Dead code**: `Text.joinOrDash`, `ProcessFrame.typeName`,
-      `Json.tryInt64`; used only by tests: `Json.tryParseList`. Unused
-      endpoint: `/internal/metrics/hosts` (check for other callers first).
-- [ ] **Parity machinery with nothing left to match**: `TraceSketch.GoMath` (125 lines
-      re-implementing Go's `math` to the last bit), `ApiPayloads.hasUnknownFields`,
-      notes that name Go types (`cannot unmarshal … into Go value of type
-      gogen.MetricPayload`). The Go route set names (`routeAPI`…) are out of the server:
-      `Routes.fs` is a plain chain of hosts, and only `Golden/Replay.fs` knows the names.
-- [ ] 141 comment lines in `src` cite Go. Half describe Go's libraries as a format spec and
-      stay; fix the ones that are false or present tense: `Server/Config.fs:60`,
-      `Engine/Query/Compile.fs:102,123`, `Routers/Lenient.fs:104`.
+- [x] **JSON parsing**: one parser, `Json` in `Common.fs` (`tryParse`, `tryParseFirst`,
+      `tryParseObject`, `tryParseList`), one depth limit, one repair. `Lenient.fs` and
+      the private parsers of `ApiPayloads`, `CiVisibility` and `GoCompat` are gone. Two
+      things changed with it: raw JSON kept in a column has half a surrogate pair repaired
+      (`\ufffd`) like everything else, and a time with a one-digit hour (`T1:30:00Z`) is
+      not RFC 3339 and is no longer read as one.
+- [x] **JSON of a protobuf message** is read by protobuf's own `JsonParser`
+      (`ProtoJson.tryParse`): `/api/v2/series` and `/api/beta/sketches` as JSON, and the
+      agent's health report. ~400 lines of field-by-field filling are gone. Its rules stand:
+      names as the schema spells them or in camelCase, an enum by number or name, unknown
+      keys passed over, and a null inside a list or a map refuses the payload (kept raw).
+- [x] **Reading an object field by field**: one reader, `JsonFields` (`JsonFields.fs`,
+      beside `Common.fs`), instead of five. Its rule, once: a member is found by its exact
+      name, the last of a repeated name counts, null is the same as absent, an integer is
+      read from its digits. Notes are one wording about the JSON (`series[2].points:
+      expected a list, got string`); nothing names a Go type any more. Dropped with the
+      copies: matching names without regard to case, an item refused because an unrelated
+      number overflows a float64, the two levels "is not"/"did not fit" of the v1 models.
+      An event with an invented `alert_type` or `priority` is now a row, with the sender's
+      word in `alert_type_raw`/`priority_raw`. The version of a JSON coverage payload is read leniently (0
+      when it cannot be read), as in the msgpack form.
+- [x] **Multipart**: one strict reader, `Multipart.tryParts` in `Http.fs`, on ASP.NET's
+      `MultipartReader`; the lenient "parts before the break" only for flares and the
+      security dump. Profiling's copy of Go's `mime.ParseMediaType` is gone
+      (`MediaTypeHeaderValue`). A part's name counts whatever its disposition type, and a
+      file name keeps its directories.
+- [x] **Time**: the repeated clamps and the dead `try/with` are gone; a protobuf
+      `Timestamp` is read by one function, `Time.ofTimestamp`, over the library's
+      `ToDateTime()` — an invalid one (nanos outside a second, a year past 9999) is None.
+- [x] **`JsonElement` accessors**: one set in `Json` (`Common.fs`): `field`, `child`, `at`
+      (a path), `lenientString`, `flag`, `text`, `textList`, `otherMembers`, …; the private
+      layers of eight routers are gone. `JsonFields.fs` is only `Fields`, the reader that
+      notes mismatches. Where a column keeps a member's JSON text, an explicit null stays `null`;
+      a typed column that is not Nullable holds `""` or 0 for null and absent alike.
+- [x] **Varints and wire walkers**: one `Varint.read` (through `CodedInputStream`);
+      `Security.wireLayout` walks with the library's reader. Capture's debug dump is the
+      other walker left, and does a different job.
+- [x] **Enum names**: `ProtoEnum.name` in `Common.fs`, for any generated enum, from the
+      `OriginalName` attribute the generator writes; a value the schema lacks is its number.
+      `ProcessEnum.fs`, three copies and Evp's hand-typed tables are gone.
+- [x] **Writing JSON**: one writer, `Json.write`; each output format once (`compact` as
+      sent, `compactSorted` with keys sorted and the last duplicate winning, `quoted`).
+- [x] Small ones: `accepted` once, in `Http.fs`; `Ctx.write ctx table rows` writes nothing
+      without a tenant and replaced 62 checks; Go's `%q` and `FormatFloat` copies are gone
+      (`Json.quoted`, `Text.ofFloat`); a body is split by `Json.tryParseList`,
+      `tryParseArray` or `tryParseElementBytes`.
+- [x] **Names**: no module is called `GoJson`; only the intake has a `Json` (the engine's
+      is `Serialization`); `Rows/ProcessExtra.fs` is folded into `Rows/Process.fs`,
+      `Rows/ApiExtra.fs` split into `Rows/Agent.fs` and `Rows/Runner.fs`. Left: routers and
+      table modules that share a name across projects (`Logs`, `Containers`, `Config`,
+      `Metrics`) need a naming rule first; `ProtoJson.message` and `Security.protoJson`
+      write protobuf JSON with different escaping (`\u003C` or `<`), and unifying them
+      changes stored text.
+- [x] **Tests**: one request sender, one multipart builder and one string → `JsonElement`
+      in `tests/Intake.Tests/Golden/Requests.fs`. Left: `RumTests.requestOf` still builds
+      its own context.
+- [x] **Engine**: one SQL parameter collector (`SqlParams` in `Sql.fs`), one tag-filter
+      model and SQL writer (`MetricQuery/Filter.fs`), one duration parser (`Duration.fs`),
+      one `maxPoints` (1500, in `Plan.fs`; that it is Datadog's cap is the comment's claim,
+      not a checked fact). `/internal/metrics/query` goes through the query engine's
+      planner, so the panel's series aggregate in time first and across series second, like
+      every other query; `Panel.querySeries` is gone. Checked against the live ClickHouse.
+- [x] **Dead code**: `Text.joinOrDash`, `ProcessFrame.typeName`, `DDSketch.bounds`,
+      `/internal/metrics/hosts` with its query. Left: `SyntheticsTestConfigs.table` in
+      `Rows/Ci.fs` has a table (migration 0017) and no writer.
+- [x] **Parity machinery**: `TraceSketch.GoMath` is `System.Math` now (stored sketch
+      summaries differ from about the 13th digit; the sketch's accuracy is 1 %),
+      `hasUnknownFields` is gone, and no note names a Go type or quotes a Go library.
+- [x] Comments that cited Go as the reason say why in their own terms; the ones that
+      describe a Go library as the definition of a wire format stay.
 
 ## 1b. Use what the framework and the libraries already do
 
@@ -161,8 +265,18 @@ No published schema, kept raw until a real payload shows the shape: `genresource
 Decoders written from Datadog's source and never run against the real thing. Every lab run so
 far found something, so expect findings. How to record: `lab/README.md`.
 
-- [ ] **Kubernetes**: orchestrator collections, manifests, cluster-agent actions (with the
-      `lab/k8s` item above).
+- [ ] **Kubernetes**: orchestrator collections and manifests arrived and decoded in the
+      kind lab (2026-10-02, agent 7.84.0); record them into `Fixtures/real/`. Cluster-agent
+      actions and container lifecycle events were not produced by that run.
+- [x] The agent's connectivity check posts `{}` to every event-platform intake at start,
+      and `sbom`, `contlcycle`, `contimage` and `data-streams` each logged a decode warning.
+      A kept payload is logged once now, by `Raw.store`, which already knew a probe; the
+      82 handler warnings that said the same thing first are gone.
+- [x] `HEAD /support/flare` answers 200 without a key: the agent's connectivity check
+      (`pkg/diagnose/connectivity`, 7.84.0) sends it with none and takes anything but 200 or
+      a redirect for a failure. The upload itself still asks for the key.
+- [x] `libgssapi-krb5-2` is in the shipping image: Npgsql loads it to try GSS encryption,
+      and printed `Cannot load library libgssapi_krb5.so.2` at every start without it.
 - [ ] **Containers**: lifecycle events, image inventory, SBOM.
 - [ ] **Tracers** — one small app with `dd-trace` covers: profiles, the debugger and symbol
       uploads, Data Streams Monitoring, tracer telemetry, CI Visibility (test cycle,

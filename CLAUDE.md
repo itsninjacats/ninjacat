@@ -29,8 +29,8 @@ Polish and should be converted to English when touched, not extended:
 - `api/docs/**` and `frontend/docs/**` — Polish prose.
 - `api/schema/migrations/0001_initial.sql` — Polish comments (an applied migration is never edited, so these stay).
 - `frontend/src/lib/server/api-keys.ts` — Polish identifiers (`nowyKlucz`, `skrotKlucza`, `prefiks`).
-- Polish route segments and payload keys: `/zadania`, `/app/ustawienia/klucze`, `uzytkownik`,
-  `zadania`, form action `?/dodaj`. Renaming a route changes a URL — batch those deliberately.
+- Polish route segments and form fields: `/app/ustawienia/klucze`, `?/utworz`, `?/usun`,
+  `blad`, `nazwa`. Renaming a route changes a URL — batch those deliberately.
 - Some Go/Svelte comments (e.g. `vite.config.ts`, `frontend/src/routes/app/+layout.server.ts`).
 
 The F# server under `api/src/` is already English — match that register: comments explain
@@ -180,6 +180,14 @@ JSON. A handler reads the request from `HttpContext` (the few one-line accessors
 `Ctx`) and answers with Oxpecker's handlers (`setStatusCode`, `json`, `bytes`). There is no
 request or response type of our own; do not add one.
 
+**One helper of each kind.** JSON is parsed, read and written through `Json` in
+`Intake/Common.fs`; an object is read field by field with `JsonFields.Fields` (exact names,
+the last of a repeated name, null the same as absent, mismatches noted); JSON of a protobuf
+message goes through protobuf's own parser (`ProtoJson`). `Multipart.tryParts`,
+`Time.ofTimestamp`, `ProtoEnum.name`, `accepted` and `Ctx.write` (writes nothing without a
+tenant) are the others. A router does not grow a private copy of any of them, and
+`Raw.store` alone logs a kept payload.
+
 **The API key is ASP.NET authentication.** `Intake/Auth.fs` registers four schemes (where
 each looks for the key) over one `AuthenticationHandler`; a host asks for its scheme where it
 is mounted in `Routes.fs`, and the key's tenant is a claim on `ctx.User`. An unknown path is
@@ -247,6 +255,9 @@ Listeners: `NINJACAT_ADDR` (`:8080`), `NINJACAT_INTERNAL_ADDR` (`:8081`),
 Migrations: `NINJACAT_AUTO_MIGRATE=false` stops the server from applying the ClickHouse
 migrations at startup (use `ninjacat-api migrate` instead).
 
+Limits: `NINJACAT_MAX_BODY_BYTES` (64 MiB) is the largest body the intake reads; a body may
+inflate to 64 MiB (`Body.maxInflatedBytes`).
+
 Proxies: `NINJACAT_TRUSTED_PROXIES` names the reverse proxies whose `X-Forwarded-For` is
 believed (ASP.NET's forwarded-headers middleware); `NINJACAT_RUM_ALLOWED_ORIGINS` narrows
 the CORS policy of browser-intake (ASP.NET's CORS middleware), any origin by default.
@@ -270,8 +281,10 @@ Two data sources, and the split matters:
   same port; its view lives in the URL (`?view=<json>`, see `src/lib/metrics/query.ts`).
 
 Auth is Better Auth, wired in `src/hooks.server.ts` (after the Paraglide handle) which
-populates `locals.user`/`locals.session`. `/app/**` is guarded once in
-`src/routes/app/+layout.server.ts` — new pages under `/app` inherit it; do not re-check per page.
+populates `locals.user`/`locals.session`. Every route is private unless it is listed in
+`src/lib/server/guard.ts` (only `/login` is), and the guard runs in `handle`, in front of
+pages, data requests, endpoints, form actions and remote functions alike. A layout's load is
+not a guard: the client chooses which loads a data request runs.
 
 API keys are Datadog-shaped (32 hex chars) so they drop into existing agent configs. Postgres
 stores **SHA-256 only**, never the key — deterministic on purpose, because the intake looks up
@@ -279,8 +292,11 @@ stores **SHA-256 only**, never the key — deterministic on purpose, because the
 entropy makes it safe). After creating or deleting a key the panel calls `refreshApiKeys()`,
 which never throws — the keeper re-reads every 30s anyway.
 
-`src/routes/demo/**`, `src/routes/remote-demo/**`, `src/routes/zadania/**` and
 `src/lib/vitest-examples/**` are scaffolding/learning examples, not product surface.
+
+Sign-in goes from the form straight to Better Auth's endpoint (`src/lib/auth-client.ts`),
+not through a form action: Better Auth's rate limiter and its cookies work only on its own
+HTTP path.
 
 ## Open work
 

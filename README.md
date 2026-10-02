@@ -58,6 +58,13 @@ To work on the host instead, run just the databases with
 and `dotnet run --project src/Server -- query` in `api/`, and `bun run dev` in `frontend/`. Development needs the .NET 10 SDK and
 [Bun](https://bun.sh).
 
+Nobody can register: accounts are made on the server. Create the first one, then sign in:
+
+```bash
+docker compose exec frontend bun run user:create -- you@example.com '<password>' 'Your Name'
+# with the shipping image: node create-user.js you@example.com '<password>' 'Your Name'
+```
+
 Create an API key in the panel under Settings, then send an agent at it. The intake
 routes on the hostname, as Datadog does, so each product needs its Datadog-shaped name
 (`app.`, `trace.agent.`, `process.`, …) resolving to NinjaCat:
@@ -127,8 +134,8 @@ converted as they are touched.
 [GNU AGPL v3](LICENSE).
 
 If you run a modified NinjaCat as a network service, AGPL section 13 requires you to
-offer its users the corresponding source. The panel links back to this repository for
-that purpose; if you modify it, that link must point at your source, not this one.
+offer its users the corresponding source. The panel does not link to its source yet
+(`TODO.md`); until it does, that offer is yours to make.
 
 Copyright (C) 2026 Michal Hodur.
 
