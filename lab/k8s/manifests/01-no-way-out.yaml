@@ -1,0 +1,22 @@
+# Nothing in the lab reaches the internet.
+#
+# The agent is told to trust the lab's CA and nothing else, but it is also
+# told to skip certificate validation, so trust alone would not keep a
+# component with a URL of its own away from Datadog. This does: pods in the
+# namespace may talk to private addresses — the cluster's pods and Services,
+# the node — and to nothing public. Images are pulled by the node, not by a
+# pod, so they are not affected.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: no-way-out
+  namespace: ninjacat-lab
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock: { cidr: 10.0.0.0/8 }
+        - ipBlock: { cidr: 172.16.0.0/12 }
+        - ipBlock: { cidr: 192.168.0.0/16 }

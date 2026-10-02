@@ -4,10 +4,9 @@
 # the lab is directly comparable with the dev stack.
 #
 # The schema is NOT applied here. The server carries its migrations embedded
-# (server/schema) and applies them at startup, so this pod only needs the
-# empty database that CLICKHOUSE_DB creates. The old docker-entrypoint-initdb.d
-# ConfigMap is gone with it — that mechanism only fired on an empty data
-# directory and had become redundant.
+# (api/schema/migrations) and the chart applies them with a hook Job
+# (`ninjacat-api migrate`), so this pod only needs the empty database that
+# CLICKHOUSE_DB creates.
 #
 # Data lives on an emptyDir on purpose. The lab is disposable; keeping state
 # would only make "delete the cluster and start clean" less true.
@@ -58,7 +57,7 @@ spec:
         - name: data
           emptyDir: {}
 ---
-# In-cluster name the server and the Datadog agent both dial.
+# In-cluster name the server dials (HTTP, :8123).
 apiVersion: v1
 kind: Service
 metadata:

@@ -10,6 +10,9 @@
 
 name: ninjacat-prod
 
+# The images are built here and named so that they cannot be pulled: a name
+# with a slash would be looked up on Docker Hub under someone else's account.
+
 services:
   clickhouse:
     image: clickhouse/clickhouse-server:26.8.6.5
@@ -56,7 +59,7 @@ services:
   # Same image as the panel, different entrypoint. Under Kubernetes this is
   # the pre-upgrade hook Job; here it is a service that runs to completion.
   migrate:
-    image: ninjacat/frontend:local
+    image: ninjacat-frontend:local
     build:
       context: ./frontend
     command: ["node", "migrate.js"]
@@ -71,7 +74,7 @@ services:
 
   # What agents send to. It owns every write to ClickHouse and its schema.
   intake:
-    image: ninjacat/api:local
+    image: ninjacat-api:local
     build:
       context: ./api
     command: ["intake"]
@@ -95,7 +98,7 @@ services:
   # over the compose network. It only reads, so it can be given a ClickHouse
   # user of its own that cannot write (CLICKHOUSE_QUERY_USER).
   query:
-    image: ninjacat/api:local
+    image: ninjacat-api:local
     command: ["query"]
     restart: unless-stopped
     environment:
@@ -112,7 +115,7 @@ services:
       intake: { condition: service_started }
 
   frontend:
-    image: ninjacat/frontend:local
+    image: ninjacat-frontend:local
     build:
       context: ./frontend
     restart: unless-stopped

@@ -7,7 +7,16 @@
 #
 # Point the agent at it with DD_SITE=<domainRoot> and it composes every intake
 # hostname by itself, exactly as it does against datadoghq.com.
-domainRoot: ninjacat.ninjacats.eu
+#
+# Required: there is no name that would be right for somebody else.
+domainRoot: ""
+
+# The reverse proxies in front of the panel and the intake — the Ingress
+# controller's pods — as addresses or networks (10.42.0.0/16). Only what they
+# say in X-Forwarded-For is believed. Without it every request seems to come
+# from the controller: RUM events carry its address as the client's, and the
+# panel's sign-in limiter counts all visitors as one.
+trustedProxies: []
 
 nameOverride: ""
 fullnameOverride: ""
@@ -19,48 +28,84 @@ imagePullSecrets: []
 # -----------------------------------------------------------------------------
 
 clickhouse:
-  addr: clickhouse:9000
+  # The HTTP interface: the server speaks HTTP to ClickHouse, not the native
+  # protocol on :9000.
+  httpAddr: clickhouse:8123
   database: ninjacat
   user: ninjacat
+  # Optional: a user for the query process alone, one that can only read
+  # (GRANT SELECT ON <database>.*). Its password is the secret key
+  # CLICKHOUSE_QUERY_PASSWORD. Empty means the user above.
+  queryUser: ""
 
 # Secret values. Either let the chart create the Secret from these, or set
-# existingSecret to a Secret you manage yourself with the same three keys:
-# DATABASE_URL, CLICKHOUSE_PASSWORD, BETTER_AUTH_SECRET.
+# existingSecret to a Secret you manage yourself with the same keys:
+# DATABASE_URL, CLICKHOUSE_PASSWORD, BETTER_AUTH_SECRET, and
+# CLICKHOUSE_QUERY_PASSWORD when clickhouse.queryUser is set.
 secrets:
   existingSecret: ""
   # postgres://user:password@host:5432/db
   databaseUrl: ""
   clickhousePassword: ""
-  # 32+ characters, high entropy: openssl rand -base64 32
+  clickhouseQueryPassword: ""
+  # At least 32 characters, high entropy: openssl rand -hex 32
   betterAuthSecret: ""
 
 # -----------------------------------------------------------------------------
-# Go server: agent intake (:8080, public) and panel API (:8081, internal).
+# The server: one image, run as two processes that share nothing but the
+# databases. What agents can reach and what the panel reads from are separate
+# pods, with separate Services.
 # -----------------------------------------------------------------------------
 
-server:
+api:
   image:
-    repository: ninjacat/server
+    # Where .github/workflows/ci.yml publishes. A bare `ninjacat/api` would
+    # be Docker Hub's, which is someone else's namespace.
+    repository: ghcr.io/itsninjacats/ninjacat/api
     pullPolicy: IfNotPresent
     # Defaults to the chart appVersion.
     tag: ""
 
-  # The intake Service is what the Ingress targets. Switch it to LoadBalancer
-  # only if agents should reach the intake without going through the Ingress.
-  intakeService:
+# `ninjacat-api intake`: what agents send to. It owns every write to ClickHouse.
+intake:
+  # More than one is safe only with migrations.enabled (below), which takes
+  # the ClickHouse migrations out of the pods' start-up.
+  replicas: 1
+
+  # The Service the Ingress targets. Switch it to LoadBalancer only if agents
+  # should reach the intake without going through the Ingress.
+  service:
     type: ClusterIP
     port: 8080
     annotations: {}
 
-  # The panel API is never exposed: only the frontend talks to it.
-  internalService:
-    port: 8081
-
-  # Extra non-secret environment, rendered into the server ConfigMap.
-  # See CLAUDE.md for the full list (DEBUG, NINJACAT_QUERY_POOL, ...).
+  # Extra non-secret environment (NINJACAT_MAX_BODY_BYTES, NINJACAT_ACK_UNKNOWN,
+  # NINJACAT_RUM_ALLOWED_ORIGINS, ...). See api/README.md.
   env: {}
 
-  resources: {}
+  # One request may hold a 64 MiB body and as much again inflated; the rest is
+  # the rows waiting to be written.
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 1Gi }
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# `ninjacat-api query`: what the panel reads from. It only reads, asks for no
+# key, and is never exposed: its Service is ClusterIP and no Ingress names it.
+query:
+  replicas: 1
+
+  service:
+    port: 8081
+
+  env: {}
+
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 512Mi }
   podAnnotations: {}
   nodeSelector: {}
   tolerations: []
@@ -72,7 +117,7 @@ server:
 
 frontend:
   image:
-    repository: ninjacat/frontend
+    repository: ghcr.io/itsninjacats/ninjacat/frontend
     pullPolicy: IfNotPresent
     tag: ""
 
@@ -86,17 +131,32 @@ frontend:
 
   env: {}
 
-  resources: {}
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 384Mi }
   podAnnotations: {}
   nodeSelector: {}
   tolerations: []
   affinity: {}
 
-# Applies the Drizzle migrations before every install and upgrade. Runs the
-# frontend image with its second entrypoint (node migrate.js).
+# The query process asks nobody for a key, so nothing but the panel may reach
+# it: a NetworkPolicy lets its port be reached from the panel's pods alone.
+# It takes a network plugin that enforces policies (Cilium, Calico, kindnet);
+# with one that does not, the policy is there and does nothing.
+networkPolicy:
+  enabled: true
+
+# Both schemas are brought up to date before every install and upgrade, by
+# hook Jobs: Postgres by the frontend image's second entrypoint
+# (node migrate.js), ClickHouse by the server's (ninjacat-api migrate). The
+# intake pods are then told not to migrate at start-up, so several of them
+# cannot race. With this off, the intake migrates ClickHouse when it starts
+# and the Postgres schema is yours to apply.
 migrations:
   enabled: true
-  resources: {}
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 512Mi }
 
 # -----------------------------------------------------------------------------
 # Ingress: one for the panel, one for the intake.
@@ -108,8 +168,23 @@ ingress:
   # Applied to both Ingresses, e.g. cert-manager.io/cluster-issuer.
   annotations: {}
 
+  # On by default, and with it plain HTTP is never served: a request over
+  # HTTP is answered with a redirect to HTTPS. Passwords, session cookies and
+  # agent keys travel here. The certificates are yours to provide: the two
+  # Secrets named below, or cert-manager through `annotations`.
   tls:
-    enabled: false
+    enabled: true
+
+  # The redirect is the controller's to make. ingress-nginx redirects an
+  # Ingress that has TLS by itself. Traefik does not: for it the chart adds a
+  # redirect Middleware and a second Ingress on the HTTP entry point, and
+  # keeps the real ones on the HTTPS entry point.
+  traefik:
+    # auto: when the cluster has Traefik's CRDs (traefik.io/v1alpha1).
+    redirect: auto   # auto | true | false
+    entryPoints:
+      http: web
+      https: websecure
 
   frontend:
     annotations: {}
@@ -159,10 +234,23 @@ ingress:
       - agenthealth-intake
       - event-management-intake
       - softinv-intake
+      - intake.synthetics
       - http-synthetics
+      - citestcycle-intake
+      - citestcov-intake
+      - webhook-intake
       - data-obs-intake
       - eudm-intake
       - llmobs-intake
+      # The browser SDKs (RUM, logs). Any origin may send, unless
+      # NINJACAT_RUM_ALLOWED_ORIGINS (intake.env) names the ones that may.
+      - browser-intake
     # Full hostnames added verbatim, e.g. Multi-Region Failover copies
     # (app.mrf.<domainRoot>) if the agent dual-ships.
+    #
+    # An agent given a site of your own asks for app.<site>, as listed above.
+    # It prefixes its version (7-84-0-app.agent.<site>) only when the site is
+    # one of Datadog's own domains (pkg/config/utils/endpoints.go, the same
+    # in 7.70 to 7.84). Only an installation that answers under such a domain
+    # needs "*.agent.<domain>" here.
     extraHosts: []

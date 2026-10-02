@@ -1,0 +1,135 @@
+{{- $fullname := include "ninjacat.fullname" . -}}
+{{- $secret := include "ninjacat.secretName" . -}}
+# `ninjacat-api intake`: what agents send to.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-intake
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "intake") | nindent 4 }}
+spec:
+  replicas: {{ .Values.intake.replicas }}
+  selector:
+    matchLabels:
+      {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "intake") | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # Roll the pod when its configuration changes.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if not .Values.secrets.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.intake.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "intake") | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: false
+      # The image runs as the named user "app"; the kubelet can only verify
+      # runAsNonRoot against a numeric UID.
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 1654
+        runAsGroup: 1654
+      containers:
+        - name: intake
+          image: {{ include "ninjacat.apiImage" . | quote }}
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          args: ["intake"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: intake
+              containerPort: {{ .Values.intake.service.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ $fullname }}-intake
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: DATABASE_URL
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: CLICKHOUSE_PASSWORD
+          # The intake routes on the Host header: a request for a host it
+          # does not know is a 404 by design, so both probes name one it does.
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: intake
+              httpHeaders:
+                - name: Host
+                  value: {{ printf "api.%s" (include "ninjacat.domainRoot" .) | quote }}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: intake
+              httpHeaders:
+                - name: Host
+                  value: {{ printf "api.%s" (include "ninjacat.domainRoot" .) | quote }}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          # The root filesystem is read-only; these are the two places the
+          # server may write: its working directory and /tmp.
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+          {{- with .Values.intake.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.intake.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.intake.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.intake.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+# The Ingress targets this one.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-intake
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "intake") | nindent 4 }}
+  {{- with .Values.intake.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.intake.service.type }}
+  ports:
+    - name: intake
+      port: {{ .Values.intake.service.port }}
+      targetPort: intake
+  selector:
+    {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "intake") | nindent 4 }}

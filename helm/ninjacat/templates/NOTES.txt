@@ -4,10 +4,10 @@ Panel:
   {{ include "ninjacat.origin" . }}
 
 Agents — point them at this site and nothing else:
-  DD_SITE={{ .Values.domainRoot }}
+  DD_SITE={{ (include "ninjacat.domainRoot" .) }}
 
-DNS: {{ .Values.domainRoot }} and every intake host below must resolve to the
-Ingress controller. A single wildcard record (*.{{ .Values.domainRoot }}) covers
+DNS: {{ (include "ninjacat.domainRoot" .) }} and every intake host below must resolve to the
+Ingress controller. A single wildcard record (*.{{ (include "ninjacat.domainRoot" .) }}) covers
 them all, including the two-label ones — DNS wildcards match any depth, only
 TLS wildcards do not.
 {{- if .Values.ingress.enabled }}
@@ -19,9 +19,28 @@ Intake hosts:
 {{- end }}
 
 Quick check from inside the cluster:
-  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ninjacat.fullname" . }}-server {{ .Values.server.intakeService.port }}
-  curl -H 'Host: api.{{ .Values.domainRoot }}' localhost:{{ .Values.server.intakeService.port }}/ping
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ninjacat.fullname" . }}-intake {{ .Values.intake.service.port }}
+  curl -H 'Host: api.{{ (include "ninjacat.domainRoot" .) }}' localhost:{{ .Values.intake.service.port }}/ping
 
-ClickHouse schema: the server applies its embedded migrations at startup, so a
-fresh database needs no manual step. With more than one server replica, set
-NINJACAT_AUTO_MIGRATE=false and run `ninjacat migrate` as a pre-upgrade Job.
+The server runs as two Deployments: {{ include "ninjacat.fullname" . }}-intake (what agents reach)
+and {{ include "ninjacat.fullname" . }}-query (what the panel reads from, never exposed{{ if .Values.networkPolicy.enabled }}; a
+NetworkPolicy admits the panel's pods only{{ end }}).
+{{- if .Values.migrations.enabled }}
+
+Schemas: both were brought up to date by hook Jobs before the pods started.
+{{- else }}
+
+Schemas: migrations.enabled is off, so the intake applies the ClickHouse
+migrations when it starts (keep it at one replica), and the Postgres schema is
+yours to apply (the frontend image, `node migrate.js`).
+{{- end }}
+{{- if not .Values.trustedProxies }}
+
+trustedProxies is empty: X-Forwarded-For is not believed, so RUM events carry
+the Ingress controller's address as the client's and the sign-in limiter counts
+every visitor as one. Name the controller's pods' network there.
+{{- end }}
+
+Nobody can register. Make the first account in the panel's pod:
+  kubectl -n {{ .Release.Namespace }} exec -it deploy/{{ include "ninjacat.fullname" . }}-frontend -- \
+    node create-user.js you@example.com '<password>' 'Your Name'

@@ -1,16 +1,18 @@
 {{- $fullname := include "ninjacat.fullname" . -}}
 {{- $secret := include "ninjacat.secretName" . -}}
+# `ninjacat-api query`: what the panel reads from. Nothing on its port asks
+# for a key, so it has pods and a Service of its own that no Ingress names.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $fullname }}-frontend
+  name: {{ $fullname }}-query
   labels:
-    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "frontend") | nindent 4 }}
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "query") | nindent 4 }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.query.replicas }}
   selector:
     matchLabels:
-      {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "frontend") | nindent 6 }}
+      {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "query") | nindent 6 }}
   template:
     metadata:
       annotations:
@@ -18,79 +20,86 @@ spec:
         {{- if not .Values.secrets.existingSecret }}
         checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
         {{- end }}
-        {{- with .Values.frontend.podAnnotations }}
+        {{- with .Values.query.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "frontend") | nindent 8 }}
+        {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "query") | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       automountServiceAccountToken: false
-      # The image runs as the named user "node"; the kubelet can only verify
-      # runAsNonRoot against a numeric UID.
       securityContext:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
-        runAsUser: 1000
-        runAsGroup: 1000
+        runAsUser: 1654
+        runAsGroup: 1654
       containers:
-        - name: frontend
-          image: {{ include "ninjacat.frontendImage" . | quote }}
-          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+        - name: query
+          image: {{ include "ninjacat.apiImage" . | quote }}
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          args: ["query"]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           ports:
-            - name: http
-              containerPort: {{ .Values.frontend.service.port }}
+            - name: query
+              containerPort: {{ .Values.query.service.port }}
           envFrom:
             - configMapRef:
-                name: {{ $fullname }}-frontend
+                name: {{ $fullname }}-query
           env:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: {{ $secret }}
                   key: DATABASE_URL
-            - name: BETTER_AUTH_SECRET
+            - name: CLICKHOUSE_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ $secret }}
-                  key: BETTER_AUTH_SECRET
+                  key: {{ ternary "CLICKHOUSE_QUERY_PASSWORD" "CLICKHOUSE_PASSWORD" (ne .Values.clickhouse.queryUser "") }}
           readinessProbe:
-            tcpSocket:
-              port: http
+            httpGet:
+              path: /ping
+              port: query
             periodSeconds: 10
           livenessProbe:
-            tcpSocket:
-              port: http
+            httpGet:
+              path: /ping
+              port: query
             initialDelaySeconds: 10
             periodSeconds: 20
+          # The root filesystem is read-only; these are the two places the
+          # server may write: its working directory and /tmp.
           volumeMounts:
+            - name: data
+              mountPath: /data
             - name: tmp
               mountPath: /tmp
-          {{- with .Values.frontend.resources }}
+          {{- with .Values.query.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
       volumes:
+        - name: data
+          emptyDir: {}
         - name: tmp
           emptyDir: {}
-      {{- with .Values.frontend.nodeSelector }}
+      {{- with .Values.query.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.frontend.affinity }}
+      {{- with .Values.query.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.frontend.tolerations }}
+      {{- with .Values.query.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -98,14 +107,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ $fullname }}-frontend
+  name: {{ $fullname }}-query
   labels:
-    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "frontend") | nindent 4 }}
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "query") | nindent 4 }}
 spec:
   type: ClusterIP
   ports:
-    - name: http
-      port: {{ .Values.frontend.service.port }}
-      targetPort: http
+    - name: query
+      port: {{ .Values.query.service.port }}
+      targetPort: query
   selector:
-    {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "frontend") | nindent 4 }}
+    {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "query") | nindent 4 }}
