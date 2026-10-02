@@ -93,7 +93,10 @@ Open, most urgent first:
       majors, `frontend/project.inlang/settings.json`). Pin or vendor them.
 - [ ] Repository settings: `main` unprotected, no tag rules, secret scanning and push
       protection off. Two old public images, `…/frontend` and `…/server`, from September.
-- [ ] 57 commits carry an employer's e-mail address as author, on a public repository.
+- [ ] The history was rewritten on 2026-10-02 so that every commit carries one author
+      address; the three branches were force-pushed. GitHub still serves the old commits to
+      anyone who has their hashes until it collects them; only its support removes them
+      at once. Any other clone has to be made again, not pulled.
 - [ ] The panel does not link to its source (AGPL section 13); `bun run lint` fails on 431
       files, so CI does not run it.
 
