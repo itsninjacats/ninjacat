@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { authClient } from '$lib/auth-client';
 	import { Button } from '$lib/components/ui/button';
 	import { FieldGroup, Field, FieldLabel, FieldError } from '$lib/components/ui/field';
 	import { Input } from '$lib/components/ui/input';
@@ -10,70 +12,78 @@
 	let {
 		ref = $bindable(null),
 		class: className,
-		blad = null,
-		email = '',
 		...restProps
-	}: WithElementRef<HTMLFormAttributes> & { blad?: string | null; email?: string } = $props();
+	}: WithElementRef<HTMLFormAttributes> = $props();
 
 	const id = $props.id();
-	let wysylanie = $state(false);
+	let email = $state('');
+	let password = $state('');
+	let error = $state<string | null>(null);
+	let submitting = $state(false);
+
+	async function signIn(event: SubmitEvent) {
+		event.preventDefault();
+		submitting = true;
+		error = null;
+
+		const result = await authClient.signIn.email({ email: email.trim(), password });
+		submitting = false;
+
+		if (!result.error) {
+			await goto(resolve('/app'), { invalidateAll: true });
+		} else if (result.error.status === 429) {
+			error = 'Too many attempts. Wait a minute and try again.';
+		} else if (result.error.status >= 500) {
+			error = 'Something went wrong. Try again.';
+		} else {
+			error = 'Wrong e-mail or password';
+		}
+	}
 </script>
 
-<form
-	method="POST"
-	action="?/zaloguj"
-	class={cn('flex flex-col gap-6', className)}
-	bind:this={ref}
-	use:enhance={() => {
-		wysylanie = true;
-		return async ({ update }) => {
-			await update();
-			wysylanie = false;
-		};
-	}}
-	{...restProps}
->
+<form class={cn('flex flex-col gap-6', className)} bind:this={ref} onsubmit={signIn} {...restProps}>
 	<FieldGroup>
 		<div class="flex flex-col items-center gap-1 text-center">
-			<h1 class="font-heading text-2xl font-semibold tracking-tight">Zaloguj się</h1>
-			<p class="text-muted-foreground text-sm text-balance">
-				Podaj dane dostępowe do swojej instancji ninjacata
+			<h1 class="font-heading text-2xl font-semibold tracking-tight">Sign in</h1>
+			<p class="text-sm text-balance text-muted-foreground">
+				Enter the credentials for your ninjacat instance
 			</p>
 		</div>
 
 		<Field>
-			<FieldLabel for="email-{id}">Adres e-mail</FieldLabel>
+			<FieldLabel for="email-{id}">E-mail address</FieldLabel>
 			<Input
 				id="email-{id}"
 				name="email"
 				type="email"
-				placeholder="ty@firma.pl"
-				value={email}
+				placeholder="you@company.com"
+				bind:value={email}
 				autocomplete="username"
 				required
 			/>
 		</Field>
 
 		<Field>
-			<FieldLabel for="haslo-{id}">Hasło</FieldLabel>
+			<FieldLabel for="password-{id}">Password</FieldLabel>
 			<Input
-				id="haslo-{id}"
-				name="haslo"
+				id="password-{id}"
+				name="password"
 				type="password"
+				bind:value={password}
 				autocomplete="current-password"
 				required
 			/>
-			{#if blad}
-				<FieldError>{blad}</FieldError>
+			{#if error}
+				<FieldError>{error}</FieldError>
 			{/if}
 		</Field>
 
 		<Field>
-			<Button type="submit" disabled={wysylanie}>
-				{#if wysylanie}
+			<Button type="submit" disabled={submitting}>
+				{#if submitting}
 					<Spinner />
 				{/if}
-				Zaloguj
+				Sign in
 			</Button>
 		</Field>
 	</FieldGroup>
