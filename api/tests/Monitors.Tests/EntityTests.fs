@@ -413,7 +413,8 @@ type EntityTests() =
                         LastTriggeredAt = Some since
                         FirstSeen = since
                         LastSeen = since
-                        LastPoint = since } ]
+                        LastPoint = since
+                        Interrupted = None } ]
               QueryHash = Some "an older query" }
 
         let _, inserts, _ = this.Start()
@@ -440,7 +441,8 @@ type EntityTests() =
                         LastTriggeredAt = Some(t0.AddHours -1.0)
                         FirstSeen = t0.AddHours -1.0
                         LastSeen = t0
-                        LastPoint = t0 } ]
+                        LastPoint = t0
+                        Interrupted = None } ]
               QueryHash = Some "an older query" }
 
         let _, inserts, _ = this.Start()
@@ -466,7 +468,8 @@ type EntityTests() =
                         LastTriggeredAt = Some since
                         FirstSeen = since
                         LastSeen = t0 - minute
-                        LastPoint = t0 - minute } ]
+                        LastPoint = t0 - minute
+                        Interrupted = None } ]
               QueryHash = Some(hashOf cpu) }
 
         let entity, inserts, records = this.Start()
@@ -542,7 +545,8 @@ type EntityTests() =
                         LastTriggeredAt = Some(t0.AddHours -1.0)
                         FirstSeen = t0.AddHours -1.0
                         LastSeen = t0
-                        LastPoint = t0 } ]
+                        LastPoint = t0
+                        Interrupted = None } ]
               QueryHash = Some(hashOf cpu) }
 
         let entity, inserts, _ = this.Start()

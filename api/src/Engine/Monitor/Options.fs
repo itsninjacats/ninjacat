@@ -24,6 +24,7 @@ let defaults: Options =
       RequireFullWindow = false
       NotifyNoData = false
       NoDataTimeframe = None
+      OnMissingData = None
       Timeout = None
       NotActedOn = [] }
 
@@ -36,6 +37,7 @@ let private actedOn =
       "require_full_window"
       "notify_no_data"
       "no_data_timeframe"
+      "on_missing_data"
       "timeout_h" ]
 
 let private refused =
@@ -74,6 +76,16 @@ let private boolean (path: string) (e: JsonElement) : Result<bool, string> =
     | JsonValueKind.True -> Ok true
     | JsonValueKind.False -> Ok false
     | _ -> Error $"{path} must be true or false"
+
+let private missingData (path: string) (e: JsonElement) : Result<MissingData, string> =
+    let text = if e.ValueKind = JsonValueKind.String then e.GetString() else ""
+
+    match text with
+    | "default" -> Ok MissingData.Default
+    | "show_no_data" -> Ok MissingData.ShowNoData
+    | "show_and_notify_no_data" -> Ok MissingData.ShowAndNotifyNoData
+    | "resolve" -> Ok MissingData.Resolve
+    | _ -> Error $"{path} must be one of default, show_no_data, show_and_notify_no_data, resolve"
 
 let private window (path: string) (e: JsonElement) : Result<Window, string> =
     match e.ValueKind with
@@ -167,7 +179,17 @@ let private ofObject (root: JsonElement) : Result<Options, string list> =
     let notifyNoData = optional path "notify_no_data" boolean root
     // Minutes, as Datadog counts it. The longest is the retention's, which Validate checks.
     let noDataTimeframe = optional path "no_data_timeframe" minutes root
+    let onMissingData = optional path "on_missing_data" missingData root
     let timeoutH = optional path "timeout_h" (fun p -> wholeNumber p 0L 24L) root
+
+    // WARNING(undocumented): on_missing_data replaces the older two, so both
+    // together are refused; an explicit notify_no_data false is accepted, as
+    // a definition read back from Datadog may carry it.
+    let replaced =
+        match valueOf onMissingData, valueOf notifyNoData, valueOf noDataTimeframe with
+        | Some _, Some true, _
+        | Some _, _, Some _ -> [ "options.on_missing_data replaces notify_no_data and no_data_timeframe; set one or the other" ]
+        | _ -> []
 
     let nested (result: Result<'T, string list>) =
         match result with
@@ -186,7 +208,9 @@ let private ofObject (root: JsonElement) : Result<Options, string list> =
               Parse.problemOf requireFullWindow
               Parse.problemOf notifyNoData
               Parse.problemOf noDataTimeframe
+              Parse.problemOf onMissingData
               Parse.problemOf timeoutH ]
+        @ replaced
 
     match problems, thresholds, windows with
     | [], Ok thresholds, Ok(trigger, recovery) ->
@@ -206,6 +230,7 @@ let private ofObject (root: JsonElement) : Result<Options, string list> =
               RequireFullWindow = valueOf requireFullWindow |> Option.defaultValue false
               NotifyNoData = valueOf notifyNoData |> Option.defaultValue false
               NoDataTimeframe = valueOf noDataTimeframe |> Option.map (fun m -> TimeSpan.FromMinutes(float m))
+              OnMissingData = valueOf onMissingData
               Timeout =
                 match valueOf timeoutH with
                 | None

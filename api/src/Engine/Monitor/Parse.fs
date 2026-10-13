@@ -202,7 +202,8 @@ let rec leaves (e: Expr<MetricQuery>) : MetricQuery list =
             | Lit _
             | Named _ -> [])
 
-let rec private functionNames (e: Expr<MetricQuery>) : string list =
+/// The functions an expression calls, outermost first.
+let rec functionNames (e: Expr<MetricQuery>) : string list =
     match e with
     | Leaf _
     | Number _ -> []

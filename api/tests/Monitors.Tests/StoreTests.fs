@@ -64,6 +64,9 @@ let ``open groups load with their latest transition, closed ones do not`` () =
         // The latest row has no trigger times; an older one has.
         stored sink "new" [ transition "host:d" (minutesAgo 30.0) None Alert Reason.New ]
         stored sink "new" [ transition "host:d" (minutesAgo 15.0) (Some Alert) NoData Reason.NoData ]
+        // A No Data not notified remembers what it interrupted.
+        stored sink "new" [ transition "host:e" (minutesAgo 30.0) None Warn Reason.New ]
+        stored sink "new" [ transition "host:e" (minutesAgo 15.0) (Some Warn) NoData Reason.NoDataShown ]
 
         // Another monitor's group is not this one's.
         let other = { Store.transitionRow key 1 "x" None None (transition "host:z" now None Alert Reason.New) with MonitorID = 8UL }
@@ -82,7 +85,7 @@ let ``open groups load with their latest transition, closed ones do not`` () =
 
         let history = (Store.history scratch key now CancellationToken.None).GetAwaiter().GetResult()
 
-        Assert.Equal<string list>([ "host:a"; "host:b"; "host:d" ], history.Groups.Keys |> List.ofSeq)
+        Assert.Equal<string list>([ "host:a"; "host:b"; "host:d"; "host:e" ], history.Groups.Keys |> List.ofSeq)
         Assert.Equal(Some "new", history.QueryHash)
 
         let a = history.Groups["host:a"]
@@ -95,7 +98,11 @@ let ``open groups load with their latest transition, closed ones do not`` () =
         Assert.Equal(None, b.FirstTriggeredAt)
 
         let d = history.Groups["host:d"]
-        Assert.Equal((Some NoData, None, None), (d.State, d.FirstTriggeredAt, d.LastTriggeredAt)))
+        Assert.Equal((Some NoData, None, None, None), (d.State, d.FirstTriggeredAt, d.LastTriggeredAt, d.Interrupted))
+
+        let e = history.Groups["host:e"]
+        Assert.Equal((Some NoData, Some Warn), (e.State, e.Interrupted))
+        Assert.Equal(None, a.Interrupted))
 
 [<Fact>]
 let ``a monitor with nothing stored starts empty`` () =

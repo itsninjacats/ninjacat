@@ -77,7 +77,7 @@ let cursor (client: ClickHouseClient) (ct: CancellationToken) : Task<DateTimeOff
 /// Reads from 30 s before `since`: rows of two inserts become visible in
 /// either order, whatever their `inserted_at` says. A transition is taken to
 /// be stored within a day of its `at`, which lets ClickHouse skip the older
-/// partitions. Expiry, query changes, deletions and a new group that is OK
+/// partitions. The reasons in State.neverNotified and a new group that is OK
 /// are never notified.
 ///
 /// The newest is read first, so every row it covers is visible to the read
@@ -119,14 +119,14 @@ let due (client: ClickHouseClient) (since: DateTimeOffset) (ct: CancellationToke
                     "SELECT tenant_id, monitor_id, group_key, at, inserted_at, from_state, to_state, reason, value "
                     + "FROM monitor_transitions FINAL WHERE "
                     + window
-                    + "AND reason NOT IN ('expired', 'definition_changed', 'deleted') "
+                    + "AND NOT has({never:Array(String)}, reason) "
                     + "AND NOT (reason = 'new' AND to_state = 'OK') "
                     + "AND (tenant_id, monitor_id, group_key, at) NOT IN ("
                     + "SELECT tenant_id, monitor_id, group_key, transition_at FROM monitor_notifications "
                     + "WHERE transition_at >= fromUnixTimestamp64Milli({earliest:Int64}) AND kind = 'transition') "
                     + "ORDER BY inserted_at, tenant_id, monitor_id, group_key "
                     + $"LIMIT {batch}"
-                  Parameters = bounds }
+                  Parameters = ("never", SqlValue.StringArray(Monitor.State.neverNotified |> List.map _.Text)) :: bounds }
 
         return
             { Found = found

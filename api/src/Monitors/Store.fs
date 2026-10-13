@@ -132,6 +132,7 @@ let private optionalTime (r: DbDataReader) (i: int) : DateTimeOffset option =
 type private Latest =
     { Key: string
       Tags: string list
+      From: Status option
       State: Status option
       Reason: string
       At: DateTimeOffset
@@ -155,13 +156,15 @@ let private latest (client: ClickHouseClient) (key: MonitorKey) (ct: Cancellatio
               FirstAt = time r 5
               FirstTriggeredAt = optionalTime r 6
               LastTriggeredAt = optionalTime r 7
-              QueryHash = r.GetString 8 })
+              QueryHash = r.GetString 8
+              From = statusOf (r.GetString 9) })
         { Text =
             // argMax skips a NULL argument and would return an older trigger
             // time; inside a tuple the NULL is kept.
             "SELECT group_key, argMax(group_tags, at), argMax(to_state, at), argMax(reason, at), max(at), min(at), "
             + "tupleElement(argMax(tuple(first_triggered_at, last_triggered_at), at), 1), "
-            + "tupleElement(argMax(tuple(first_triggered_at, last_triggered_at), at), 2), argMax(query_hash, at) "
+            + "tupleElement(argMax(tuple(first_triggered_at, last_triggered_at), at), 2), argMax(query_hash, at), "
+            + "argMax(from_state, at) "
             + "FROM monitor_transitions WHERE tenant_id = {tenant:String} AND monitor_id = {monitor:Int64} "
             + "GROUP BY group_key"
           Parameters = keyParameters key }
@@ -206,7 +209,8 @@ let history (client: ClickHouseClient) (key: MonitorKey) (now: DateTimeOffset) (
               // Points are not stored with the evaluation; the last tick that
               // saw the group is the nearest bound. It errs late, so No Data
               // comes at most a window and the evaluation delay later.
-              LastPoint = lastSeen }
+              LastPoint = lastSeen
+              Interrupted = (if t.State = Some NoData && t.Reason = Reason.NoDataShown.Text then t.From else None) }
 
         return
             { Groups = openGroups |> List.map (fun t -> t.Key, groupOf t) |> Map.ofList

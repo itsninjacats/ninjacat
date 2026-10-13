@@ -106,6 +106,44 @@ let ``timeout_h 0 is no timeout`` () =
 [<InlineData("""{"thresholds":""", "not valid JSON")>]
 let ``options refused`` (options: string, fragment: string) = refused above90 options fragment
 
+[<Theory>]
+[<InlineData("default")>]
+[<InlineData("show_no_data")>]
+[<InlineData("show_and_notify_no_data")>]
+[<InlineData("resolve")>]
+let ``on_missing_data is read`` (rule: string) =
+    let o = (valid above90 $"""{{"on_missing_data":"{rule}","notify_no_data":false}}""").Options
+
+    let expected =
+        match rule with
+        | "default" -> MissingData.Default
+        | "show_no_data" -> MissingData.ShowNoData
+        | "show_and_notify_no_data" -> MissingData.ShowAndNotifyNoData
+        | _ -> MissingData.Resolve
+
+    Assert.Equal(Some expected, o.OnMissingData)
+    Assert.Empty o.NotActedOn
+
+[<Fact>]
+let ``without on_missing_data, notify_no_data decides`` () =
+    Assert.Equal(None, (valid above90 """{"notify_no_data":true}""").Options.OnMissingData)
+
+[<Theory>]
+[<InlineData("""{"on_missing_data":"notify"}""", "on_missing_data must be one of default, show_no_data")>]
+[<InlineData("""{"on_missing_data":true}""", "on_missing_data must be one of")>]
+[<InlineData("""{"on_missing_data":"resolve","notify_no_data":true}""", "on_missing_data replaces notify_no_data and no_data_timeframe")>]
+[<InlineData("""{"on_missing_data":"default","no_data_timeframe":10}""", "on_missing_data replaces notify_no_data and no_data_timeframe")>]
+let ``on_missing_data refused`` (options: string, fragment: string) = refused above90 options fragment
+
+[<Theory>]
+[<InlineData("show_no_data")>]
+[<InlineData("show_and_notify_no_data")>]
+[<InlineData("resolve")>]
+let ``with default_zero only the default on_missing_data`` (rule: string) =
+    let query = "sum(last_5m):default_zero(sum:requests{*} by {host}) < 10"
+    refused query $"""{{"on_missing_data":"{rule}"}}""" "on_missing_data must be default when the query has default_zero()"
+    Assert.Equal(Some MissingData.Default, (valid query """{"on_missing_data":"default"}""").Options.OnMissingData)
+
 [<Fact>]
 let ``several problems are reported together`` () =
     let problems = validateWith Plan.defaultRetention above90 """{"timeout_h":25,"evaluation_delay":-1}""" |> problemsOf

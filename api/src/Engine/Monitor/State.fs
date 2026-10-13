@@ -31,6 +31,9 @@ type Reason =
     | Threshold
     | Recovery
     | NoData
+    /// Into, or back out of, the No Data that show_no_data shows without
+    /// notifying.
+    | NoDataShown
     | Timeout
     | Expired
     | DefinitionChanged
@@ -42,10 +45,15 @@ type Reason =
         | Reason.Threshold -> "threshold"
         | Reason.Recovery -> "recovery"
         | Reason.NoData -> "no_data"
+        | Reason.NoDataShown -> "no_data_shown"
         | Reason.Timeout -> "timeout"
         | Reason.Expired -> "expired"
         | Reason.DefinitionChanged -> "definition_changed"
         | Reason.Deleted -> "deleted"
+
+/// Reasons the notifier never notifies. A new group that is OK is not
+/// notified either.
+let neverNotified = [ Reason.NoDataShown; Reason.Expired; Reason.DefinitionChanged; Reason.Deleted ]
 
 /// The threshold a transition's value crossed.
 type Crossed =
@@ -74,7 +82,10 @@ type Group =
       /// Ticks at which the group was in the result.
       FirstSeen: DateTimeOffset
       LastSeen: DateTimeOffset
-      LastPoint: DateTimeOffset }
+      LastPoint: DateTimeOffset
+      /// In a No Data that was not notified (show_no_data): the state it
+      /// interrupted, which the group resumes from. None otherwise.
+      Interrupted: Status option }
 
 type Transition =
     { Key: string
@@ -117,6 +128,10 @@ let private recovered (c: Comparator) (value: float) (threshold: float) (recover
 
 let private triggered (s: Status option) = s = Some Alert || s = Some Warn
 
+/// The state a group is judged from: the one a silent No Data interrupted, or
+/// its own.
+let private resumed (g: Group) = Option.orElse g.State g.Interrupted
+
 /// The state a value puts a group in, from the state it was in, and the
 /// threshold that decided it.
 let private judge (q: MonitorQuery) (t: Thresholds) (current: Status option) (value: float) : Status * Crossed option =
@@ -149,7 +164,7 @@ let private move (g: Group) (next: Status) (reason: Reason) (value: float option
     let first, last =
         match next with
         | Alert
-        | Warn -> (if triggered g.State then g.FirstTriggeredAt else Some at), Some at
+        | Warn -> (if triggered (resumed g) then g.FirstTriggeredAt else Some at), Some at
         | OK
         | NoData -> g.FirstTriggeredAt, g.LastTriggeredAt
 
@@ -158,7 +173,8 @@ let private move (g: Group) (next: Status) (reason: Reason) (value: float option
             State = Some next
             Since = at
             FirstTriggeredAt = (if next = OK then None else first)
-            LastTriggeredAt = last }
+            LastTriggeredAt = last
+            Interrupted = (if next = NoData && reason = Reason.NoDataShown then g.State else None) }
 
     moved,
     { Key = g.Key
@@ -176,10 +192,53 @@ let private move (g: Group) (next: Status) (reason: Reason) (value: float option
 let private newGroupDelay (d: Definition) =
     if d.Query.GroupBy.IsEmpty then TimeSpan.Zero else d.Options.NewGroupDelay
 
-/// A judged group with no point in the window read: after timeout_h in Alert
-/// or Warn it goes to OK, after no_data_timeframe to No Data. Silence runs
-/// from its last point to the end of that window, so an evaluation delay does
-/// not count as silence.
+/// The transition a value makes from the group's state.
+let private judged (d: Definition) (g: Group) (value: float) (p: Period) (at: DateTimeOffset) : Group * Transition option =
+    let next, crossed = judge d.Query d.Options.Thresholds (resumed g) value
+
+    let reason =
+        match g.State, next with
+        | None, _ -> Reason.New
+        // WARNING(undocumented): back from a No Data that was not notified,
+        // into the state it interrupted, is not notified either; a trigger
+        // goes on unbroken. Into another state, it is notified as usual.
+        | Some NoData, _ when g.Interrupted = Some next -> Reason.NoDataShown
+        | Some _, OK -> Reason.Recovery
+        | Some _, _ -> Reason.Threshold
+
+    match g.State with
+    | Some state when state = next -> g, None
+    | _ ->
+        let moved, transition = move g next reason (Some value) crossed (Some p) at
+        moved, Some transition
+
+let private into (g: Group) (next: Status) (reason: Reason) (p: Period) (at: DateTimeOffset) : Group * Transition option =
+    if g.State = Some next then
+        g, None
+    else
+        let moved, transition = move g next reason None None (Some p) at
+        moved, Some transition
+
+/// on_missing_data `default`: a sum over no points is 0. `.as_count()`
+/// takes only sum, so this covers it too.
+///
+/// WARNING(undocumented): only for a threshold. A change monitor judges the
+/// change, not the sum, so a missing group of one keeps its state.
+let private zeroWhenMissing (d: Definition) =
+    let threshold =
+        match d.Query.Detection with
+        | Threshold -> true
+        | Change _
+        | Anomaly _
+        | Forecast _
+        | Outlier _ -> false
+
+    d.Options.OnMissingData = Some MissingData.Default && threshold && d.Query.Aggregator = Sum
+
+/// A judged group with no point in the window read. Under on_missing_data it
+/// is missing at once; otherwise, after timeout_h in Alert or Warn it goes to
+/// OK, after no_data_timeframe to No Data. Silence runs from its last point to
+/// the end of that window, so an evaluation delay does not count as silence.
 ///
 /// WARNING(undocumented): from the last point, not from the last evaluation
 /// that had the group.
@@ -187,17 +246,25 @@ let private silent (d: Definition) (g: Group) (p: Period) (at: DateTimeOffset) :
     let silence = p.To - g.LastPoint
     let noDataAfter = defaultArg d.Options.NoDataTimeframe (d.Query.Window.Length * 2.0)
 
-    match g.State with
-    | None -> g, None
-    | Some state ->
-        match d.Options.Timeout with
-        | Some timeout when triggered g.State && silence >= timeout ->
-            let moved, transition = move g OK Reason.Timeout None None (Some p) at
-            moved, Some transition
-        | _ when d.Options.NotifyNoData && state <> NoData && silence >= noDataAfter ->
-            let moved, transition = move g NoData Reason.NoData None None (Some p) at
-            moved, Some transition
-        | _ -> g, None
+    match g.State, d.Options.Timeout with
+    | None, _ -> g, None
+    // Judged as 0, it is not without data, so timeout_h does not end it.
+    | Some _, _ when zeroWhenMissing d -> judged d g 0.0 p at
+    | Some _, Some timeout when triggered (resumed g) && silence >= timeout -> into g OK Reason.Timeout p at
+    | Some state, _ ->
+        // WARNING(undocumented): Datadog documents on_missing_data for
+        // event-based monitors; its migration guide offers it for metrics.
+        // `resolve` is notified like a timeout when it ends Alert or Warn,
+        // or a No Data that was notified; not when it ends a No Data that
+        // was not.
+        match d.Options.OnMissingData with
+        | Some MissingData.Default -> g, None
+        | Some MissingData.ShowNoData -> into g NoData Reason.NoDataShown p at
+        | Some MissingData.ShowAndNotifyNoData -> into g NoData Reason.NoData p at
+        | Some MissingData.Resolve when g.Interrupted = Some OK -> into g OK Reason.NoDataShown p at
+        | Some MissingData.Resolve -> into g OK Reason.NoData p at
+        | None when d.Options.NotifyNoData && state <> NoData && silence >= noDataAfter -> into g NoData Reason.NoData p at
+        | None -> g, None
 
 let private seen (d: Definition) (g: Group) (r: GroupResult) (p: Period) (at: DateTimeOffset) : Group * Transition option =
     let g =
@@ -209,18 +276,7 @@ let private seen (d: Definition) (g: Group) (r: GroupResult) (p: Period) (at: Da
     | Skipped _, _ when r.LastPoint.IsNone -> silent d g p at
     | Skipped _, _ -> g, None
     | Judged _, None when at - g.FirstSeen < newGroupDelay d -> g, None
-    | Judged value, current ->
-        let next, crossed = judge d.Query d.Options.Thresholds current value
-
-        match current with
-        | Some state when state = next -> g, None
-        | Some _ ->
-            let reason = if next = OK then Reason.Recovery else Reason.Threshold
-            let moved, transition = move g next reason (Some value) crossed (Some p) at
-            moved, Some transition
-        | None ->
-            let moved, transition = move g next Reason.New (Some value) crossed (Some p) at
-            moved, Some transition
+    | Judged value, _ -> judged d g value p at
 
 /// A known group missing from the result: silent, and forgotten after 24 h
 /// unseen.
@@ -256,7 +312,8 @@ let step (d: Definition) (groups: Map<string, Group>) (evaluation: Evaluation) (
                         LastTriggeredAt = None
                         FirstSeen = at
                         LastSeen = at
-                        LastPoint = defaultArg r.LastPoint evaluation.Period.From }
+                        LastPoint = defaultArg r.LastPoint evaluation.Period.From
+                        Interrupted = None }
 
                   let g, t = seen d fresh r evaluation.Period at
                   key, Some g, t

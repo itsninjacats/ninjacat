@@ -134,6 +134,16 @@ type Thresholds =
       CriticalRecovery: float option
       WarningRecovery: float option }
 
+/// on_missing_data: what a judged group with no point in the window becomes.
+[<RequireQualifiedAccess>]
+type MissingData =
+    /// A threshold over a sum or `.as_count()` judges it as 0; otherwise it
+    /// keeps its state.
+    | Default
+    | ShowNoData
+    | ShowAndNotifyNoData
+    | Resolve
+
 /// The options evaluation acts on. Options Datadog has that are stored but
 /// not acted on yet are only named, in NotActedOn.
 type Options =
@@ -146,6 +156,8 @@ type Options =
       NotifyNoData: bool
       /// None: twice the window.
       NoDataTimeframe: TimeSpan option
+      /// None: notify_no_data and no_data_timeframe decide instead.
+      OnMissingData: MissingData option
       /// timeout_h; None when absent or 0.
       Timeout: TimeSpan option
       NotActedOn: string list }

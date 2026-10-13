@@ -145,6 +145,16 @@ let private windowProblems (q: MonitorQuery) (o: Options) : string list =
     | _, None, None -> []
     | _ -> [ "options.threshold_windows is for anomaly monitors" ]
 
+/// Datadog accepts only `default` beside default_zero(), which already
+/// reads missing points as 0.
+let private missingDataProblems (q: MonitorQuery) (o: Options) : string list =
+    match o.OnMissingData with
+    | None
+    | Some MissingData.Default -> []
+    | Some _ when List.contains "default_zero" (Parse.functionNames q.Expression) ->
+        [ "options.on_missing_data must be default when the query has default_zero()" ]
+    | Some _ -> []
+
 /// Whether the engine can plan the query, as the evaluation will run it.
 let private planProblems (retention: Plan.Retention) (now: DateTimeOffset) (q: MonitorQuery) : string list =
     let queries, formula = Engine.split q.Expression
@@ -202,6 +212,7 @@ let definition
         let problems =
             thresholdProblems q o.Thresholds
             @ windowProblems q o
+            @ missingDataProblems q o
             @ (match q.Detection with
                | Anomaly a -> anomalyProblems q a o
                | Threshold

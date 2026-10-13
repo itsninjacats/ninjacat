@@ -21,6 +21,12 @@ let private definition (query: string) (options: string) : Definition =
 let private above90 options = definition "avg(last_5m):avg:cpu{*} by {host} > 90" options
 let private simple options = definition "avg(last_5m):avg:cpu{*} > 90" options
 
+let private missing (rule: string) = $"""{{"on_missing_data":"{rule}"}}"""
+let private fewRequests options = definition "sum(last_5m):sum:requests{*} by {host} < 10" options
+let private fewRequestsSimple options = definition "sum(last_5m):sum:requests{*} < 10" options
+let private countedErrors options = definition "sum(last_5m):sum:errors{*} by {host}.as_count() > 5" options
+let private trafficDrop options = definition "pct_change(sum(last_5m),last_1h):sum:requests{*} by {host} < -50" options
+
 /// A group judged before, seen at the previous tick, with a point near the
 /// end of its window.
 let private group (key: string) (state: Status option) : Group =
@@ -32,7 +38,14 @@ let private group (key: string) (state: Status option) : Group =
       LastTriggeredAt = None
       FirstSeen = at.AddHours -2.0
       LastSeen = at.AddMinutes -1.0
-      LastPoint = period.To.AddSeconds -15.0 }
+      LastPoint = period.To.AddSeconds -15.0
+      Interrupted = None }
+
+/// A group in a No Data that show_no_data did not notify, entered from `from`.
+let private shown (key: string) (from: Status) : Group =
+    { group key (Some NoData) with
+        Interrupted = Some from
+        FirstTriggeredAt = (if from = OK then None else Some(at.AddHours -1.0)) }
 
 let private silentFor (span: TimeSpan) (g: Group) = { g with LastPoint = period.To - span }
 
@@ -203,6 +216,173 @@ let private cases: Map<string, Case> =
               [ a, Some NoData ]
               [ a, Some Alert, NoData, Reason.NoData ]
 
+          // --- on_missing_data: missing at once, the window the monitor's own
+          "default: a missing avg group keeps Alert",
+          case (above90 (missing "default")) [ group a (Some Alert) ] [] [ a, Some Alert ] []
+
+          "default: a missing avg group keeps OK, simple alert",
+          case (simple (missing "default")) [ group "*" (Some OK) ] [] [ "*", Some OK ] []
+
+          "default: a missing avg group still times out",
+          case
+              (above90 """{"on_missing_data":"default","timeout_h":1}""")
+              [ group a (Some Alert) |> silentFor (TimeSpan.FromHours 1.0) ]
+              []
+              [ a, Some OK ]
+              [ a, Some Alert, OK, Reason.Timeout ]
+
+          "default: a missing sum group is judged as 0 and alerts",
+          case (fewRequests (missing "default")) [ group a (Some OK) ] [] [ a, Some Alert ] [ a, Some OK, Alert, Reason.Threshold ]
+
+          "default: a missing sum group is judged as 0 and alerts, simple alert",
+          case (fewRequestsSimple (missing "default")) [ group "*" (Some OK) ] [] [ "*", Some Alert ] [ "*", Some OK, Alert, Reason.Threshold ]
+
+          "default: a missing as_count group is judged as 0 and recovers",
+          case (countedErrors (missing "default")) [ group a (Some Alert) ] [] [ a, Some OK ] [ a, Some Alert, OK, Reason.Recovery ]
+
+          "default: a missing sum group judged as 0 stays in Alert",
+          case (fewRequests (missing "default")) [ group a (Some Alert) ] [] [ a, Some Alert ] []
+
+          "default: a missing change group is not judged as 0 and keeps OK",
+          case (trafficDrop (missing "default")) [ group a (Some OK) ] [] [ a, Some OK ] []
+
+          "default: a missing change group keeps Alert",
+          case (trafficDrop (missing "default")) [ group a (Some Alert) ] [] [ a, Some Alert ] []
+
+          "default: judged as 0, timeout_h does not end it",
+          case
+              (fewRequests """{"on_missing_data":"default","timeout_h":1}""")
+              [ group a (Some Alert) |> silentFor (TimeSpan.FromHours 2.0) ]
+              []
+              [ a, Some Alert ]
+              []
+
+          "show_no_data: a missing group is No Data at once, not notified",
+          case (above90 (missing "show_no_data")) [ group a (Some OK) ] [] [ a, Some NoData ] [ a, Some OK, NoData, Reason.NoDataShown ]
+
+          "show_no_data: an alerting group missing is No Data, not notified",
+          case (above90 (missing "show_no_data")) [ group a (Some Alert) ] [] [ a, Some NoData ] [ a, Some Alert, NoData, Reason.NoDataShown ]
+
+          "show_no_data: simple alert",
+          case (simple (missing "show_no_data")) [ group "*" (Some OK) ] [] [ "*", Some NoData ] [ "*", Some OK, NoData, Reason.NoDataShown ]
+
+          "show_no_data: a sum group is No Data too",
+          case (fewRequests (missing "show_no_data")) [ group a (Some OK) ] [] [ a, Some NoData ] [ a, Some OK, NoData, Reason.NoDataShown ]
+
+          "show_no_data: No Data stays No Data",
+          case (above90 (missing "show_no_data")) [ shown a OK ] [] [ a, Some NoData ] []
+
+          "show_no_data: data back is not notified",
+          case (above90 (missing "show_no_data")) [ shown a OK ] [ a, Judged 10.0 ] [ a, Some OK ] [ a, Some NoData, OK, Reason.NoDataShown ]
+
+          "show_no_data: data back ends the trigger the No Data interrupted, notified",
+          case (above90 (missing "show_no_data")) [ shown a Alert ] [ a, Judged 10.0 ] [ a, Some OK ] [ a, Some NoData, OK, Reason.Recovery ]
+
+          "show_no_data: data back breaching alerts",
+          case (above90 (missing "show_no_data")) [ shown a OK ] [ a, Judged 95.0 ] [ a, Some Alert ] [ a, Some NoData, Alert, Reason.Threshold ]
+
+          "show_no_data: an Alert back breaching after the gap is not notified again",
+          case (above90 (missing "show_no_data")) [ shown a Alert ] [ a, Judged 95.0 ] [ a, Some Alert ] [ a, Some NoData, Alert, Reason.NoDataShown ]
+
+          "show_no_data: a Warn back as Warn is not notified again",
+          case
+              (above90 """{"on_missing_data":"show_no_data","thresholds":{"warning":80}}""")
+              [ shown a Warn ]
+              [ a, Judged 85.0 ]
+              [ a, Some Warn ]
+              [ a, Some NoData, Warn, Reason.NoDataShown ]
+
+          "show_no_data: a Warn back as Alert is notified",
+          case
+              (above90 """{"on_missing_data":"show_no_data","thresholds":{"warning":80}}""")
+              [ shown a Warn ]
+              [ a, Judged 95.0 ]
+              [ a, Some Alert ]
+              [ a, Some NoData, Alert, Reason.Threshold ]
+
+          "show_no_data: an Alert back above its recovery threshold stays Alert",
+          case
+              (above90 """{"on_missing_data":"show_no_data","thresholds":{"critical_recovery":80}}""")
+              [ shown a Alert ]
+              [ a, Judged 85.0 ]
+              [ a, Some Alert ]
+              [ a, Some NoData, Alert, Reason.NoDataShown ]
+
+          "show_no_data: a No Data that was notified recovers notified",
+          case (above90 (missing "show_no_data")) [ group a (Some NoData) ] [ a, Judged 10.0 ] [ a, Some OK ] [ a, Some NoData, OK, Reason.Recovery ]
+
+          "a No Data not notified stays silent on return after the option changed",
+          case (above90 (missing "show_and_notify_no_data")) [ shown a OK ] [ a, Judged 10.0 ] [ a, Some OK ] [ a, Some NoData, OK, Reason.NoDataShown ]
+
+          "show_no_data: an interrupted Alert still times out, notified",
+          case
+              (above90 """{"on_missing_data":"show_no_data","timeout_h":1}""")
+              [ shown a Alert |> silentFor (TimeSpan.FromHours 1.0) ]
+              []
+              [ a, Some OK ]
+              [ a, Some NoData, OK, Reason.Timeout ]
+
+          "show_no_data: a skipped group with points is not missing",
+          case (above90 (missing "show_no_data")) [ group a (Some OK) ] [ a, Skipped "not full" ] [ a, Some OK ] []
+
+          "show_and_notify_no_data: a missing group is No Data at once, notified",
+          case (above90 (missing "show_and_notify_no_data")) [ group a (Some Warn) ] [] [ a, Some NoData ] [ a, Some Warn, NoData, Reason.NoData ]
+
+          "show_and_notify_no_data: simple alert",
+          case (simple (missing "show_and_notify_no_data")) [ group "*" (Some OK) ] [] [ "*", Some NoData ] [ "*", Some OK, NoData, Reason.NoData ]
+
+          "show_and_notify_no_data: data back recovers",
+          case (above90 (missing "show_and_notify_no_data")) [ group a (Some NoData) ] [ a, Judged 10.0 ] [ a, Some OK ] [ a, Some NoData, OK, Reason.Recovery ]
+
+          "show_and_notify_no_data: No Data stays No Data",
+          case (above90 (missing "show_and_notify_no_data")) [ group a (Some NoData) ] [] [ a, Some NoData ] []
+
+          "resolve: a missing Alert resolves to OK",
+          case (above90 (missing "resolve")) [ group a (Some Alert) ] [] [ a, Some OK ] [ a, Some Alert, OK, Reason.NoData ]
+
+          "resolve: a missing Warn resolves to OK",
+          case (above90 """{"on_missing_data":"resolve","thresholds":{"warning":80}}""") [ group a (Some Warn) ] [] [ a, Some OK ] [ a, Some Warn, OK, Reason.NoData ]
+
+          "resolve: simple alert",
+          case (simple (missing "resolve")) [ group "*" (Some Alert) ] [] [ "*", Some OK ] [ "*", Some Alert, OK, Reason.NoData ]
+
+          "resolve: a No Data not notified resolves without a notice",
+          case (above90 (missing "resolve")) [ shown a OK ] [] [ a, Some OK ] [ a, Some NoData, OK, Reason.NoDataShown ]
+
+          "resolve: a No Data that interrupted an Alert resolves notified",
+          case (above90 (missing "resolve")) [ shown a Alert ] [] [ a, Some OK ] [ a, Some NoData, OK, Reason.NoData ]
+
+          "resolve: a No Data that was notified resolves notified",
+          case (above90 (missing "resolve")) [ group a (Some NoData) ] [] [ a, Some OK ] [ a, Some NoData, OK, Reason.NoData ]
+
+          "resolve: a missing OK group stays OK",
+          case (above90 (missing "resolve")) [ group a (Some OK) ] [] [ a, Some OK ] []
+
+          "resolve: a sum group resolves too",
+          case (fewRequests (missing "resolve")) [ group a (Some Alert) ] [] [ a, Some OK ] [ a, Some Alert, OK, Reason.NoData ]
+
+          // Datadog: "the monitor must be able to evaluate data before alerting on missing data".
+          "show_no_data: a group never judged is never missing",
+          case (above90 (missing "show_no_data")) [ group a None ] [] [ a, None ] []
+
+          "show_and_notify_no_data: a group never judged is never missing",
+          case (above90 (missing "show_and_notify_no_data")) [ group a None ] [] [ a, None ] []
+
+          "resolve: a group never judged is never missing",
+          case (above90 (missing "resolve")) [ group a None ] [] [ a, None ] []
+
+          "default: a sum group never judged is not judged as 0",
+          case (fewRequests (missing "default")) [ group a None ] [] [ a, None ] []
+
+          "show_no_data: a group unseen for 24 h still expires",
+          case (above90 (missing "show_no_data")) [ { group a (Some NoData) with LastSeen = at.AddHours -24.0 } ] [] [] [ a, Some NoData, OK, Reason.Expired ]
+
+          "default: a sum group judged as 0 still expires after 24 h unseen",
+          case (fewRequests (missing "default")) [ { group a (Some Alert) with LastSeen = at.AddHours -24.0 } ] [] [] [ a, Some Alert, OK, Reason.Expired ]
+
+          "resolve: a group unseen for 24 h expires",
+          case (above90 (missing "resolve")) [ { group a (Some Alert) with LastSeen = at.AddHours -24.0 } ] [] [] [ a, Some Alert, OK, Reason.Expired ]
+
           // --- expiry
           "a group unseen for 24 h expires to OK",
           case (above90 "") [ { group a (Some Alert) with LastSeen = at.AddHours -24.0 } ] [] [] [ a, Some Alert, OK, Reason.Expired ]
@@ -323,6 +503,40 @@ let ``no data and timeout transitions carry the window, expiry does not`` () =
     Assert.Equal(Some period, (Assert.Single noData).Period)
     let _, expired = once d (Map [ a, { group a (Some OK) with LastSeen = at.AddDays -1.0 } ]) [] at
     Assert.Equal(None, (Assert.Single expired).Period)
+
+[<Fact>]
+let ``under on_missing_data a group with no point in the window is missing like an absent one`` () =
+    let _, transitions = pointless (above90 (missing "show_and_notify_no_data")) (group a (Some OK))
+    Assert.Equal((a, Some OK, NoData, Reason.NoData), (let t = Assert.Single transitions in t.Key, t.From, t.To, t.Reason))
+
+[<Fact>]
+let ``a missing sum group judged as 0 carries 0 and the window`` () =
+    let _, transitions = once (fewRequests (missing "default")) (Map [ a, group a (Some OK) ]) [] at
+    let t = Assert.Single transitions
+    Assert.Equal((Some 0.0, Some Critical, Some period), (t.Value, t.Crossed, t.Period))
+
+[<Fact>]
+let ``a resolve carries the trigger it ends`` () =
+    let triggered = { group a (Some Alert) with FirstTriggeredAt = Some(at.AddHours -1.0); LastTriggeredAt = Some(at.AddMinutes -1.0) }
+    let groups, transitions = once (above90 (missing "resolve")) (Map [ a, triggered ]) [] at
+    let t = Assert.Single transitions
+    Assert.Equal((triggered.FirstTriggeredAt, triggered.LastTriggeredAt, None), (t.FirstTriggeredAt, t.LastTriggeredAt, t.Value))
+    Assert.Equal(None, groups[a].FirstTriggeredAt)
+
+[<Fact>]
+let ``a silent No Data inside a trigger keeps its start and resumes it`` () =
+    let d = above90 (missing "show_no_data")
+    let first = at.AddHours -1.0
+    let alerting = { group a (Some Alert) with FirstTriggeredAt = Some first; LastTriggeredAt = Some first }
+
+    let groups, _ = once d (Map [ a, alerting ]) [] at
+    Assert.Equal((Some NoData, Some Alert, Some first), (groups[a].State, groups[a].Interrupted, groups[a].FirstTriggeredAt))
+
+    let later = at.AddMinutes 1.0
+    let groups, back = once d groups [ a, Judged 95.0 ] later
+    let t = Assert.Single back
+    Assert.Equal((Some first, Some later), (t.FirstTriggeredAt, t.LastTriggeredAt))
+    Assert.Equal((Some Alert, None, Some first), (groups[a].State, groups[a].Interrupted, groups[a].FirstTriggeredAt))
 
 // --- outside a tick ----------------------------------------------------------------------
 

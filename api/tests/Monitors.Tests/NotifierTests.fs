@@ -185,6 +185,8 @@ let ``due leaves out what is never notified and what was already notified`` () =
                transition 1UL "host:d" at "OK" "expired"
                transition 1UL "host:e" at "OK" "definition_changed"
                transition 1UL "host:f" at "OK" "deleted"
+               transition 1UL "host:g" at "No Data" "no_data_shown"
+               transition 1UL "host:h" at "OK" "no_data"
                transition 2UL "*" at "OK" "recovery" |]
 
         sink.InsertAsync(MonitorTransitions.table, rows, CancellationToken.None).GetAwaiter().GetResult()
@@ -197,7 +199,7 @@ let ``due leaves out what is never notified and what was already notified`` () =
 
         let first = read (started.AddMinutes -1.0)
         let found = first.Found
-        Assert.Equal<(uint64 * string) list>([ 1UL, "host:a"; 1UL, "host:c"; 2UL, "*" ], keys first)
+        Assert.Equal<(uint64 * string) list>([ 1UL, "host:a"; 1UL, "host:c"; 1UL, "host:h"; 2UL, "*" ], keys first)
         // The newest covers the transitions never notified as well.
         Assert.True(first.Newest.IsSome && first.Newest.Value >= (found |> List.map _.InsertedAt |> List.max))
         Assert.Equal(None, (Notifier.cursor scratch CancellationToken.None).GetAwaiter().GetResult())
@@ -221,12 +223,12 @@ let ``due leaves out what is never notified and what was already notified`` () =
 
         sink.InsertAsync(MonitorNotifications.table, notified, CancellationToken.None).GetAwaiter().GetResult()
 
-        Assert.Equal<(uint64 * string) list>([ 1UL, "host:c"; 2UL, "*" ], keys (read (started.AddMinutes -1.0)))
+        Assert.Equal<(uint64 * string) list>([ 1UL, "host:c"; 1UL, "host:h"; 2UL, "*" ], keys (read (started.AddMinutes -1.0)))
         Assert.Equal(Some notified[0].TransitionInsertedAt, (Notifier.cursor scratch CancellationToken.None).GetAwaiter().GetResult() |> Option.map _.UtcDateTime)
 
         // Inserted less than 30 s before `since`: read again, in case an
         // older insert became visible late.
-        Assert.Equal<(uint64 * string) list>([ 1UL, "host:c"; 2UL, "*" ], keys (read (DateTimeOffset.UtcNow.AddSeconds 10.0)))
+        Assert.Equal<(uint64 * string) list>([ 1UL, "host:c"; 1UL, "host:h"; 2UL, "*" ], keys (read (DateTimeOffset.UtcNow.AddSeconds 10.0)))
 
         // More than 30 s before: not read again.
         let later = read (DateTimeOffset.UtcNow.AddMinutes 1.0)
