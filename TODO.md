@@ -416,11 +416,19 @@ data is here; the product is not.
 
 ## 6. Known rough edges
 
-- [ ] **The query process (:8081) asks for nothing.** No key, no session, and `?tenant=`
-      lets the caller name any tenant. All that protects it is the network: its own
-      container, a port compose does not publish (loopback only in the dev stack). It needs
-      a credential the panel presents — a shared secret at least, the user's session and
-      tenant at best — before a second tenant exists.
+- [x] **The query process (:8081) asked for nothing.** No key, no session, and `?tenant=`
+      let the caller name any tenant. Done 2026-10-13 (tenants.md): every route but `/ping`
+      and `/health` asks for an HS256 JWT the panel signs per call
+      (`NINJACAT_QUERY_TOKEN_SECRET`, checked by ASP.NET's JwtBearer in
+      `api/src/Server/QueryToken.fs`), and its `tenant` claim is the only source of the
+      tenant; `?tenant=` and the fallback to `default` are gone. Covered by
+      `api/tests/Query.Tests`. The port still belongs on a network only the panel reaches.
+- [ ] **Datadog's query API on the query port takes only the panel's token.**
+      `/api/v1/metrics` and `/api/v2/query/timeseries|scalar` answer the panel alone, so no
+      Datadog client can call them. Datadog's clients send an API key and an application
+      key (`DD-API-KEY`, `DD-APPLICATION-KEY`); that needs application keys in the panel
+      (per user, per tenant), a second authentication scheme next to JwtBearer, and a way to
+      reach the port that is not the panel's network.
 - [ ] **Logs over TCP (:10516) are plain unless a certificate is given**, so the API key
       travels in clear text, and the agent's default (TLS) does not even connect. Proposed,
       not decided: without `NINJACAT_TLS_CERT`/`NINJACAT_TLS_KEY` the listener does not
@@ -441,6 +449,11 @@ data is here; the product is not.
 - [ ] RUM: an event type the schema does not know goes to `raw_payloads` as `unknown_event`.
       Nothing is lost, but nothing says so either: watch that reason when the SDKs are
       upgraded.
+- [ ] **The lab scripts write keys for tenants that may not exist.** `api_key.tenant_id`
+      references `organization.id` since 2026-10-13, but `lab/server.sh` inserts a key for
+      the tenant `lab`, which nothing creates, and `lab/k8s/scripts/up.sh` one for
+      `default`, which exists only once `create-user` has run. Both inserts fail on the
+      foreign key; each script has to make its tenant first.
 - [ ] `lab/` scripts for MySQL, MariaDB, SQL Server, Oracle, MongoDB, ClickHouse, SNMP and
       system-probe ran before the key and network were renamed; only Postgres and the data
       security run were repeated afterwards.
@@ -479,9 +492,27 @@ data is here; the product is not.
 - [ ] Remove the unused `app/metrics/data` route and `fetchMetricSeries`.
 - [ ] Prettier: ignore shadcn and generated files.
 - [ ] Log search.
-- [ ] Monitors and tenants: planned in `api/docs/zadania/monitors.md` and
-      `api/docs/zadania/tenants.md` (2026-10-13). The ClickHouse migrations are squashed into
-      one `0001_initial.sql`; a database from before the squash must be dropped.
+- [x] Tenants (`api/docs/zadania/tenants.md`, 2026-10-13): a tenant is a Better Auth
+      organization, every request knows its tenant (`locals.tenant`), the instance admin
+      creates tenants and adds members under `/app/admin`, API keys belong to a tenant at
+      `/app/settings/keys`, and the query port takes the tenant from the panel's token. Both
+      migration histories were squashed; a database from before 2026-10-13 must be dropped.
+- [ ] Monitors: planned in `api/docs/zadania/monitors.md` (2026-10-13), on top of tenants.
+- [ ] **RBAC.** The tenant roles are the organization plugin's (owner, admin, member), and
+      only Better Auth's own organization routes check them: the panel's pages do not, and
+      the query port ignores the token's `role` claim. Decide what each role may do (keys,
+      members, monitors, later the query API) and check it where the action runs; the
+      plugin's access control (`ac`, `roles`, `hasPermission`) is the place to start. Until
+      then, section 0's item on keys.
+- [ ] **Deleting a tenant.** Not offered (`disableOrganizationDeletion`), because its API
+      keys (`on delete restrict`) and its ClickHouse rows would be left without an owner.
+      Needs: what happens to the rows (drop by `tenant_id`, or keep until TTL), its keys
+      revoked first, and `default` refused while self-monitoring writes there. Its members'
+      sessions need nothing: the hook moves a session off a tenant it no longer finds.
+- [ ] **Invitations by e-mail.** Members are added directly by the instance admin; the
+      plugin's invitation routes are in `disabledPaths` because an on-prem install may have
+      no e-mail. With an optional mail channel (`sendInvitationEmail`), re-enable them and
+      let a tenant's owner or admin invite.
 - [ ] A tenant's own owner or admin cannot add members: only the instance admin can, under
       `/app/admin`. A members page for the current tenant (`locals.tenant`, owner or admin)
       would reuse `changeMember` in `lib/server/admin.ts` and `auth.api.addMember`.
@@ -505,10 +536,11 @@ data is here; the product is not.
 ## 8. Language debt
 
 English is canonical; what is still Polish is listed in `CLAUDE.md` ("Language policy"):
-`api/docs/**`, `frontend/docs/**`, route segments (`/zadania`). Translate when touched;
-rename routes in one deliberate batch.
+`api/docs/**`, `experiments/goja-sandbox/README.md` and the copy of the two home pages
+(`/`, `/app`). Translate when touched; rename routes in one deliberate batch, as the keys
+page was (`/app/settings/keys`).
 
-- [ ] `frontend/docs/auth-i-ochrona-tras.md` is out of date as well as Polish: it calls the
-      layout's load the guard (the guard is `lib/server/guard.ts`, in `handle`, since
-      2026-10-02) and names routes and actions that are gone (`/app/ustawienia/klucze`,
-      `?/utworz`, `zaloguj`, `wyloguj`). Rewrite it in English from the code, or delete it.
+- [x] `frontend/docs/auth-i-ochrona-tras.md` was out of date as well as Polish: it called the
+      layout's load the guard and named routes and actions that are gone. Rewritten in
+      English from the code as `frontend/docs/auth-and-route-guard.md` (2026-10-13), with
+      tenants.

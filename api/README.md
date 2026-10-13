@@ -81,8 +81,10 @@ immutable snapshot; a request reads the current one. Postgres holds only the
 SHA-256 of a key.
 
 **`tenant_id` is the first `ORDER BY` column everywhere.** It comes from
-`api_key.tenant_id` and is written into every row. Today it is always
-`"default"`.
+`api_key.tenant_id` and is written into every row. A tenant is the panel's
+Better Auth organization, and `tenant_id` is its id. The query process takes
+the tenant from the panel's token (see "What `query` serves"), never from the
+request, and nothing falls back to `default`.
 
 ### Adding a router
 

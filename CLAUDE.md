@@ -26,11 +26,13 @@ Message keys and the `en` values are authored first; `es`/`pl` follow.
 **Existing violations are migration debt, not precedent.** Large parts of the tree are still
 Polish and should be converted to English when touched, not extended:
 
-- `api/docs/**` and `frontend/docs/**` — Polish prose.
-- `frontend/src/lib/server/api-keys.ts` — Polish identifiers (`nowyKlucz`, `skrotKlucza`, `prefiks`).
-- Polish route segments and form fields: `/app/ustawienia/klucze`, `?/utworz`, `?/usun`,
-  `blad`, `nazwa`. Renaming a route changes a URL — batch those deliberately.
-- Some Go/Svelte comments (e.g. `vite.config.ts`, `frontend/src/routes/app/+layout.server.ts`).
+- `api/docs/**` and `experiments/goja-sandbox/README.md` — Polish prose.
+- `frontend/src/routes/+page.svelte` and `frontend/src/routes/app/+page.svelte` — Polish copy
+  written into the markup rather than `messages/`, Polish identifiers (`etykieta`, `opis`,
+  `tytul`) and comments.
+
+Renaming a route changes a URL — batch those deliberately, as the keys page was
+(`/app/ustawienia/klucze` became `/app/settings/keys`).
 
 The F# server under `api/src/` is already English — match that register: comments explain
 *why* a decision was made, not what the line does, and there are few of them.
@@ -217,8 +219,13 @@ keeper (`Server/ApiKeysKeeper.fs`) alone replaces it, every 30s and when the pan
 `raw_payloads` with a reason, so an unhandled endpoint loses nothing.
 
 **Multi-tenancy is in from day one.** `tenant_id` is the first `ORDER BY` column everywhere;
-it is cheap to carry and expensive to add later. It flows Postgres `api_key.tenant_id` →
-`ApiKeys.Key.TenantID` → every ClickHouse row. Today it is always `"default"`.
+it is cheap to carry and expensive to add later. A tenant is a Better Auth organization, and
+`tenant_id` is its `organization.id`. Writes: Postgres `api_key.tenant_id` →
+`ApiKeys.Key.TenantID` → the key's `tenant` claim → every ClickHouse row. Reads: the panel's
+`locals.tenant` → the `tenant` claim of the query token → a parameter bound into every query
+the Engine compiles. Nothing falls back to `default`: that tenant exists only because
+`create-user.ts` makes it with the first account, under that id, and self-monitoring writes
+there (`NINJACAT_SELFMON_TENANT`).
 
 **Plain F#.** `match`, `if`, small named functions. No custom operators, no home-made DSLs
 or computation expressions.
@@ -279,29 +286,53 @@ of 404 on unknown paths), `NINJACAT_SELFMON_INTERVAL`/`_TENANT`/`_HOST`.
 ## Frontend architecture
 
 SvelteKit 5 (runes forced on for project files), Tailwind 4, shadcn-svelte in
-`src/lib/components/ui/`, node adapter. Remote functions are enabled
-(`experimental.remoteFunctions`, see `*.remote.ts`).
+`src/lib/components/ui/`, node adapter. Remote functions are not enabled: the flag went with
+the scaffolding routes in the security review of 2026-10-02. The panel uses routes, form
+actions and `+server.ts` endpoints.
 
 Two data sources, and the split matters:
 
-- **Postgres via Drizzle** — users, sessions, API keys. Schema in `src/lib/server/db/schema.ts`.
+- **Postgres via Drizzle** — users, sessions, tenants (Better Auth's `organization`) and their
+  members, API keys. Schema in `src/lib/server/db/schema.ts`; the Better Auth tables are in
+  the generated `auth.schema.ts` beside it.
 - **The server's internal port via `src/lib/server/ninjacat.ts`** — all telemetry. Server-side
   only, so the browser never learns :8081 exists. Timeouts here are shorter than the server's,
   so a slow query surfaces as our error rather than a hang. The metrics explorer
   (`/app/metrics`, proxied by `app/metrics/query/+server.ts`) uses Datadog's query API on the
   same port; its view lives in the URL (`?view=<json>`, see `src/lib/metrics/query.ts`).
 
-Auth is Better Auth, wired in `src/hooks.server.ts` (after the Paraglide handle) which
-populates `locals.user`/`locals.session`. Every route is private unless it is listed in
-`src/lib/server/guard.ts` (only `/login` is), and the guard runs in `handle`, in front of
-pages, data requests, endpoints, form actions and remote functions alike. A layout's load is
-not a guard: the client chooses which loads a data request runs.
+Auth is Better Auth with its `admin` and `organization` plugins, configured in
+`src/lib/server/auth-options.ts` (shared by the panel's `auth.ts` and `scripts/create-user.ts`)
+and wired in `src/hooks.server.ts` after the Paraglide handle. The hook populates
+`locals.user`/`locals.session`, then `locals.tenants` (every membership) and `locals.tenant`
+(`{ id, name, role }` or `null`) through `resolveTenant` in `src/lib/server/tenant.ts`.
+Membership is read on every request, because removing a member does not clear the active
+organization of their other sessions; when the request falls back to another tenant, the
+session is moved there too. Better Auth's own routes (`/api/auth/*`) are answered there,
+ahead of the guard.
+
+Every route is private unless it is listed in `src/lib/server/guard.ts` (only `/login` is),
+and the guard runs in `handle`, in front of pages, data requests, endpoints and form actions
+alike. A layout's load is not a guard: the client chooses which loads a data request runs.
+A signed-in user with no tenant reaches only `/no-tenant`; `/app/admin/**` is for the
+instance admin (`user.role` includes `admin`, `isInstanceAdmin`), who reaches it without a
+tenant. Tenant roles are the organization plugin's own (owner, admin, member); only Better
+Auth's own organization routes check them. The panel's pages and the query port (which gets
+the role in its token) do not yet: RBAC is open work in `TODO.md`.
+
+Accounts are made by `scripts/create-user.ts` or the admin pages; sign-up is closed. When
+no account exists yet, the script makes the tenant `default` and the first account its owner
+and the instance admin. Members are added directly by the admin pages, not invited: the
+invitation routes are in `disabledPaths`, since an on-prem install may have no e-mail.
 
 API keys are Datadog-shaped (32 hex chars) so they drop into existing agent configs. Postgres
 stores **SHA-256 only**, never the key — deterministic on purpose, because the intake looks up
 *by hash* on every agent request (bcrypt's salt would make that impossible; 128 bits of
 entropy makes it safe). After creating or deleting a key the panel calls `refreshApiKeys()`,
-which never throws — the keeper re-reads every 30s anyway.
+which never throws — the keeper re-reads every 30s anyway. A key belongs to one tenant
+(`api_key.tenant_id`, no default); `/app/settings/keys` lists, creates and deletes only the
+current tenant's, and its forms carry the tenant they were shown for, so a switch in another
+tab is a 409 rather than a key made for the wrong tenant.
 
 `src/lib/vitest-examples/**` are scaffolding/learning examples, not product surface.
 
@@ -320,5 +351,5 @@ Tick an item there when it is done; add one when something is deferred.
 `api/docs/spis-endpointow-datadoga.md` (full endpoint inventory),
 `datadog-agent.md`, `konfiguracja-agenta.md`, `traces.md`, `ddsketch-agenta.md`.
 `api/docs/zadania/` holds scoped work items (RUM router, OTLP, remote-config TUF, query
-engine, missing API endpoints, …). `frontend/docs/auth-i-ochrona-tras.md` documents the
-session model empirically. All currently in Polish — translate as you touch them.
+engine, missing API endpoints, …). These are still in Polish — translate as you touch them.
+`frontend/docs/auth-and-route-guard.md` documents the panel's sessions, tenants and guard.

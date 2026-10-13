@@ -120,7 +120,7 @@ Datadog Agent ──:8080──▶ intake ──▶ one writer per table ──�
                                                                  ▲
 SvelteKit panel ──:8081──▶ query (panel and query API) ─────────┘
        │
-       └──▶ Postgres (users, sessions, API keys)
+       └──▶ Postgres (users, sessions, tenants and their members, API keys)
 ```
 
 The server is one F# program (`api/`) run as two processes: agents reach `intake` and only
