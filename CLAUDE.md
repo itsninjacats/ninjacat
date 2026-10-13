@@ -129,6 +129,7 @@ bun run lint                     # prettier --check + eslint
 bun run format
 bun run test                     # vitest, both projects, single run
 bun run test:unit -- --project=server src/lib/vitest-examples/greet.spec.ts   # one file
+bun run test:e2e                 # Playwright: every page at four widths, overflow + tenant isolation (docs/view-tests.md)
 bun run db:start                 # Postgres + ClickHouse from the root compose
 bun run db:push / db:generate / db:migrate / db:studio
 bun run auth:schema              # regenerate src/lib/server/db/auth.schema.ts from the auth options
