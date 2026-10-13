@@ -16,35 +16,19 @@ open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
 open NinjaCat.Api.Monitors.Definitions
 open NinjaCat.Api.Monitors.Entity
+open NinjaCat.Api.Monitors.Manager
 
 /// ClickHouse's limit for one evaluation's query: a model's history read can
 /// pass the query process's 7 s.
 let private queryLimitSeconds = 30
 
-type private Live =
-    | Live of MonitorRow list
-    | LiveFailed of string
-    | ReadAgain
+/// How often the manager reads the monitor table again.
+let private resyncInterval = TimeSpan.FromSeconds 30.0
 
-/// One entity per live monitor, started from one read of the table.
-///
-/// It stands in for the manager and the shard region, which keep the
-/// entities in step with Postgres (LISTEN and a resync); until they exist a
-/// monitor created after the start waits for the next one.
-type LocalEntities(db: NpgsqlDataSource, services: Services) =
+/// Stands in for the shard region on one node: one child entity per
+/// monitor, started by the first message for it.
+type LocalRegion(services: Services) =
     inherit UntypedActor()
-
-    member private this.ReadLive() =
-        let read =
-            task {
-                try
-                    let! rows = live db CancellationToken.None
-                    return Live rows
-                with e ->
-                    return LiveFailed e.Message
-            }
-
-        read.PipeTo(this.Self) |> ignore
 
     member private this.Route(monitor: string, message: obj) =
         match MonitorKey.Parse monitor with
@@ -59,33 +43,11 @@ type LocalEntities(db: NpgsqlDataSource, services: Services) =
 
             entity.Forward message
 
-    override this.PreStart() = this.ReadLive()
-
     override this.OnReceive(message: obj) =
         match message with
-        | :? Live as result ->
-            match result with
-            | Live rows ->
-                services.Log.LogInformation("Starting {Count} monitors", rows.Length)
-
-                for r in rows do
-                    this.Route(r.Key.Text, { Ensure.Monitor = r.Key.Text; Version = r.Version })
-            | LiveFailed error ->
-                services.Log.LogWarning("Monitors could not be read, retrying in 30 s: {Error}", error)
-                this.timers.StartSingleTimer("live", ReadAgain, TimeSpan.FromSeconds 30.0)
-            | ReadAgain -> this.ReadLive()
         | :? Ensure as ensure -> this.Route(ensure.Monitor, ensure)
         | :? Delete as delete -> this.Route(delete.Monitor, delete)
         | _ -> this.Unhandled message
-
-    // Set by Akka from the base constructor; see MonitorEntity.
-    [<DefaultValue>]
-    val mutable private timers: ITimerScheduler
-
-    interface IWithTimers with
-        member this.Timers
-            with get () = this.timers
-            and set value = this.timers <- value
 
 let private servicesOf (settings: Settings.Settings) (provider: IServiceProvider) : Services =
     let db = provider.GetRequiredService<NpgsqlDataSource>()
@@ -103,7 +65,8 @@ let private servicesOf (settings: Settings.Settings) (provider: IServiceProvider
       Retention = settings.Platform.MetricsRetention
       MaxGroups = settings.MaxGroups
       Log = provider.GetRequiredService<ILoggerFactory>().CreateLogger "NinjaCat.Api.Monitors"
-      Retry = TimeSpan.FromSeconds 30.0 }
+      Retry = TimeSpan.FromSeconds 30.0
+      Resync = resyncInterval }
 
 let run (settings: Settings.Settings) (args: string[]) : int =
     let cfg = settings.Platform
@@ -116,6 +79,11 @@ let run (settings: Settings.Settings) (args: string[]) : int =
     |> ignore
 
     let self = $"akka.tcp://ninjacat-monitors@{settings.Host}:{settings.Port}"
+
+    // The LISTEN connection only waits, so without a keepalive query a link
+    // that died silently would leave it waiting for good.
+    use listenDb =
+        NpgsqlDataSource.Create(NpgsqlConnectionStringBuilder(Postgres.connectionString cfg.DatabaseUrl, KeepAlive = 30))
 
     builder.Services
         .AddNpgsqlDataSource(Postgres.connectionString cfg.DatabaseUrl)
@@ -141,8 +109,17 @@ let run (settings: Settings.Settings) (args: string[]) : int =
                     .WithActors(fun (system: ActorSystem) (registry: IActorRegistry) ->
                         let services = servicesOf settings provider
                         let db = provider.GetRequiredService<NpgsqlDataSource>()
-                        let entities = system.ActorOf(Props.Create(typeof<LocalEntities>, [| box db; box services |]), "monitors")
-                        registry.Register<LocalEntities>(entities))
+                        let region = system.ActorOf(Props.Create(typeof<LocalRegion>, [| box services |]), "metric-monitor")
+                        registry.Register<MonitorRegion>(region)
+
+                        let manager =
+                            { Snapshot = snapshot db
+                              Listen = listen listenDb channel
+                              Registry = registry
+                              Interval = resyncInterval
+                              Log = provider.GetRequiredService<ILoggerFactory>().CreateLogger "NinjaCat.Api.Monitors.Manager" }
+
+                        system.ActorOf(MonitorManager.Props manager, "manager") |> ignore)
                 |> ignore
         )
     |> ignore

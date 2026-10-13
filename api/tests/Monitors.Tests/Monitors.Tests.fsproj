@@ -4,7 +4,9 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="TestPostgres.fs" />
     <Compile Include="EntityTests.fs" />
+    <Compile Include="ManagerTests.fs" />
     <Compile Include="DefinitionsTests.fs" />
     <Compile Include="StoreTests.fs" />
   </ItemGroup>

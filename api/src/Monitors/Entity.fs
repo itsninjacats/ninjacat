@@ -1,10 +1,8 @@
 /// One monitor, alive: it evaluates on its ticks, moves its groups through
 /// the state machine and stores the transitions before it adopts them.
 ///
-/// No handler awaits. An awaiting handler would hold the mailbox for the
-/// whole await, so ticks, Ensure and a hand-off Stop would queue behind a slow
-/// query; every slow step runs as a task whose outcome is piped back as a
-/// message.
+/// No handler awaits, so ticks, Ensure and a hand-off Stop never queue
+/// behind a slow query: every slow step runs detached (`Detached.run`).
 module NinjaCat.Api.Monitors.Entity
 
 open System
@@ -55,7 +53,11 @@ type Services =
       Log: ILogger
       /// How long after a failed read of Postgres or ClickHouse it is read
       /// again.
-      Retry: TimeSpan }
+      Retry: TimeSpan
+      /// How often the manager sends Ensure. After three or four resyncs
+      /// without one the entity reads its definition itself, so a lost Delete
+      /// still closes it.
+      Resync: TimeSpan }
 
 /// Fits the 10 s the region's shutdown gives a hand-off.
 let private insertTimeout = TimeSpan.FromSeconds 7.0
@@ -71,6 +73,7 @@ type private Outcome =
     | GateRefused of at: DateTimeOffset
     | Committed
     | CommitFailed of string
+    | Unheard
 
 /// Transitions waiting to be stored, and the groups adopted once they are.
 /// A failed insert is retried with exactly these rows. The evaluations go to
@@ -105,22 +108,14 @@ type MonitorEntity(key: MonitorKey, services: Services) =
     let mutable closing = false
     let mutable stopping = false
     let mutable lastAttemptMade = false
+    let mutable reloadFailing = false
 
-    /// Runs `work` off the actor's thread and sends its outcome to `self`;
-    /// a thrown exception becomes `failed`'s message.
-    let detached (self: IActorRef) (failed: exn -> Outcome) (work: CancellationToken -> Task<Outcome>) : unit =
-        let ct = cancel.Token
-
-        let guarded () : Task<obj> =
-            task {
-                try
-                    let! outcome = work ct
-                    return box outcome
-                with e ->
-                    return box (failed e)
-            }
-
-        Task.Run<obj>(Func<Task<obj>> guarded).PipeTo(self) |> ignore
+    /// One resync's Ensure reaches every entity within milliseconds, so
+    /// without a spread they would all read Postgres in the same instant once
+    /// the manager falls silent.
+    let unheardAfter =
+        let spread = float ((key.Text.GetHashCode() &&& 0x7fffffff) % 1000) / 1000.0
+        services.Resync * (3.0 + spread)
 
     let validDefinition () =
         match definition with
@@ -158,11 +153,14 @@ type MonitorEntity(key: MonitorKey, services: Services) =
         let at, fireAt = nextTick key.Text frequency lastAt now
         this.timers.StartSingleTimer("tick", Tick at, max (fireAt - now) TimeSpan.Zero)
 
+    member private this.Heard() =
+        this.timers.StartSingleTimer("unheard", Unheard, unheardAfter)
+
     member private this.Load() =
         let gate = services.Gate
         let now = services.Clock()
 
-        detached this.Self (fun e -> LoadFailed e.Message) (fun ct ->
+        Detached.run cancel.Token this.Self (fun e -> LoadFailed e.Message) (fun ct ->
             task {
                 do! gate.WaitAsync ct
 
@@ -178,10 +176,17 @@ type MonitorEntity(key: MonitorKey, services: Services) =
         busy <- true
         reloadDue <- false
 
-        detached this.Self (fun e -> ReloadFailed e.Message) (fun ct ->
+        let gate = services.Gate
+
+        Detached.run cancel.Token this.Self (fun e -> ReloadFailed e.Message) (fun ct ->
             task {
-                let! found = services.Definition key ct
-                return Reloaded found
+                do! gate.WaitAsync ct
+
+                try
+                    let! found = services.Definition key ct
+                    return Reloaded found
+                finally
+                    gate.Release() |> ignore
             })
 
     member private this.InsertPending() =
@@ -190,7 +195,7 @@ type MonitorEntity(key: MonitorKey, services: Services) =
         | Some p ->
             busy <- true
 
-            detached this.Self (fun e -> CommitFailed e.Message) (fun ct ->
+            Detached.run cancel.Token this.Self (fun e -> CommitFailed e.Message) (fun ct ->
                 task {
                     use timeout = CancellationTokenSource.CreateLinkedTokenSource ct
                     timeout.CancelAfter insertTimeout
@@ -287,7 +292,7 @@ type MonitorEntity(key: MonitorKey, services: Services) =
         let gate = services.Gate
         let wait = services.GateWait(frequency d.Query)
 
-        detached this.Self (fun e -> Evaluated(at, Error e.Message)) (fun ct ->
+        Detached.run cancel.Token this.Self (fun e -> Evaluated(at, Error e.Message)) (fun ct ->
             task {
                 let! granted = gate.WaitAsync(wait, ct)
 
@@ -326,6 +331,7 @@ type MonitorEntity(key: MonitorKey, services: Services) =
             queryHash <- history.QueryHash
             this.Read found
             this.Arm()
+            this.Heard()
             this.stash.UnstashAll()
             this.Settle()
         | LoadFailed error ->
@@ -334,12 +340,22 @@ type MonitorEntity(key: MonitorKey, services: Services) =
         | RetryLoad -> this.Load()
         | Reloaded found ->
             busy <- false
+            reloadFailing <- false
+            this.Heard()
             this.Read found
             this.Settle()
         | ReloadFailed error ->
             busy <- false
             reloadDue <- true
-            services.Log.LogWarning("Monitor {Monitor}: its definition could not be read, retrying in {Retry}: {Error}", key.Text, services.Retry, error)
+
+            // With Postgres down every entity fails here; one warning each
+            // is enough.
+            if reloadFailing then
+                services.Log.LogDebug("Monitor {Monitor}: its definition could not be read again: {Error}", key.Text, error)
+            else
+                services.Log.LogWarning("Monitor {Monitor}: its definition could not be read, retrying every {Retry}: {Error}", key.Text, services.Retry, error)
+
+            reloadFailing <- true
             this.timers.StartSingleTimer("reload", RetryReload, services.Retry)
         | RetryReload -> this.Settle()
         | Evaluated(at, Ok evaluation) ->
@@ -378,6 +394,9 @@ type MonitorEntity(key: MonitorKey, services: Services) =
             busy <- false
             services.Log.LogWarning("Monitor {Monitor}: transitions not stored, retried at the next tick: {Error}", key.Text, error)
             this.Settle()
+        | Unheard ->
+            reloadDue <- true
+            this.Settle()
 
     override this.PreStart() = this.Load()
 
@@ -397,6 +416,8 @@ type MonitorEntity(key: MonitorKey, services: Services) =
             let (Tick at) = tick
             this.OnTick at
         | :? Ensure as ensure ->
+            this.Heard()
+
             match row with
             | Some r when ensure.Version <= r.Version -> ()
             | _ ->

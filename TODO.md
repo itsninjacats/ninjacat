@@ -492,6 +492,11 @@ data is here; the product is not.
       so the chart and the compose files must hand `query` the same values as `intake` and
       the migrate job (not passed anywhere yet). Reading `system.tables` at start would
       remove the duplication.
+- [ ] **The intake's API-key keeper does not notice a LISTEN link that died silently.**
+      `api/src/Server/ApiKeysKeeper.fs` waits on its connection with no keepalive, so a
+      half-open link stops notifications until the process restarts; the 30 s re-read
+      keeps keys current meanwhile. The monitor manager opens its LISTEN connection from
+      a data source with Npgsql's `KeepAlive`; the keeper should do the same.
 - [ ] **An unaligned `to` older than the raw retention** loses its last part minute: the
       rollup stops at the minute holding `to`, and the raw points that would finish it
       are gone.

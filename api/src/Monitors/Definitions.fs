@@ -75,9 +75,86 @@ let byKey (db: NpgsqlDataSource) (key: MonitorKey) (ct: CancellationToken) : Tas
         return List.tryHead rows
     }
 
-/// Every monitor not deleted, of every tenant.
-let live (db: NpgsqlDataSource) (ct: CancellationToken) : Task<MonitorRow list> =
+/// A monitor and the version a read of the table or a notification saw.
+type Seen = { Key: MonitorKey; Version: int }
+
+/// What one resync read.
+type Snapshot =
+    { /// Postgres's clock before the rows were read. The next resync counts
+      /// deletions from it, so no clock of ours is compared with `deleted_at`.
+      At: DateTimeOffset
+      Live: Seen list
+      Deleted: Seen list }
+
+/// Every live monitor, and those deleted after `deletedSince` (None: in the
+/// last day).
+let snapshot (db: NpgsqlDataSource) (deletedSince: DateTimeOffset option) (ct: CancellationToken) : Task<Snapshot> =
     task {
-        use command = db.CreateCommand $"SELECT {columns} FROM monitor WHERE deleted_at IS NULL ORDER BY tenant_id, id"
-        return! readAll command ct
+        use! connection = db.OpenConnectionAsync ct
+        use clock = new NpgsqlCommand("SELECT now()", connection)
+        let! now = clock.ExecuteScalarAsync ct
+        // Npgsql reads a timestamptz as a UTC DateTime.
+        let at = DateTimeOffset(now :?> DateTime)
+
+        use command =
+            new NpgsqlCommand(
+                "SELECT tenant_id, id, version, deleted_at IS NOT NULL FROM monitor "
+                + "WHERE deleted_at IS NULL OR deleted_at > coalesce($1, now() - interval '1 day')",
+                connection
+            )
+
+        let since =
+            match deletedSince with
+            | Some t -> NpgsqlParameter(Value = t.ToUniversalTime())
+            | None -> NpgsqlParameter(Value = DBNull.Value, NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.TimestampTz)
+
+        command.Parameters.Add since |> ignore
+        use! reader = command.ExecuteReaderAsync ct
+        let live = ResizeArray()
+        let deleted = ResizeArray()
+        let mutable more = true
+
+        while more do
+            let! next = reader.ReadAsync ct
+
+            if next then
+                let seen =
+                    { Key = { Tenant = reader.GetString 0; Id = reader.GetInt64 1 }
+                      Version = reader.GetInt32 2 }
+
+                if reader.GetBoolean 3 then deleted.Add seen else live.Add seen
+            else
+                more <- false
+
+        return
+            { At = at
+              Live = List.ofSeq live
+              Deleted = List.ofSeq deleted }
+    }
+
+/// The channel the panel notifies on (frontend/src/lib/server/monitors.ts).
+let channel = "ninjacat_monitors"
+
+/// A notification's payload, `<tenant>/<id>/<version>`.
+let parseNotification (payload: string) : Seen option =
+    match payload.LastIndexOf '/' with
+    | -1 -> None
+    | slash ->
+        match Int32.TryParse(payload.AsSpan(slash + 1)), MonitorKey.Parse(payload.Substring(0, slash)) with
+        | (true, version), Some key -> Some { Key = key; Version = version }
+        | _ -> None
+
+/// LISTENs on `channel` on its own connection, since LISTEN belongs to a
+/// session, and hands every payload to `notified` until the connection fails
+/// or `ct` is cancelled. Only `db`'s keepalive notices a link that died
+/// without closing.
+let listen (db: NpgsqlDataSource) (channel: string) (notified: string -> unit) (ct: CancellationToken) : Task =
+    task {
+        use! connection = db.OpenConnectionAsync ct
+        connection.Notification.Add(fun e -> notified e.Payload)
+        use command = new NpgsqlCommand($"LISTEN {channel}", connection)
+        let! _ = command.ExecuteNonQueryAsync ct
+
+        while true do
+            do! connection.WaitAsync ct
     }

@@ -8,7 +8,9 @@
     <Compile Include="Settings.fs" />
     <Compile Include="Definitions.fs" />
     <Compile Include="Store.fs" />
+    <Compile Include="Detached.fs" />
     <Compile Include="Entity.fs" />
+    <Compile Include="Manager.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

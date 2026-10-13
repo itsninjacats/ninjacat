@@ -62,6 +62,8 @@ type Fakes() =
     member val ExecuteGate: Task = Task.CompletedTask with get, set
     member val DefinitionGate: Task = Task.CompletedTask with get, set
     member val Executions = 0 with get, set
+    member val Reads = 0 with get, set
+    member val Resync = TimeSpan.FromHours 1.0 with get, set
 
 /// Answers the engine's SQL with one point per bucket of the window read, all
 /// of `value`, for a query without groups.
@@ -87,6 +89,7 @@ let private servicesOf (fakes: Fakes) (gate: SemaphoreSlim) (inserts: IActorRef)
     { Definition =
         fun _ _ ->
             task {
+                lock fakes (fun () -> fakes.Reads <- fakes.Reads + 1)
                 do! fakes.DefinitionGate
                 return fakes.Row
             }
@@ -120,7 +123,8 @@ let private servicesOf (fakes: Fakes) (gate: SemaphoreSlim) (inserts: IActorRef)
       Retention = Plan.defaultRetention
       MaxGroups = 1000
       Log = NullLogger.Instance
-      Retry = TimeSpan.FromMilliseconds 200.0 }
+      Retry = TimeSpan.FromMilliseconds 200.0
+      Resync = fakes.Resync }
 
 let private single (attempt: Attempt) : MonitorTransitionRow =
     Assert.Single attempt.Rows
@@ -316,6 +320,25 @@ type EntityTests() =
         let closed = single (inserts.ExpectMsg<Attempt>(wait))
         Assert.Equal(("Alert", "OK", "deleted", Some "user-3"), (closed.FromState, closed.ToState, closed.Reason, closed.Actor))
         Assert.Equal(2u, closed.MonitorVersion)
+        this.ExpectTerminated(entity, wait) |> ignore
+
+    [<Fact>]
+    member this.``an Ensure of the version that deleted the monitor closes it too``() =
+        let entity, inserts, _ = this.Start()
+        this.Watch entity |> ignore
+        entity.Tell(Tick t0)
+        inserts.ExpectMsg<Attempt>(wait) |> ignore
+
+        fakes.Row <-
+            Some
+                { monitorRow 2 cpu critical90 with
+                    DeletedBy = Some "user-3"
+                    DeletedAt = Some(t0 + minute) }
+
+        // What the manager sends for the panel's notification of a delete.
+        entity.Tell { Ensure.Monitor = key.Text; Version = 2 }
+        let closed = single (inserts.ExpectMsg<Attempt>(wait))
+        Assert.Equal(("Alert", "OK", "deleted", Some "user-3"), (closed.FromState, closed.ToState, closed.Reason, closed.Actor))
         this.ExpectTerminated(entity, wait) |> ignore
 
     [<Fact>]
@@ -545,3 +568,36 @@ type EntityTests() =
         fakes.Clock <- fireAt.AddMilliseconds -200.0
         let _, inserts, _ = this.Start()
         Assert.Equal(at.UtcDateTime, (single (inserts.ExpectMsg<Attempt>(wait))).At)
+
+    [<Fact>]
+    member this.``three resyncs without Ensure read the definition again, and a lost deletion closes it``() =
+        fakes.Resync <- TimeSpan.FromMilliseconds 100.0
+        let entity, inserts, _ = this.Start()
+        this.Watch entity |> ignore
+        entity.Tell(Tick t0)
+        inserts.ExpectMsg<Attempt>(wait) |> ignore
+
+        fakes.Row <-
+            Some
+                { monitorRow 2 cpu critical90 with
+                    DeletedBy = Some "user-3"
+                    DeletedAt = Some(t0 + minute) }
+
+        let closed = single (inserts.ExpectMsg<Attempt>(wait))
+        Assert.Equal(("Alert", "OK", "deleted"), (closed.FromState, closed.ToState, closed.Reason))
+        this.ExpectTerminated(entity, wait) |> ignore
+
+    [<Fact>]
+    member this.``an Ensure, even of a version already held, keeps the entity from reading again``() =
+        fakes.Resync <- TimeSpan.FromMilliseconds 300.0
+        let entity, _, _ = this.Start()
+        this.AwaitAssert(fun () -> Assert.Equal(1, fakes.Reads))
+
+        for _ in 1..8 do
+            entity.Tell { Ensure.Monitor = key.Text; Version = 1 }
+            Thread.Sleep 200
+
+        Assert.Equal(1, fakes.Reads)
+
+        // Unheard for three resyncs, it reads again.
+        this.AwaitAssert((fun () -> Assert.Equal(2, fakes.Reads)), wait)
