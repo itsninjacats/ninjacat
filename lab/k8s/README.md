@@ -46,10 +46,14 @@ the chart does not own them.
 | 18123     | ClickHouse HTTP — `curl 'localhost:18123/?user=ninjacat&password=ninjacat&query=SELECT+1'` |
 
 The query process has no host port: the chart's NetworkPolicy admits the
-panel's pods only. To poke it:
+panel's pods only. To poke it, forward a port and mint a token with the secret
+`up.sh` generated, as `api/README.md` shows for the dev stack, then ask
+`127.0.0.1:18081`:
 
 ```sh
 kubectl --context kind-ninjacat-lab -n ninjacat-lab port-forward deploy/ninjacat-query 18081:8081
+export SECRET=$(kubectl --context kind-ninjacat-lab -n ninjacat-lab get secret ninjacat-secrets \
+  -o jsonpath='{.data.NINJACAT_QUERY_TOKEN_SECRET}' | base64 -d)
 ```
 
 ## Verify data is flowing

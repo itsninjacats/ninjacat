@@ -10,6 +10,7 @@
     <Compile Include="Postgres.fs" />
     <Compile Include="ApiKeysKeeper.fs" />
     <Compile Include="SelfMonitor.fs" />
+    <Compile Include="QueryToken.fs" />
     <Compile Include="Handlers.fs" />
     <Compile Include="PanelHandlers.fs" />
     <Compile Include="IntakeHost.fs" />
@@ -20,6 +21,7 @@
     <PackageReference Include="Oxpecker" />
     <PackageReference Include="ClickHouse.Driver" />
     <PackageReference Include="Npgsql.DependencyInjection" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Engine/Engine.fsproj" />

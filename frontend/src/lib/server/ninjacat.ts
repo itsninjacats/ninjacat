@@ -1,4 +1,6 @@
 import { env } from '$env/dynamic/private';
+import { getRequestEvent } from '$app/server';
+import { SignJWT } from 'jose';
 
 // Address of the server's internal port. This is NOT the agent intake port (8080),
 // which is exposed to the machines running agents. The panel talks to 8081,
@@ -54,11 +56,38 @@ export type LogFacets = {
 /** Thrown by the query helpers when the server cannot answer. */
 export class NinjacatError extends Error {}
 
+/**
+ * The query process answers only a token the panel signed, and runs every
+ * query for the tenant it names (api/src/Server/QueryToken.fs). One is minted
+ * per call, for the user and tenant of the request being served.
+ */
+async function queryToken(): Promise<string> {
+	const { locals } = getRequestEvent();
+	if (!locals.user || !locals.tenant) {
+		throw new NinjacatError('this request has no tenant to query for');
+	}
+	const secret = new TextEncoder().encode(env.NINJACAT_QUERY_TOKEN_SECRET ?? '');
+	if (secret.length < 32) {
+		throw new NinjacatError('NINJACAT_QUERY_TOKEN_SECRET must be at least 32 bytes');
+	}
+	return new SignJWT({ tenant: locals.tenant.id, role: locals.tenant.role })
+		.setProtectedHeader({ alg: 'HS256' })
+		.setSubject(locals.user.id)
+		.setIssuer('ninjacat-panel')
+		.setAudience('ninjacat-query')
+		.setIssuedAt()
+		.setExpirationTime('60s')
+		.sign(secret);
+}
+
 async function get<T>(path: string, timeoutMs = QUERY_TIMEOUT_MS): Promise<T> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), timeoutMs);
 	try {
-		const res = await fetch(`${BASE}${path}`, { signal: controller.signal });
+		const res = await fetch(`${BASE}${path}`, {
+			headers: { authorization: `Bearer ${await queryToken()}` },
+			signal: controller.signal
+		});
 		const body = await res.json().catch(() => null);
 		if (!res.ok) {
 			throw new NinjacatError(body?.error ?? `server responded ${res.status}`);
@@ -178,7 +207,10 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 	try {
 		const res = await fetch(`${BASE}${path}`, {
 			method: 'POST',
-			headers: { 'content-type': 'application/json' },
+			headers: {
+				authorization: `Bearer ${await queryToken()}`,
+				'content-type': 'application/json'
+			},
 			body: JSON.stringify(body),
 			signal: controller.signal
 		});

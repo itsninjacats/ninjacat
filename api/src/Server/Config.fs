@@ -23,8 +23,12 @@ type Config =
       /// `host:8080`. Reachable from agent machines.
       IntakeAddr: string
       /// Where the query process listens (NINJACAT_INTERNAL_ADDR): the panel's
-      /// and the query API. Internal only: nothing on it asks for a key.
+      /// and the query API. Internal only: it asks for the panel's token, not
+      /// for an API key.
       InternalAddr: string
+      /// The key the panel signs its tokens to the query process with
+      /// (NINJACAT_QUERY_TOKEN_SECRET). Only the query process needs it.
+      QueryTokenSecret: string
       /// The agent's TCP transport for logs (NINJACAT_LOGS_TCP_ADDR), or
       /// None when it is "off".
       LogsTcpAddr: string option
@@ -61,6 +65,7 @@ type Config =
 let load () =
     { IntakeAddr = envOr "NINJACAT_ADDR" ":8080"
       InternalAddr = envOr "NINJACAT_INTERNAL_ADDR" ":8081"
+      QueryTokenSecret = envOr "NINJACAT_QUERY_TOKEN_SECRET" ""
       LogsTcpAddr =
         match envOr "NINJACAT_LOGS_TCP_ADDR" ":10516" with
         | "off" -> None

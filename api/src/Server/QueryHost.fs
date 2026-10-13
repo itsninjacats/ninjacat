@@ -2,8 +2,9 @@
 /// the panel and Datadog's query API, on the internal port.
 ///
 /// It only reads: its ClickHouse client cannot write, and it holds no
-/// writers and no API keys. Nothing on this port asks for a key, so it
-/// belongs on a network only the panel can reach.
+/// writers and no API keys. Every route but the probes asks for the panel's
+/// token (QueryToken), which names the tenant; the port still belongs on a
+/// network only the panel can reach.
 module NinjaCat.Api.Server.QueryHost
 
 open Microsoft.AspNetCore.Builder
@@ -11,15 +12,10 @@ open Microsoft.AspNetCore.Hosting
 open Microsoft.Extensions.DependencyInjection
 open Oxpecker
 
-let run (cfg: Config.Config) (args: string[]) : int =
-    let builder = Hosting.createBuilder args
-
-    builder.WebHost.ConfigureKestrel(fun options -> Hosting.listen options cfg.InternalAddr ignore)
-    |> ignore
-
+let addServices (cfg: Config.Config) (services: IServiceCollection) : unit =
     // One client per database for the process: each owns its connection
     // pool. Registered through factories so the container disposes them.
-    builder.Services
+    services
         .AddSingleton<ClickHouse.Driver.ClickHouseClient>(fun _ -> ClickHouse.createClient cfg)
         .AddNpgsqlDataSource(Postgres.connectionString cfg.DatabaseUrl)
         .AddSingleton<Config.Config>(cfg)
@@ -30,7 +26,24 @@ let run (cfg: Config.Config) (args: string[]) : int =
         .AddSingleton<IJsonSerializer>(SystemTextJsonSerializer(NinjaCat.Api.Engine.Serialization.options))
     |> ignore
 
+    QueryToken.addTo services cfg.QueryTokenSecret
+
+let configure (app: IApplicationBuilder) : unit =
+    let guarded =
+        Handlers.endpoints @ PanelHandlers.endpoints
+        |> List.map (configureEndpoint (fun endpoint -> endpoint.RequireAuthorization()))
+
+    app.UseRouting().UseAuthentication().UseAuthorization().UseOxpecker(Handlers.probes @ guarded)
+    |> ignore
+
+let run (cfg: Config.Config) (args: string[]) : int =
+    let builder = Hosting.createBuilder args
+
+    builder.WebHost.ConfigureKestrel(fun options -> Hosting.listen options cfg.InternalAddr ignore)
+    |> ignore
+
+    addServices cfg builder.Services
     let app = builder.Build()
-    app.UseRouting().UseOxpecker(Handlers.endpoints @ PanelHandlers.endpoints) |> ignore
+    configure app
     app.Run()
     0

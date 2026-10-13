@@ -64,6 +64,11 @@ spec:
                 secretKeyRef:
                   name: {{ $secret }}
                   key: {{ ternary "CLICKHOUSE_QUERY_PASSWORD" "CLICKHOUSE_PASSWORD" (ne .Values.clickhouse.queryUser "") }}
+            - name: NINJACAT_QUERY_TOKEN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: NINJACAT_QUERY_TOKEN_SECRET
           readinessProbe:
             httpGet:
               path: /ping

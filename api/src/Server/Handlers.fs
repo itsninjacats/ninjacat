@@ -8,9 +8,6 @@ open Oxpecker
 open ClickHouse.Driver
 open NinjaCat.Api.Engine
 
-/// Used until requests carry a tenant: the one every API key has today.
-let private defaultTenant = TenantId "default"
-
 /// Datadog's error envelope, so API clients report our errors the way they
 /// report Datadog's.
 let private errors (status: int) (msgs: string list) : EndpointHandler =
@@ -42,7 +39,7 @@ let activeMetrics: EndpointHandler =
         | Some(true, from) ->
             task {
                 let req: Metrics.ActiveMetricsRequest =
-                    { Tenant = defaultTenant
+                    { Tenant = QueryToken.tenant ctx
                       From = DateTimeOffset.FromUnixTimeSeconds from
                       Host = ctx.TryGetQueryValue "host" |> Option.filter (String.IsNullOrEmpty >> not) }
 
@@ -74,7 +71,7 @@ let queryTimeseries: EndpointHandler =
                 let execute = ClickHouse.metricRows client ctx.RequestAborted
 
                 try
-                    let! response = NinjaCat.Api.Engine.Query.Execute.run execute defaultTenant plan
+                    let! response = NinjaCat.Api.Engine.Query.Execute.run execute (QueryToken.tenant ctx) plan
                     return! ctx.WriteJson response
                 with e ->
                     let log = ctx.GetService<ILoggerFactory>().CreateLogger "NinjaCat.Api.QueryTimeseries"
@@ -100,7 +97,7 @@ let queryScalar: EndpointHandler =
                 let execute = ClickHouse.metricRows (ctx.GetService<ClickHouseClient>()) ctx.RequestAborted
 
                 try
-                    match! NinjaCat.Api.Engine.Query.Execute.runScalar execute defaultTenant plan request with
+                    match! NinjaCat.Api.Engine.Query.Execute.runScalar execute (QueryToken.tenant ctx) plan request with
                     | Ok response -> return! ctx.WriteJson response
                     | Error msgs -> return! errors StatusCodes.Status400BadRequest msgs ctx
                 with e ->
@@ -109,7 +106,9 @@ let queryScalar: EndpointHandler =
                     return! errors StatusCodes.Status500InternalServerError [ $"query failed: {e.Message}" ] ctx
         }
 
+/// Open to anyone who reaches the port: the probes of compose and Kubernetes.
+let probes = [ GET [ route "/ping" ping; route "/health" health ] ]
+
 let endpoints =
-    [ GET [ route "/ping" ping; route "/health" health ]
-      subRoute "/api/v1" [ GET [ route "/metrics" activeMetrics ] ]
+    [ subRoute "/api/v1" [ GET [ route "/metrics" activeMetrics ] ]
       subRoute "/api/v2" [ POST [ route "/query/timeseries" queryTimeseries; route "/query/scalar" queryScalar ] ] ]

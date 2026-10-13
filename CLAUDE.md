@@ -137,7 +137,8 @@ and **server** (everything else, node). `expect.requireAssertions` is on — a t
 assertion fails. `auth.schema.ts` is generated; edit `src/lib/server/auth-options.ts`
 instead, the options the panel (`auth.ts`) and `scripts/create-user.ts` share.
 
-Copy `.env.example` to `.env`: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ORIGIN`, and
+Copy `.env.example` to `.env`: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ORIGIN`,
+`NINJACAT_QUERY_TOKEN_SECRET` (the same value the query process has), and
 `NINJACAT_INTERNAL_URL` (defaults to `http://localhost:8081`).
 
 ## Server architecture
@@ -160,7 +161,9 @@ mode that serves both ports):
   schema, the key keeper, self-monitoring, logs over TCP.
 - **`ninjacat-api query`, :8081** (`NINJACAT_INTERNAL_ADDR`, `QueryHost.fs`) — `/internal/*`
   for the panel and Datadog's query API (`/api/v1/metrics`, `/api/v2/query/*`). It only
-  reads. No key is asked for, so it must stay on a network only the panel reaches.
+  reads. Every route but the probes asks for a short-lived HS256 JWT the panel signs
+  (`Server/QueryToken.fs`, ASP.NET's JwtBearer); its `tenant` claim is the only source of
+  the tenant. It still belongs on a network only the panel reaches.
 
 They share ClickHouse and Postgres and nothing else. The panel tells the intake that a key
 changed through Postgres (`NOTIFY ninjacat_api_keys`), so the intake has no port for the panel.
@@ -255,6 +258,10 @@ Connections: `CLICKHOUSE_HTTP_ADDR` (default `localhost:8123` — HTTP, not the 
 
 Listeners: `NINJACAT_ADDR` (`:8080`), `NINJACAT_INTERNAL_ADDR` (`:8081`),
 `NINJACAT_LOGS_TCP_ADDR` (`:10516`, `off` to disable), `NINJACAT_TLS_CERT`/`NINJACAT_TLS_KEY`.
+
+Query token: `NINJACAT_QUERY_TOKEN_SECRET` (at least 32 bytes, required by `query`) is the
+key the panel signs its tokens with. It must differ from `BETTER_AUTH_SECRET`, so the query
+process cannot sign panel sessions. `api/README.md` shows how to mint a token for `curl`.
 
 Migrations: `NINJACAT_AUTO_MIGRATE=false` stops the server from applying the ClickHouse
 migrations at startup (use `ninjacat-api migrate` instead).

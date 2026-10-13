@@ -1,6 +1,7 @@
 /// The panel's internal API (`/internal/*`): what the SvelteKit server asks
-/// for on behalf of a signed-in user. Internal port only; nothing here asks
-/// for a key. HTTP in, a query from Engine.Panel, JSON out.
+/// for on behalf of a signed-in user, for the tenant its token names
+/// (QueryToken). Internal port only. HTTP in, a query from Engine.Panel, JSON
+/// out.
 module NinjaCat.Api.Server.PanelHandlers
 
 open System
@@ -26,12 +27,6 @@ let private queryInt (ctx: HttpContext) (name: string) : int =
     | true, n -> n
     | false, _ -> 0
 
-/// Until requests carry a tenant of their own, the panel may name one.
-let private tenant (ctx: HttpContext) : TenantId =
-    match queryValue ctx "tenant" with
-    | "" -> TenantId "default"
-    | named -> TenantId named
-
 /// Runs a query; a failure in ClickHouse is the caller's 400 with its reason,
 /// as the query is built from the caller's parameters.
 let private run (ctx: HttpContext) (read: Data.Common.DbDataReader -> 'T) (sql: Sql) : Task<Result<'T list, string>> =
@@ -54,10 +49,10 @@ let private names (sql: Sql) (respond: string list -> obj) : EndpointHandler =
         }
 
 let metricNames: EndpointHandler =
-    fun ctx -> names (Panel.listMetrics (tenant ctx) (queryValue ctx "search") (queryInt ctx "limit")) (fun found -> {| metrics = found |}) ctx
+    fun ctx -> names (Panel.listMetrics (QueryToken.tenant ctx) (queryValue ctx "search") (queryInt ctx "limit")) (fun found -> {| metrics = found |}) ctx
 
 let metricTagKeys: EndpointHandler =
-    fun ctx -> names (Panel.listTagKeys (tenant ctx) (queryValue ctx "metric")) (fun found -> {| keys = found |}) ctx
+    fun ctx -> names (Panel.listTagKeys (QueryToken.tenant ctx) (queryValue ctx "metric")) (fun found -> {| keys = found |}) ctx
 
 let metricTagValues: EndpointHandler =
     fun ctx ->
@@ -65,7 +60,7 @@ let metricTagValues: EndpointHandler =
         | "" -> fail 400 "key is required" ctx
         | key ->
             names
-                (Panel.listTagValues (tenant ctx) (queryValue ctx "metric") key (queryValue ctx "search") (queryInt ctx "limit"))
+                (Panel.listTagValues (QueryToken.tenant ctx) (queryValue ctx "metric") key (queryValue ctx "search") (queryInt ctx "limit"))
                 (fun found -> {| values = found |})
                 ctx
 
@@ -111,7 +106,7 @@ let metricQuery: EndpointHandler =
                 let! answer =
                     task {
                         try
-                            return! Query.Engine.parsed execute (tenant ctx) [ "q" ] (Panel.seriesRequest query)
+                            return! Query.Engine.parsed execute (QueryToken.tenant ctx) [ "q" ] (Panel.seriesRequest query)
                         with e ->
                             ctx.GetService<ILoggerFactory>().CreateLogger("NinjaCat.Api.Panel").LogWarning("query: {Error}", e.Message)
                             return Error [ e.Message ]
@@ -151,7 +146,7 @@ let logSearch: EndpointHandler =
             | _, Error e -> return! fail 400 e ctx
             | Ok(from, until), Ok tags ->
                 let search: Panel.LogSearch =
-                    { Tenant = tenant ctx
+                    { Tenant = QueryToken.tenant ctx
                       Text = queryValue ctx "q"
                       Service = queryValue ctx "service"
                       Host = queryValue ctx "host"
@@ -189,7 +184,7 @@ let logFacets: EndpointHandler =
             | Error e -> return! fail 400 e ctx
             | Ok(from, until) ->
                 let facet (which: Panel.LogFacet) =
-                    run ctx (fun r -> {| value = r.GetString 0; count = Convert.ToUInt64(r.GetValue 1) |}) (Panel.logFacet (tenant ctx) from until which)
+                    run ctx (fun r -> {| value = r.GetString 0; count = Convert.ToUInt64(r.GetValue 1) |}) (Panel.logFacet (QueryToken.tenant ctx) from until which)
 
                 let! services = facet Panel.ByService
                 let! hosts = facet Panel.ByHost

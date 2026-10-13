@@ -9,5 +9,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/Engine.Tests/Engine.Tests.fsproj" />
     <Project Path="tests/Intake.Tests/Intake.Tests.fsproj" />
+    <Project Path="tests/Query.Tests/Query.Tests.fsproj" />
   </Folder>
 </Solution>

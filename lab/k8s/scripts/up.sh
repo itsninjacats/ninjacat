@@ -82,6 +82,7 @@ helm --kube-context "$CTX" upgrade --install ninjacat "$ROOT/helm/ninjacat" \
   --namespace "$NS" \
   -f "$HERE/ninjacat-values.yaml" \
   --set-string secrets.betterAuthSecret="$(openssl rand -hex 32)" \
+  --set-string secrets.queryTokenSecret="$(openssl rand -hex 32)" \
   --wait --timeout 6m
 k -n "$NS" rollout status deployment/ninjacat-intake   --timeout=240s
 k -n "$NS" rollout status deployment/ninjacat-query    --timeout=240s
@@ -124,6 +125,7 @@ cat <<INFO
 
   panel        http://localhost:8888
   query API    kubectl --context $CTX -n $NS port-forward deploy/ninjacat-query 18081:8081
+               (asks for a token: lab/k8s/README.md)
   ClickHouse   curl 'http://localhost:18123/?user=ninjacat&password=ninjacat' -d 'SELECT 1'
 
   see what arrived:  $HERE/scripts/verify.sh

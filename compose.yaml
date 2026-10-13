@@ -8,8 +8,9 @@
 # so an edit on the host is an edit in the container.
 #
 # Databases and the query process publish on 127.0.0.1 only. The databases
-# have passwords, the query process asks for nothing at all; exposing either
-# on 0.0.0.0 is a separate decision — drop the prefix if you mean to make it.
+# have passwords, the query process asks for a token the panel signs (see
+# api/README.md to mint one for curl); exposing either on 0.0.0.0 is a
+# separate decision — drop the prefix if you mean to make it.
 
 name: ninjacat
 
@@ -130,8 +131,9 @@ services:
       migrate: { condition: service_completed_successfully }
 
   # What the panel reads from: the panel's and the query API. It only reads.
-  # Nothing on its port asks for a key, so it is published on the loopback
-  # alone; the panel's container reaches it over the compose network.
+  # Its port asks for the panel's token, not for an API key, and is published
+  # on the loopback alone; the panel's container reaches it over the compose
+  # network.
   query:
     image: mcr.microsoft.com/dotnet/sdk:10.0
     container_name: ninjacat-query
@@ -143,6 +145,8 @@ services:
     environment:
       <<: *server-environment
       NINJACAT_INTERNAL_ADDR: ":8081"
+      # The same on the frontend: it signs, this checks.
+      NINJACAT_QUERY_TOKEN_SECRET: dev-only-query-token-secret-change-me-32ch
     volumes:
       - ./api:/app
       - query-artifacts:/artifacts
@@ -166,6 +170,7 @@ services:
       NINJACAT_INTERNAL_URL: http://query:8081
       ORIGIN: http://localhost:5173
       BETTER_AUTH_SECRET: dev-only-secret-change-me-in-production-32ch
+      NINJACAT_QUERY_TOKEN_SECRET: dev-only-query-token-secret-change-me-32ch
     volumes:
       - ./frontend:/app
       # Named volumes shadow the bind mount, so the container keeps its own

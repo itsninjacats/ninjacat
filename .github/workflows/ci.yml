@@ -81,6 +81,10 @@ jobs:
         working-directory: api/tests/Intake.Tests
         run: dotnet test --no-build
 
+      - name: Query tests
+        working-directory: api/tests/Query.Tests
+        run: dotnet test --no-build
+
   frontend:
     runs-on: ubuntu-latest
 
@@ -129,7 +133,8 @@ jobs:
         run: |
           set -- --set domainRoot=ninjacat.example \
             --set secrets.databaseUrl=postgres://u:p@h/d --set secrets.clickhousePassword=x \
-            --set secrets.betterAuthSecret=0123456789abcdef0123456789abcdef
+            --set secrets.betterAuthSecret=0123456789abcdef0123456789abcdef \
+            --set secrets.queryTokenSecret=fedcba9876543210fedcba9876543210
           helm lint helm/ninjacat "$@"
           helm template ci helm/ninjacat "$@" > /dev/null
           # With Traefik's CRDs in the cluster the chart adds the redirect.

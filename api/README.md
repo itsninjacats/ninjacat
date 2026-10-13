@@ -10,7 +10,7 @@ a port or a container.
 | --- | --- | --- | --- |
 | `ninjacat-api intake` | 8080 (`NINJACAT_ADDR`) | agent machines | the intake: Datadog's wire protocol, behind an API key |
 | | 10516 (`NINJACAT_LOGS_TCP_ADDR`) | agent machines | the agent's TCP transport for logs; `off` disables it |
-| `ninjacat-api query` | 8081 (`NINJACAT_INTERNAL_ADDR`) | the panel only | `/internal/*` for the panel and Datadog's query API. No key is asked for, so it stays on an internal network. It only reads, and can be given a ClickHouse user that cannot write |
+| `ninjacat-api query` | 8081 (`NINJACAT_INTERNAL_ADDR`) | the panel only | `/internal/*` for the panel and Datadog's query API, behind a token the panel signs (below); still on an internal network. It only reads, and can be given a ClickHouse user that cannot write |
 | `ninjacat-api migrate` | | | applies the ClickHouse migrations and exits |
 
 The query side speaks Datadog's public API (`/api/v1/...`, `/api/v2/...`)
@@ -280,6 +280,7 @@ Package versions live in `Directory.Packages.props` only.
 | `CLICKHOUSE_HTTP_ADDR` | `localhost:8123` |
 | `CLICKHOUSE_DB`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` | `ninjacat` |
 | `DATABASE_URL` | required — the same `postgres://` URL the panel uses |
+| `NINJACAT_QUERY_TOKEN_SECRET` | required by `query` — at least 32 bytes, the key the panel signs its tokens with (below) |
 | `NINJACAT_AUTO_MIGRATE` | `true`; with several replicas set `false` and run `migrate` as a job |
 | `NINJACAT_TRUSTED_PROXIES` | none — reverse proxies in front of the intake, as addresses or networks (`10.0.0.0/8`), comma-separated. Only their `X-Forwarded-For` is believed; the loopback is always trusted |
 | `NINJACAT_MAX_BODY_BYTES` | the largest request body the intake reads, 64 MiB by default; a larger one is answered 413. A body may inflate to 64 MiB |
@@ -298,7 +299,32 @@ Package versions live in `Directory.Packages.props` only.
 | `GET /internal/metrics/{names,tags,tag-values,query}` | the panel's metric pages |
 | `GET /internal/logs/{search,facets}` | the panel's log pages |
 
-Tenant is `"default"` on this port until requests carry one.
+Every route but `/ping` and `/health` asks for `Authorization: Bearer <token>`:
+an HS256 JWT the panel signs with `NINJACAT_QUERY_TOKEN_SECRET` for each call
+(`frontend/src/lib/server/ninjacat.ts`), checked by ASP.NET's JwtBearer
+(`src/Server/QueryToken.fs`). Its claims are `sub` (the user), `tenant`, `role`,
+`iss` `ninjacat-panel` and `aud` `ninjacat-query`, and it lives 60 seconds.
+The tenant every query runs for is the token's `tenant`; nothing in the request
+can name another. A request without a valid token, or with one that does not name
+exactly one tenant, is answered 401.
+
+To ask by hand, mint one with the panel's own library (here for an hour, and
+the tenant `default`). `SECRET` is the dev stack's, from `compose.yaml`; the
+kind lab generates its own (`lab/k8s/README.md` says how to read it).
+
+```bash
+cd frontend
+export SECRET=dev-only-query-token-secret-change-me-32ch
+TOKEN=$(bun -e "
+import { SignJWT } from 'jose';
+const key = new TextEncoder().encode(process.env.SECRET);
+console.log(await new SignJWT({ tenant: 'default', role: 'owner' })
+  .setProtectedHeader({ alg: 'HS256' }).setSubject('curl')
+  .setIssuer('ninjacat-panel').setAudience('ninjacat-query')
+  .setExpirationTime('1h').sign(key));
+")
+curl -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:8081/internal/metrics/names?limit=10'
+```
 
 The intake's API keys are not here. The keeper lives in `intake`; the panel
 tells it a key changed with `NOTIFY ninjacat_api_keys` in Postgres, and it

@@ -93,10 +93,10 @@ services:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
 
-  # What the panel reads from. Its port is deliberately NOT published:
-  # nothing on it asks for a key, and only the frontend container needs it,
-  # over the compose network. It only reads, so it can be given a ClickHouse
-  # user of its own that cannot write (CLICKHOUSE_QUERY_USER).
+  # What the panel reads from. Its port is deliberately NOT published: only
+  # the frontend container needs it, over the compose network, and it asks
+  # for the frontend's token, not for an API key. It only reads, so it can be
+  # given a ClickHouse user of its own that cannot write (CLICKHOUSE_QUERY_USER).
   query:
     image: ninjacat-api:local
     command: ["query"]
@@ -108,6 +108,7 @@ services:
       CLICKHOUSE_USER: ${CLICKHOUSE_QUERY_USER:-${CLICKHOUSE_USER:-ninjacat}}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_QUERY_PASSWORD:-${CLICKHOUSE_PASSWORD}}
       NINJACAT_INTERNAL_ADDR: ":8081"
+      NINJACAT_QUERY_TOKEN_SECRET: ${NINJACAT_QUERY_TOKEN_SECRET:?set NINJACAT_QUERY_TOKEN_SECRET}
     depends_on:
       clickhouse: { condition: service_healthy }
       postgres: { condition: service_healthy }
@@ -127,6 +128,7 @@ services:
       # Must be the URL users actually reach, or form actions and auth break.
       ORIGIN: ${ORIGIN:?set ORIGIN, e.g. https://ninjacat.example.com}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
+      NINJACAT_QUERY_TOKEN_SECRET: ${NINJACAT_QUERY_TOKEN_SECRET:?set NINJACAT_QUERY_TOKEN_SECRET}
     depends_on:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }

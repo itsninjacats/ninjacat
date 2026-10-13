@@ -40,8 +40,9 @@ clickhouse:
 
 # Secret values. Either let the chart create the Secret from these, or set
 # existingSecret to a Secret you manage yourself with the same keys:
-# DATABASE_URL, CLICKHOUSE_PASSWORD, BETTER_AUTH_SECRET, and
-# CLICKHOUSE_QUERY_PASSWORD when clickhouse.queryUser is set.
+# DATABASE_URL, CLICKHOUSE_PASSWORD, BETTER_AUTH_SECRET,
+# NINJACAT_QUERY_TOKEN_SECRET, and CLICKHOUSE_QUERY_PASSWORD when
+# clickhouse.queryUser is set.
 secrets:
   existingSecret: ""
   # postgres://user:password@host:5432/db
@@ -50,6 +51,10 @@ secrets:
   clickhouseQueryPassword: ""
   # At least 32 characters, high entropy: openssl rand -hex 32
   betterAuthSecret: ""
+  # The key the panel signs its calls to the query process with; both pods
+  # get it. At least 32 characters, high entropy, and not betterAuthSecret:
+  # the query pod must not be able to forge panel sessions.
+  queryTokenSecret: ""
 
 # -----------------------------------------------------------------------------
 # The server: one image, run as two processes that share nothing but the

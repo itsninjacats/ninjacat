@@ -1,8 +1,8 @@
 # NinjaCat itself, installed from the chart in helm/ninjacat — the same chart
 # a real deployment uses, so a lab run is also the chart's test.
 #
-# Only what differs from the chart's defaults. up.sh adds the one value that
-# must not be in git (secrets.betterAuthSecret).
+# Only what differs from the chart's defaults. up.sh adds the values that
+# must not be in git (secrets.betterAuthSecret, secrets.queryTokenSecret).
 
 domainRoot: ninjacat.lab
 
