@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { authClient } from '$lib/auth-client';
@@ -20,6 +21,10 @@
 	let password = $state('');
 	let error = $state<string | null>(null);
 	let submitting = $state(false);
+	// Until the page hydrates, a submit would be the browser's own, which knows
+	// nothing of signIn below; the button waits for the script instead.
+	let hydrated = $state(false);
+	onMount(() => (hydrated = true));
 
 	async function signIn(event: SubmitEvent) {
 		event.preventDefault();
@@ -41,7 +46,14 @@
 	}
 </script>
 
-<form class={cn('flex flex-col gap-6', className)} bind:this={ref} onsubmit={signIn} {...restProps}>
+<!-- POST, so that even a submit the script never sees keeps the password out of the URL. -->
+<form
+	method="post"
+	class={cn('flex flex-col gap-6', className)}
+	bind:this={ref}
+	onsubmit={signIn}
+	{...restProps}
+>
 	<FieldGroup>
 		<div class="flex flex-col items-center gap-1 text-center">
 			<h1 class="font-heading text-2xl font-semibold tracking-tight">Sign in</h1>
@@ -79,7 +91,7 @@
 		</Field>
 
 		<Field>
-			<Button type="submit" disabled={submitting}>
+			<Button type="submit" disabled={!hydrated || submitting}>
 				{#if submitting}
 					<Spinner />
 				{/if}
