@@ -18,15 +18,7 @@ open NinjaCat.Api.Engine.Monitor.Evaluate
 open NinjaCat.Api.Engine.Monitor.State
 open NinjaCat.Api.Storage.Rows
 open NinjaCat.Api.Monitors.Definitions
-
-/// A version of the monitor exists; a newer one than the entity has is read.
-type Ensure = { Monitor: string; Version: int }
-
-/// The monitor was deleted: its groups are closed and the entity stops.
-type Delete = { Monitor: string; Version: int }
-
-/// Stop for a hand-off, once nothing is left to store.
-type Stop = | Stop
+open NinjaCat.Api.Monitors.Messages
 
 /// The aligned tick `at`, the evaluation's identity.
 type Tick = | Tick of at: DateTimeOffset

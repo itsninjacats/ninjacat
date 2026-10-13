@@ -13,7 +13,7 @@ open Akka.Actor
 open Akka.Hosting
 open Microsoft.Extensions.Logging
 open NinjaCat.Api.Monitors.Definitions
-open NinjaCat.Api.Monitors.Entity
+open NinjaCat.Api.Monitors.Messages
 
 /// The key the region of monitor entities is registered under.
 type MonitorRegion = class end
@@ -72,6 +72,13 @@ type MonitorManager(services: ManagerServices) =
                     return Read(Ok snapshot)
                 })
 
+    /// Not once the node is shutting down: on the last node a message for a
+    /// shard already handed off has nowhere to go, and the region would hold
+    /// it until its shutdown phase timed out.
+    member private this.Send(message: obj) =
+        if isNull (CoordinatedShutdown.Get(UntypedActor.Context.System).ShutdownReason) then
+            region.Tell(message, this.Self)
+
     // The region starts asynchronously, so nothing is sent before it is
     // registered. The lookup fails only when the manager stops.
     override this.PreStart() =
@@ -99,10 +106,10 @@ type MonitorManager(services: ManagerServices) =
                 lastRead <- Some snapshot.At
 
                 for s in snapshot.Live do
-                    region.Tell({ Ensure.Monitor = s.Key.Text; Version = s.Version }, this.Self)
+                    this.Send { Ensure.Monitor = s.Key.Text; Version = s.Version }
 
                 for s in snapshot.Deleted do
-                    region.Tell({ Delete.Monitor = s.Key.Text; Version = s.Version }, this.Self)
+                    this.Send { Delete.Monitor = s.Key.Text; Version = s.Version }
             | Read(Error error) ->
                 reading <- false
                 services.Log.LogWarning("Monitors could not be read, retrying in {Interval}: {Error}", services.Interval, error)
@@ -110,7 +117,7 @@ type MonitorManager(services: ManagerServices) =
                 // The payload does not say whether it was a deletion; the
                 // entity reads the row either way, and a deleted one closes.
                 match parseNotification payload with
-                | Some s -> region.Tell({ Ensure.Monitor = s.Key.Text; Version = s.Version }, this.Self)
+                | Some s -> this.Send { Ensure.Monitor = s.Key.Text; Version = s.Version }
                 | None -> services.Log.LogWarning("Not a monitor notification: {Payload}", payload)
             | ListenEnded error ->
                 services.Log.LogWarning("Not listening for monitor changes, retrying in {Interval}: {Error}", services.Interval, error)

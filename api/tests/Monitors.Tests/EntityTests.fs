@@ -19,6 +19,7 @@ open NinjaCat.Api.Storage.Rows
 open NinjaCat.Api.Monitors
 open NinjaCat.Api.Monitors.Definitions
 open NinjaCat.Api.Monitors.Entity
+open NinjaCat.Api.Monitors.Messages
 
 let private key = { Tenant = "acme"; Id = 7L }
 let private t0 = DateTimeOffset(2026, 10, 13, 12, 0, 0, TimeSpan.Zero)
@@ -67,7 +68,7 @@ type Fakes() =
 
 /// Answers the engine's SQL with one point per bucket of the window read, all
 /// of `value`, for a query without groups.
-let private rowsFor (sql: Sql) (value: float) : Compile.Row list =
+let rowsFor (sql: Sql) (value: float) : Compile.Row list =
     let number (name: string) =
         sql.Parameters
         |> List.pick (fun (n, v) ->

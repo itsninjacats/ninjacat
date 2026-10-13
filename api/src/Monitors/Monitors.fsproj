@@ -9,14 +9,19 @@
     <Compile Include="Definitions.fs" />
     <Compile Include="Store.fs" />
     <Compile Include="Detached.fs" />
+    <Compile Include="Messages.fs" />
     <Compile Include="Entity.fs" />
     <Compile Include="Manager.fs" />
+    <Compile Include="Cluster.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Akka.Hosting" />
     <PackageReference Include="Akka.Cluster.Hosting" />
+    <PackageReference Include="Akka.Management" />
+    <PackageReference Include="Akka.Discovery.KubernetesApi" />
     <PackageReference Include="ClickHouse.Driver" />
+    <PackageReference Include="FSharp.SystemTextJson" />
     <PackageReference Include="Npgsql.DependencyInjection" />
   </ItemGroup>
   <ItemGroup>

@@ -9,6 +9,7 @@
     <Compile Include="ManagerTests.fs" />
     <Compile Include="DefinitionsTests.fs" />
     <Compile Include="StoreTests.fs" />
+    <Compile Include="ClusterTests.fs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="xunit.v3" />

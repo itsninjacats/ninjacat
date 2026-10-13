@@ -21,6 +21,8 @@
     <!-- Akka.NET: every package the same version. -->
     <PackageVersion Include="Akka.Hosting" Version="1.5.73" />
     <PackageVersion Include="Akka.Cluster.Hosting" Version="1.5.73" />
+    <PackageVersion Include="Akka.Management" Version="1.5.73" />
+    <PackageVersion Include="Akka.Discovery.KubernetesApi" Version="1.5.73" />
     <PackageVersion Include="Akka.TestKit.Xunit" Version="1.5.73" />
   </ItemGroup>
 </Project>

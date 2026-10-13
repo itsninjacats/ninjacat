@@ -12,6 +12,7 @@ open Akka.TestKit
 open Microsoft.Extensions.Logging.Abstractions
 open NinjaCat.Api.Monitors.Definitions
 open NinjaCat.Api.Monitors.Entity
+open NinjaCat.Api.Monitors.Messages
 open NinjaCat.Api.Monitors.Manager
 open NinjaCat.Api.Monitors.Tests.TestPostgres
 
