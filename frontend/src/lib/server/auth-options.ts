@@ -1,4 +1,4 @@
-import type { BetterAuthOptions } from 'better-auth/minimal';
+import type { BetterAuthOptions, BetterAuthPlugin } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { admin, organization } from 'better-auth/plugins';
 import { defaultAc, userAc } from 'better-auth/plugins/admin/access';
@@ -30,6 +30,20 @@ const instanceAdmin = defaultAc.newRole({
 	],
 	session: ['list', 'revoke', 'delete']
 });
+
+// The organization plugin checks that a user is not a member yet and then
+// inserts, with nothing in between: two adds at once made two rows, and
+// removing one left the user in. Its options take no index, so this plugin
+// adds one to its table; the CLI writes it into auth.schema.ts.
+const oneMembershipPerTenant = {
+	id: 'one-membership-per-tenant',
+	schema: {
+		member: {
+			fields: {},
+			indexes: [{ fields: ['organizationId', 'userId'], unique: true }]
+		}
+	}
+} satisfies BetterAuthPlugin;
 
 // The admin plugin keeps several roles in one comma-separated column.
 export function isInstanceAdmin(role: string | null | undefined): boolean {
@@ -102,7 +116,8 @@ export function authOptions(db: Database, env: AuthEnv) {
 				disableOrganizationDeletion: true,
 				// The plugin's default of 100 is a team's size; a tenant can be a company.
 				membershipLimit: 10_000
-			})
+			}),
+			oneMembershipPerTenant
 		]
 	} satisfies BetterAuthOptions;
 }

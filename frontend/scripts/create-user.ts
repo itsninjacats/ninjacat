@@ -31,10 +31,10 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { authOptions } from '../src/lib/server/auth-options';
 import * as schema from '../src/lib/server/db/schema';
+import { tenantRoles } from '../src/lib/tenant';
 
 const usage =
 	'usage: bun run user:create -- <email> [--name "Their Name"] [--admin] [--tenant <id|slug>]... [--role owner|admin|member]';
-const roles = ['owner', 'admin', 'member'] as const;
 
 function fail(message: string): never {
 	console.error(`create-user: ${message}`);
@@ -133,9 +133,9 @@ if (unexpected.length > 0) {
 if (!email.includes('@')) {
 	fail(`${email} does not look like an email address`);
 }
-const askedRole = roles.find((role) => role === (values.role ?? 'member'));
+const askedRole = tenantRoles.find((role) => role === (values.role ?? 'member'));
 if (!askedRole) {
-	fail(`--role is one of ${roles.join(', ')}\n${usage}`);
+	fail(`--role is one of ${tenantRoles.join(', ')}\n${usage}`);
 }
 
 const url = process.env.DATABASE_URL;

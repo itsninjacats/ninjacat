@@ -8,6 +8,13 @@
       "when": 1791910010821,
       "tag": "0000_bright_layla_miller",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791913028210,
+      "tag": "0001_one_membership_per_tenant",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,5 @@
 import { redirect } from '@sveltejs/kit';
+import { isInstanceAdmin } from '$lib/server/auth-options';
 import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = ({ locals }) => {
@@ -12,6 +13,7 @@ export const load: LayoutServerLoad = ({ locals }) => {
 			email: locals.user.email,
 			name: locals.user.name
 		},
+		instanceAdmin: isInstanceAdmin(locals.user.role),
 		tenant: locals.tenant,
 		tenants: locals.tenants
 	};

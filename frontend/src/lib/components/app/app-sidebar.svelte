@@ -4,10 +4,13 @@
 	import LayoutDashboardIcon from '@lucide/svelte/icons/layout-dashboard';
 	import ScrollTextIcon from '@lucide/svelte/icons/scroll-text';
 	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
+	import BuildingIcon from '@lucide/svelte/icons/building';
+	import UsersIcon from '@lucide/svelte/icons/users';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import NavMain from './nav-main.svelte';
 	import NavUser from './nav-user.svelte';
 	import TenantSwitcher from './tenant-switcher.svelte';
+	import { m } from '$lib/paraglide/messages';
 	import type { Tenant } from '$lib/tenant';
 
 	let {
@@ -15,11 +18,13 @@
 		user,
 		tenant,
 		tenants,
+		instanceAdmin,
 		...restProps
 	}: {
 		user: { email: string; name: string | null };
 		tenant: Tenant | null;
 		tenants: Tenant[];
+		instanceAdmin: boolean;
 	} & ComponentProps<typeof Sidebar.Root> = $props();
 
 	// Grouped the way the work splits rather than the way the routes nest:
@@ -32,7 +37,15 @@
 		{ title: 'Logs', url: '/app/logs', icon: ScrollTextIcon }
 	];
 
-	const settings = [{ title: 'API keys', url: '/app/ustawienia/klucze', icon: KeyRoundIcon }];
+	const settings = $derived([
+		{ title: 'API keys', url: '/app/ustawienia/klucze', icon: KeyRoundIcon },
+		...(instanceAdmin
+			? [
+					{ title: m.tenants(), url: '/app/admin/tenants', icon: BuildingIcon },
+					{ title: m.admin_users(), url: '/app/admin/users', icon: UsersIcon }
+				]
+			: [])
+	]);
 </script>
 
 <!-- collapsible="icon" is the Datadog-shaped part: the rail shrinks to icons

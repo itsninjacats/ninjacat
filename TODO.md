@@ -477,6 +477,15 @@ data is here; the product is not.
 - [ ] Monitors and tenants: planned in `api/docs/zadania/monitors.md` and
       `api/docs/zadania/tenants.md` (2026-10-13). The ClickHouse migrations are squashed into
       one `0001_initial.sql`; a database from before the squash must be dropped.
+- [ ] A tenant's own owner or admin cannot add members: only the instance admin can, under
+      `/app/admin`. A members page for the current tenant (`locals.tenant`, owner or admin)
+      would reuse `changeMember` in `lib/server/admin.ts` and `auth.api.addMember`.
+- [ ] Better Auth's own `organization/update-member-role`, `remove-member` and `leave`
+      routes skip the row lock `changeMember` takes, so an owner there and the instance
+      admin at the same moment could leave a tenant with no owner. Route both through one
+      path, or disable those routes once the members page above exists.
+- [ ] Accounts on the admin pages: ban, delete, reset a password. The admin plugin has the
+      calls (`banUser`, `removeUser`, `setUserPassword`); the pages offer none yet.
 - [ ] Data retention set in the panel. For now `NINJACAT_METRICS_RETENTION_DAYS` and
       `NINJACAT_METRICS_ROLLUP_RETENTION_DAYS` (planned, monitors.md); other tables keep a
       fixed TTL.

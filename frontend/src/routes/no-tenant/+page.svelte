@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { signOut } from '$lib/auth-client';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
@@ -19,7 +20,10 @@
 		<Card.Content>
 			<p class="text-sm leading-relaxed text-muted-foreground">{m.no_tenant_explained()}</p>
 		</Card.Content>
-		<Card.Footer>
+		<Card.Footer class="gap-2">
+			{#if data.instanceAdmin}
+				<Button href={resolve('/app/admin/tenants')}>{m.admin_manage_tenants()}</Button>
+			{/if}
 			<Button variant="outline" onclick={signOut}>{m.sign_out()}</Button>
 		</Card.Footer>
 	</Card.Root>

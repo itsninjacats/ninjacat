@@ -7,18 +7,12 @@
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import { m } from '$lib/paraglide/messages';
 	import { toast } from 'svelte-sonner';
+	import { roleName } from '$lib/role-name';
 	import type { Tenant } from '$lib/tenant';
 
 	let { tenant, tenants }: { tenant: Tenant | null; tenants: Tenant[] } = $props();
 
 	const sidebar = Sidebar.useSidebar();
-
-	const roleNames: Record<string, () => string> = {
-		owner: m.tenant_role_owner,
-		admin: m.tenant_role_admin,
-		member: m.tenant_role_member
-	};
-	const roleName = (role: string) => roleNames[role]?.() ?? role;
 
 	// The session remembers the choice; every load then runs again for the new
 	// tenant.

@@ -4,6 +4,7 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { Toaster } from '$lib/components/ui/sonner';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
+	import { m } from '$lib/paraglide/messages';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
@@ -15,12 +16,19 @@
 		if (p.startsWith('/app/metrics')) return 'Metrics';
 		if (p.startsWith('/app/logs')) return 'Logs';
 		if (p.startsWith('/app/ustawienia/klucze')) return 'API keys';
+		if (p.startsWith('/app/admin/tenants')) return m.tenants();
+		if (p.startsWith('/app/admin/users')) return m.admin_users();
 		return 'Overview';
 	});
 </script>
 
 <Sidebar.Provider>
-	<AppSidebar user={data.user} tenant={data.tenant} tenants={data.tenants} />
+	<AppSidebar
+		user={data.user}
+		tenant={data.tenant}
+		tenants={data.tenants}
+		instanceAdmin={data.instanceAdmin}
+	/>
 
 	<Sidebar.Inset class="flex h-svh flex-col overflow-hidden">
 		<header class="flex h-14 shrink-0 items-center gap-2 border-b px-4">
