@@ -32,6 +32,7 @@
     <Compile Include="Rows/Process.fs" />
     <Compile Include="Rows/Usm.fs" />
     <Compile Include="Rows/Rum.fs" />
+    <Compile Include="Rows/Monitors.fs" />
     <Compile Include="Writer.fs" />
     <Compile Include="ClickHouseSink.fs" />
     <Compile Include="Migrations.fs" />
