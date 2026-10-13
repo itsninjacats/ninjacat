@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import AppSidebar from '$lib/components/app/app-sidebar.svelte';
 	import { Separator } from '$lib/components/ui/separator';
+	import { Toaster } from '$lib/components/ui/sonner';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import type { LayoutProps } from './$types';
 
@@ -19,7 +20,7 @@
 </script>
 
 <Sidebar.Provider>
-	<AppSidebar user={data.user} />
+	<AppSidebar user={data.user} tenant={data.tenant} tenants={data.tenants} />
 
 	<Sidebar.Inset class="flex h-svh flex-col overflow-hidden">
 		<header class="flex h-14 shrink-0 items-center gap-2 border-b px-4">
@@ -33,3 +34,5 @@
 		</div>
 	</Sidebar.Inset>
 </Sidebar.Provider>
+
+<Toaster />

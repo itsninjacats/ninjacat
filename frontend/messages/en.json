@@ -1,5 +1,14 @@
 {
 	"$schema": "https://inlang.com/schema/inlang-message-format",
 	"hello_world": "Hello, {name} from en!",
-	"no_tenant": "You belong to no tenant"
+	"no_tenant": "You belong to no tenant",
+	"no_tenant_explained": "Your account exists, but no tenant has you as a member, so there is no data for you to see. Ask an instance admin or a tenant’s owner to add you.",
+	"sign_out": "Sign out",
+	"tenants": "Tenants",
+	"tenant_none": "No tenant",
+	"tenant_role_owner": "Owner",
+	"tenant_role_admin": "Admin",
+	"tenant_role_member": "Member",
+	"tenant_switch_failed": "Could not switch to that tenant. You may no longer be a member of it.",
+	"tenant_changed": "The tenant changed since this page was opened. Nothing was done; reload the page and try again."
 }

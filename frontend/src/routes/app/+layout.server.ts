@@ -1,9 +1,8 @@
 import { redirect } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 
-// Straznik dla CALEJ sekcji /app. Dzieki temu podstrony nie musza go powtarzac,
-// a dodanie nowej nie grozi zapomnieniem o sprawdzeniu sesji.
 export const load: LayoutServerLoad = ({ locals }) => {
+	// The guard has already sent a visitor to /login; this narrows the type.
 	if (!locals.user) {
 		redirect(302, '/login');
 	}
@@ -12,6 +11,8 @@ export const load: LayoutServerLoad = ({ locals }) => {
 		user: {
 			email: locals.user.email,
 			name: locals.user.name
-		}
+		},
+		tenant: locals.tenant,
+		tenants: locals.tenants
 	};
 };

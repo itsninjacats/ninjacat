@@ -52,9 +52,9 @@
 			</Card.Header>
 			<Card.Content>
 				{#if form.aktywnyOdRazu === false}
-					<p class="text-muted-foreground mb-3 text-xs">
-						Odbiornik nie odpowiedział — klucz zacznie działać w ciągu 30 sekund,
-						przy najbliższym odświeżeniu.
+					<p class="mb-3 text-xs text-muted-foreground">
+						Odbiornik nie odpowiedział — klucz zacznie działać w ciągu 30 sekund, przy najbliższym
+						odświeżeniu.
 					</p>
 				{/if}
 				<div class="flex items-center gap-2">
@@ -81,6 +81,7 @@
 		</Card.Header>
 		<Card.Content>
 			<form method="POST" action="?/utworz" use:enhance class="flex items-end gap-3">
+				<input type="hidden" name="tenant" value={data.tenant?.id} />
 				<Field class="flex-1">
 					<FieldLabel for="nazwa">Nazwa</FieldLabel>
 					<Input
@@ -158,6 +159,7 @@
 									<AlertDialog.Footer>
 										<AlertDialog.Cancel>Anuluj</AlertDialog.Cancel>
 										<form method="POST" action="?/usun" use:enhance>
+											<input type="hidden" name="tenant" value={data.tenant?.id} />
 											<input type="hidden" name="id" value={k.id} />
 											<AlertDialog.Action type="submit">Usuń</AlertDialog.Action>
 										</form>

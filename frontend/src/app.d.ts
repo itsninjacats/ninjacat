@@ -1,4 +1,5 @@
 import type { auth } from '$lib/server/auth';
+import type { Tenant } from '$lib/tenant';
 
 // With the plugins' fields: user.role, session.activeOrganizationId.
 type AuthSession = typeof auth.$Infer.Session;
@@ -10,6 +11,10 @@ declare global {
 		interface Locals {
 			user?: AuthSession['user'];
 			session?: AuthSession['session'];
+			// Every tenant the user is a member of, and the one this request is
+			// for. Set by hooks.server.ts; null without a membership.
+			tenants: Tenant[];
+			tenant: Tenant | null;
 		}
 
 		// interface Error {}

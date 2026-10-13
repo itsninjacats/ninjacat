@@ -2,9 +2,9 @@ import type { BetterAuthOptions } from 'better-auth/minimal';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { admin, organization } from 'better-auth/plugins';
 import { defaultAc, userAc } from 'better-auth/plugins/admin/access';
-import { asc, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from './db/schema';
+import { memberships } from './tenant';
 
 // The options shared by the panel (auth.ts) and scripts/create-user.ts. No
 // $env or $app here: the script runs as a plain process, outside SvelteKit.
@@ -88,13 +88,8 @@ export function authOptions(db: Database, env: AuthEnv) {
 			session: {
 				create: {
 					before: async (session) => {
-						const [first] = await db
-							.select({ organizationId: schema.member.organizationId })
-							.from(schema.member)
-							.where(eq(schema.member.userId, session.userId))
-							.orderBy(asc(schema.member.createdAt))
-							.limit(1);
-						return { data: { activeOrganizationId: first?.organizationId ?? null } };
+						const [first] = await memberships(db, session.userId);
+						return { data: { activeOrganizationId: first?.id ?? null } };
 					}
 				}
 			}

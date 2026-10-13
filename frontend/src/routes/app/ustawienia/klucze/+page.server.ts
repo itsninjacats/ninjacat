@@ -1,33 +1,17 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { and, desc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { apiKey, member } from '$lib/server/db/schema';
+import { apiKey } from '$lib/server/db/schema';
 import { nowyKlucz, skrotKlucza, prefiks, refreshApiKeys } from '$lib/server/api-keys';
 import { m } from '$lib/paraglide/messages';
 import type { Actions, PageServerLoad } from './$types';
-
-// Until the hook resolves the tenant on every request, this page checks it
-// here: a session keeps its active organization after its user is removed
-// from it, and a key made then would still write into that tenant.
-async function activeTenant(locals: App.Locals): Promise<string | null> {
-	const tenantId = locals.session?.activeOrganizationId;
-	if (!locals.user || !tenantId) {
-		return null;
-	}
-	const [membership] = await db
-		.select({ id: member.id })
-		.from(member)
-		.where(and(eq(member.userId, locals.user.id), eq(member.organizationId, tenantId)))
-		.limit(1);
-	return membership ? tenantId : null;
-}
 
 export const load: PageServerLoad = async ({ locals }) => {
 	if (!locals.user) {
 		redirect(302, '/login');
 	}
 
-	const tenantId = await activeTenant(locals);
+	const tenantId = locals.tenant?.id;
 	if (!tenantId) {
 		return { klucze: [] };
 	}
@@ -47,6 +31,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 	return { klucze };
 };
 
+// Every form names the tenant its page was shown for. The session's tenant can
+// change in another tab, and a key made for the wrong one sends an agent's data
+// there.
 export const actions: Actions = {
 	utworz: async ({ request, locals }) => {
 		if (!locals.user) {
@@ -63,9 +50,12 @@ export const actions: Actions = {
 			return fail(400, { blad: 'Nazwa może mieć najwyżej 100 znaków', nazwa });
 		}
 
-		const tenantId = await activeTenant(locals);
+		const tenantId = locals.tenant?.id;
 		if (!tenantId) {
 			return fail(403, { blad: m.no_tenant(), nazwa });
+		}
+		if (dane.get('tenant') !== tenantId) {
+			return fail(409, { blad: m.tenant_changed(), nazwa });
 		}
 
 		const klucz = nowyKlucz();
@@ -101,9 +91,12 @@ export const actions: Actions = {
 			return fail(400, { blad: 'Brak identyfikatora klucza' });
 		}
 
-		const tenantId = await activeTenant(locals);
+		const tenantId = locals.tenant?.id;
 		if (!tenantId) {
 			return fail(403, { blad: m.no_tenant() });
+		}
+		if (dane.get('tenant') !== tenantId) {
+			return fail(409, { blad: m.tenant_changed() });
 		}
 
 		await db.delete(apiKey).where(and(eq(apiKey.id, id), eq(apiKey.tenantId, tenantId)));

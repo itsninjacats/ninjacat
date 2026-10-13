@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	import { signOut } from '$lib/auth-client';
+	import { m } from '$lib/paraglide/messages';
 	import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
@@ -60,18 +61,10 @@
 					</div>
 				</DropdownMenu.Label>
 				<DropdownMenu.Separator />
-				<!-- The sign-out action lives in /app/+page.server.ts, so the form
-				     targets that page explicitly rather than the current route. -->
-				<form method="POST" action="/app?/signOut" use:enhance class="w-full">
-					<DropdownMenu.Item closeOnSelect={false}>
-						{#snippet child({ props })}
-							<button type="submit" {...props} class="{props.class} w-full">
-								<LogOutIcon />
-								Sign out
-							</button>
-						{/snippet}
-					</DropdownMenu.Item>
-				</form>
+				<DropdownMenu.Item onSelect={signOut}>
+					<LogOutIcon />
+					{m.sign_out()}
+				</DropdownMenu.Item>
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
 	</Sidebar.MenuItem>
