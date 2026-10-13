@@ -35,8 +35,10 @@
 							<Avatar.Fallback class="rounded-lg">{initials}</Avatar.Fallback>
 						</Avatar.Root>
 						<div class="grid flex-1 text-left text-sm leading-tight">
-							<span class="truncate font-medium">{display}</span>
-							<span class="truncate text-xs text-muted-foreground">{user.email}</span>
+							<span class="truncate font-medium" title={display}>{display}</span>
+							<span class="truncate text-xs text-muted-foreground" title={user.email}
+								>{user.email}</span
+							>
 						</div>
 						<ChevronsUpDownIcon class="ml-auto size-4" />
 					</Sidebar.MenuButton>
@@ -44,7 +46,7 @@
 			</DropdownMenu.Trigger>
 
 			<DropdownMenu.Content
-				class="w-(--bits-dropdown-menu-anchor-width) min-w-56 rounded-lg"
+				class="w-72 max-w-[calc(100vw-2rem)] rounded-lg"
 				side={sidebar.isMobile ? 'bottom' : 'right'}
 				align="end"
 				sideOffset={4}
@@ -54,9 +56,11 @@
 						<Avatar.Root class="size-8 rounded-lg">
 							<Avatar.Fallback class="rounded-lg">{initials}</Avatar.Fallback>
 						</Avatar.Root>
-						<div class="grid flex-1 text-left text-sm leading-tight">
-							<span class="truncate font-medium">{display}</span>
-							<span class="truncate text-xs text-muted-foreground">{user.email}</span>
+						<div class="grid flex-1 gap-0.5 text-left text-sm leading-tight wrap-anywhere">
+							<span class="font-medium">{display}</span>
+							{#if display !== user.email}
+								<span class="text-xs text-muted-foreground">{user.email}</span>
+							{/if}
 						</div>
 					</div>
 				</DropdownMenu.Label>

@@ -8,6 +8,7 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import * as Popover from '$lib/components/ui/popover/index.js';
 	import { Input } from '$lib/components/ui/input';
+	import * as NativeSelect from '$lib/components/ui/native-select';
 	import FunctionChips from './function-chips.svelte';
 	import { SPACE_AGGREGATORS, builderText, type ExplorerQuery } from '$lib/metrics/query';
 
@@ -140,7 +141,7 @@
 </script>
 
 <div
-	class="flex items-start gap-2 rounded-md border bg-card px-2 py-1.5 {query.hidden
+	class="@container flex items-start gap-2 rounded-md border bg-card px-2 py-1.5 {query.hidden
 		? 'opacity-60'
 		: ''}"
 >
@@ -156,16 +157,17 @@
 			<Input
 				bind:value={query.text}
 				placeholder={TEXT_PLACEHOLDER}
-				class="h-8 min-w-72 flex-1 font-mono text-xs"
+				class="h-8 min-w-0 grow basis-72 font-mono text-xs md:text-xs"
 				spellcheck={false}
 			/>
 		{:else}
 			<!-- metric -->
-			<div class="relative w-72">
+			<div class="relative min-w-0 grow basis-72">
 				<Input
 					value={metricOpen ? metricSearch : b.metric}
 					placeholder="metric…"
-					class="h-8 font-mono text-xs"
+					title={b.metric || undefined}
+					class="h-8 font-mono text-xs md:text-xs"
 					onfocus={() => {
 						metricSearch = '';
 						metricOpen = true;
@@ -177,13 +179,18 @@
 					<div
 						class="absolute top-full z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md"
 					>
+						<!-- The input shows the search while open, so the metric it replaces is shown here. -->
+						{#if b.metric}
+							<p class="px-2 py-1.5 font-mono text-xs wrap-anywhere text-muted-foreground">
+								{b.metric}
+							</p>
+						{/if}
 						{#each metricOptions.length > 0 || metricSearch ? metricOptions : metrics as m (m)}
 							<button
 								type="button"
-								class="w-full truncate rounded-sm px-2 py-1.5 text-left font-mono text-xs transition-colors
+								class="w-full rounded-sm px-2 py-1.5 text-left font-mono text-xs wrap-anywhere transition-colors
 								{m === b.metric ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}"
 								onmousedown={() => pickMetric(m)}
-								title={m}
 							>
 								{m}
 							</button>
@@ -195,123 +202,130 @@
 			</div>
 
 			<!-- from -->
-			<span class="text-xs text-muted-foreground">from</span>
-			<div class="flex flex-wrap items-center gap-1">
-				{#each b.filters as f, i (`${f.key}:${f.value}`)}
-					<span
-						class="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono text-[11px]"
-					>
-						{f.key}:{f.value}
-						<button
-							type="button"
-							class="opacity-50 hover:opacity-100"
-							onclick={() => removeFilter(i)}
-							aria-label={`Remove filter ${f.key}:${f.value}`}
+			<div class="flex min-w-0 items-center gap-2">
+				<span class="text-xs text-muted-foreground">from</span>
+				<div class="flex min-w-0 flex-wrap items-center gap-1">
+					{#each b.filters as f, i (`${f.key}:${f.value}`)}
+						<span
+							class="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] wrap-anywhere"
 						>
-							<XIcon class="size-3" />
-						</button>
-					</span>
-				{:else}
-					<span class="font-mono text-xs text-muted-foreground">everywhere</span>
-				{/each}
+							{f.key}:{f.value}
+							<button
+								type="button"
+								class="opacity-50 hover:opacity-100"
+								onclick={() => removeFilter(i)}
+								aria-label={`Remove filter ${f.key}:${f.value}`}
+							>
+								<XIcon class="size-3" />
+							</button>
+						</span>
+					{:else}
+						<span class="font-mono text-xs text-muted-foreground">everywhere</span>
+					{/each}
 
-				<Popover.Root bind:open={filterOpen}>
-					<Popover.Trigger
-						class="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
-						disabled={tagKeys.length === 0}
-						aria-label="Add tag filter"
-						title="Add tag filter"
-					>
-						<PlusIcon class="size-3.5" />
-					</Popover.Trigger>
-					<Popover.Content align="start" class="w-72 space-y-2 p-2">
-						<select
-							bind:value={filterKey}
-							class="h-8 w-full rounded-md border bg-transparent px-2 font-mono text-xs"
+					<Popover.Root bind:open={filterOpen}>
+						<Popover.Trigger
+							class="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+							disabled={tagKeys.length === 0}
+							aria-label="Add tag filter"
+							title="Add tag filter"
 						>
-							<option value="">tag key…</option>
-							{#each tagKeys as k (k)}
-								<option value={k}>{k}</option>
-							{/each}
-						</select>
-						<Input
-							bind:value={valueSearch}
-							placeholder={filterKey
-								? `${filterKey} value… (wildcards: web-*)`
-								: 'pick a key first'}
-							disabled={!filterKey}
-							class="h-8 font-mono text-xs"
-							onkeydown={(e) => {
-								if (e.key === 'Enter' && valueSearch) addFilter(valueSearch);
-							}}
-						/>
-						{#if valueOptions.length > 0}
-							<div class="max-h-56 overflow-y-auto">
-								{#each valueOptions as v (v)}
-									<button
-										type="button"
-										class="w-full truncate rounded-sm px-2 py-1 text-left font-mono text-xs hover:bg-muted"
-										onclick={() => addFilter(v)}
-										title={v}
-									>
-										{v}
-									</button>
+							<PlusIcon class="size-3.5" />
+						</Popover.Trigger>
+						<Popover.Content align="start" class="w-72 space-y-2 p-2">
+							<NativeSelect.Root
+								bind:value={filterKey}
+								size="sm"
+								class="w-full font-mono [&>select]:text-xs"
+							>
+								<NativeSelect.Option value="">tag key…</NativeSelect.Option>
+								{#each tagKeys as k (k)}
+									<NativeSelect.Option value={k}>{k}</NativeSelect.Option>
 								{/each}
-							</div>
-						{/if}
-					</Popover.Content>
-				</Popover.Root>
+							</NativeSelect.Root>
+							<Input
+								bind:value={valueSearch}
+								placeholder={filterKey
+									? `${filterKey} value… (wildcards: web-*)`
+									: 'pick a key first'}
+								disabled={!filterKey}
+								class="h-8 font-mono text-xs md:text-xs"
+								onkeydown={(e) => {
+									if (e.key === 'Enter' && valueSearch) addFilter(valueSearch);
+								}}
+							/>
+							{#if valueOptions.length > 0}
+								<div class="max-h-56 overflow-y-auto">
+									{#each valueOptions as v (v)}
+										<button
+											type="button"
+											class="w-full rounded-sm px-2 py-1 text-left font-mono text-xs wrap-anywhere hover:bg-muted"
+											onclick={() => addFilter(v)}
+										>
+											{v}
+										</button>
+									{/each}
+								</div>
+							{/if}
+						</Popover.Content>
+					</Popover.Root>
+				</div>
 			</div>
 
-			<!-- aggregation and grouping -->
-			<select
-				bind:value={query.builder.agg}
-				class="h-8 rounded-md border bg-transparent px-2 font-mono text-xs"
-				aria-label="Space aggregation"
-			>
-				{#each SPACE_AGGREGATORS as a (a)}
-					<option value={a}>{a}</option>
-				{/each}
-			</select>
-			<span class="text-xs text-muted-foreground">by</span>
-			<div class="flex flex-wrap items-center gap-1">
-				{#if b.groupBy.length === 0}
-					<span class="font-mono text-xs text-muted-foreground">everything</span>
-				{/if}
-				{#each b.groupBy as key (key)}
-					<span
-						class="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono text-[11px]"
-					>
-						{key}
-						<button
-							type="button"
-							class="opacity-50 hover:opacity-100"
-							onclick={() => removeGroup(key)}
-							aria-label={`Stop grouping by ${key}`}
+			<!-- aggregation and grouping; on a narrow row the chips go under "avg by" -->
+			<div class="flex min-w-0 flex-wrap items-center gap-2">
+				<NativeSelect.Root
+					bind:value={query.builder.agg}
+					size="sm"
+					class="shrink-0 font-mono [&>select]:text-xs"
+					aria-label="Space aggregation"
+				>
+					{#each SPACE_AGGREGATORS as a (a)}
+						<NativeSelect.Option value={a}>{a}</NativeSelect.Option>
+					{/each}
+				</NativeSelect.Root>
+				<span class="text-xs text-muted-foreground">by</span>
+				<div class="flex min-w-0 flex-wrap items-center gap-1">
+					{#if b.groupBy.length === 0}
+						<span class="font-mono text-xs text-muted-foreground">everything</span>
+					{/if}
+					{#each b.groupBy as key (key)}
+						<span
+							class="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] wrap-anywhere"
 						>
-							<XIcon class="size-3" />
-						</button>
-					</span>
-				{/each}
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger
-						class="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
-						disabled={tagKeys.length === 0}
-						aria-label="Group by"
-						title="Group by"
-					>
-						<PlusIcon class="size-3.5" />
-					</DropdownMenu.Trigger>
-					<DropdownMenu.Content align="start" class="max-h-72 w-56 overflow-y-auto">
-						{#each tagKeys.filter((k) => !b.groupBy.includes(k)) as k (k)}
-							<DropdownMenu.Item class="font-mono text-xs" onSelect={() => addGroup(k)}>
-								{k}
-							</DropdownMenu.Item>
-						{:else}
-							<p class="px-2 py-1.5 text-xs text-muted-foreground">Already grouped by every key.</p>
-						{/each}
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
+							{key}
+							<button
+								type="button"
+								class="opacity-50 hover:opacity-100"
+								onclick={() => removeGroup(key)}
+								aria-label={`Stop grouping by ${key}`}
+							>
+								<XIcon class="size-3" />
+							</button>
+						</span>
+					{/each}
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger
+							class="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+							disabled={tagKeys.length === 0}
+							aria-label="Group by"
+							title="Group by"
+						>
+							<PlusIcon class="size-3.5" />
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content align="start" class="max-h-72 w-56 overflow-y-auto">
+							{#each tagKeys.filter((k) => !b.groupBy.includes(k)) as k (k)}
+								<DropdownMenu.Item class="font-mono text-xs" onSelect={() => addGroup(k)}>
+									{k}
+								</DropdownMenu.Item>
+							{:else}
+								<p class="px-2 py-1.5 text-xs text-muted-foreground">
+									Already grouped by every key.
+								</p>
+							{/each}
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
+				</div>
 			</div>
 		{/if}
 
@@ -326,7 +340,7 @@
 		</label>
 	</div>
 
-	<div class="flex shrink-0 items-center gap-0.5 pt-0.5">
+	<div class="flex shrink-0 flex-col items-center gap-0.5 pt-0.5 @md:flex-row">
 		<button
 			type="button"
 			class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"

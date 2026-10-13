@@ -46,7 +46,7 @@
 
 <main class="mx-auto max-w-6xl px-6 py-10">
 	<div class="mb-8">
-		<h1 class="font-heading text-3xl font-semibold tracking-tight">
+		<h1 class="font-heading text-3xl font-semibold tracking-tight wrap-anywhere">
 			Witaj{data.user.name ? `, ${data.user.name}` : ''}
 		</h1>
 		<p class="mt-2 text-sm text-muted-foreground">
@@ -58,7 +58,7 @@
 		{#each kafelki as k (k.etykieta)}
 			{@const Ikona = k.ikona}
 			<Card.Root>
-				<Card.Content class="pt-6">
+				<Card.Content>
 					<div class="flex items-start justify-between">
 						<div>
 							<p class="text-sm text-muted-foreground">{k.etykieta}</p>
@@ -114,7 +114,7 @@
 					></pre>
 				<p class="mt-3 text-xs text-muted-foreground">
 					Reszta endpointów — logi, ślady, process-agent — ma osobne zmienne. Opisane w <code
-						>docs/datadog-agent.md</code
+						class="whitespace-nowrap">docs/datadog-agent.md</code
 					>.
 				</p>
 			</Card.Content>

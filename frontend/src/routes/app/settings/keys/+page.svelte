@@ -41,7 +41,9 @@
 	{#if form?.created}
 		<Card.Root class="mb-6 border-primary">
 			<Card.Header>
-				<Card.Title class="text-base">{m.api_key_created({ name: form.name })}</Card.Title>
+				<Card.Title class="text-base wrap-anywhere"
+					>{m.api_key_created({ name: form.name })}</Card.Title
+				>
 				<Card.Description>{m.api_key_created_explained()}</Card.Description>
 			</Card.Header>
 			<Card.Content>
@@ -49,7 +51,7 @@
 					<p class="mb-3 text-xs text-muted-foreground">{m.api_key_not_active_yet()}</p>
 				{/if}
 				<div class="flex items-center gap-2">
-					<code class="flex-1 overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-sm">
+					<code class="min-w-0 flex-1 rounded-md bg-muted px-3 py-2 font-mono text-sm break-all">
 						{form.created}
 					</code>
 					<Button
@@ -82,23 +84,25 @@
 			<Card.Description>{m.api_key_new_hint()}</Card.Description>
 		</Card.Header>
 		<Card.Content>
-			<form method="POST" action="?/create" use:enhance class="flex items-end gap-3">
+			<form method="POST" action="?/create" use:enhance>
 				<input type="hidden" name="tenant" value={data.tenant?.id} />
-				<Field class="flex-1">
+				<Field>
 					<FieldLabel for="name">{m.api_key_name()}</FieldLabel>
-					<Input
-						id="name"
-						name="name"
-						placeholder={m.api_key_name_placeholder()}
-						value={form?.created ? '' : (form?.name ?? '')}
-						maxlength={100}
-						required
-					/>
+					<div class="flex gap-3">
+						<Input
+							id="name"
+							name="name"
+							placeholder={m.api_key_name_placeholder()}
+							value={form?.created ? '' : (form?.name ?? '')}
+							maxlength={100}
+							required
+						/>
+						<Button type="submit">{m.api_key_create()}</Button>
+					</div>
 					{#if form?.error}
 						<FieldError>{form.error}</FieldError>
 					{/if}
 				</Field>
-				<Button type="submit">{m.api_key_create()}</Button>
 			</form>
 		</Card.Content>
 	</Card.Root>
@@ -116,62 +120,86 @@
 			</div>
 		</Card.Root>
 	{:else}
-		<Table.Root>
-			<Table.Header>
-				<Table.Row>
-					<Table.Head>{m.api_key_name()}</Table.Head>
-					<Table.Head>{m.api_key_key()}</Table.Head>
-					<Table.Head>{m.api_key_created_at()}</Table.Head>
-					<Table.Head>{m.api_key_last_used()}</Table.Head>
-					<Table.Head class="w-10"></Table.Head>
-				</Table.Row>
-			</Table.Header>
-			<Table.Body>
-				{#each data.keys as k (k.id)}
+		<!-- Below the width the columns need, a key is its name, with what those
+		     columns hold underneath. -->
+		<div class="@container">
+			<Table.Root>
+				<Table.Header>
 					<Table.Row>
-						<Table.Cell class="font-medium">{k.name}</Table.Cell>
-						<Table.Cell>
-							<code class="text-xs text-muted-foreground">{k.prefix}…</code>
-						</Table.Cell>
-						<Table.Cell class="text-sm text-muted-foreground">{date(k.createdAt)}</Table.Cell>
-						<Table.Cell class="text-sm">
-							{#if k.lastUsedAt}
-								<span class="text-muted-foreground">{date(k.lastUsedAt)}</span>
-							{:else}
-								<Badge variant="outline">{m.api_key_unused()}</Badge>
-							{/if}
-						</Table.Cell>
-						<Table.Cell>
-							<AlertDialog.Root>
-								<AlertDialog.Trigger>
-									{#snippet child({ props })}
-										<Button {...props} variant="ghost" size="icon" aria-label={m.api_key_delete()}>
-											<Trash2Icon class="size-4" />
-										</Button>
-									{/snippet}
-								</AlertDialog.Trigger>
-								<AlertDialog.Content>
-									<AlertDialog.Header>
-										<AlertDialog.Title
-											>{m.api_key_delete_confirm({ name: k.name })}</AlertDialog.Title
-										>
-										<AlertDialog.Description>{m.api_key_delete_explained()}</AlertDialog.Description
-										>
-									</AlertDialog.Header>
-									<AlertDialog.Footer>
-										<AlertDialog.Cancel>{m.cancel()}</AlertDialog.Cancel>
-										<form method="POST" action="?/delete" use:enhance>
-											<input type="hidden" name="tenant" value={data.tenant?.id} />
-											<input type="hidden" name="id" value={k.id} />
-											<AlertDialog.Action type="submit">{m.api_key_delete()}</AlertDialog.Action>
-										</form>
-									</AlertDialog.Footer>
-								</AlertDialog.Content>
-							</AlertDialog.Root>
-						</Table.Cell>
+						<Table.Head>{m.api_key_name()}</Table.Head>
+						<Table.Head class="hidden @2xl:table-cell">{m.api_key_key()}</Table.Head>
+						<Table.Head class="hidden @2xl:table-cell">{m.api_key_created_at()}</Table.Head>
+						<Table.Head class="hidden @2xl:table-cell">{m.api_key_last_used()}</Table.Head>
+						<Table.Head class="w-10"></Table.Head>
 					</Table.Row>
-				{/each}
-			</Table.Body>
-		</Table.Root>
+				</Table.Header>
+				<Table.Body>
+					{#each data.keys as k (k.id)}
+						<Table.Row>
+							<Table.Cell class="font-medium wrap-anywhere whitespace-normal">
+								{k.name}
+								<div class="mt-1 text-xs font-normal text-muted-foreground @2xl:hidden">
+									<code>{k.prefix}…</code> · {m.api_key_created_at()}
+									{date(k.createdAt)} ·
+									{k.lastUsedAt
+										? `${m.api_key_last_used()} ${date(k.lastUsedAt)}`
+										: m.api_key_unused()}
+								</div>
+							</Table.Cell>
+							<Table.Cell class="hidden @2xl:table-cell">
+								<code class="text-xs text-muted-foreground">{k.prefix}…</code>
+							</Table.Cell>
+							<Table.Cell class="hidden text-sm text-muted-foreground @2xl:table-cell"
+								>{date(k.createdAt)}</Table.Cell
+							>
+							<Table.Cell class="hidden text-sm @2xl:table-cell">
+								{#if k.lastUsedAt}
+									<span class="text-muted-foreground">{date(k.lastUsedAt)}</span>
+								{:else}
+									<Badge variant="outline">{m.api_key_unused()}</Badge>
+								{/if}
+							</Table.Cell>
+							<Table.Cell>
+								<AlertDialog.Root>
+									<AlertDialog.Trigger>
+										{#snippet child({ props })}
+											<Button
+												{...props}
+												variant="ghost"
+												size="icon"
+												aria-label={m.api_key_delete()}
+											>
+												<Trash2Icon class="size-4" />
+											</Button>
+										{/snippet}
+									</AlertDialog.Trigger>
+									<AlertDialog.Content>
+										<AlertDialog.Header>
+											<AlertDialog.Title class="wrap-anywhere"
+												>{m.api_key_delete_confirm({ name: k.name })}</AlertDialog.Title
+											>
+											<AlertDialog.Description
+												>{m.api_key_delete_explained()}</AlertDialog.Description
+											>
+										</AlertDialog.Header>
+										<AlertDialog.Footer>
+											<AlertDialog.Cancel>{m.cancel()}</AlertDialog.Cancel>
+											<form method="POST" action="?/delete" use:enhance>
+												<input type="hidden" name="tenant" value={data.tenant?.id} />
+												<input type="hidden" name="id" value={k.id} />
+												<!-- Stretched like Cancel while the footer stacks; the form would not stretch it. -->
+												<AlertDialog.Action type="submit" class="w-full sm:w-auto"
+													>{m.api_key_delete()}</AlertDialog.Action
+												>
+											</form>
+										</AlertDialog.Footer>
+									</AlertDialog.Content>
+								</AlertDialog.Root>
+							</Table.Cell>
+						</Table.Row>
+					{/each}
+				</Table.Body>
+			</Table.Root>
+		</div>
 	{/if}
 </div>

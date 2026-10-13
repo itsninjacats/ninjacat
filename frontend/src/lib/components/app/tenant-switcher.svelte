@@ -44,7 +44,9 @@
 							<span class="text-sm font-semibold">n</span>
 						</div>
 						<div class="grid flex-1 text-left text-sm leading-tight">
-							<span class="truncate font-semibold">{tenant?.name ?? m.tenant_none()}</span>
+							<span class="truncate font-semibold" title={tenant?.name}
+								>{tenant?.name ?? m.tenant_none()}</span
+							>
 							<span class="truncate text-xs text-muted-foreground">
 								{tenant ? roleName(tenant.role) : 'ninjacat'}
 							</span>
@@ -55,7 +57,7 @@
 			</DropdownMenu.Trigger>
 
 			<DropdownMenu.Content
-				class="w-(--bits-dropdown-menu-anchor-width) min-w-56 rounded-lg"
+				class="w-72 max-w-[calc(100vw-2rem)] rounded-lg"
 				side={sidebar.isMobile ? 'bottom' : 'right'}
 				align="start"
 				sideOffset={4}
@@ -64,7 +66,7 @@
 				{#each tenants as option (option.id)}
 					<DropdownMenu.Item onSelect={() => switchTo(option.id)} class="gap-2 p-2">
 						<div class="grid flex-1 leading-tight">
-							<span class="truncate">{option.name}</span>
+							<span class="wrap-anywhere">{option.name}</span>
 							<span class="truncate text-xs text-muted-foreground">{roleName(option.role)}</span>
 						</div>
 						{#if option.id === tenant?.id}

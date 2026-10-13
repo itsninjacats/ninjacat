@@ -14,6 +14,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import * as NativeSelect from '$lib/components/ui/native-select';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import FunctionChips from '$lib/components/app/metrics/function-chips.svelte';
@@ -255,7 +256,7 @@
 			<Card.Root>
 				<Card.Header class="pb-4">
 					<div class="flex flex-wrap items-center justify-between gap-3">
-						<div class="flex items-center gap-1">
+						<div class="flex flex-wrap items-center gap-1">
 							{#each DISPLAY_OPTIONS as d (d.value)}
 								<Button
 									size="sm"
@@ -264,23 +265,24 @@
 									title={d.label}
 								>
 									<d.icon class="size-4" />
-									<span class="hidden sm:inline">{d.label}</span>
+									<span class="hidden @lg/card-header:inline">{d.label}</span>
 								</Button>
 							{/each}
 						</div>
 
-						<div class="flex items-center gap-1">
+						<div class="flex flex-wrap items-center gap-1">
 							{#if scalar}
-								<select
+								<NativeSelect.Root
 									bind:value={view.aggregator}
-									class="h-8 rounded-md border bg-transparent px-2 font-mono text-xs"
+									size="sm"
+									class="shrink-0 font-mono [&>select]:text-xs"
 									aria-label="Reduce the window by"
 									title="How the window becomes one value"
 								>
 									{#each SCALAR_AGGREGATORS as a (a)}
-										<option value={a}>{a}</option>
+										<NativeSelect.Option value={a}>{a}</NativeSelect.Option>
 									{/each}
-								</select>
+								</NativeSelect.Root>
 								<Separator orientation="vertical" class="mx-1 h-5" />
 							{/if}
 							{#each RANGES as r (r.value)}
@@ -335,7 +337,7 @@
 						<Skeleton class="h-[320px] w-full" />
 					{:else if lines.length === 0}
 						<div
-							class="flex h-[320px] items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground"
+							class="flex h-[320px] items-center justify-center rounded-md border border-dashed px-4 text-center text-sm text-muted-foreground"
 						>
 							{request.outputs.length === 0
 								? 'Nothing to draw: pick a metric, or show a query or formula.'
@@ -353,7 +355,7 @@
 
 			<!-- Queries and formulas. Not clipped: the metric list drops below the card. -->
 			<Card.Root class="overflow-visible">
-				<Card.Content class="space-y-2 pt-6">
+				<Card.Content class="space-y-2">
 					{#each view.queries as query, i (query.name)}
 						<QueryRow
 							bind:query={view.queries[i]}
@@ -377,7 +379,7 @@
 							<Input
 								bind:value={formula.text}
 								placeholder="a / b * 100"
-								class="h-8 min-w-60 flex-1 font-mono text-xs"
+								class="h-8 min-w-0 grow basis-60 font-mono text-xs md:text-xs"
 								spellcheck={false}
 							/>
 							<FunctionChips bind:functions={formula.functions} allowModifiers={false} />
@@ -414,14 +416,14 @@
 						</div>
 					{/each}
 
-					<div class="flex items-center gap-2 pt-1">
+					<div class="flex flex-wrap items-center gap-2 pt-1">
 						<Button size="sm" variant="outline" onclick={addQuery}>
 							<PlusIcon class="size-4" /> Query
 						</Button>
 						<Button size="sm" variant="outline" onclick={addFormula}>
 							<PlusIcon class="size-4" /> Formula
 						</Button>
-						<span class="ml-2 text-xs text-muted-foreground">
+						<span class="text-xs text-muted-foreground">
 							Formulas combine queries by name. Hide a query to use it only in formulas.
 						</span>
 					</div>

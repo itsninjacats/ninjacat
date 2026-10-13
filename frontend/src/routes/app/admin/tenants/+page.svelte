@@ -25,8 +25,8 @@
 		<Card.Header>
 			<Card.Title class="text-base">{m.admin_tenant_new()}</Card.Title>
 		</Card.Header>
-		<Card.Content>
-			<form method="POST" action="?/create" use:enhance class="grid gap-4 sm:grid-cols-3">
+		<Card.Content class="@container">
+			<form method="POST" action="?/create" use:enhance class="grid gap-4 @2xl:grid-cols-3">
 				<Field>
 					<FieldLabel for="name">{m.admin_tenant_name()}</FieldLabel>
 					<Input id="name" name="name" value={form?.name ?? ''} maxlength={100} required />
@@ -50,9 +50,9 @@
 					</NativeSelect.Root>
 				</Field>
 				{#if form?.error}
-					<FieldError class="sm:col-span-3">{form.error}</FieldError>
+					<FieldError class="@2xl:col-span-3">{form.error}</FieldError>
 				{/if}
-				<div class="sm:col-span-3">
+				<div class="@2xl:col-span-3">
 					<Button type="submit">{m.admin_tenant_create()}</Button>
 				</div>
 			</form>
@@ -62,30 +62,42 @@
 	{#if data.tenants.length === 0}
 		<p class="text-sm text-muted-foreground">{m.admin_tenants_empty()}</p>
 	{:else}
-		<Table.Root>
-			<Table.Header>
-				<Table.Row>
-					<Table.Head>{m.admin_tenant_name()}</Table.Head>
-					<Table.Head>{m.admin_tenant_slug()}</Table.Head>
-					<Table.Head>{m.admin_members()}</Table.Head>
-					<Table.Head>{m.admin_created()}</Table.Head>
-				</Table.Row>
-			</Table.Header>
-			<Table.Body>
-				{#each data.tenants as tenant (tenant.id)}
+		<!-- Below the width the columns need, the slug goes under the name. -->
+		<div class="@container">
+			<Table.Root>
+				<Table.Header>
 					<Table.Row>
-						<Table.Cell class="font-medium">
-							<a
-								href={resolve('/app/admin/tenants/[id]', { id: tenant.id })}
-								class="hover:underline">{tenant.name}</a
-							>
-						</Table.Cell>
-						<Table.Cell><code class="text-xs">{tenant.slug}</code></Table.Cell>
-						<Table.Cell>{tenant.members}</Table.Cell>
-						<Table.Cell class="text-sm text-muted-foreground">{date(tenant.createdAt)}</Table.Cell>
+						<Table.Head>{m.admin_tenant_name()}</Table.Head>
+						<Table.Head class="hidden @2xl:table-cell">{m.admin_tenant_slug()}</Table.Head>
+						<Table.Head>{m.admin_members()}</Table.Head>
+						<Table.Head class="hidden @2xl:table-cell">{m.admin_created()}</Table.Head>
 					</Table.Row>
-				{/each}
-			</Table.Body>
-		</Table.Root>
+				</Table.Header>
+				<Table.Body>
+					{#each data.tenants as tenant (tenant.id)}
+						<Table.Row>
+							<Table.Cell class="font-medium wrap-anywhere whitespace-normal">
+								<a
+									href={resolve('/app/admin/tenants/[id]', { id: tenant.id })}
+									class="hover:underline">{tenant.name}</a
+								>
+								<div class="mt-1 text-xs font-normal text-muted-foreground @2xl:hidden">
+									<code class="block">{tenant.slug}</code>
+									{m.admin_created()}
+									{date(tenant.createdAt)}
+								</div>
+							</Table.Cell>
+							<Table.Cell class="hidden wrap-anywhere whitespace-normal @2xl:table-cell">
+								<code class="text-xs">{tenant.slug}</code>
+							</Table.Cell>
+							<Table.Cell>{tenant.members}</Table.Cell>
+							<Table.Cell class="hidden text-sm text-muted-foreground @2xl:table-cell"
+								>{date(tenant.createdAt)}</Table.Cell
+							>
+						</Table.Row>
+					{/each}
+				</Table.Body>
+			</Table.Root>
+		</div>
 	{/if}
 </div>

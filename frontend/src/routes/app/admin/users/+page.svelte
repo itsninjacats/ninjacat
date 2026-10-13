@@ -20,11 +20,24 @@
 
 <svelte:head><title>{m.admin_users()} — ninjacat</title></svelte:head>
 
+{#snippet tenantsOf(tenants: (typeof data.users)[number]['tenants'])}
+	{#each tenants as tenant (tenant.id)}
+		<div>
+			<a href={resolve('/app/admin/tenants/[id]', { id: tenant.id })} class="hover:underline"
+				>{tenant.name}</a
+			>
+			<span class="text-muted-foreground">· {roleName(tenant.role)}</span>
+		</div>
+	{:else}
+		<span class="text-muted-foreground">{m.tenant_none()}</span>
+	{/each}
+{/snippet}
+
 <div class="mx-auto max-w-4xl px-6 py-10">
 	<p class="mb-8 text-sm text-muted-foreground">{m.admin_users_intro()}</p>
 
 	{#if form?.created}
-		<p class="mb-6 rounded-md border border-primary px-4 py-3 text-sm" role="status">
+		<p class="mb-6 rounded-md border border-primary px-4 py-3 text-sm wrap-anywhere" role="status">
 			{m.admin_user_created({ email: form.created })}
 		</p>
 	{/if}
@@ -33,8 +46,8 @@
 		<Card.Header>
 			<Card.Title class="text-base">{m.admin_user_new()}</Card.Title>
 		</Card.Header>
-		<Card.Content>
-			<form method="POST" action="?/create" use:enhance class="grid gap-4 sm:grid-cols-3">
+		<Card.Content class="@container">
+			<form method="POST" action="?/create" use:enhance class="grid gap-4 @2xl:grid-cols-3">
 				<Field>
 					<FieldLabel for="email">{m.admin_user_email()}</FieldLabel>
 					<Input id="email" name="email" type="email" value={form?.email ?? ''} required />
@@ -53,7 +66,7 @@
 						required
 					/>
 				</Field>
-				<Field orientation="horizontal" class="sm:col-span-3">
+				<Field orientation="horizontal" class="@2xl:col-span-3">
 					<Checkbox id="admin" name="admin" checked={form?.admin ?? false} />
 					<div>
 						<FieldLabel for="admin">{m.admin_user_instance_admin()}</FieldLabel>
@@ -61,53 +74,57 @@
 					</div>
 				</Field>
 				{#if form?.error}
-					<FieldError class="sm:col-span-3">{form.error}</FieldError>
+					<FieldError class="@2xl:col-span-3">{form.error}</FieldError>
 				{/if}
-				<div class="sm:col-span-3">
+				<div class="@2xl:col-span-3">
 					<Button type="submit">{m.admin_user_create()}</Button>
 				</div>
 			</form>
 		</Card.Content>
 	</Card.Root>
 
-	<Table.Root>
-		<Table.Header>
-			<Table.Row>
-				<Table.Head>{m.admin_member_user()}</Table.Head>
-				<Table.Head>{m.admin_user_tenants()}</Table.Head>
-				<Table.Head>{m.admin_created()}</Table.Head>
-			</Table.Row>
-		</Table.Header>
-		<Table.Body>
-			{#each data.users as user (user.id)}
+	<!-- Below the width the columns need, a user's tenants go under the user. -->
+	<div class="@container">
+		<Table.Root>
+			<Table.Header>
 				<Table.Row>
-					<Table.Cell>
-						<div class="flex items-center gap-2 font-medium">
-							{user.email}
-							{#if user.instanceAdmin}
-								<Badge variant="outline">{m.admin_user_instance_admin()}</Badge>
-							{/if}
-						</div>
-						{#if user.name !== user.email}
-							<div class="text-xs text-muted-foreground">{user.name}</div>
-						{/if}
-					</Table.Cell>
-					<Table.Cell class="text-sm">
-						{#each user.tenants as tenant (tenant.id)}
-							<div>
-								<a
-									href={resolve('/app/admin/tenants/[id]', { id: tenant.id })}
-									class="hover:underline">{tenant.name}</a
-								>
-								<span class="text-muted-foreground">· {roleName(tenant.role)}</span>
-							</div>
-						{:else}
-							<span class="text-muted-foreground">{m.tenant_none()}</span>
-						{/each}
-					</Table.Cell>
-					<Table.Cell class="text-sm text-muted-foreground">{date(user.createdAt)}</Table.Cell>
+					<Table.Head>{m.admin_member_user()}</Table.Head>
+					<Table.Head class="hidden @2xl:table-cell">{m.admin_user_tenants()}</Table.Head>
+					<Table.Head class="hidden @2xl:table-cell">{m.admin_created()}</Table.Head>
 				</Table.Row>
-			{/each}
-		</Table.Body>
-	</Table.Root>
+			</Table.Header>
+			<Table.Body>
+				{#each data.users as user (user.id)}
+					<Table.Row>
+						<Table.Cell class="align-top wrap-anywhere whitespace-normal">
+							<div class="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
+								{user.email}
+								{#if user.instanceAdmin}
+									<Badge variant="outline">{m.admin_user_instance_admin()}</Badge>
+								{/if}
+							</div>
+							{#if user.name !== user.email}
+								<div class="text-xs text-muted-foreground">{user.name}</div>
+							{/if}
+							<div class="mt-2 text-sm @2xl:hidden">
+								{@render tenantsOf(user.tenants)}
+								<div class="mt-1 text-xs text-muted-foreground">
+									{m.admin_created()}
+									{date(user.createdAt)}
+								</div>
+							</div>
+						</Table.Cell>
+						<Table.Cell
+							class="hidden align-top text-sm wrap-anywhere whitespace-normal @2xl:table-cell"
+						>
+							{@render tenantsOf(user.tenants)}
+						</Table.Cell>
+						<Table.Cell class="hidden align-top text-sm text-muted-foreground @2xl:table-cell"
+							>{date(user.createdAt)}</Table.Cell
+						>
+					</Table.Row>
+				{/each}
+			</Table.Body>
+		</Table.Root>
+	</div>
 </div>

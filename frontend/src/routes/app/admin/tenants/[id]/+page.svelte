@@ -51,6 +51,24 @@
 
 <svelte:head><title>{data.tenant.name} — ninjacat</title></svelte:head>
 
+{#snippet roleForm(member: (typeof data.members)[number])}
+	<form method="POST" action="?/role" use:enhance={roleChange(member.id)}>
+		<input type="hidden" name="member" value={member.id} />
+		<NativeSelect.Root
+			name="role"
+			size="sm"
+			class="w-36"
+			value={member.role}
+			aria-label={m.admin_member_role()}
+			onchange={(e) => e.currentTarget.form?.requestSubmit()}
+		>
+			{#each tenantRoles as role (role)}
+				<NativeSelect.Option value={role}>{roleName(role)}</NativeSelect.Option>
+			{/each}
+		</NativeSelect.Root>
+	</form>
+{/snippet}
+
 <div class="mx-auto max-w-4xl px-6 py-10">
 	<a
 		href={resolve('/app/admin/tenants')}
@@ -60,8 +78,10 @@
 		{m.admin_all_tenants()}
 	</a>
 	<div class="mb-8">
-		<h2 class="font-heading text-2xl font-semibold tracking-tight">{data.tenant.name}</h2>
-		<p class="mt-1 text-sm text-muted-foreground">
+		<h2 class="font-heading text-2xl font-semibold tracking-tight wrap-anywhere">
+			{data.tenant.name}
+		</h2>
+		<p class="mt-1 text-sm wrap-anywhere text-muted-foreground">
 			<code>{data.tenant.slug}</code> · <code>{data.tenant.id}</code>
 		</p>
 	</div>
@@ -106,85 +126,74 @@
 	{#if data.members.length === 0}
 		<p class="text-sm text-muted-foreground">{m.admin_members_empty()}</p>
 	{:else}
-		<Table.Root>
-			<Table.Header>
-				<Table.Row>
-					<Table.Head>{m.admin_member_user()}</Table.Head>
-					<Table.Head class="w-44">{m.admin_member_role()}</Table.Head>
-					<Table.Head class="w-10"></Table.Head>
-				</Table.Row>
-			</Table.Header>
-			<Table.Body>
-				{#each data.members as member (member.id)}
+		<!-- Below the width a role column needs beside an e-mail, the role goes
+		     under the e-mail. -->
+		<div class="@container">
+			<Table.Root>
+				<Table.Header>
 					<Table.Row>
-						<Table.Cell>
-							<div class="font-medium">{member.email}</div>
-							{#if member.name !== member.email}
-								<div class="text-xs text-muted-foreground">{member.name}</div>
-							{/if}
-						</Table.Cell>
-						<Table.Cell>
-							<form method="POST" action="?/role" use:enhance={roleChange(member.id)}>
-								<input type="hidden" name="member" value={member.id} />
-								<NativeSelect.Root
-									name="role"
-									size="sm"
-									class="w-full"
-									value={member.role}
-									aria-label={m.admin_member_role()}
-									onchange={(e) => e.currentTarget.form?.requestSubmit()}
-								>
-									{#each tenantRoles as role (role)}
-										<NativeSelect.Option value={role}>{roleName(role)}</NativeSelect.Option>
-									{/each}
-								</NativeSelect.Root>
-							</form>
-						</Table.Cell>
-						<Table.Cell>
-							<AlertDialog.Root
-								bind:open={
-									() => removing === member.id, (open) => (removing = open ? member.id : null)
-								}
-							>
-								<AlertDialog.Trigger>
-									{#snippet child({ props })}
-										<Button
-											{...props}
-											variant="ghost"
-											size="icon"
-											aria-label={m.admin_member_remove()}
-										>
-											<Trash2Icon class="size-4" />
-										</Button>
-									{/snippet}
-								</AlertDialog.Trigger>
-								<AlertDialog.Content>
-									<AlertDialog.Header>
-										<AlertDialog.Title>
-											{m.admin_member_remove_confirm({
-												email: member.email,
-												tenant: data.tenant.name
-											})}
-										</AlertDialog.Title>
-										<AlertDialog.Description>
-											{m.admin_member_remove_explained()}
-										</AlertDialog.Description>
-									</AlertDialog.Header>
-									<AlertDialog.Footer>
-										<AlertDialog.Cancel>{m.cancel()}</AlertDialog.Cancel>
-										<form method="POST" action="?/remove" use:enhance={remove}>
-											<input type="hidden" name="member" value={member.id} />
-											<AlertDialog.Action type="submit"
-												>{m.admin_member_remove()}</AlertDialog.Action
-											>
-										</form>
-									</AlertDialog.Footer>
-								</AlertDialog.Content>
-							</AlertDialog.Root>
-						</Table.Cell>
+						<Table.Head>{m.admin_member_user()}</Table.Head>
+						<Table.Head class="hidden w-40 @md:table-cell">{m.admin_member_role()}</Table.Head>
+						<Table.Head class="w-10"></Table.Head>
 					</Table.Row>
-				{/each}
-			</Table.Body>
-		</Table.Root>
+				</Table.Header>
+				<Table.Body>
+					{#each data.members as member (member.id)}
+						<Table.Row>
+							<Table.Cell class="wrap-anywhere whitespace-normal">
+								<div class="font-medium">{member.email}</div>
+								{#if member.name !== member.email}
+									<div class="text-xs text-muted-foreground">{member.name}</div>
+								{/if}
+								<div class="mt-2 @md:hidden">{@render roleForm(member)}</div>
+							</Table.Cell>
+							<Table.Cell class="hidden @md:table-cell">{@render roleForm(member)}</Table.Cell>
+							<Table.Cell>
+								<AlertDialog.Root
+									bind:open={
+										() => removing === member.id, (open) => (removing = open ? member.id : null)
+									}
+								>
+									<AlertDialog.Trigger>
+										{#snippet child({ props })}
+											<Button
+												{...props}
+												variant="ghost"
+												size="icon"
+												aria-label={m.admin_member_remove()}
+											>
+												<Trash2Icon class="size-4" />
+											</Button>
+										{/snippet}
+									</AlertDialog.Trigger>
+									<AlertDialog.Content>
+										<AlertDialog.Header>
+											<AlertDialog.Title class="wrap-anywhere">
+												{m.admin_member_remove_confirm({
+													email: member.email,
+													tenant: data.tenant.name
+												})}
+											</AlertDialog.Title>
+											<AlertDialog.Description>
+												{m.admin_member_remove_explained()}
+											</AlertDialog.Description>
+										</AlertDialog.Header>
+										<AlertDialog.Footer>
+											<AlertDialog.Cancel>{m.cancel()}</AlertDialog.Cancel>
+											<form method="POST" action="?/remove" use:enhance={remove}>
+												<input type="hidden" name="member" value={member.id} />
+												<AlertDialog.Action type="submit" class="w-full sm:w-auto"
+													>{m.admin_member_remove()}</AlertDialog.Action
+												>
+											</form>
+										</AlertDialog.Footer>
+									</AlertDialog.Content>
+								</AlertDialog.Root>
+							</Table.Cell>
+						</Table.Row>
+					{/each}
+				</Table.Body>
+			</Table.Root>
+		</div>
 	{/if}
 </div>

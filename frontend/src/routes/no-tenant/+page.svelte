@@ -15,7 +15,7 @@
 	<Card.Root class="w-full max-w-md">
 		<Card.Header>
 			<Card.Title>{m.no_tenant()}</Card.Title>
-			<Card.Description>{data.email}</Card.Description>
+			<Card.Description class="wrap-anywhere">{data.email}</Card.Description>
 		</Card.Header>
 		<Card.Content>
 			<p class="text-sm leading-relaxed text-muted-foreground">{m.no_tenant_explained()}</p>
