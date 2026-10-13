@@ -79,6 +79,11 @@ Open, most urgent first:
       A `kind` column on `api_key` (the panel's schema), carried as a claim by the keeper;
       the browser scheme takes only client keys, the other three refuse them; the keys page
       lets one be made. Until then, do not set `PUBLIC_NINJACAT_RUM_*` on a public panel.
+- [ ] **Any member of a tenant manages its API keys.** The keys page
+      (`frontend/src/routes/app/settings/keys/`) checks the tenant, not the role, so a
+      `member` can make a key that writes into the tenant or delete the one production uses.
+      Until RBAC (tenants.md defers it), limit create and delete to `owner` and `admin`
+      (`locals.tenant.role`), or do not give anyone the `member` role.
 - [ ] Logs over TCP (:10516): on by default in the image (the chart turns it off), plain
       text unless given a certificate, no limit on connections, no timeout, the key checked
       only when a whole frame has arrived.
@@ -484,6 +489,9 @@ data is here; the product is not.
       routes skip the row lock `changeMember` takes, so an owner there and the instance
       admin at the same moment could leave a tenant with no owner. Route both through one
       path, or disable those routes once the members page above exists.
+- [ ] Nothing writes `api_key.last_used_at`, so the keys page shows every key as never
+      used. The intake looks a key up on every request and the keeper is its only reader of
+      Postgres; a write per request is too many, one per key per keeper cycle is enough.
 - [ ] Accounts on the admin pages: ban, delete, reset a password. The admin plugin has the
       calls (`banUser`, `removeUser`, `setUserPassword`); the pages offer none yet.
 - [ ] Data retention set in the panel. For now `NINJACAT_METRICS_RETENTION_DAYS` and
@@ -497,6 +505,10 @@ data is here; the product is not.
 ## 8. Language debt
 
 English is canonical; what is still Polish is listed in `CLAUDE.md` ("Language policy"):
-`api/docs/**`, `frontend/docs/**`, route segments (`/zadania`, `/app/ustawienia/klucze`),
-identifiers in `frontend/src/lib/server/api-keys.ts`. Translate when touched; rename routes
-in one deliberate batch.
+`api/docs/**`, `frontend/docs/**`, route segments (`/zadania`). Translate when touched;
+rename routes in one deliberate batch.
+
+- [ ] `frontend/docs/auth-i-ochrona-tras.md` is out of date as well as Polish: it calls the
+      layout's load the guard (the guard is `lib/server/guard.ts`, in `handle`, since
+      2026-10-02) and names routes and actions that are gone (`/app/ustawienia/klucze`,
+      `?/utworz`, `zaloguj`, `wyloguj`). Rewrite it in English from the code, or delete it.

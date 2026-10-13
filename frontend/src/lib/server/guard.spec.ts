@@ -53,7 +53,7 @@ describe('the guard in front of every route', () => {
 		expect(await outcome(event({ route: '/login' }))).toBe('resolved');
 		expect(await outcome(event({ route: '/' }))).toBe('redirect /login');
 		expect(await outcome(event({ route: '/app/logs' }))).toBe('redirect /login');
-		expect(await outcome(event({ route: '/app/ustawienia/klucze' }))).toBe('redirect /login');
+		expect(await outcome(event({ route: '/app/settings/keys' }))).toBe('redirect /login');
 		// A path with no route: a remote function, or nothing at all.
 		expect(await outcome(event({ route: null }))).toBe('redirect /login');
 	});
@@ -73,7 +73,7 @@ describe('the guard in front of every route', () => {
 
 	it('redirects an enhanced form action, which SvelteKit answers with a redirect result', async () => {
 		const action = {
-			route: '/app/ustawienia/klucze',
+			route: '/app/settings/keys',
 			method: 'POST',
 			accept: 'application/json',
 			enhanced: true
@@ -102,9 +102,9 @@ describe('the guard in front of every route', () => {
 				event({ route: '/app/metrics/query', ...noTenant, method: 'POST', accept: '*/*' })
 			)
 		).toBe('403');
-		expect(
-			await outcome(event({ route: '/app/ustawienia/klucze', ...noTenant, method: 'POST' }))
-		).toBe('403');
+		expect(await outcome(event({ route: '/app/settings/keys', ...noTenant, method: 'POST' }))).toBe(
+			'403'
+		);
 	});
 
 	it('does not let a visitor see the no-tenant page', async () => {

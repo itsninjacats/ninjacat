@@ -17,10 +17,6 @@ export function requireInstanceAdmin(locals: App.Locals) {
 	return user;
 }
 
-export function formText(form: FormData, name: string): string {
-	return form.get(name)?.toString().trim() ?? '';
-}
-
 // Better Auth reports what it refused as a code in the error's body.
 export function authErrorCode(e: unknown): string | undefined {
 	return isAPIError(e) ? e.body?.code : undefined;

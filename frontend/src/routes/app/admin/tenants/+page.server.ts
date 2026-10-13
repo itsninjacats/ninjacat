@@ -3,12 +3,8 @@ import { asc, count, eq } from 'drizzle-orm';
 import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { member, organization, user } from '$lib/server/db/schema';
-import {
-	authErrorCode,
-	formText,
-	isUniqueViolation,
-	requireInstanceAdmin
-} from '$lib/server/admin';
+import { authErrorCode, isUniqueViolation, requireInstanceAdmin } from '$lib/server/admin';
+import { formText } from '$lib/server/form';
 import { m } from '$lib/paraglide/messages';
 import type { Actions, PageServerLoad } from './$types';
 

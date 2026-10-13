@@ -38,7 +38,7 @@
 	];
 
 	const settings = $derived([
-		{ title: 'API keys', url: '/app/ustawienia/klucze', icon: KeyRoundIcon },
+		{ title: m.api_keys(), url: '/app/settings/keys', icon: KeyRoundIcon },
 		...(instanceAdmin
 			? [
 					{ title: m.tenants(), url: '/app/admin/tenants', icon: BuildingIcon },

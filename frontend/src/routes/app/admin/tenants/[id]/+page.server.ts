@@ -6,10 +6,10 @@ import { member, organization, user } from '$lib/server/db/schema';
 import {
 	authErrorCode,
 	changeMember,
-	formText,
 	isUniqueViolation,
 	requireInstanceAdmin
 } from '$lib/server/admin';
+import { formText } from '$lib/server/form';
 import { isTenantRole, type TenantRole } from '$lib/tenant';
 import { m } from '$lib/paraglide/messages';
 import type { Actions, PageServerLoad } from './$types';
