@@ -18,7 +18,7 @@ open NinjaCat.Api.Engine.Query.Compile
 /// it, and all run in parallel.
 let private fetchAll (execute: Sql -> Task<Row list>) (tenant: TenantId) (window: Plan) (nodes: Node list) : Task<Evaluate.Fetched> =
     task {
-        let keys = nodes |> List.collect Evaluate.fetches |> List.distinct
+        let keys = nodes |> List.collect fetches |> List.distinct
 
         let! series =
             keys
@@ -121,7 +121,7 @@ let evaluate (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : 
                 let step = s.Step
                 let window =
                     { plan with
-                        From = plan.To - seasonalHistory s
+                        From = plan.To - seasonalHistory plan.Retention s
                         Step = step
                         Queries = plan.Queries |> List.map (fun q -> { q with Step = step }) }
 
@@ -135,7 +135,7 @@ let evaluate (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : 
         // evaluated from there, and the series trimmed back to the window.
         let evalOutput (o: Output) : Task<Series.OutputSeries list> =
             task {
-                let stepMs = fetched.StepMs[Evaluate.fetches o.Node |> List.head |> fst]
+                let stepMs = fetched.StepMs[fetches o.Node |> List.head |> fst]
                 let visible (s: Series.Series) = { s with Points = s.Points |> Map.filter (fun t _ -> t >= fromMs) }
 
                 let withExtras (historyFrom: int64) (extra: Series.Series -> Series.SeriesExtra) =

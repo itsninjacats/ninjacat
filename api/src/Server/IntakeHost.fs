@@ -54,7 +54,7 @@ let run (cfg: Config.Config) (args: string[]) : int =
     let writeClient = ClickHouse.createWriteClient cfg
 
     if cfg.AutoMigrate then
-        match (Migrations.apply writeClient).GetAwaiter().GetResult() with
+        match (ClickHouse.migrate cfg).GetAwaiter().GetResult() with
         | Ok 0 -> ()
         | Ok applied -> printfn "storage: applied %d schema migration(s)" applied
         | Error e -> failwith e

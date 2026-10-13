@@ -12,7 +12,8 @@ let private plan =
       To = DateTimeOffset.FromUnixTimeMilliseconds 1711981200000L
       Step = TimeSpan.FromSeconds 20.0
       Queries = []
-      Outputs = [] }
+      Outputs = []
+      Retention = defaultRetention }
 
 let private query filter groupBy =
     { Metric = "system.cpu.user"
@@ -140,3 +141,52 @@ let ``with a fill, series come back one by one`` () =
     Assert.Contains("v AS value, series_id", sql.Text)
     Assert.Contains("ORDER BY g0, series_id, bucket", sql.Text)
     Assert.DoesNotContain("sum(v)", sql.Text)
+
+// --- the rollup ------------------------------------------------------------------
+
+[<Fact>]
+let ``a step of whole minutes reads the rollup, a finer one the raw points`` () =
+    Assert.Contains("FROM metrics\n", (withTime (Plain Avg) 20.0).Text)
+    let rollup = (withTime (Plain Avg) 60.0).Text
+    Assert.Contains("FROM metrics_1m\n", rollup)
+    Assert.Contains("toStartOfInterval(minute, toIntervalSecond({step", rollup)
+    Assert.Contains("AND minute >= fromUnixTimestamp64Milli({from", rollup)
+
+[<Fact>]
+let ``the rollup stops at the minute holding to, and the raw points finish it`` () =
+    let rollup = (withTime (Plain Avg) 60.0).Text
+    Assert.Contains("AND minute < toStartOfMinute(fromUnixTimestamp64Milli({to", rollup)
+    Assert.Contains("UNION ALL", rollup)
+    Assert.Contains("AND timestamp >= greatest(fromUnixTimestamp64Milli({from", rollup)
+    Assert.Contains("AND timestamp < fromUnixTimestamp64Milli({to", rollup)
+    Assert.Contains("countState(value), avgState(value), minState(value), maxState(value), sumState(value)", rollup)
+
+[<Fact>]
+let ``the rollup merges its states, an average from sums and counts`` () =
+    Assert.Contains("avgMerge(value_avg) AS v", (withTime (Plain Avg) 60.0).Text)
+    Assert.Contains("sumMerge(value_sum) AS v", (withTime (Plain Sum) 60.0).Text)
+    Assert.Contains("minMerge(value_min) AS v", (withTime (Plain Min) 60.0).Text)
+    Assert.Contains("maxMerge(value_max) AS v", (withTime (Plain Max) 300.0).Text)
+    Assert.Contains("toFloat64(countMerge(points)) AS v", (withTime (Plain Count) 60.0).Text)
+
+[<Fact>]
+let ``as_count and as_rate on the rollup read a rate's events`` () =
+    let count = (withTime AsCount 60.0).Text
+    Assert.Contains("any(metric_type) = 'RATE', sumMerge(value_events)", count)
+    Assert.Contains("any(metric_type) = 'COUNT', sumMerge(value_sum), avgMerge(value_avg)) AS v", count)
+    let rate = (withTime AsRate 60.0).Text
+    Assert.Contains("sumMerge(value_events) / greatest({step", rate)
+    Assert.Contains("}, max(interval))", rate)
+
+[<Fact>]
+let ``a filter and a group compile the same for both tables`` () =
+    let q = { query (And [ Tag("env", "prod"); Tag("host", "web-*") ]) [ "host"; "role" ] with Step = TimeSpan.FromMinutes 1.0 }
+    let raw = (compileOn PointsTable (TenantId "acme") plan q).Text
+    let rollup = (compileOn RollupTable (TenantId "acme") plan q).Text
+    let between (first: string) (last: string) (sql: string) =
+        let start = sql.IndexOf first
+        sql.Substring(start, sql.IndexOf(last, start) - start)
+    let filter = between "AND (" "\n" raw
+    // Both parts of the rollup's read filter it as the raw table does.
+    Assert.Equal(3, rollup.Split(filter).Length)
+    Assert.Equal(between "SELECT series_id, " "toStartOfInterval" raw, between "SELECT series_id, " "toStartOfInterval" rollup)

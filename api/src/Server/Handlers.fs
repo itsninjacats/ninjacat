@@ -16,6 +16,8 @@ let private errors (status: int) (msgs: string list) : EndpointHandler =
 
 let private badRequest (msg: string) : EndpointHandler = errors StatusCodes.Status400BadRequest [ msg ]
 
+let private retention (ctx: HttpContext) = ctx.GetService<Config.Config>().MetricsRetention
+
 let ping: EndpointHandler = text "pong"
 
 let health: EndpointHandler =
@@ -63,7 +65,7 @@ let queryTimeseries: EndpointHandler =
 
             let planned =
                 NinjaCat.Api.Engine.Api.V2.Timeseries.read body
-                |> Result.bind NinjaCat.Api.Engine.Query.Plan.plan
+                |> Result.bind (NinjaCat.Api.Engine.Query.Plan.plan (retention ctx) DateTimeOffset.UtcNow)
 
             match planned with
             | Error msgs -> return! errors StatusCodes.Status400BadRequest msgs ctx
@@ -90,7 +92,9 @@ let queryScalar: EndpointHandler =
 
             let planned =
                 NinjaCat.Api.Engine.Api.V2.Scalar.read body
-                |> Result.bind (fun r -> NinjaCat.Api.Engine.Query.Plan.plan r.Request |> Result.map (fun p -> p, r))
+                |> Result.bind (fun r ->
+                    NinjaCat.Api.Engine.Query.Plan.plan (retention ctx) DateTimeOffset.UtcNow r.Request
+                    |> Result.map (fun p -> p, r))
 
             match planned with
             | Error msgs -> return! errors StatusCodes.Status400BadRequest msgs ctx

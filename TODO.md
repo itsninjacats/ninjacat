@@ -483,6 +483,18 @@ data is here; the product is not.
 - [ ] **`processes.has_create_time` + `create_time`** would be one `Nullable(DateTime)`.
       The squash kept the pair to stay identical to the old chain; folding it changes the
       row writers in `Rows/Process.fs`.
+- [ ] **0002 refills `metrics_1m` in one `INSERT … SELECT … GROUP BY`** over every raw
+      point kept. Fine on the databases that exist; on a large `metrics` it could run past
+      the migration client's hour or out of memory, and the next start would redo it. Batch
+      it by day if such a database ever has to take it.
+- [ ] **The query process does not read the metrics TTLs back.** It plans by
+      `NINJACAT_METRICS_RETENTION_DAYS`/`_ROLLUP_RETENTION_DAYS` from its own environment,
+      so the chart and the compose files must hand `query` the same values as `intake` and
+      the migrate job (not passed anywhere yet). Reading `system.tables` at start would
+      remove the duplication.
+- [ ] **An unaligned `to` older than the raw retention** loses its last part minute: the
+      rollup stops at the minute holding `to`, and the raw points that would finish it
+      are gone.
 
 ## 7. Panel
 
@@ -526,8 +538,7 @@ data is here; the product is not.
 - [ ] Accounts on the admin pages: ban, delete, reset a password. The admin plugin has the
       calls (`banUser`, `removeUser`, `setUserPassword`); the pages offer none yet.
 - [ ] Data retention set in the panel. For now `NINJACAT_METRICS_RETENTION_DAYS` and
-      `NINJACAT_METRICS_ROLLUP_RETENTION_DAYS` (planned, monitors.md); other tables keep a
-      fixed TTL.
+      `NINJACAT_METRICS_ROLLUP_RETENTION_DAYS`; other tables keep a fixed TTL.
 - [ ] On-call, built in-house (on-prem sovereignty): external services only as optional
       channels.
 - [ ] "NinjaCat on NinjaCat": a stateless watchdog that alerts through one simple channel

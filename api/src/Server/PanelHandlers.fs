@@ -101,13 +101,15 @@ let metricQuery: EndpointHandler =
                       GroupBy = queryValues ctx "by" }
 
                 let execute = ClickHouse.metricRows (ctx.GetService<ClickHouseClient>()) ctx.RequestAborted
+                let retention = ctx.GetService<Config.Config>().MetricsRetention
+                let now = DateTimeOffset.UtcNow
 
                 // A failure in ClickHouse is the caller's 400 with its
                 // reason, as for the other lookups.
                 let! answer =
                     task {
                         try
-                            return! Query.Engine.parsed execute (QueryToken.tenant ctx) [ "q" ] (Panel.seriesRequest query)
+                            return! Query.Engine.parsed execute (QueryToken.tenant ctx) retention now [ "q" ] (Panel.seriesRequest query)
                         with e ->
                             ctx.GetService<ILoggerFactory>().CreateLogger("NinjaCat.Api.Panel").LogWarning("query: {Error}", e.Message)
                             return Error [ e.Message ]
@@ -121,7 +123,7 @@ let metricQuery: EndpointHandler =
                             {| metric = metric
                                from = from.UtcDateTime
                                ``to`` = until.UtcDateTime
-                               step = int (Query.Plan.step (until - from) query.Step).TotalSeconds
+                               step = int (Query.Plan.requestStep retention now from until query.Step).TotalSeconds
                                series =
                                 [ for series in Panel.seriesOf query results ->
                                       {| metric = metric

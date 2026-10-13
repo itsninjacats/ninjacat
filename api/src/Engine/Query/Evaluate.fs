@@ -188,30 +188,6 @@ let private alongTime (fn: TimewiseFn) (stepMs: int64) (s: Series) : Series =
 let private trim (fromMs: int64) (series: Series list) =
     series |> List.map (fun s -> { s with Points = s.Points |> Map.filter (fun t _ -> t >= fromMs) })
 
-// --- the tree ---------------------------------------------------------------------
-
-/// What a node reads: which query, and shifted by how much. The same query
-/// may be read at several offsets (`a` and `week_before(a)` side by side);
-/// each is one trip to ClickHouse.
-let rec fetches (node: Node) : (int * int64) list =
-    let rec go (shift: int64) node =
-        match node with
-        | Fetch i -> [ i, shift ]
-        | Shift(offset, inner) -> go (shift + offset) inner
-        | Pointwise(_, inner)
-        | Top(inner, _, _, _)
-        | CountNonzero inner
-        | CountNotNull inner
-        | ExcludeNull inner
-        | Timewise(_, inner)
-        | DefaultZero inner
-        | Outliers(inner, _, _) -> go shift inner
-        | Arith(_, l, r) -> go shift l @ go shift r
-        | Constant _
-        | TimeOfPoint -> []
-
-    go 0L node
-
 // --- arithmetic ---------------------------------------------------------------------
 
 /// One operation on two values; None where it has no finite answer.

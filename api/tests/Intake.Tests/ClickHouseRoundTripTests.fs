@@ -14,7 +14,10 @@ open ClickHouse.Driver
 open ClickHouse.Driver.ADO
 open Microsoft.Extensions.Logging
 open Xunit
+open NinjaCat.Api.Engine
+open NinjaCat.Api.Engine.Query
 open NinjaCat.Api.Storage
+open NinjaCat.Api.Storage.Rows
 open NinjaCat.Api.Intake.Tests.Golden
 
 let private env (name: string) (fallback: string) =
@@ -51,11 +54,10 @@ type private ErrorLog() =
                 let cause = if isNull error then "" else ": " + error.GetBaseException().Message
                 lock errors (fun () -> errors.Add(format.Invoke(state, error) + cause))
 
-/// Runs `write` against the real sink over a scratch database built from the
-/// migrations, then fails for every table that did not take all of its rows.
-/// `expected` is the number of rows per table. Skips when ClickHouse is not
+/// Runs `test` against a database of its own, dropped afterwards; with
+/// `migrated`, built from the migrations. Skips when ClickHouse is not
 /// reachable.
-let roundTrip (expected: Map<string, int>) (write: ISink -> unit) : unit =
+let private inScratch (migrated: bool) (test: ClickHouseClient -> unit) : unit =
     let admin = client "default"
 
     try
@@ -69,10 +71,21 @@ let roundTrip (expected: Map<string, int>) (write: ISink -> unit) : unit =
     try
         let scratch = client database
 
-        match (Migrations.apply scratch).GetAwaiter().GetResult() with
-        | Error e -> Assert.Fail e
-        | Ok _ -> ()
+        if migrated then
+            match (Migrations.apply scratch).GetAwaiter().GetResult() with
+            | Error e -> Assert.Fail e
+            | Ok _ -> ()
 
+        test scratch
+    finally
+        admin.ExecuteNonQueryAsync($"DROP DATABASE IF EXISTS {database}").GetAwaiter().GetResult() |> ignore
+
+/// Runs `write` against the real sink over a scratch database built from the
+/// migrations, then fails for every table that did not take all of its rows.
+/// `expected` is the number of rows per table. Skips when ClickHouse is not
+/// reachable.
+let roundTrip (expected: Map<string, int>) (write: ISink -> unit) : unit =
+    inScratch true (fun scratch ->
         let log = ErrorLog()
         let sink = ClickHouseSink(scratch, log)
         write sink
@@ -88,9 +101,7 @@ let roundTrip (expected: Map<string, int>) (write: ISink -> unit) : unit =
                   | None -> $"{pair.Key}: nothing written, {pair.Value} rows expected" ]
 
         if not failures.IsEmpty || not log.Errors.IsEmpty then
-            Assert.Fail(String.concat "\n" (failures @ log.Errors))
-    finally
-        admin.ExecuteNonQueryAsync($"DROP DATABASE IF EXISTS {database}").GetAwaiter().GetResult() |> ignore
+            Assert.Fail(String.concat "\n" (failures @ log.Errors)))
 
 [<Fact>]
 let ``every row the fixtures produce fits its ClickHouse table`` () =
@@ -108,19 +119,7 @@ let ``every row the fixtures produce fits its ClickHouse table`` () =
 
 [<Fact>]
 let ``times ClickHouse cannot hold are brought into range, not the end of the batch`` () =
-    let admin = client "default"
-
-    try
-        admin.PingAsync().GetAwaiter().GetResult() |> ignore
-    with _ ->
-        Assert.Skip "ClickHouse is not reachable"
-
-    let database = "ninjacat_roundtrip_" + Guid.NewGuid().ToString "N"
-    admin.ExecuteNonQueryAsync($"CREATE DATABASE {database}").GetAwaiter().GetResult() |> ignore
-
-    try
-        let scratch = client database
-
+    inScratch false (fun scratch ->
         scratch
             .ExecuteNonQueryAsync(
                 "CREATE TABLE times (id UInt8, plain DateTime('UTC'), milli DateTime64(3, 'UTC'), nano DateTime64(9, 'UTC'), "
@@ -160,6 +159,160 @@ let ``times ClickHouse cannot hold are brought into range, not the end of the ba
               [ "2105-12-31 23:59:59"; "2262-04-11 23:47:16.000"; "1970-01-01 00:00:00.000000000"; "2026-06-01 00:00:00.000"; "['2026-06-01 00:00:00.000']" ]
               [ "1970-01-01 00:00:00"; "1900-01-01 00:00:00.000"; "1970-01-01 00:00:00.000000001"; ""; "[]" ] ],
             rows
-        )
-    finally
-        admin.ExecuteNonQueryAsync($"DROP DATABASE IF EXISTS {database}").GetAwaiter().GetResult() |> ignore
+        ))
+
+// --- the one-minute rollup ----------------------------------------------------------------
+
+/// Half an hour of points every 15 s, off the minute and with some missing,
+/// so minutes hold different numbers of points, from three hosts: a gauge, a
+/// count and two rates (one with interval 0). web-2 carries two roles, so it
+/// sits in two groups.
+let private rollupPoints (start: DateTime) : MetricPoint[] =
+    let hosts =
+        [ "web-1", Map [ "env", [| "prod" |]; "role", [| "api" |] ]
+          "web-2", Map [ "env", [| "prod" |]; "role", [| "api"; "web" |] ]
+          "web-3", Map [ "env", [| "dev" |]; "role", [| "web" |] ] ]
+
+    let metrics = [ "rt.gauge", "GAUGE", 0u; "rt.count", "COUNT", 10u; "rt.rate", "RATE", 15u; "rt.rate0", "RATE", 0u ]
+
+    [| for metric, kind, interval in metrics do
+           for h, (host, tags) in List.indexed hosts do
+               for i in 0..119 do
+                   if (i * 13 + h) % 5 <> 0 then
+                       let at = start.AddSeconds(7.0 + 15.0 * float i)
+                       let value = float ((i * 37 + h * 11) % 23) + 0.25 * float h
+
+                       { Metrics.point "default" at metric value with
+                           Host = host
+                           MetricType = kind
+                           Interval = interval
+                           Tags = tags } |]
+
+let private writePoints (scratch: ClickHouseClient) (points: MetricPoint[]) =
+    let log = ErrorLog()
+    let sink = ClickHouseSink(scratch, log)
+    (sink :> ISink).Write(Metrics.table, points)
+    sink.StopAsync().GetAwaiter().GetResult()
+    Assert.Empty log.Errors
+
+[<Fact>]
+let ``the rollup answers whole-minute steps as the raw points do`` () =
+    inScratch true (fun scratch ->
+        // Recent, so the tables' TTLs keep it.
+        let now = DateTime.UtcNow
+        let start = DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0, DateTimeKind.Utc).AddHours -2.0
+        writePoints scratch (rollupPoints start)
+
+        let window (from: DateTime) (until: DateTime) : Plan.Plan =
+            { From = DateTimeOffset from
+              To = DateTimeOffset until
+              Step = TimeSpan.FromMinutes 1.0
+              Queries = []
+              Outputs = []
+              Retention = Plan.defaultRetention }
+
+        // Aligned; then a `to` inside a minute with points after it, as a
+        // shifted read or a window in the past has; then `from` inside one too.
+        let windows =
+            [ window start (start.AddMinutes 30.0)
+              window start (start.AddSeconds(17.0 * 60.0 + 37.0))
+              window (start.AddSeconds(3.0 * 60.0 + 10.0)) (start.AddSeconds(17.0 * 60.0 + 37.0)) ]
+
+        // The bucket holding an unaligned `from` is partial in both tables
+        // and the engine drops it (keepFromMs); so does this.
+        let rows (plan: Plan.Plan) (table: Plan.Table) (query: Plan.QueryPlan) =
+            Compile.compileOn table (TenantId "default") plan query
+            |> NinjaCat.Api.Platform.ClickHouse.metricRows scratch Threading.CancellationToken.None
+            |> fun t -> t.GetAwaiter().GetResult()
+            |> List.filter (fun r -> r.BucketMs >= Compile.keepFromMs plan query)
+            |> List.sortBy (fun r -> r.Groups, r.SeriesId, r.BucketMs)
+
+        let close (a: float) (b: float) = abs (a - b) <= 1e-9 * max 1.0 (abs a)
+
+        let timeAggs = [ Plan.Plain Plan.Avg; Plan.Plain Plan.Sum; Plan.Plain Plan.Min; Plan.Plain Plan.Max; Plan.Plain Plan.Count; Plan.AsCount; Plan.AsRate ]
+
+        for plan in windows do
+            for metric in [ "rt.gauge"; "rt.count"; "rt.rate"; "rt.rate0" ] do
+                for timeAgg in timeAggs do
+                    for step in [ 1.0; 5.0 ] do
+                        for fill in [ Plan.NoFill; Plan.FillWithin(Plan.Linear, 300) ] do
+                            let query: Plan.QueryPlan =
+                                { Metric = metric
+                                  Filter = MetricQuery.Ast.Tag("env", "prod")
+                                  GroupBy = [ "role" ]
+                                  SpaceAgg = Plan.Sum
+                                  TimeAgg = timeAgg
+                                  Step = TimeSpan.FromMinutes step
+                                  Lookback = 0
+                                  Fill = fill }
+
+                            let raw = rows plan Plan.PointsTable query
+                            let rollup = rows plan Plan.RollupTable query
+                            let label = $"{plan.From.ToUnixTimeMilliseconds()}-{plan.To.ToUnixTimeMilliseconds()} {metric} {timeAgg} {step}m {fill}"
+                            Assert.True(raw.Length > 0, label)
+
+                            Assert.Equal<obj list>(
+                                raw |> List.map (fun r -> box (r.Groups, r.SeriesId, r.BucketMs)),
+                                rollup |> List.map (fun r -> box (r.Groups, r.SeriesId, r.BucketMs))
+                            )
+
+                            for r, u in List.zip raw rollup do
+                                Assert.True(close r.Value u.Value, $"{label} at {r.BucketMs}: raw {r.Value}, rollup {u.Value}")
+
+        // `last` has no query of its own yet: the stored state against the raw points.
+        use reader =
+            scratch
+                .ExecuteReaderAsync(
+                    "SELECT countIf(raw.l != rollup.l), count() FROM "
+                    + "(SELECT series_id, toStartOfMinute(timestamp) AS m, argMax(value, timestamp) AS l FROM metrics GROUP BY series_id, m) AS raw "
+                    + "FULL JOIN (SELECT series_id, minute AS m, argMaxMerge(value_last) AS l FROM metrics_1m GROUP BY series_id, m) AS rollup "
+                    + "USING (series_id, m)"
+                )
+                .GetAwaiter()
+                .GetResult()
+
+        Assert.True(reader.Read())
+        Assert.Equal(0UL, reader.GetFieldValue<uint64> 0)
+        Assert.Equal(360UL, reader.GetFieldValue<uint64> 1))
+
+[<Fact>]
+let ``0002 fills the rollup from the raw points it finds`` () =
+    inScratch false (fun scratch ->
+        let migrations =
+            match Migrations.load () with
+            | Ok all -> all
+            | Error e -> failwith e
+
+        let run (m: Migrations.Migration) =
+            for statement in Migrations.splitStatements m.Sql do
+                scratch.ExecuteNonQueryAsync(statement).GetAwaiter().GetResult() |> ignore
+
+        let now = DateTime.UtcNow
+        let start = DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0, DateTimeKind.Utc).AddHours -2.0
+        let points = rollupPoints start
+        run migrations[0]
+        writePoints scratch points[.. 499]
+        run migrations[1]
+        writePoints scratch points[500..]
+
+        use reader =
+            scratch.ExecuteReaderAsync("SELECT countMerge(points) FROM metrics_1m").GetAwaiter().GetResult()
+
+        Assert.True(reader.Read())
+        Assert.Equal(uint64 points.Length, reader.GetFieldValue<uint64> 0))
+
+[<Fact>]
+let ``the metrics retention is set without rewriting the tables`` () =
+    inScratch true (fun scratch ->
+        match (Migrations.setMetricsRetention scratch 45 500).GetAwaiter().GetResult() with
+        | Error e -> Assert.Fail e
+        | Ok() -> ()
+
+        let scalar (sql: string) =
+            use reader = scratch.ExecuteReaderAsync(sql).GetAwaiter().GetResult()
+            if reader.Read() then string (reader.GetValue 0) else ""
+
+        let engine table = scalar $"SELECT engine_full FROM system.tables WHERE database = currentDatabase() AND name = '{table}'"
+        Assert.Contains("TTL toDateTime(timestamp) + toIntervalDay(45)", engine "metrics")
+        Assert.Contains("TTL minute + toIntervalDay(500)", engine "metrics_1m")
+        Assert.Equal("0", scalar "SELECT count() FROM system.mutations WHERE database = currentDatabase()"))

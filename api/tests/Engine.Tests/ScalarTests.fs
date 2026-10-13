@@ -61,7 +61,7 @@ let private run queries formulas =
     match read (body queries formulas) with
     | Error es -> failwith (String.Join("\n", es))
     | Ok r ->
-        match Plan.plan r.Request with
+        match Plan.plan Plan.defaultRetention (DateTimeOffset.UnixEpoch.AddDays 1.0) r.Request with
         | Error es -> failwith (String.Join("\n", es))
         | Ok p ->
             match (Execute.runScalar execute (TenantId "t") p r).Result with

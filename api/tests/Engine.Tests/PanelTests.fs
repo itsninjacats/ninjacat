@@ -117,7 +117,7 @@ let private execute (sql: Sql) =
               row (if groups = 1 then [ Some "b" ] else [ Some "prod"; None ]) (start + i * 20000L) (float i * 10.0) ]
 
 let private seriesFor (q: SeriesQuery) : Series list =
-    match (Query.Engine.parsed execute tenant [ "q" ] (seriesRequest q)).Result with
+    match (Query.Engine.parsed execute tenant Query.Plan.defaultRetention noon [ "q" ] (seriesRequest q)).Result with
     | Ok results -> seriesOf q results
     | Error problems -> failwith (String.concat "; " problems)
 
@@ -135,7 +135,7 @@ let ``ungrouped series are hosts; grouped ones are named by their tags, N/A wher
 
 [<Fact>]
 let ``an aggregation the engine does not have is refused, not replaced`` () =
-    match (Query.Engine.parsed execute tenant [ "q" ] (seriesRequest { cpu with Aggregation = "median" })).Result with
+    match (Query.Engine.parsed execute tenant Query.Plan.defaultRetention noon [ "q" ] (seriesRequest { cpu with Aggregation = "median" })).Result with
     | Error problems -> Assert.Contains("median", String.concat "; " problems)
     | Ok _ -> Assert.Fail "median was accepted"
 

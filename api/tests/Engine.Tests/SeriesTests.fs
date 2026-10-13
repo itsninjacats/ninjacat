@@ -10,6 +10,9 @@ open NinjaCat.Api.Engine.Query.Compile
 
 let private row groups bucket value = { Groups = List.map Some groups; BucketMs = bucket; Value = value; SeriesId = None }
 
+/// Every window here lies within the raw retention counted back from it.
+let private planNow = Plan.plan Plan.defaultRetention (DateTimeOffset.UnixEpoch.AddDays 1.0)
+
 // --- series from rows ---------------------------------------------------------
 
 [<Fact>]
@@ -76,7 +79,7 @@ let ``a request runs end to end`` () =
         Task.FromResult [ row [ "web-1" ] 0L 41.0; row [ "web-1" ] 20000L 40.5 ]
 
     let plan =
-        match read body |> Result.bind Plan.plan with
+        match read body |> Result.bind planNow with
         | Ok p -> p
         | Error es -> failwith (String.Join("\n", es))
 
@@ -104,7 +107,7 @@ let ``a shifted read queries the past and draws it now`` () =
         Task.FromResult [ { Groups = []; BucketMs = from; Value = (if from = 0L then 1.0 else 2.0); SeriesId = None } ]
 
     let plan =
-        match read body |> Result.bind Plan.plan with
+        match read body |> Result.bind planNow with
         | Ok p -> p
         | Error es -> failwith (String.Join("\n", es))
 
@@ -190,7 +193,7 @@ let ``a forecast runs end to end, past the window`` () =
     let execute (_: Sql) = Task.FromResult [ for t in 0L .. 20000L .. 80000L -> { Groups = []; BucketMs = t; Value = float t / 1000.0; SeriesId = None } ]
 
     let plan =
-        match read body |> Result.bind Plan.plan with
+        match read body |> Result.bind planNow with
         | Ok p -> p
         | Error es -> failwith (String.Join("\n", es))
 
@@ -219,7 +222,7 @@ let ``a seasonal forecast fits the history and continues the season`` () =
         Task.FromResult [ for t in first .. step .. until - 1L -> { Groups = []; BucketMs = t; Value = shape t; SeriesId = None } ]
 
     let plan =
-        match read body |> Result.bind Plan.plan with
+        match read body |> Result.bind planNow with
         | Ok p -> p
         | Error es -> failwith (String.Join("\n", es))
 
@@ -249,7 +252,7 @@ let private bandAfterShift algorithm =
             "formulas":[{{"formula":"anomalies(a, '{algorithm}', 3, seasonality='hourly')"}}]}}}}}}"""
 
     let plan =
-        match read body |> Result.bind Plan.plan with
+        match read body |> Result.bind planNow with
         | Ok p -> p
         | Error es -> failwith (String.Join("\n", es))
 

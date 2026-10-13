@@ -18,6 +18,29 @@ let private duration (key: string) (fallback: TimeSpan) : TimeSpan =
     | _, (true, seconds) when seconds > 0 -> TimeSpan.FromSeconds(float seconds)
     | _ -> fallback
 
+/// A whole number of days, up to a century. A set value outside 1–36500
+/// stops the start: falling back to the default could set a shorter TTL than
+/// meant, and ClickHouse would delete the difference.
+let private days (key: string) (fallback: TimeSpan) : TimeSpan =
+    match envOr key "" with
+    | "" -> fallback
+    | raw ->
+        match Int32.TryParse raw with
+        | true, n when n > 0 && n <= 36500 -> TimeSpan.FromDays(float n)
+        | _ -> failwith $"{key} must be a whole number of days from 1 to 36500, got \"{raw}\""
+
+/// A step of whole minutes reads the rollup whatever its age, so a rollup
+/// kept shorter than the raw points would answer nothing where the raw table
+/// still holds them.
+let private metricsRetention () : Query.Plan.Retention =
+    let raw = days "NINJACAT_METRICS_RETENTION_DAYS" Query.Plan.defaultRetention.Raw
+    let rollup = days "NINJACAT_METRICS_ROLLUP_RETENTION_DAYS" Query.Plan.defaultRetention.Rollup
+
+    if rollup < raw then
+        failwith $"NINJACAT_METRICS_ROLLUP_RETENTION_DAYS ({rollup.TotalDays}) must not be shorter than NINJACAT_METRICS_RETENTION_DAYS ({raw.TotalDays})"
+
+    { Raw = raw; Rollup = rollup }
+
 type Config =
     { /// Where the intake process listens (NINJACAT_ADDR), as `:8080` or
       /// `host:8080`. Reachable from agent machines.
@@ -44,6 +67,12 @@ type Config =
       /// Apply the ClickHouse migrations at start-up (NINJACAT_AUTO_MIGRATE).
       /// With more than one replica, turn it off and run `migrate` as a job.
       AutoMigrate: bool
+      /// Days the metrics tables keep their rows: raw points
+      /// (NINJACAT_METRICS_RETENTION_DAYS, 30) and the one-minute rollup
+      /// (NINJACAT_METRICS_ROLLUP_RETENTION_DAYS, 400). The migrating process
+      /// sets them as the tables' TTLs, and the engine reads past the raw
+      /// retention from the rollup.
+      MetricsRetention: Query.Plan.Retention
       /// Reverse proxies in front of the intake (NINJACAT_TRUSTED_PROXIES):
       /// addresses or networks (`10.0.0.0/8`), comma-separated. Only what
       /// such a proxy says in X-Forwarded-For is believed.
@@ -82,6 +111,7 @@ let load () =
         | "" -> failwith "DATABASE_URL is not set (e.g. postgres://root:mysecretpassword@localhost:5433/local)"
         | url -> url
       AutoMigrate = envOr "NINJACAT_AUTO_MIGRATE" "true" <> "false"
+      MetricsRetention = metricsRetention ()
       TrustedProxies =
         (envOr "NINJACAT_TRUSTED_PROXIES" "").Split(',', StringSplitOptions.RemoveEmptyEntries ||| StringSplitOptions.TrimEntries)
         |> List.ofArray

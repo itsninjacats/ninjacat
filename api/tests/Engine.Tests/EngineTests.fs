@@ -11,6 +11,7 @@ open NinjaCat.Api.Engine.Query.Compile
 open NinjaCat.Api.Engine.Query.Engine
 
 let private t0 = DateTimeOffset.FromUnixTimeMilliseconds 0L
+let private now = t0.AddDays 1.0
 
 /// Query `cpu`: host a at 10, 20, 30 and host b at 1, 2, 3, every 20 s; one
 /// series of host c without a `role` tag for grouped queries.
@@ -24,7 +25,7 @@ let private execute (sql: Sql) =
               if groups > 0 then row [ Some "b" ] t v ]
 
 let private run request =
-    match (timeseries execute (TenantId "t") request).Result with
+    match (timeseries execute (TenantId "t") Plan.defaultRetention now request).Result with
     | Ok r -> r
     | Error es -> failwith (String.Join("\n", es))
 
@@ -59,7 +60,7 @@ let ``formulas label their results`` () =
 [<Fact>]
 let ``problems come back named`` () =
     let result =
-        (timeseries execute (TenantId "t")
+        (timeseries execute (TenantId "t") Plan.defaultRetention now
             { From = t0; To = t0.AddSeconds 60.0; Interval = None
               Queries = [ { Name = "cpu"; Query = "avg:cpu{host:a" } ]
               Formulas = [ "nope" ] }).Result
@@ -72,7 +73,7 @@ let ``problems come back named`` () =
 [<Fact>]
 let ``a scalar is one value per group`` () =
     let result =
-        (scalar execute (TenantId "t")
+        (scalar execute (TenantId "t") Plan.defaultRetention now
             { From = t0; To = t0.AddSeconds 60.0
               Queries = [ { Name = "cpu"; Query = "avg:cpu{*} by {host}.fill(null)"; Aggregator = ScalarMax } ]
               Formulas = [] }).Result
@@ -108,7 +109,7 @@ let ``the same query twice is one query`` () =
 
 [<Fact>]
 let ``an expression runs like a formula`` () =
-    let result = (expression execute (TenantId "t") t0 (t0.AddSeconds 60.0) "avg:cpu{*} by {host}.fill(null) * 2").Result
+    let result = (expression execute (TenantId "t") Plan.defaultRetention now t0 (t0.AddSeconds 60.0) "avg:cpu{*} by {host}.fill(null) * 2").Result
 
     match result with
     | Ok [ r ] ->
@@ -118,10 +119,10 @@ let ``an expression runs like a formula`` () =
 
 [<Fact>]
 let ``expression problems are named`` () =
-    match (expression execute (TenantId "t") t0 (t0.AddSeconds 60.0) "avg:cpu{*}, avg:mem{*}").Result with
+    match (expression execute (TenantId "t") Plan.defaultRetention now t0 (t0.AddSeconds 60.0) "avg:cpu{*}, avg:mem{*}").Result with
     | Error [ e ] -> Assert.Equal("expected one expression, got 2 separated by commas", e)
     | other -> Assert.Fail $"{other}"
 
-    match (expression execute (TenantId "t") t0 (t0.AddSeconds 60.0) "ewma_4(avg:cpu{*})").Result with
+    match (expression execute (TenantId "t") Plan.defaultRetention now t0 (t0.AddSeconds 60.0) "ewma_4(avg:cpu{*})").Result with
     | Error es -> Assert.Contains("formulas[0]: function 'ewma_4' is not supported yet", es)
     | other -> Assert.Fail $"{other}"

@@ -11,7 +11,7 @@ a port or a container.
 | `ninjacat-api intake` | 8080 (`NINJACAT_ADDR`) | agent machines | the intake: Datadog's wire protocol, behind an API key |
 | | 10516 (`NINJACAT_LOGS_TCP_ADDR`) | agent machines | the agent's TCP transport for logs; `off` disables it |
 | `ninjacat-api query` | 8081 (`NINJACAT_INTERNAL_ADDR`) | the panel only | `/internal/*` for the panel and Datadog's query API, behind a token the panel signs (below); still on an internal network. It only reads, and can be given a ClickHouse user that cannot write |
-| `ninjacat-api migrate` | | | applies the ClickHouse migrations and exits |
+| `ninjacat-api migrate` | | | applies the ClickHouse migrations and the metrics retention, and exits |
 
 The query side speaks Datadog's public API (`/api/v1/...`, `/api/v2/...`)
 rather than one of our own, so the panel, `datadog-api-client`, Terraform and
@@ -285,6 +285,8 @@ Package versions live in `Directory.Packages.props` only.
 | `DATABASE_URL` | required — the same `postgres://` URL the panel uses |
 | `NINJACAT_QUERY_TOKEN_SECRET` | required by `query` — at least 32 bytes, the key the panel signs its tokens with (below) |
 | `NINJACAT_AUTO_MIGRATE` | `true`; with several replicas set `false` and run `migrate` as a job |
+| `NINJACAT_METRICS_RETENTION_DAYS` | `30` — days `metrics` keeps raw points; a value that is not 1–36500 stops the start |
+| `NINJACAT_METRICS_ROLLUP_RETENTION_DAYS` | `400` — days `metrics_1m`, the one-minute rollup, keeps its rows; likewise, and it may not be shorter than the raw retention. Set both identically on `intake`, `migrate` and `query` |
 | `NINJACAT_TRUSTED_PROXIES` | none — reverse proxies in front of the intake, as addresses or networks (`10.0.0.0/8`), comma-separated. Only their `X-Forwarded-For` is believed; the loopback is always trusted |
 | `NINJACAT_MAX_BODY_BYTES` | the largest request body the intake reads, 64 MiB by default; a larger one is answered 413. A body may inflate to 64 MiB |
 | `NINJACAT_ACK_UNKNOWN` | `true` answers 202 instead of 404 on unknown intake paths |
@@ -301,6 +303,29 @@ Package versions live in `Directory.Packages.props` only.
 | `POST /api/v2/query/timeseries`, `/api/v2/query/scalar` | Datadog's v2 query API: queries, formulas, functions |
 | `GET /internal/metrics/{names,tags,tag-values,query}` | the panel's metric pages |
 | `GET /internal/logs/{search,facets}` | the panel's log pages |
+
+**Metrics come from two tables.** `metrics` holds every point;
+`metrics_1m` holds one row per series per minute, with the tags and the
+aggregate states (count, sum, min, max, avg, the last value, and a rate's
+events for `as_count()`), filled by a materialized view as points arrive. A
+query whose step is a whole number of minutes reads the rollup and merges its
+states, which gives the raw table's answer from about a quarter of the rows
+(`Plan.tableFor`); a finer step reads the raw points. A window that reaches
+back past the raw retention gets whole-minute steps, since only the rollup
+still holds it. The two retentions are set by the process that migrates, after
+the migrations, as `ALTER TABLE … MODIFY TTL` with
+`materialize_ttl_after_modify = 0`: the TTL changes in the table's metadata
+only, and parts already written take it as they merge. The query process plans
+by the same two settings and does not read the TTLs back, so it must be given
+the same values: one that believes the raw table keeps more than it does reads
+fine steps from days that are gone, and gets empty charts. A step of whole
+minutes reads the rollup at any age, so the rollup is never kept shorter than
+the raw points (the start stops if it would be). When `to` falls inside a
+minute, that minute's points before it come from the raw table, so the rollup
+never reads past `to`. `metrics` is
+partitioned by day, so a raw retention of months makes hundreds of partitions;
+keep it short and let the rollup hold the long range. The other tables' TTLs
+are fixed in their migrations.
 
 Every route but `/ping` and `/health` asks for `Authorization: Bearer <token>`:
 an HS256 JWT the panel signs with `NINJACAT_QUERY_TOKEN_SECRET` for each call

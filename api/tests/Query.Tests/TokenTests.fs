@@ -39,6 +39,7 @@ let private config: Config.Config =
       // and it is tested only for being open.
       DatabaseUrl = "postgres://test:test@127.0.0.1:1/test"
       AutoMigrate = false
+      MetricsRetention = NinjaCat.Api.Engine.Query.Plan.defaultRetention
       TrustedProxies = []
       MaxBodyBytes = 1024L
       AckUnknown = false

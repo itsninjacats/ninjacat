@@ -1,14 +1,12 @@
 module NinjaCat.Api.Server.Program
 
-open NinjaCat.Api.Storage
 open NinjaCat.Api.Platform
 
-/// `ninjacat-api migrate`: apply the ClickHouse migrations and exit. For
-/// deployments with several replicas, where applying at start-up would race.
+/// `ninjacat-api migrate`: apply the ClickHouse migrations and the metrics
+/// retention, and exit. For deployments with several replicas, where applying
+/// at start-up would race.
 let private migrate (cfg: Config.Config) : int =
-    use client = ClickHouse.createWriteClient cfg
-
-    match (Migrations.apply client).GetAwaiter().GetResult() with
+    match (ClickHouse.migrate cfg).GetAwaiter().GetResult() with
     | Ok applied ->
         printfn "migrate: schema up to date (%d applied)" applied
         0

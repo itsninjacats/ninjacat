@@ -23,13 +23,17 @@ let private request (queries: (string option * string) list) (formulas: string l
     parse
         $"""{{"data":{{"type":"timeseries_request","attributes":{{"from":1711977600000,"to":1711981200000,"queries":[{qs}],"formulas":[{fs}]}}}}}}"""
 
+/// The requests' `to`: their windows are within the raw retention.
+let private now = DateTimeOffset.FromUnixTimeMilliseconds 1711981200000L
+let private planAt = plan defaultRetention now
+
 let private planOf queries formulas =
-    match plan (request queries formulas) with
+    match planAt (request queries formulas) with
     | Ok p -> p
     | Error es -> failwith (String.Join("\n", es))
 
 let private errorsOf queries formulas =
-    match plan (request queries formulas) with
+    match planAt (request queries formulas) with
     | Ok p -> failwith $"expected errors, got {p}"
     | Error es -> es
 
@@ -63,6 +67,53 @@ let ``a hint that would exceed 1500 points is widened`` () =
 [<Fact>]
 let ``a sub-second hint is rounded up to a second`` () =
     Assert.Equal(TimeSpan.FromSeconds 1.0, step (TimeSpan.FromMinutes 1.0) (Some(TimeSpan.FromMilliseconds 200.0)))
+
+// --- the table ------------------------------------------------------------------------
+
+[<Theory>]
+[<InlineData(60.0, true)>]
+[<InlineData(300.0, true)>]
+[<InlineData(86400.0, true)>]
+[<InlineData(20.0, false)>]
+[<InlineData(90.0, false)>]
+let ``a step of whole minutes reads the rollup`` (stepSeconds: float, rollup: bool) =
+    Assert.Equal((if rollup then RollupTable else PointsTable), tableFor (TimeSpan.FromSeconds stepSeconds))
+
+/// One hour, its `from` `daysBack` days before `now`.
+let private hourAgo (daysBack: float) (queries: (string option * string) list) (formulas: string list) =
+    let from = now.AddDays -daysBack
+    let req = { request queries formulas with From = from; To = from.AddHours 1.0 }
+
+    match planAt req with
+    | Ok p -> p
+    | Error es -> failwith (String.Join("\n", es))
+
+[<Fact>]
+let ``a window before the raw retention gets whole minutes`` () =
+    // An hour is 20 s steps; 40 days back, only the rollup has it.
+    Assert.Equal(TimeSpan.FromSeconds 20.0, (hourAgo 1.0 [ None, "x{*}" ] []).Step)
+    let old = hourAgo 40.0 [ None, "x{*}" ] []
+    Assert.Equal(TimeSpan.FromMinutes 1.0, old.Step)
+    Assert.Equal(TimeSpan.FromMinutes 1.0, (Assert.Single old.Queries).Step)
+    // A rollup interval of the query's own is rounded up as well.
+    Assert.Equal(TimeSpan.FromMinutes 2.0, (Assert.Single (hourAgo 40.0 [ None, "x{*}.rollup(sum, 90)" ] []).Queries).Step)
+    let from = now.AddDays -40.0
+    Assert.Equal(TimeSpan.FromMinutes 1.0, requestStep defaultRetention now from (from.AddHours 1.0) None)
+
+[<Fact>]
+let ``a shift or a lookback before the raw retention gets whole minutes, for every query`` () =
+    let ab = [ Some "a", "x{*}"; Some "b", "y{*}" ]
+    let stepsOf (p: Plan) = p.Queries |> List.map (_.Step >> _.TotalSeconds)
+    Assert.Equal<float list>([ 20.0; 20.0 ], stepsOf (hourAgo 1.0 ab [ "a / b" ]))
+    // A week back from a day ago is still in the raw points; from 25 days ago it is not.
+    Assert.Equal<float list>([ 20.0; 20.0 ], stepsOf (hourAgo 1.0 ab [ "a / week_before(b)" ]))
+    Assert.Equal<float list>([ 60.0; 60.0 ], stepsOf (hourAgo 25.0 ab [ "a / week_before(b)" ]))
+    // Forty days of forecast history read far before the window.
+    Assert.Equal<float list>([ 60.0 ], stepsOf (hourAgo 1.0 [ Some "a", "x{*}" ] [ "forecast(a, 'linear', 1, history='40d')" ]))
+
+[<Fact>]
+let ``the plan carries the retention it was made against`` () =
+    Assert.Equal(defaultRetention, (planOf [ None, "x{*}" ] []).Retention)
 
 // --- queries ------------------------------------------------------------------------
 
@@ -277,7 +328,7 @@ let private shiftAt (from: string) formula =
     let body =
         $"""{{"data":{{"type":"timeseries_request","attributes":{{"from":{fromMs},"to":{fromMs + 3600000L},"queries":[{{"data_source":"metrics","name":"a","query":"x{{*}}"}}],"formulas":[{{"formula":"{formula}"}}]}}}}}}"""
 
-    match read body |> Result.bind plan with
+    match read body |> Result.bind planAt with
     | Ok p ->
         match (List.exactlyOne p.Outputs).Node with
         | Shift(offset, Fetch 0) -> offset
@@ -406,11 +457,12 @@ let ``seasonal algorithms take their seasonality, weekly by default`` () =
     Assert.Equal(Forecast(1.0, SeasonalForecast Daily, None, None), (outputOf "forecast(a, 'seasonal', 1, seasonality='daily')").Extra)
 
 [<Fact>]
-let ``seasonal history is six seasons, within raw retention`` () =
-    Assert.Equal(TimeSpan.FromHours 6.0, seasonalHistory Hourly)
-    Assert.Equal(TimeSpan.FromDays 6.0, seasonalHistory Daily)
-    // Six weeks would be 42 days; 30 days of raw points hold four whole weeks.
-    Assert.Equal(TimeSpan.FromDays 28.0, seasonalHistory Weekly)
+let ``seasonal history is six seasons, within the rollup's retention`` () =
+    Assert.Equal(TimeSpan.FromHours 6.0, seasonalHistory defaultRetention Hourly)
+    Assert.Equal(TimeSpan.FromDays 6.0, seasonalHistory defaultRetention Daily)
+    Assert.Equal(TimeSpan.FromDays 42.0, seasonalHistory defaultRetention Weekly)
+    // A rollup kept 30 days holds four whole weeks.
+    Assert.Equal(TimeSpan.FromDays 28.0, seasonalHistory { defaultRetention with Rollup = TimeSpan.FromDays 30.0 } Weekly)
     Assert.Equal<int list>([ 60; 288; 168 ], [ Hourly.Period; Daily.Period; Weekly.Period ])
 
 // --- arithmetic ----------------------------------------------------------------------------

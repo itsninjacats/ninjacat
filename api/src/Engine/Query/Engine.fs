@@ -7,7 +7,7 @@
 /// results into Datadog's response shape; this module turns them into these.
 ///
 ///   let! result =
-///       Engine.timeseries execute tenant
+///       Engine.timeseries execute tenant Plan.defaultRetention now
 ///           { From = now.AddHours -1.0; To = now; Interval = None
 ///             Queries = [ { Name = "cpu"; Query = "avg:system.cpu.user{env:prod} by {host}" } ]
 ///             Formulas = [] }
@@ -134,15 +134,18 @@ let private results (names: string list) (outputs: Series.OutputResult list) : F
 /// evaluating the same query every minute does.
 ///
 /// `labels` names the results, one per formula (or per query when there are
-/// no formulas).
+/// no formulas). `now` is when the request is made: the tables' retention
+/// counts back from it, and the engine never reads the clock.
 let parsed
     (execute: Sql -> Task<Compile.Row list>)
     (tenant: TenantId)
+    (retention: Plan.Retention)
+    (now: DateTimeOffset)
     (labels: string list)
     (request: Timeseries.ParsedTimeseriesRequest)
     : Task<Result<FormulaResult list, string list>> =
     task {
-        match Plan.plan request with
+        match Plan.plan retention now request with
         | Error problems -> return Error problems
         | Ok plan ->
             let! outputs = Execute.evaluate execute tenant plan
@@ -157,6 +160,8 @@ let parsed
 let timeseries
     (execute: Sql -> Task<Compile.Row list>)
     (tenant: TenantId)
+    (retention: Plan.Retention)
+    (now: DateTimeOffset)
     (request: TimeseriesRequest)
     : Task<Result<FormulaResult list, string list>> =
     task {
@@ -176,7 +181,7 @@ let timeseries
 
         match Timeseries.parse wire with
         | Error problems -> return Error problems
-        | Ok request' -> return! parsed execute tenant (labels (request.Queries |> List.map _.Name) request.Formulas) request'
+        | Ok request' -> return! parsed execute tenant retention now (labels (request.Queries |> List.map _.Name) request.Formulas) request'
     }
 
 /// Splits an expression with queries inline into named queries and the
@@ -223,6 +228,8 @@ let split (expr: Expr<MetricQuery>) : Timeseries.ParsedQuery list * Formula =
 let expression
     (execute: Sql -> Task<Compile.Row list>)
     (tenant: TenantId)
+    (retention: Plan.Retention)
+    (now: DateTimeOffset)
     (from: DateTimeOffset)
     (until: DateTimeOffset)
     (text: string)
@@ -232,7 +239,7 @@ let expression
     | Ok [ expr ] ->
         let queries, formula = split expr
 
-        parsed execute tenant [ text ]
+        parsed execute tenant retention now [ text ]
             { From = from
               To = until
               Interval = None
@@ -244,6 +251,8 @@ let expression
 let scalar
     (execute: Sql -> Task<Compile.Row list>)
     (tenant: TenantId)
+    (retention: Plan.Retention)
+    (now: DateTimeOffset)
     (request: ScalarRequest)
     : Task<Result<ScalarResult list, string list>> =
     task {
@@ -261,7 +270,7 @@ let scalar
                 | [] -> None
                 | fs -> Some(fs |> List.map (fun f -> { Formula = f; Limit = None })) }
 
-        match Timeseries.parse wire |> Result.bind Plan.plan with
+        match Timeseries.parse wire |> Result.bind (Plan.plan retention now) with
         | Error problems -> return Error problems
         | Ok plan ->
             match! Execute.evaluateScalar execute tenant plan (request.Queries |> List.map _.Aggregator) with

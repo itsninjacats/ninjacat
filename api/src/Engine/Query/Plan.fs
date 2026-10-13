@@ -185,18 +185,37 @@ type Seasonality =
     /// Points per season.
     member s.Period = int (s.Length / s.Step)
 
-/// The `metrics` table's TTL (schema/migrations/0001_initial.sql).
-/// When retention becomes configurable, read it here.
-let rawRetention = TimeSpan.FromDays 30.0
+/// How long the two metrics tables keep their rows: `metrics`
+/// (NINJACAT_METRICS_RETENTION_DAYS) and `metrics_1m`
+/// (NINJACAT_METRICS_ROLLUP_RETENTION_DAYS). The migrating process sets the
+/// same values as the tables' TTLs.
+type Retention = { Raw: TimeSpan; Rollup: TimeSpan }
+
+let defaultRetention =
+    { Raw = TimeSpan.FromDays 30.0
+      Rollup = TimeSpan.FromDays 400.0 }
+
+/// The table a query reads.
+type Table =
+    /// `metrics`: every point.
+    | PointsTable
+    /// `metrics_1m`: one row per series per minute, holding aggregate states.
+    | RollupTable
+
+/// A step of whole minutes reads the rollup: its per-minute states merge into
+/// such a bucket exactly, so the answer is the raw table's, from about a
+/// quarter of the rows.
+let tableFor (step: TimeSpan) : Table =
+    if step.Ticks % TimeSpan.TicksPerMinute = 0L then RollupTable else PointsTable
+
+let private wholeMinutes (step: TimeSpan) : TimeSpan =
+    TimeSpan.FromMinutes(Math.Ceiling step.TotalMinutes)
 
 /// History a seasonal model reads back from `to`: six seasons, as Datadog's
-/// "up to six weeks".
-///
-/// WARNING(undocumented): raw retention caps us at whole seasons within 30
-/// days, so weekly gets four weeks, not six.
-let seasonalHistory (s: Seasonality) : TimeSpan =
+/// "up to six weeks". Its steps are whole minutes, so it reads the rollup.
+let seasonalHistory (retention: Retention) (s: Seasonality) : TimeSpan =
     let wanted = s.Length * 6.0
-    let wholeSeasonsKept = rawRetention.Ticks / s.Length.Ticks
+    let wholeSeasonsKept = retention.Rollup.Ticks / s.Length.Ticks
     let available = TimeSpan.FromTicks(wholeSeasonsKept * s.Length.Ticks)
     if wanted < available then wanted else available
 
@@ -234,7 +253,9 @@ type Plan =
       To: DateTimeOffset
       Step: TimeSpan
       Queries: QueryPlan list
-      Outputs: Output list }
+      Outputs: Output list
+      /// What the plan was made against; seasonal history is capped by it.
+      Retention: Retention }
 
 // --- small helpers ---------------------------------------------------------------
 
@@ -288,6 +309,13 @@ let step (window: TimeSpan) (hint: TimeSpan option) : TimeSpan =
         match defaultSteps |> List.tryFind (fun (upTo, _) -> window <= upTo) with
         | Some(_, step) -> step
         | None -> TimeSpan.FromDays 7.0
+
+/// The step of a request: Datadog's for its window, in whole minutes when
+/// the window starts before the oldest raw point kept, as only the rollup
+/// still holds it.
+let requestStep (retention: Retention) (now: DateTimeOffset) (from: DateTimeOffset) (until: DateTimeOffset) (hint: TimeSpan option) =
+    let s = step (until - from) hint
+    if from < now - retention.Raw then wholeMinutes s else s
 
 // --- queries ---------------------------------------------------------------------
 
@@ -948,6 +976,35 @@ let private planOutputs (req: ParsedTimeseriesRequest) : Result<Output list, str
 
 // --- lookback --------------------------------------------------------------------
 
+/// What a node reads: which query, and shifted by how much. The same query
+/// may be read at several offsets (`a` and `week_before(a)` side by side);
+/// each is one trip to ClickHouse.
+let fetches (node: Node) : (int * int64) list =
+    let rec go (shift: int64) node =
+        match node with
+        | Fetch i -> [ i, shift ]
+        | Shift(offset, inner) -> go (shift + offset) inner
+        | Pointwise(_, inner)
+        | Top(inner, _, _, _)
+        | CountNonzero inner
+        | CountNotNull inner
+        | ExcludeNull inner
+        | Timewise(_, inner)
+        | DefaultZero inner
+        | Outliers(inner, _, _) -> go shift inner
+        | Arith(_, l, r) -> go shift l @ go shift r
+        | Constant _
+        | TimeOfPoint -> []
+
+    go 0L node
+
+/// How far before `from` a query reads, in milliseconds: its lookback, and
+/// one bucket more, as the bucket holding `from` minus the lookback may start
+/// before it and would be partial.
+let earliestOffsetMs (query: QueryPlan) =
+    if query.Lookback = 0 then 0L
+    else int64 (query.Lookback + 1) * int64 query.Step.TotalMilliseconds
+
 /// Buckets before the window that `node` reads from query `source`, or None
 /// when the node does not read that query.
 let rec private historyFrom (source: int) (node: Node) : int option =
@@ -1021,9 +1078,21 @@ let private queryLookback (window: TimeSpan) (queries: QueryPlan list) (outputs:
 
 // --- the plan --------------------------------------------------------------------
 
-let plan (req: ParsedTimeseriesRequest) : Result<Plan, string list> =
+/// Whether any query reads before `cutoff`: from its lookback, or from a
+/// shift into the past.
+let private readsBefore (cutoff: DateTimeOffset) (from: DateTimeOffset) (queries: QueryPlan list) (outputs: Output list) : bool =
+    let reads = outputs |> List.collect (fun o -> fetches o.Node)
+
+    queries
+    |> List.indexed
+    |> List.exists (fun (i, q) ->
+        let furthestBack = reads |> List.filter (fun (source, _) -> source = i) |> List.fold (fun back (_, offset) -> min back offset) 0L
+        from.AddMilliseconds(float (furthestBack - earliestOffsetMs q)) < cutoff)
+
+/// Plans a request at `now`: the engine never reads the clock.
+let plan (retention: Retention) (now: DateTimeOffset) (req: ParsedTimeseriesRequest) : Result<Plan, string list> =
     let window = req.To - req.From
-    let requestStep = step window req.Interval
+    let requestStep = requestStep retention now req.From req.To req.Interval
 
     let duplicateNames =
         req.Queries
@@ -1051,12 +1120,25 @@ let plan (req: ParsedTimeseriesRequest) : Result<Plan, string list> =
 
     match duplicateNames @ errorsIn queries @ outputErrors, outputs with
     | [], Ok outputs ->
-        let queries = queries |> List.choose Result.toOption
+        let withLookback (queries: QueryPlan list) =
+            queries |> List.mapi (fun i q -> { q with Lookback = queryLookback window queries outputs i })
+
+        let planned = queries |> List.choose Result.toOption |> withLookback
+
+        // A read before the oldest raw point is answered by the rollup alone,
+        // so every step of the request becomes whole minutes: steps stay
+        // alike across a formula, and its buckets line up.
+        let step, queries =
+            if readsBefore (now - retention.Raw) req.From planned outputs then
+                wholeMinutes requestStep, planned |> List.map (fun q -> { q with Step = wholeMinutes q.Step }) |> withLookback
+            else
+                requestStep, planned
 
         Ok
             { From = req.From
               To = req.To
-              Step = requestStep
-              Queries = queries |> List.mapi (fun i q -> { q with Lookback = queryLookback window queries outputs i })
-              Outputs = outputs }
+              Step = step
+              Queries = queries
+              Outputs = outputs
+              Retention = retention }
     | errors, _ -> Error errors

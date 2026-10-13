@@ -274,6 +274,14 @@ process cannot sign panel sessions. `api/README.md` shows how to mint a token fo
 Migrations: `NINJACAT_AUTO_MIGRATE=false` stops the server from applying the ClickHouse
 migrations at startup (use `ninjacat-api migrate` instead).
 
+Retention: `NINJACAT_METRICS_RETENTION_DAYS` (30, raw `metrics`) and
+`NINJACAT_METRICS_ROLLUP_RETENTION_DAYS` (400, `metrics_1m`). The migrating process applies
+them as TTLs after the migrations (a migration cannot read configuration), and the engine
+reads a whole-minute step from the rollup and anything older than the raw retention there.
+Give `intake`, `migrate` and `query` the same values: the query process plans by them, and
+a raw retention it believes longer than the TTL reads days that are gone. The rollup may not
+be kept shorter than the raw points; the start stops if it is.
+
 Limits: `NINJACAT_MAX_BODY_BYTES` (64 MiB) is the largest body the intake reads; a body may
 inflate to 64 MiB (`Body.maxInflatedBytes`).
 

@@ -1,4 +1,5 @@
-/// Compiles one QueryPlan into SQL against the `metrics` table.
+/// Compiles one QueryPlan into SQL against `metrics`, or against its
+/// one-minute rollup `metrics_1m` when the step is whole minutes.
 ///
 /// The shape follows Datadog's order of operations — time first, then space
 /// (docs: dashboards/guide/query-to-the-graph):
@@ -72,6 +73,21 @@ let private timeAggregateSql (step: string) =
         $"multiIf(any(metric_type) = 'RATE', sum(value * greatest(interval, 1)) / greatest({step}, max(interval)), "
         + $"any(metric_type) = 'COUNT', sum(value) / {step}, avg(value))"
 
+/// The same over the rollup, whose per-minute states merge into the bucket:
+/// an average is the merged sums over the merged counts, never an average of
+/// averages. `metric_type` and `interval` are kept per minute as `any` and
+/// `max`, so the per-series reads above give the same answer here.
+let private rollupAggregateSql (step: string) =
+    function
+    | Plain Count -> "toFloat64(countMerge(points))"
+    | Plain agg -> $"{aggregate agg}Merge(value_{aggregate agg})"
+    | AsCount ->
+        "multiIf(any(metric_type) = 'RATE', sumMerge(value_events), "
+        + "any(metric_type) = 'COUNT', sumMerge(value_sum), avgMerge(value_avg))"
+    | AsRate ->
+        $"multiIf(any(metric_type) = 'RATE', sumMerge(value_events) / greatest({step}, max(interval)), "
+        + $"any(metric_type) = 'COUNT', sumMerge(value_sum) / {step}, avgMerge(value_avg))"
+
 /// One expression per `by` key. A tag holds a list of values, and a series
 /// with `role:api` and `role:web` belongs to both groups — arrayJoin gives it a
 /// row in each.
@@ -89,16 +105,12 @@ let private groupSql (p: SqlParams) (key: string) =
         let k = p.Add("k", String k)
         $"arrayJoin(if(empty(tags[{k}]), [NULL], CAST(tags[{k}], 'Array(Nullable(String))')))"
 
-/// How far before `from` a query reads, in milliseconds.
-let earliestOffsetMs (query: QueryPlan) =
-    if query.Lookback = 0 then 0L
-    else int64 (query.Lookback + 1) * int64 query.Step.TotalMilliseconds
-
 /// The first bucket a query's series keep: `from`, less its lookback.
 let keepFromMs (plan: Plan) (query: QueryPlan) =
     plan.From.ToUnixTimeMilliseconds() - int64 query.Lookback * int64 query.Step.TotalMilliseconds
 
-let compile (tenant: TenantId) (plan: Plan) (query: QueryPlan) : Sql =
+/// `compile` with the table given rather than chosen by the step.
+let compileOn (table: Table) (tenant: TenantId) (plan: Plan) (query: QueryPlan) : Sql =
     let p = SqlParams()
     let (TenantId t) = tenant
 
@@ -109,13 +121,53 @@ let compile (tenant: TenantId) (plan: Plan) (query: QueryPlan) : Sql =
 
     let tenantP = p.Add("tenant", String t)
     let metricP = p.Add("metric", String query.Metric)
-    // With lookback, one bucket more than asked: the bucket holding `from`
-    // minus the lookback may start before it, and would be partial.
     let fromMs = plan.From.ToUnixTimeMilliseconds() - earliestOffsetMs query
     let fromP = p.Add("from", Int64 fromMs)
     let toP = p.Add("to", Int64(plan.To.ToUnixTimeMilliseconds()))
     let stepP = p.Add("step", Int64(int64 query.Step.TotalSeconds))
     let filter = Filter.sql p query.Filter
+
+    let raw =
+        $"""metrics
+    WHERE tenant_id = {tenantP}
+      AND metric = {metricP}
+      AND timestamp >= fromUnixTimestamp64Milli({fromP})
+      AND timestamp < fromUnixTimestamp64Milli({toP})
+      AND ({filter})"""
+
+    // A rollup row is a whole minute, so it holds points after an unaligned
+    // `to`: the minutes before the one holding `to` come from the rollup, and
+    // that minute's points before `to` from the raw table, as the same
+    // states. Past the raw retention that last part minute is gone. The
+    // bucket holding an unaligned `from` is partial either way, and the
+    // series drop it (keepFromMs).
+    let rollup =
+        $"""(
+        SELECT series_id, host, tags, minute, metric_type, interval,
+               points, value_avg, value_min, value_max, value_sum, value_events
+        FROM metrics_1m
+        WHERE tenant_id = {tenantP}
+          AND metric = {metricP}
+          AND minute >= fromUnixTimestamp64Milli({fromP})
+          AND minute < toStartOfMinute(fromUnixTimestamp64Milli({toP}))
+          AND ({filter})
+        UNION ALL
+        SELECT series_id, host, any(tags), toStartOfMinute(timestamp) AS tail_minute, any(metric_type), max(interval),
+               countState(value), avgState(value), minState(value), maxState(value), sumState(value),
+               sumState(value * greatest(interval, 1))
+        FROM metrics
+        WHERE tenant_id = {tenantP}
+          AND metric = {metricP}
+          AND timestamp >= greatest(fromUnixTimestamp64Milli({fromP}), toStartOfMinute(fromUnixTimestamp64Milli({toP})))
+          AND timestamp < fromUnixTimestamp64Milli({toP})
+          AND ({filter})
+        GROUP BY series_id, host, tail_minute
+    )"""
+
+    let source, time, timeAgg =
+        match table with
+        | PointsTable -> raw, "timestamp", timeAggregateSql stepP query.TimeAgg
+        | RollupTable -> rollup, "minute", rollupAggregateSql stepP query.TimeAgg
 
     let perSeries = query.Fill <> NoFill
 
@@ -125,29 +177,22 @@ let compile (tenant: TenantId) (plan: Plan) (query: QueryPlan) : Sql =
         if perSeries then
             $"""SELECT {groupList}toInt64(toUnixTimestamp(bucket)) * 1000 AS bucket_ms, v AS value, series_id
 FROM (
-    SELECT series_id, {groupSelect}toStartOfInterval(timestamp, toIntervalSecond({stepP})) AS bucket, {timeAggregateSql stepP query.TimeAgg} AS v
-    FROM metrics
-    WHERE tenant_id = {tenantP}
-      AND metric = {metricP}
-      AND timestamp >= fromUnixTimestamp64Milli({fromP})
-      AND timestamp < fromUnixTimestamp64Milli({toP})
-      AND ({filter})
+    SELECT series_id, {groupSelect}toStartOfInterval({time}, toIntervalSecond({stepP})) AS bucket, {timeAgg} AS v
+    FROM {source}
     GROUP BY series_id, {groupList}bucket
 )
 ORDER BY {groupList}series_id, bucket"""
         else
         $"""SELECT {groupList}toInt64(toUnixTimestamp(bucket)) * 1000 AS bucket_ms, {aggregate query.SpaceAgg}(v) AS value
 FROM (
-    SELECT series_id, {groupSelect}toStartOfInterval(timestamp, toIntervalSecond({stepP})) AS bucket, {timeAggregateSql stepP query.TimeAgg} AS v
-    FROM metrics
-    WHERE tenant_id = {tenantP}
-      AND metric = {metricP}
-      AND timestamp >= fromUnixTimestamp64Milli({fromP})
-      AND timestamp < fromUnixTimestamp64Milli({toP})
-      AND ({filter})
+    SELECT series_id, {groupSelect}toStartOfInterval({time}, toIntervalSecond({stepP})) AS bucket, {timeAgg} AS v
+    FROM {source}
     GROUP BY series_id, {groupList}bucket
 )
 GROUP BY {groupList}bucket
 ORDER BY {groupList}bucket"""
 
     { Text = text; Parameters = p.All }
+
+let compile (tenant: TenantId) (plan: Plan) (query: QueryPlan) : Sql =
+    compileOn (tableFor query.Step) tenant plan query

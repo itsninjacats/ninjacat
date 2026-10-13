@@ -37,11 +37,32 @@ let createClient (cfg: Config.Config) =
     settings.CustomSettings["max_execution_time"] <- box maxExecutionSeconds
     new ClickHouseClient(settings)
 
-/// The client the write path and the migrations use. Kept apart from the
-/// read client so no query can ever write, and so a slow query and a slow
-/// insert do not share a timeout. Migrations rebuild tables: two minutes.
+/// The client the write path uses. Kept apart from the read client so no
+/// query can ever write, and so a slow query and a slow insert do not share a
+/// timeout.
 let createWriteClient (cfg: Config.Config) =
     new ClickHouseClient(settings cfg (TimeSpan.FromMinutes 2.0))
+
+/// What the migrating process does: the migrations, then the metrics
+/// tables' retention. Returns how many migrations ran.
+///
+/// A client of its own with an hour's timeout: a migration may rebuild a
+/// table from every row kept (0002 refills the rollup), and ClickHouse goes on
+/// with a write after the client gives up, so a migration cut short would
+/// block the next start's attempt on its own table.
+let migrate (cfg: Config.Config) : Task<Result<int, string>> =
+    task {
+        use client = new ClickHouseClient(settings cfg (TimeSpan.FromHours 1.0))
+
+        match! NinjaCat.Api.Storage.Migrations.apply client with
+        | Error e -> return Error e
+        | Ok applied ->
+            let retention = cfg.MetricsRetention
+
+            match! NinjaCat.Api.Storage.Migrations.setMetricsRetention client (int retention.Raw.TotalDays) (int retention.Rollup.TotalDays) with
+            | Error e -> return Error e
+            | Ok() -> return Ok applied
+    }
 
 let private toDriverValue =
     function
