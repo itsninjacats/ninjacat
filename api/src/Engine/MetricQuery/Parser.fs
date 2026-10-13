@@ -200,9 +200,13 @@ let private quoted: P<string> =
 
 // Not pfloat: it also reads `NaN` and `Infinity`, which would make a metric
 // named `nan.errors` start as a number. A minus sign is the expression layer's.
-let private number: P<float> =
+let number: P<float> =
     numberLiteral (NumberLiteralOptions.AllowFraction ||| NumberLiteralOptions.AllowExponent) "number"
-    |>> fun n -> float n.String
+    >>= fun n ->
+        // `1e999` reads as infinity.
+        match float n.String with
+        | value when Double.IsFinite value -> preturn value
+        | _ -> fail $"{n.String} is too large a number"
 
 let private literal: P<Literal> =
     choice [ number |>> Num; quoted |>> Quoted; identifier |>> Word ] .>> ws
@@ -348,8 +352,11 @@ let formula: P<Formula> = ws >>. expressionOf WordsAreLeaves identifier .>> eof
 
 let parseFormula (input: string) : Result<Formula, string> = run formula input |> toResult
 
+/// One expression with its metric queries inline, as v1 and monitors write
+/// it. No `eof`: a monitor's query goes on with a comparator after it.
+let expression: P<Expr<MetricQuery>> = expressionOf WordsAreLiterals metricQuery
+
 /// A v1 `query=`: one or more expressions, separated by commas.
-let program: P<Program> =
-    ws >>. sepBy1 (expressionOf WordsAreLiterals metricQuery) (pchar ',' >>. ws) .>> eof
+let program: P<Program> = ws >>. sepBy1 expression (pchar ',' >>. ws) .>> eof
 
 let parseProgram (input: string) : Result<Program, string> = run program input |> toResult

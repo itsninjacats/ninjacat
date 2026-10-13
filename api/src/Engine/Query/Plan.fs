@@ -260,7 +260,7 @@ type Plan =
 // --- small helpers ---------------------------------------------------------------
 
 /// A word argument, quoted or not.
-let private word (literal: Literal) : string option =
+let word (literal: Literal) : string option =
     match literal with
     | Word w
     | Quoted w -> Some w
@@ -581,7 +581,7 @@ let private topShorthand (name: string) : Ranking option =
 
 /// `outliers(q, 'dbscan', 3)` or `outliers(q, 'mad', 3, 20)`. Algorithm names
 /// ignore case: Datadog's own examples write both 'DBSCAN' and 'dbscan'.
-let private outlierArgs (args: Literal list) : Result<OutlierAlgorithm * float, string> =
+let outlierArgs (args: Literal list) : Result<OutlierAlgorithm * float, string> =
     let usage = "outliers() takes a query, an algorithm, a tolerance and for MAD a percentage: outliers(query, 'dbscan', 3) or outliers(query, 'mad', 3, 20)"
     let algorithm (literal: Literal) = word literal |> Option.map (fun w -> w.ToLowerInvariant())
 
@@ -757,11 +757,11 @@ let private duration (text: string) : TimeSpan option =
     | Ok span when span > TimeSpan.Zero -> Some span
     | _ -> None
 
-let private namedArg (name: string) (named: (string * Literal) list) : Literal option =
+let namedArg (name: string) (named: (string * Literal) list) : Literal option =
     named |> List.tryFind (fun (n, _) -> n = name) |> Option.map snd
 
 /// Positional arguments after the query, and the `name=value` ones.
-let private splitArgs (rest: Arg<string> list) : Literal option list * (string * Literal) list =
+let splitArgs (rest: Arg<string> list) : Literal option list * (string * Literal) list =
     let positional =
         rest
         |> List.choose (fun arg ->
@@ -802,7 +802,7 @@ let private seasonality (named: (string * Literal) list) : Result<Seasonality, s
 /// WARNING(undocumented): `direction`, `alert_window`, `interval` and
 /// `count_default_zero` are for monitors. Accepted here and ignored: a graph
 /// draws the whole band.
-let private anomaliesArgs (rest: Arg<string> list) : Result<Extra, string> =
+let anomaliesArgs (rest: Arg<string> list) : Result<AnomalyAlgorithm * float, string> =
     let allowed = [ "direction"; "alert_window"; "interval"; "count_default_zero"; "seasonality"; "timezone" ]
     let positional, named = splitArgs rest
 
@@ -812,17 +812,12 @@ let private anomaliesArgs (rest: Arg<string> list) : Result<Extra, string> =
         match positional with
         | [ Some alg; Some(Num bounds) ] when bounds > 0.0 ->
             match word alg with
-            | Some "basic" -> Ok(Anomalies(Basic, bounds))
-            | Some "robust" ->
-                match seasonality named with
-                | Ok s -> Ok(Anomalies(Robust s, bounds))
-                | Error e -> Error e
-            | Some "agile" ->
-                match seasonality named with
-                | Ok s -> Ok(Anomalies(Agile s, bounds))
-                | Error e -> Error e
+            | Some "basic" -> Ok(Basic, bounds)
+            | Some "robust" -> seasonality named |> Result.map (fun s -> Robust s, bounds)
+            | Some "agile" -> seasonality named |> Result.map (fun s -> Agile s, bounds)
+            | Some "adaptive" -> Error "anomalies() 'adaptive' is Datadog's legacy algorithm and is not supported; use 'agile' or 'robust'"
             | _ -> Error "anomalies() algorithm must be 'basic', 'agile' or 'robust'"
-        | _ -> Error "anomalies() takes a query, an algorithm and bounds: anomalies(query, 'basic', 2)"
+        | _ -> Error "anomalies() takes a query, an algorithm and bounds above 0: anomalies(query, 'basic', 2)"
 
 let private linearModel (named: (string * Literal) list) : Result<LinearModel, string> =
     match namedArg "model" named |> Option.bind word with
@@ -845,7 +840,7 @@ let private durationArg (name: string) (named: (string * Literal) list) : Result
 ///
 /// `horizon` is ours: Datadog takes it from the monitor (`next_1w`) and does
 /// not document one for graphs. `interval` is accepted and ignored.
-let private forecastArgs (rest: Arg<string> list) : Result<Extra, string> =
+let forecastArgs (rest: Arg<string> list) : Result<float * ForecastMethod * TimeSpan option * TimeSpan option, string> =
     let allowed = [ "model"; "history"; "horizon"; "seasonality"; "timezone"; "interval" ]
     let positional, named = splitArgs rest
     let unknown = named |> List.tryFind (fun (n, _) -> not (List.contains n allowed))
@@ -859,11 +854,8 @@ let private forecastArgs (rest: Arg<string> list) : Result<Extra, string> =
         match positional with
         | [ Some alg; Some(Num deviations) ] when deviations >= 0.0 ->
             match word alg with
-            | Some "linear" -> Ok(Forecast(deviations, LinearForecast model, history, horizon))
-            | Some "seasonal" ->
-                match seasonality named with
-                | Ok s -> Ok(Forecast(deviations, SeasonalForecast s, history, horizon))
-                | Error e -> Error e
+            | Some "linear" -> Ok(deviations, LinearForecast model, history, horizon)
+            | Some "seasonal" -> seasonality named |> Result.map (fun s -> deviations, SeasonalForecast s, history, horizon)
             | _ -> Error "forecast() algorithm must be 'linear' or 'seasonal'"
         | _ -> Error "forecast() takes a query, an algorithm and deviations: forecast(query, 'linear', 1)"
 
@@ -872,7 +864,11 @@ let private forecastArgs (rest: Arg<string> list) : Result<Extra, string> =
 let private resolveOutput (from: DateTimeOffset) (label: string) (byName: Map<string, int>) (expr: Formula) : Result<Node * Extra, string list> =
     match expr with
     | Call(("anomalies" | "forecast") as name, Value inner :: rest) ->
-        let extra = if name = "anomalies" then anomaliesArgs rest else forecastArgs rest
+        let extra =
+            if name = "anomalies" then
+                anomaliesArgs rest |> Result.map Anomalies
+            else
+                forecastArgs rest |> Result.map Forecast
 
         match resolve from label byName inner, extra with
         | Ok node, Ok extra -> Ok(node, extra)

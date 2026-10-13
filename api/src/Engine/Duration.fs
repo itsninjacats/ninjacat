@@ -31,4 +31,7 @@ let parse (text: string) : Result<TimeSpan, string> =
             Regex.Matches(text, pair)
             |> Seq.sumBy (fun part -> Double.Parse(part.Groups[1].Value, CultureInfo.InvariantCulture) * seconds[part.Groups[2].Value])
 
-        Ok(TimeSpan.FromSeconds(if m.Groups[1].Value = "-" then -total else total))
+        try
+            Ok(TimeSpan.FromSeconds(if m.Groups[1].Value = "-" then -total else total))
+        with :? OverflowException ->
+            Error $"duration \"{text}\" is too long"

@@ -29,6 +29,10 @@
     <Compile Include="Query/Evaluate.fs" />
     <Compile Include="Query/Execute.fs" />
     <Compile Include="Query/Engine.fs" />
+    <Compile Include="Monitor/Definition.fs" />
+    <Compile Include="Monitor/Parse.fs" />
+    <Compile Include="Monitor/Options.fs" />
+    <Compile Include="Monitor/Validate.fs" />
     <Compile Include="Panel.fs" />
   </ItemGroup>
   <ItemGroup>
