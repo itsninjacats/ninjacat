@@ -1,4 +1,16 @@
-import { pgTable, text, uuid, timestamp, index } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import {
+	pgTable,
+	text,
+	uuid,
+	timestamp,
+	index,
+	bigint,
+	integer,
+	smallint,
+	jsonb,
+	check
+} from 'drizzle-orm/pg-core';
 import { organization, user } from './auth.schema';
 
 // The agents' API keys. An agent sends its key in Dd-Api-Key with EVERY
@@ -48,6 +60,57 @@ export const apiKey = pgTable(
 	(table) => [
 		// The intake looks a key up by its hash on every agent request.
 		index('api_key_hash_idx').on(table.keyHash)
+	]
+);
+
+// A monitor's definition, in Datadog's shape (name, type, query, message,
+// options, tags, priority), so a Datadog-compatible /api/v1/monitor and
+// Terraform stay cheap later. The monitor service reads this table and never
+// writes it; every write goes through src/lib/server/monitors.ts, which tells
+// the service in the same transaction.
+export const monitor = pgTable(
+	'monitor',
+	{
+		// An integer, as Datadog's monitor ids are.
+		id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+
+		// No default and restrict, as for api_key: a monitor belongs to a named
+		// tenant, and its transitions in ClickHouse would lose their owner.
+		tenantId: text('tenant_id')
+			.notNull()
+			.references(() => organization.id, { onDelete: 'restrict' }),
+
+		name: text('name').notNull(),
+		// "query alert"; "metric alert" is accepted as the same.
+		type: text('type').notNull(),
+		query: text('query').notNull(),
+		message: text('message').notNull().default(''),
+		// Datadog's options object, verbatim.
+		options: jsonb('options').notNull().default({}),
+		tags: text('tags')
+			.array()
+			.notNull()
+			.default(sql`'{}'::text[]`),
+		priority: smallint('priority'),
+		// The panel's own view of the query, so the editor reopens what it saved.
+		editor: jsonb('editor'),
+
+		// Bumped on every write; the service tells a stale notification by it.
+		version: integer('version').notNull().default(1),
+
+		// The actor of the transitions a change causes (definition_changed, deleted).
+		createdById: text('created_by_id').references(() => user.id, { onDelete: 'set null' }),
+		updatedById: text('updated_by_id').references(() => user.id, { onDelete: 'set null' }),
+		deletedById: text('deleted_by_id').references(() => user.id, { onDelete: 'set null' }),
+
+		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+		// Soft delete: the service closes the monitor's groups when it sees this.
+		deletedAt: timestamp('deleted_at', { withTimezone: true })
+	},
+	(table) => [
+		index('monitor_tenant_idx').on(table.tenantId),
+		check('monitor_priority_check', sql`${table.priority} between 1 and 5`)
 	]
 );
 

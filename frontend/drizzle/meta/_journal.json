@@ -15,6 +15,13 @@
       "when": 1791913028210,
       "tag": "0001_one_membership_per_tenant",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791922506342,
+      "tag": "0002_monitor",
+      "breakpoints": true
     }
   ]
 }
