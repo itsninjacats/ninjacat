@@ -28,14 +28,6 @@ let private stateText (s: Status option) =
     | Some s -> s.Text
     | None -> "none"
 
-let private statusOf (text: string) : Status option =
-    match text with
-    | "OK" -> Some OK
-    | "Warn" -> Some Warn
-    | "Alert" -> Some Alert
-    | "No Data" -> Some NoData
-    | _ -> None
-
 let private utc (t: DateTimeOffset) = t.UtcDateTime
 
 /// A transition as stored, with what judged it: the definition's thresholds
@@ -117,8 +109,7 @@ let monitorRow (key: MonitorKey) (at: DateTimeOffset) (groups: Map<string, Group
 
 // --- reading back ----------------------------------------------------------------------
 
-/// The latest transition of a group says it is closed.
-let private closing = set [ Reason.Expired.Text; Reason.DefinitionChanged.Text; Reason.Deleted.Text ]
+let private closing = closes |> List.map _.Text |> set
 
 let private keyParameters (key: MonitorKey) =
     [ "tenant", SqlValue.String key.Tenant; "monitor", SqlValue.Int64 key.Id ]
@@ -150,14 +141,14 @@ let private latest (client: ClickHouseClient) (key: MonitorKey) (ct: Cancellatio
         (fun r ->
             { Key = r.GetString 0
               Tags = (r.GetValue 1 :?> string[]) |> List.ofArray
-              State = statusOf (r.GetString 2)
+              State = Status.ofText (r.GetString 2)
               Reason = r.GetString 3
               At = time r 4
               FirstAt = time r 5
               FirstTriggeredAt = optionalTime r 6
               LastTriggeredAt = optionalTime r 7
               QueryHash = r.GetString 8
-              From = statusOf (r.GetString 9) })
+              From = Status.ofText (r.GetString 9) })
         { Text =
             // argMax skips a NULL argument and would return an older trigger
             // time; inside a tuple the NULL is kept.

@@ -7,6 +7,7 @@ module NinjaCat.Api.Engine.Monitor.Validate
 
 open System
 open System.Globalization
+open System.Text.Json
 open NinjaCat.Api.Engine.Api.V2.Timeseries
 open NinjaCat.Api.Engine.Query
 open NinjaCat.Api.Engine.Monitor.Definition
@@ -238,3 +239,30 @@ let definition
                         NotActedOn = notActedOn } }
         | problems -> Error problems
     | problems, q, o -> Error(problems @ problemsOf q @ problemsOf o)
+
+/// A monitor as Datadog's API takes it, as JSON: its type, query and options
+/// are checked as `definition` checks them, and its other fields are left to
+/// the panel.
+let monitor (retention: Plan.Retention) (now: DateTimeOffset) (json: string) : Result<Definition, string list> =
+    let text (root: JsonElement) (name: string) =
+        match root.TryGetProperty name with
+        | true, value when value.ValueKind = JsonValueKind.String -> Ok(value.GetString())
+        | _ -> Error [ $"{name} must be a string" ]
+
+    try
+        use document = JsonDocument.Parse json
+        let root = document.RootElement
+
+        if root.ValueKind <> JsonValueKind.Object then
+            Error [ "a monitor must be a JSON object" ]
+        else
+            let options =
+                match root.TryGetProperty "options" with
+                | true, value -> value.GetRawText()
+                | false, _ -> ""
+
+            match text root "type", text root "query" with
+            | Ok monitorType, Ok query -> definition retention now monitorType query options
+            | monitorType, query -> Error(problemsOf monitorType @ problemsOf query)
+    with :? JsonException as e ->
+        Error [ $"the monitor is not valid JSON: {e.Message}" ]

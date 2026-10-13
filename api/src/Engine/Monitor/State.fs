@@ -25,6 +25,22 @@ type Status =
         | Alert -> "Alert"
         | NoData -> "No Data"
 
+    static member ofText(text: string) : Status option =
+        match text with
+        | "OK" -> Some OK
+        | "Warn" -> Some Warn
+        | "Alert" -> Some Alert
+        | "No Data" -> Some NoData
+        | _ -> None
+
+/// The most severe group decides a monitor's state.
+let severity (s: Status) =
+    match s with
+    | Alert -> 3
+    | Warn -> 2
+    | NoData -> 1
+    | OK -> 0
+
 [<RequireQualifiedAccess>]
 type Reason =
     | New
@@ -54,6 +70,10 @@ type Reason =
 /// Reasons the notifier never notifies. A new group that is OK is not
 /// notified either.
 let neverNotified = [ Reason.NoDataShown; Reason.Expired; Reason.DefinitionChanged; Reason.Deleted ]
+
+/// A group whose latest transition has one of these reasons is closed: the
+/// service does not load it and the panel does not show it.
+let closes = [ Reason.Expired; Reason.DefinitionChanged; Reason.Deleted ]
 
 /// The threshold a transition's value crossed.
 type Crossed =
@@ -383,13 +403,6 @@ let redefine (previous: string) (d: Definition) (at: DateTimeOffset) (groups: Ma
 /// The monitor's state, its most severe judged group; None when no group is
 /// judged yet, which a multi alert shows as "no groups found".
 let overall (groups: Map<string, Group>) : Status option =
-    let severity (s: Status) =
-        match s with
-        | Alert -> 3
-        | Warn -> 2
-        | NoData -> 1
-        | OK -> 0
-
     match groups.Values |> Seq.choose _.State |> List.ofSeq with
     | [] -> None
     | states -> Some(List.maxBy severity states)

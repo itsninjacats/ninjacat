@@ -3,124 +3,18 @@
 module NinjaCat.Api.Query.Tests.TokenTests
 
 open System
-open System.Collections.Concurrent
 open System.Net
 open System.Net.Http
-open System.Net.Http.Headers
-open System.Text
 open System.Threading.Tasks
-open System.Web
-open Microsoft.AspNetCore.Builder
-open Microsoft.AspNetCore.Hosting
-open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.IdentityModel.JsonWebTokens
 open Microsoft.IdentityModel.Tokens
 open Xunit
-open ClickHouse.Driver
-open ClickHouse.Driver.ADO
 open NinjaCat.Api.Server
-open NinjaCat.Api.Platform
+open NinjaCat.Api.Query.Tests.TestServer
 
-let private secret = "0123456789abcdef0123456789abcdef"
-
-let private config: Config.Config =
-    { IntakeAddr = ":8080"
-      InternalAddr = ":8081"
-      QueryTokenSecret = secret
-      LogsTcpAddr = None
-      TlsCertFile = ""
-      TlsKeyFile = ""
-      ClickHouseHttpAddr = "localhost:8123"
-      ClickHouseDb = "ninjacat"
-      ClickHouseUser = "ninjacat"
-      ClickHousePassword = "ninjacat"
-      // Nothing listens there: /health is the only route that connects,
-      // and it is tested only for being open.
-      DatabaseUrl = "postgres://test:test@127.0.0.1:1/test"
-      AutoMigrate = false
-      MetricsRetention = NinjaCat.Api.Engine.Query.Plan.defaultRetention
-      TrustedProxies = []
-      MaxBodyBytes = 1024L
-      AckUnknown = false
-      Debug = false
-      CaptureDir = ""
-      SelfMonitorInterval = TimeSpan.FromSeconds 15.0
-      SelfMonitorTenant = "default"
-      SelfMonitorHost = "" }
-
-/// Stands in for ClickHouse's HTTP interface: keeps the bound parameters of
-/// every query (`param_<name>` in the URL) and answers each with no rows.
-type private FakeClickHouse() =
-    inherit HttpMessageHandler()
-
-    member val Parameters = ConcurrentQueue<string>()
-
-    override this.SendAsync(request: HttpRequestMessage, _) =
-        let query = HttpUtility.ParseQueryString request.RequestUri.Query
-
-        for name in query.AllKeys do
-            if name.StartsWith "param_" then
-                this.Parameters.Enqueue query[name]
-
-        // RowBinaryWithNamesAndTypes with no columns: a zero column count.
-        Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK, Content = new ByteArrayContent [| 0uy |]))
-
-/// The query process as `ninjacat-api query` builds it, in memory, with
-/// ClickHouse replaced.
-let private withServer (config: Config.Config) (test: HttpClient -> FakeClickHouse -> Task) : Task =
-    task {
-        let clickhouse = new FakeClickHouse()
-        let builder = WebApplication.CreateEmptyBuilder(WebApplicationOptions())
-        builder.WebHost.UseTestServer() |> ignore
-        QueryHost.addServices config builder.Services
-
-        builder.Services.AddSingleton<ClickHouseClient>(fun _ ->
-            new ClickHouseClient(ClickHouseClientSettings(Host = "clickhouse.test", HttpClient = new HttpClient(clickhouse))))
-        |> ignore
-
-        use app = builder.Build()
-        QueryHost.configure app
-        do! app.StartAsync()
-        use client = app.GetTestClient()
-        do! test client clickhouse
-        do! app.StopAsync()
-    }
-
-/// A token as the panel mints it (frontend/src/lib/server/ninjacat.ts), and
-/// what each test changes in it.
-type private Token =
-    { Key: string
-      Issuer: string
-      Audience: string
-      Expires: DateTime
-      Algorithm: string
-      Claims: (string * obj) list }
-
-let private panelToken () : Token =
-    { Key = secret
-      Issuer = QueryToken.issuer
-      Audience = QueryToken.audience
-      Expires = DateTime.UtcNow.AddSeconds 60.0
-      Algorithm = SecurityAlgorithms.HmacSha256
-      Claims = [ "sub", box "user-1"; "tenant", box "acme"; "role", box "member" ] }
-
-let private mint (token: Token) : string =
-    JsonWebTokenHandler()
-        .CreateToken(
-            SecurityTokenDescriptor(
-                Issuer = token.Issuer,
-                Audience = token.Audience,
-                IssuedAt = Nullable(token.Expires.AddSeconds -60.0),
-                NotBefore = Nullable(token.Expires.AddSeconds -60.0),
-                Expires = Nullable token.Expires,
-                SigningCredentials = SigningCredentials(SymmetricSecurityKey(Encoding.UTF8.GetBytes token.Key), token.Algorithm),
-                Claims = dict token.Claims
-            )
-        )
-
-/// One request to each kind of guarded route: the panel's, and Datadog's
-/// query API, read and planned.
+/// One request to each kind of guarded route that queries: the panel's,
+/// the monitors', and Datadog's query API, read and planned.
 let private guarded: (HttpMethod * string * string) list =
     [ HttpMethod.Get, "/internal/metrics/names", ""
       HttpMethod.Get, "/internal/metrics/tags?metric=system.cpu.user", ""
@@ -128,6 +22,10 @@ let private guarded: (HttpMethod * string * string) list =
       HttpMethod.Get, "/internal/metrics/query?metric=system.cpu.user", ""
       HttpMethod.Get, "/internal/logs/search", ""
       HttpMethod.Get, "/internal/logs/facets", ""
+      HttpMethod.Get, "/internal/monitors/status?ids=1,2", ""
+      HttpMethod.Get, "/internal/monitors/7/groups", ""
+      HttpMethod.Get, "/internal/monitors/7/transitions?from=-1d&group=host:a", ""
+      HttpMethod.Get, "/internal/monitors/7/evaluations?from=-1d", ""
       HttpMethod.Get, "/api/v1/metrics?from=0", ""
       HttpMethod.Post,
       "/api/v2/query/timeseries",
@@ -136,21 +34,16 @@ let private guarded: (HttpMethod * string * string) list =
       "/api/v2/query/scalar",
       """{"data":{"type":"scalar_request","attributes":{"from":1700000000000,"to":1700003600000,"queries":[{"data_source":"metrics","name":"a","query":"avg:system.cpu.user{*}","aggregator":"avg"}]}}}""" ]
 
-let private send (client: HttpClient) (bearer: string option) (method: HttpMethod, path: string, body: string) : Task<HttpResponseMessage> =
-    let request = new HttpRequestMessage(method, path)
-
-    if body <> "" then
-        request.Content <- new StringContent(body, Encoding.UTF8, "application/json")
-
-    bearer |> Option.iter (fun token -> request.Headers.Authorization <- AuthenticationHeaderValue("Bearer", token))
-    client.SendAsync request
+/// Validation reads nothing, but answers only the panel.
+let private validate =
+    HttpMethod.Post, "/internal/monitors/validate", """{"type":"query alert","query":"avg(last_5m):avg:system.cpu.user{*} > 90"}"""
 
 /// Every guarded route answers 401 with this bearer (or none), and nothing
 /// reaches ClickHouse.
 let private refusedEverywhere (bearer: string option) : Task =
     withServer config (fun client clickhouse ->
         task {
-            for route in guarded do
+            for route in validate :: guarded do
                 use! response = send client bearer route
                 let _, path, _ = route
                 Assert.True(response.StatusCode = HttpStatusCode.Unauthorized, $"{path}: {response.StatusCode}")

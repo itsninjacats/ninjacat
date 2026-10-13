@@ -31,7 +31,7 @@ let addServices (cfg: Config.Config) (services: IServiceCollection) : unit =
 
 let configure (app: IApplicationBuilder) : unit =
     let guarded =
-        Handlers.endpoints @ PanelHandlers.endpoints
+        Handlers.endpoints @ PanelHandlers.endpoints @ MonitorHandlers.endpoints
         |> List.map (configureEndpoint (fun endpoint -> endpoint.RequireAuthorization()))
 
     app.UseRouting().UseAuthentication().UseAuthorization().UseOxpecker(Handlers.probes @ guarded)

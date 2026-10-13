@@ -16,6 +16,7 @@ type SqlValue =
     | Int64 of int64
     | Float64 of float
     | StringArray of string list
+    | Int64Array of int64 list
 
     member v.ClickHouseType =
         match v with
@@ -23,6 +24,7 @@ type SqlValue =
         | Int64 _ -> "Int64"
         | Float64 _ -> "Float64"
         | StringArray _ -> "Array(String)"
+        | Int64Array _ -> "Array(Int64)"
 
 /// A compiled query: text with `{name:Type}` placeholders plus their values.
 ///

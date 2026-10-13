@@ -74,6 +74,7 @@ let private toDriverValue =
     | SqlValue.Int64 i -> box i
     | SqlValue.Float64 f -> box f
     | SqlValue.StringArray xs -> box (List.toArray xs)
+    | SqlValue.Int64Array xs -> box (List.toArray xs)
 
 /// Runs a query and maps each row with `read`.
 let query (client: ClickHouseClient) (ct: CancellationToken) (read: Data.Common.DbDataReader -> 'T) (sql: Sql) : Task<'T list> =

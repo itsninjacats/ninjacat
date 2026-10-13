@@ -366,3 +366,34 @@ let ``every type plans`` () =
           "max(next_1w):forecast(avg:x{*}, 'seasonal', 1, seasonality='daily') >= 3"
           "avg(last_30m):outliers(avg:x{*} by {host}, 'scaledmad', 3, 20) > 0" ] do
         valid query "" |> ignore
+
+// --- a monitor as JSON ------------------------------------------------------------------
+
+let private monitorJson (json: string) = Validate.monitor Plan.defaultRetention now json
+
+[<Fact>]
+let ``a monitor's JSON is checked by its type, query and options`` () =
+    let json =
+        """{"name":"cpu","type":"query alert","query":"avg(last_5m):avg:system.cpu.user{*} by {host} > 90",
+            "message":"@ops","tags":["team:a"],"options":{"thresholds":{"warning":80},"renotify_interval":60}}"""
+
+    match monitorJson json with
+    | Ok d ->
+        Assert.Equal(Some 90.0, d.Options.Thresholds.Critical)
+        Assert.Contains("renotify_interval", d.Options.NotActedOn)
+    | Error problems -> failwith (String.Join('\n', problems))
+
+    Assert.True((monitorJson """{"type":"metric alert","query":"avg(last_5m):avg:x{*} > 1","options":null}""").IsOk)
+
+[<Fact>]
+let ``JSON that is no monitor is a problem`` () =
+    monitorJson "{" |> problemsOf |> mentions "not valid JSON"
+    monitorJson "[]" |> problemsOf |> mentions "must be a JSON object"
+
+    let both = monitorJson """{"type":1}""" |> problemsOf
+    mentions "type must be a string" both
+    mentions "query must be a string" both
+
+    monitorJson """{"type":"query alert","query":"avg(last_5m):avg:x{*} > 1","options":{"thresholds":{"critical":2}}}"""
+    |> problemsOf
+    |> mentions "must equal the query's threshold"

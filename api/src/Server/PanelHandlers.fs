@@ -14,13 +14,13 @@ open ClickHouse.Driver
 open NinjaCat.Api.Engine
 open NinjaCat.Api.Platform
 
-let private fail (status: int) (message: string) : EndpointHandler =
+let fail (status: int) (message: string) : EndpointHandler =
     setStatusCode status >=> json {| error = message |}
 
-let private queryValue (ctx: HttpContext) (name: string) : string =
+let queryValue (ctx: HttpContext) (name: string) : string =
     ctx.TryGetQueryValue name |> Option.defaultValue ""
 
-let private queryValues (ctx: HttpContext) (name: string) : string list =
+let queryValues (ctx: HttpContext) (name: string) : string list =
     ctx.Request.Query[name].ToArray() |> List.ofArray
 
 let private queryInt (ctx: HttpContext) (name: string) : int =
@@ -28,9 +28,10 @@ let private queryInt (ctx: HttpContext) (name: string) : int =
     | true, n -> n
     | false, _ -> 0
 
-/// Runs a query; a failure in ClickHouse is the caller's 400 with its reason,
-/// as the query is built from the caller's parameters.
-let private run (ctx: HttpContext) (read: Data.Common.DbDataReader -> 'T) (sql: Sql) : Task<Result<'T list, string>> =
+/// Runs a query; a failure in ClickHouse is logged and comes back as its
+/// reason. The panel's lookups answer it with a 400, as their queries are built
+/// from the caller's parameters.
+let run (ctx: HttpContext) (read: Data.Common.DbDataReader -> 'T) (sql: Sql) : Task<Result<'T list, string>> =
     task {
         try
             let! rows = ClickHouse.query (ctx.GetService<ClickHouseClient>()) ctx.RequestAborted read sql
@@ -66,7 +67,7 @@ let metricTagValues: EndpointHandler =
                 ctx
 
 /// `from` and `to` of a request: an hour back to now unless given.
-let private timeRange (ctx: HttpContext) : Result<DateTimeOffset * DateTimeOffset, string> =
+let timeRange (ctx: HttpContext) : Result<DateTimeOffset * DateTimeOffset, string> =
     let now = DateTimeOffset.UtcNow
 
     match Panel.parseTime (queryValue ctx "from") (now.AddHours -1.0) now, Panel.parseTime (queryValue ctx "to") now now with

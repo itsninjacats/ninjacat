@@ -4,7 +4,9 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="TestServer.fs" />
     <Compile Include="TokenTests.fs" />
+    <Compile Include="MonitorTests.fs" />
   </ItemGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
