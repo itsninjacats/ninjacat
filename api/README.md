@@ -46,7 +46,9 @@ Grafana's Datadog plugin can all point at it unchanged.
 
 Postgres (users, API keys, later monitors and dashboards) is reached through
 plain Npgsql, no ORM. Its schema belongs to Drizzle in `frontend/`: this
-service never migrates it, and a table it needs is added there first.
+service never migrates it, and a table it needs is added there first. Its
+history was squashed into one `0000` on 2026-10-13, like ClickHouse's: a
+Postgres built before that must be dropped.
 
 ## The intake
 

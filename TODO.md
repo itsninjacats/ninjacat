@@ -53,7 +53,7 @@ Fixed that day, each checked against the shipping image:
       nothing a request carries can forge a log line; NOTES say how the first account is made.
 - [x] **Sign-in is throttled.** The form signs in through Better Auth's own endpoint, so its
       rate limiter counts: five attempts a minute per client address
-      (`frontend/src/lib/server/auth.ts`), in the process's memory. With more than one panel
+      (`frontend/src/lib/server/auth-options.ts`), in the process's memory. With more than one panel
       pod, `storage: "database"`.
 - [x] **An agent through the chart's real Ingress.** The kind lab runs Traefik now and the
       agent reaches the intake through the chart's Ingress with the lab's certificate. Run on

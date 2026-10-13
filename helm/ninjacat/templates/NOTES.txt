@@ -44,4 +44,6 @@ every visitor as one. Name the controller's pods' network there.
 Nobody can register. Make the first account in the panel's pod:
   kubectl -n {{ .Release.Namespace }} exec -it deploy/{{ include "ninjacat.fullname" . }}-frontend -- \
     node create-user.js you@example.com --name 'Your Name'
-It asks for the password.
+It asks for the password. The first account is the instance admin and the owner
+of the tenant default. Add later ones with --tenant <id|slug> and
+--role owner|admin|member, or --admin for another instance admin.

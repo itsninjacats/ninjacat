@@ -72,7 +72,9 @@ production goes through `frontend/scripts/migrate.ts`, which uses only drizzle-o
 migrator and is bundled into the runtime image as `migrate.js`. So the shipping image
 has two entrypoints: `node build` serves, `node migrate.js` migrates and exits. That
 is what lets Kubernetes run migrations as a pre-upgrade hook Job without shipping
-drizzle-kit anywhere near production.
+drizzle-kit anywhere near production. The Drizzle history was squashed once, into one
+`0000` (2026-10-13), before anyone ran NinjaCat; a Postgres from before that must be
+dropped.
 
 **The ClickHouse schema follows the same shape, owned by the server.** Migrations
 live embedded in the binary (`api/schema/migrations/*.sql`, tracked in a
@@ -127,12 +129,13 @@ bun run test                     # vitest, both projects, single run
 bun run test:unit -- --project=server src/lib/vitest-examples/greet.spec.ts   # one file
 bun run db:start                 # Postgres + ClickHouse from the root compose
 bun run db:push / db:generate / db:migrate / db:studio
-bun run auth:schema              # regenerate src/lib/server/db/auth.schema.ts from auth.ts
+bun run auth:schema              # regenerate src/lib/server/db/auth.schema.ts from the auth options
 ```
 
 Vitest runs two projects: **client** (`*.svelte.{test,spec}.ts`, real Chromium via Playwright)
 and **server** (everything else, node). `expect.requireAssertions` is on — a test with no
-assertion fails. `auth.schema.ts` is generated; edit `src/lib/server/auth.ts` instead.
+assertion fails. `auth.schema.ts` is generated; edit `src/lib/server/auth-options.ts`
+instead, the options the panel (`auth.ts`) and `scripts/create-user.ts` share.
 
 Copy `.env.example` to `.env`: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ORIGIN`, and
 `NINJACAT_INTERNAL_URL` (defaults to `http://localhost:8081`).

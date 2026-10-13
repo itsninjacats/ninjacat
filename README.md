@@ -68,6 +68,15 @@ docker compose exec frontend bun run user:create -- you@example.com --name 'Your
 It asks for the password, as Django's `createsuperuser` does. Where nobody is there to type
 (a Job, a script), it takes it from `NINJACAT_USER_PASSWORD`.
 
+The first account on an empty database is the instance admin and the owner of the tenant
+`default`, which it creates. Later accounts take `--admin` (an instance admin, who creates
+tenants and accounts), `--tenant <id|slug>` (repeatable) and `--role owner|admin|member`
+(`member` by default):
+
+```bash
+docker compose exec frontend bun run user:create -- them@example.com --tenant default --role admin
+```
+
 Create an API key in the panel under Settings, then send an agent at it. The intake
 routes on the hostname, as Datadog does, so each product needs its Datadog-shaped name
 (`app.`, `trace.agent.`, `process.`, …) resolving to NinjaCat:

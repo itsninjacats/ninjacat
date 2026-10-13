@@ -1,13 +1,35 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { apiKey } from '$lib/server/db/schema';
+import { apiKey, member } from '$lib/server/db/schema';
 import { nowyKlucz, skrotKlucza, prefiks, refreshApiKeys } from '$lib/server/api-keys';
+import { m } from '$lib/paraglide/messages';
 import type { Actions, PageServerLoad } from './$types';
+
+// Until the hook resolves the tenant on every request, this page checks it
+// here: a session keeps its active organization after its user is removed
+// from it, and a key made then would still write into that tenant.
+async function activeTenant(locals: App.Locals): Promise<string | null> {
+	const tenantId = locals.session?.activeOrganizationId;
+	if (!locals.user || !tenantId) {
+		return null;
+	}
+	const [membership] = await db
+		.select({ id: member.id })
+		.from(member)
+		.where(and(eq(member.userId, locals.user.id), eq(member.organizationId, tenantId)))
+		.limit(1);
+	return membership ? tenantId : null;
+}
 
 export const load: PageServerLoad = async ({ locals }) => {
 	if (!locals.user) {
 		redirect(302, '/login');
+	}
+
+	const tenantId = await activeTenant(locals);
+	if (!tenantId) {
+		return { klucze: [] };
 	}
 
 	const klucze = await db
@@ -19,6 +41,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			lastUsedAt: apiKey.lastUsedAt
 		})
 		.from(apiKey)
+		.where(eq(apiKey.tenantId, tenantId))
 		.orderBy(desc(apiKey.createdAt));
 
 	return { klucze };
@@ -40,10 +63,16 @@ export const actions: Actions = {
 			return fail(400, { blad: 'Nazwa może mieć najwyżej 100 znaków', nazwa });
 		}
 
+		const tenantId = await activeTenant(locals);
+		if (!tenantId) {
+			return fail(403, { blad: m.no_tenant(), nazwa });
+		}
+
 		const klucz = nowyKlucz();
 
 		await db.insert(apiKey).values({
 			name: nazwa,
+			tenantId,
 			keyHash: skrotKlucza(klucz),
 			prefix: prefiks(klucz),
 			createdById: locals.user.id
@@ -72,7 +101,12 @@ export const actions: Actions = {
 			return fail(400, { blad: 'Brak identyfikatora klucza' });
 		}
 
-		await db.delete(apiKey).where(eq(apiKey.id, id));
+		const tenantId = await activeTenant(locals);
+		if (!tenantId) {
+			return fail(403, { blad: m.no_tenant() });
+		}
+
+		await db.delete(apiKey).where(and(eq(apiKey.id, id), eq(apiKey.tenantId, tenantId)));
 
 		// Przy usuwaniu odswiezenie jest WAZNIEJSZE niz przy tworzeniu:
 		// dopoki keeper trzyma stary obraz, skasowany klucz nadal dziala.
