@@ -1,4 +1,4 @@
-module NinjaCat.Api.Server.Config
+module NinjaCat.Api.Platform.Config
 
 open System
 open NinjaCat.Api.Engine

@@ -1,5 +1,5 @@
 /// Executes what the engine compiled. The only file that knows the driver.
-module NinjaCat.Api.Server.ClickHouse
+module NinjaCat.Api.Platform.ClickHouse
 
 open System
 open System.Threading

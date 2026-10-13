@@ -7,6 +7,7 @@ open Microsoft.Extensions.Logging
 open Oxpecker
 open ClickHouse.Driver
 open NinjaCat.Api.Engine
+open NinjaCat.Api.Platform
 
 /// Datadog's error envelope, so API clients report our errors the way they
 /// report Datadog's.

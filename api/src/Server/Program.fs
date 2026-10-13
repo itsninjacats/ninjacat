@@ -1,6 +1,7 @@
 module NinjaCat.Api.Server.Program
 
 open NinjaCat.Api.Storage
+open NinjaCat.Api.Platform
 
 /// `ninjacat-api migrate`: apply the ClickHouse migrations and exit. For
 /// deployments with several replicas, where applying at start-up would race.

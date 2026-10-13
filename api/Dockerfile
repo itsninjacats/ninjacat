@@ -12,6 +12,7 @@ COPY src/Proto/NinjaCat.Api.Proto.csproj src/Proto/
 COPY src/Engine/Engine.fsproj src/Engine/
 COPY src/Storage/Storage.fsproj src/Storage/
 COPY src/Intake/Intake.fsproj src/Intake/
+COPY src/Platform/Platform.fsproj src/Platform/
 COPY src/Server/Server.fsproj src/Server/
 RUN dotnet restore src/Server/Server.fsproj
 

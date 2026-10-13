@@ -2,7 +2,7 @@
 ///
 /// The schema belongs to Drizzle in `frontend/` — this service never migrates
 /// it. Anything the F# side needs to store gets its table there first.
-module NinjaCat.Api.Server.Postgres
+module NinjaCat.Api.Platform.Postgres
 
 open System
 open System.Threading

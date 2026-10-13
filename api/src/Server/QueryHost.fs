@@ -11,6 +11,7 @@ open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
 open Microsoft.Extensions.DependencyInjection
 open Oxpecker
+open NinjaCat.Api.Platform
 
 let addServices (cfg: Config.Config) (services: IServiceCollection) : unit =
     // One client per database for the process: each owns its connection

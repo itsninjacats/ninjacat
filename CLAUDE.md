@@ -145,14 +145,15 @@ Copy `.env.example` to `.env`: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ORIGIN`,
 
 ## Server architecture
 
-One program (`api/src/Server`, `ninjacat-api`) run as two processes, five projects:
+One program (`api/src/Server`, `ninjacat-api`) run as two processes, six projects:
 
 ```
 src/Proto     agent protobuf schemas → generated C#
 src/Engine    query language → SQL text + typed parameters; the panel's queries
 src/Storage   rows, one writer per table, the sink, migrations
 src/Intake    host dispatch, route matching, auth, one router per Datadog product
-src/Server    the program: config, the two hosts, key keeper, self-monitoring, logs over TCP
+src/Platform  what every process shares: config, the ClickHouse and Postgres clients, self-monitoring
+src/Server    the program: the two hosts, key keeper, logs over TCP
 ```
 
 Two processes, deliberately not one (`Program.fs` picks by the first argument; there is no
@@ -261,7 +262,7 @@ SNMP device with traps and NetFlow, system-probe) and a kind cluster.
 
 Connections: `CLICKHOUSE_HTTP_ADDR` (default `localhost:8123` — HTTP, not the native port),
 `CLICKHOUSE_DB`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` (all default to `ninjacat`), and
-`DATABASE_URL` for Postgres. All are read in `Server/Config.fs`.
+`DATABASE_URL` for Postgres. All are read in `Platform/Config.fs`.
 
 Listeners: `NINJACAT_ADDR` (`:8080`), `NINJACAT_INTERNAL_ADDR` (`:8081`),
 `NINJACAT_LOGS_TCP_ADDR` (`:10516`, `off` to disable), `NINJACAT_TLS_CERT`/`NINJACAT_TLS_KEY`.

@@ -38,9 +38,10 @@ Grafana's Datadog plugin can all point at it unchanged.
   matching); `Auth.fs` is the API key as an ASP.NET authentication scheme;
   `Routers/*.fs` hold the handlers, Oxpecker's own, which turn a payload into
   rows.
-- `src/Server` — the host: configuration, the two HTTP surfaces, the API key
-  keeper, self-monitoring. `ClickHouse.fs` and `Postgres.fs` are the only
-  files that open a database connection.
+- `src/Platform` — what every process shares: configuration, the web host's
+  defaults, self-monitoring. Its `ClickHouse.fs` and `Postgres.fs` are the
+  only files that open a database connection.
+- `src/Server` — the program: the two HTTP surfaces and the API key keeper.
 - `tests/Engine.Tests`, `tests/Intake.Tests` — xunit v3 on
   Microsoft.Testing.Platform.
 
@@ -143,7 +144,7 @@ let! values = Engine.scalar execute tenant { …; Queries = [ { …; Aggregator 
 // Ok [ { Formula = "cpu"; Values = [ { Tags = [ … ]; Value = 41.7 }; … ] } ]
 ```
 
-`execute` is how the engine reaches ClickHouse — `Server/ClickHouse.fs`
+`execute` is how the engine reaches ClickHouse — `Platform/ClickHouse.fs`
 `metricRows` in the service, a list in tests.
 
 ## Known deviations from Datadog

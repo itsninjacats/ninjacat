@@ -1,5 +1,5 @@
-/// What both processes set up the same way.
-module NinjaCat.Api.Server.Hosting
+/// What every process sets up the same way.
+module NinjaCat.Api.Platform.Hosting
 
 open System.Net
 open Microsoft.AspNetCore.Builder

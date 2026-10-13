@@ -23,6 +23,7 @@ open Microsoft.Extensions.Logging
 open Oxpecker
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
+open NinjaCat.Api.Platform
 
 /// Inserts what the writers still hold when the process stops.
 type private SinkLifetime(sink: ClickHouseSink) =

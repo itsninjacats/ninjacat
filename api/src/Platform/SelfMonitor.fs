@@ -1,17 +1,33 @@
-namespace NinjaCat.Api.Server
+namespace NinjaCat.Api.Platform
 
 open System
 open System.Diagnostics
 open System.Threading
 open System.Threading.Tasks
 open Microsoft.Extensions.Hosting
+open Microsoft.Extensions.Logging
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
 
+type ReadingKind =
+    | Gauge
+    /// `Read` returns a running total; what was added since the last sample is sent.
+    | Count
+
+/// A value a process reports about itself besides what every process
+/// reports. A host registers each one as a service; `Read` runs once per
+/// sample, on the sampling thread.
+type Reading =
+    { Name: string
+      Unit: string
+      Kind: ReadingKind
+      Tags: Map<string, string[]>
+      Read: unit -> float }
+
 /// NinjaCat's own vital signs, stored as ordinary metrics so they can be
-/// graphed and alerted on like any other: the process (`ninjacat.node.*`)
-/// and each table's writer (`ninjacat.storage.*`).
-type SelfMonitor(sink: ClickHouseSink, cfg: Config.Config) =
+/// graphed and alerted on like any other: the process (`ninjacat.node.*`),
+/// each table's writer (`ninjacat.storage.*`) and the readings its host adds.
+type SelfMonitor(sink: ClickHouseSink, cfg: Config.Config, readings: Reading seq, log: ILogger<SelfMonitor>) =
     inherit BackgroundService()
 
     let host =
@@ -31,6 +47,34 @@ type SelfMonitor(sink: ClickHouseSink, cfg: Config.Config) =
 
     /// Counters are sent as what was added since the last sample.
     let mutable previous: (TimeSpan * TimeSpan * TimeSpan * int * Map<string, WriterStats>) option = None
+
+    let readings = Array.ofSeq readings
+    let lastTotals: float option[] = Array.create readings.Length None
+
+    // A reading is the host's code: one that throws or is not a number costs
+    // its own point, never the sample or the process.
+    let read (r: Reading) =
+        try
+            let value = r.Read()
+            if Double.IsFinite value then Some value else None
+        with ex ->
+            log.LogWarning(ex, "Self-monitoring could not read {Metric}", r.Name)
+            None
+
+    let hostPoints (now: DateTime) =
+        [ for i in 0 .. readings.Length - 1 do
+              let r = readings.[i]
+              let pointTags = Map.fold (fun acc k v -> Map.add k v acc) tags r.Tags
+
+              match r.Kind, read r with
+              | _, None -> ()
+              | Gauge, Some value -> point now "GAUGE" r.Name r.Unit value pointTags
+              | Count, Some total ->
+                  match lastTotals.[i] with
+                  | Some last -> point now "COUNT" r.Name r.Unit (max (total - last) 0.0) pointTags
+                  | None -> ()
+
+                  lastTotals.[i] <- Some total ]
 
     let sample () : MetricPoint[] =
         let now = DateTime.UtcNow
@@ -69,7 +113,7 @@ type SelfMonitor(sink: ClickHouseSink, cfg: Config.Config) =
                         point now "COUNT" "ninjacat.storage.rows.failed" "" (float (w.Failed - last.Failed)) tableTags ]
 
         previous <- Some(proc.UserProcessorTime, proc.PrivilegedProcessorTime, GC.GetTotalPauseDuration(), collections, writers)
-        Array.ofList (gauges @ counts)
+        Array.ofList (gauges @ counts @ hostPoints now)
 
     override _.ExecuteAsync(ct: CancellationToken) : Task =
         task {

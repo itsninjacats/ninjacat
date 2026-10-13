@@ -20,6 +20,7 @@ open Xunit
 open ClickHouse.Driver
 open ClickHouse.Driver.ADO
 open NinjaCat.Api.Server
+open NinjaCat.Api.Platform
 
 let private secret = "0123456789abcdef0123456789abcdef"
 

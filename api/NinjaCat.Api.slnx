@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Engine/Engine.fsproj" />
     <Project Path="src/Intake/Intake.fsproj" />
+    <Project Path="src/Platform/Platform.fsproj" />
     <Project Path="src/Proto/NinjaCat.Api.Proto.csproj" />
     <Project Path="src/Storage/Storage.fsproj" />
     <Project Path="src/Server/Server.fsproj" />

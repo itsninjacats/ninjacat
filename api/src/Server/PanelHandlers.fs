@@ -12,6 +12,7 @@ open Microsoft.Extensions.Logging
 open Oxpecker
 open ClickHouse.Driver
 open NinjaCat.Api.Engine
+open NinjaCat.Api.Platform
 
 let private fail (status: int) (message: string) : EndpointHandler =
     setStatusCode status >=> json {| error = message |}
