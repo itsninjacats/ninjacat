@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Engine/Engine.fsproj" />
     <Project Path="src/Intake/Intake.fsproj" />
+    <Project Path="src/Monitors/Monitors.fsproj" />
     <Project Path="src/Platform/Platform.fsproj" />
     <Project Path="src/Proto/NinjaCat.Api.Proto.csproj" />
     <Project Path="src/Storage/Storage.fsproj" />
@@ -10,6 +11,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/Engine.Tests/Engine.Tests.fsproj" />
     <Project Path="tests/Intake.Tests/Intake.Tests.fsproj" />
+    <Project Path="tests/Monitors.Tests/Monitors.Tests.fsproj" />
     <Project Path="tests/Query.Tests/Query.Tests.fsproj" />
   </Folder>
 </Solution>

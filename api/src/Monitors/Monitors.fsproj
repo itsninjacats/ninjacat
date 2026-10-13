@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>ninjacat-monitors</AssemblyName>
+    <RootNamespace>NinjaCat.Api.Monitors</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Settings.fs" />
+    <Compile Include="Definitions.fs" />
+    <Compile Include="Store.fs" />
+    <Compile Include="Entity.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Akka.Hosting" />
+    <PackageReference Include="Akka.Cluster.Hosting" />
+    <PackageReference Include="ClickHouse.Driver" />
+    <PackageReference Include="Npgsql.DependencyInjection" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Engine/Engine.fsproj" />
+    <ProjectReference Include="../Platform/Platform.fsproj" />
+    <ProjectReference Include="../Storage/Storage.fsproj" />
+  </ItemGroup>
+</Project>

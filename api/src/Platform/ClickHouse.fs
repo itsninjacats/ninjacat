@@ -9,7 +9,7 @@ open ClickHouse.Driver.ADO
 open ClickHouse.Driver.Utility
 open NinjaCat.Api.Engine
 
-/// Server-side limit for a single query, in seconds.
+/// Server-side limit for a single query of the query process, in seconds.
 let private maxExecutionSeconds = 7
 
 let private settings (cfg: Config.Config) (timeout: TimeSpan) =
@@ -27,15 +27,19 @@ let private settings (cfg: Config.Config) (timeout: TimeSpan) =
         Timeout = timeout
     )
 
-/// The client queries run on. It cannot write: readonly=2 makes ClickHouse
-/// refuse anything but reads on it, while still letting the driver set its
-/// own session settings (readonly=1 would not). A slow query must fail in
-/// ClickHouse with a readable message before the HTTP client gives up.
-let createClient (cfg: Config.Config) =
-    let settings = settings cfg (TimeSpan.FromSeconds(float maxExecutionSeconds + 1.0))
+/// A client that cannot write, with ClickHouse's limit for one query:
+/// readonly=2 makes ClickHouse refuse anything but reads on it, while still
+/// letting the driver set its own session settings (readonly=1 would not). A
+/// slow query must fail in ClickHouse with a readable message before the HTTP
+/// client gives up.
+let createReadClient (cfg: Config.Config) (limitSeconds: int) =
+    let settings = settings cfg (TimeSpan.FromSeconds(float limitSeconds + 1.0))
     settings.CustomSettings["readonly"] <- box 2
-    settings.CustomSettings["max_execution_time"] <- box maxExecutionSeconds
+    settings.CustomSettings["max_execution_time"] <- box limitSeconds
     new ClickHouseClient(settings)
+
+/// The client the query process's queries run on.
+let createClient (cfg: Config.Config) = createReadClient cfg maxExecutionSeconds
 
 /// The client the write path uses. Kept apart from the read client so no
 /// query can ever write, and so a slow query and a slow insert do not share a

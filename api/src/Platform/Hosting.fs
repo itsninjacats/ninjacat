@@ -2,9 +2,13 @@
 module NinjaCat.Api.Platform.Hosting
 
 open System.Net
+open System.Threading
+open System.Threading.Tasks
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Server.Kestrel.Core
+open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
+open NinjaCat.Api.Storage
 
 let createBuilder (args: string[]) : WebApplicationBuilder =
     let builder = WebApplication.CreateBuilder(args)
@@ -32,3 +36,9 @@ let listen (options: KestrelServerOptions) (address: string) (configure: ListenO
         options.ListenAnyIP(port, configure)
     else
         options.Listen(IPAddress.Parse host, port, configure)
+
+/// Inserts what the writers still hold when the process stops.
+type SinkLifetime(sink: ClickHouseSink) =
+    interface IHostedService with
+        member _.StartAsync(_: CancellationToken) = Task.CompletedTask
+        member _.StopAsync(_: CancellationToken) = sink.StopAsync()

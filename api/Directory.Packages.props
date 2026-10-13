@@ -18,5 +18,9 @@
     <PackageVersion Include="Grpc.Tools" Version="2.76.0" />
     <PackageVersion Include="ZstdSharp.Port" Version="0.8.6" />
     <PackageVersion Include="MessagePack" Version="3.1.10" />
+    <!-- Akka.NET: every package the same version. -->
+    <PackageVersion Include="Akka.Hosting" Version="1.5.73" />
+    <PackageVersion Include="Akka.Cluster.Hosting" Version="1.5.73" />
+    <PackageVersion Include="Akka.TestKit.Xunit" Version="1.5.73" />
   </ItemGroup>
 </Project>

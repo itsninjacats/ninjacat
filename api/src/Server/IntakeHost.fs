@@ -9,7 +9,6 @@ open System
 open System.IO
 open System.Net
 open System.Security.Cryptography.X509Certificates
-open System.Threading
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Connections
@@ -24,12 +23,6 @@ open Oxpecker
 open NinjaCat.Api.Intake
 open NinjaCat.Api.Storage
 open NinjaCat.Api.Platform
-
-/// Inserts what the writers still hold when the process stops.
-type private SinkLifetime(sink: ClickHouseSink) =
-    interface IHostedService with
-        member _.StartAsync(_: CancellationToken) = Task.CompletedTask
-        member _.StopAsync(_: CancellationToken) = sink.StopAsync()
 
 let run (cfg: Config.Config) (args: string[]) : int =
     let builder = Hosting.createBuilder args
@@ -86,7 +79,7 @@ let run (cfg: Config.Config) (args: string[]) : int =
         .AddSingleton<IntakeSettings>({ AckUnknown = cfg.AckUnknown })
         // Registered first, so stopped last: the writers flush after
         // everything that feeds them has stopped.
-        .AddHostedService<SinkLifetime>()
+        .AddHostedService<Hosting.SinkLifetime>()
         .AddSingleton<ApiKeysKeeper>()
         .AddHostedService<ApiKeysKeeper>(fun services -> services.GetRequiredService<ApiKeysKeeper>())
         .AddHostedService<SelfMonitor>()
