@@ -43,6 +43,24 @@ type MonitorEvaluationRow =
       Outcome: string
       Detail: string }
 
+/// What the notifier did with one transition, one row per attempt.
+type MonitorNotificationRow =
+    { TenantID: string
+      MonitorID: uint64
+      GroupKey: string
+      TransitionAt: DateTime
+      /// The transition's `inserted_at`, the notifier's cursor.
+      TransitionInsertedAt: DateTime
+      /// transition, renotify, downtime_end or escalation.
+      Kind: string
+      /// The nth renotify or escalation.
+      Seq: uint32
+      Channel: string
+      /// stub, sent, muted or failed.
+      Status: string
+      Attempt: uint32
+      HandledAt: DateTime }
+
 module MonitorTransitions =
     /// Written with `ClickHouseSink.InsertAsync`, never through the buffered
     /// writer: a transition must be stored, and the writer drops a failed batch.
@@ -68,3 +86,17 @@ module MonitorEvaluations =
             "monitor_evaluations"
             [ "tenant_id"; "monitor_id"; "group_key"; "at"; "value"; "state"; "outcome"; "detail" ]
             (fun r -> [| r.TenantID; r.MonitorID; r.GroupKey; r.At; Col.opt r.Value; r.State; r.Outcome; r.Detail |])
+
+module MonitorNotifications =
+    /// Written with `ClickHouseSink.InsertAsync`, never through the buffered
+    /// writer: the notifier moves its cursor past a transition only once its
+    /// row is stored, and the writer drops a failed batch.
+    let table: Table<MonitorNotificationRow> =
+        Table.create
+            "storage_monitor_notifications"
+            "monitor_notifications"
+            [ "tenant_id"; "monitor_id"; "group_key"; "transition_at"; "transition_inserted_at"; "kind"; "seq"; "channel"
+              "status"; "attempt"; "handled_at" ]
+            (fun r ->
+                [| r.TenantID; r.MonitorID; r.GroupKey; r.TransitionAt; r.TransitionInsertedAt; r.Kind; r.Seq; r.Channel
+                   r.Status; r.Attempt; r.HandledAt |])

@@ -5,10 +5,12 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="TestPostgres.fs" />
+    <Compile Include="TestClickHouse.fs" />
     <Compile Include="EntityTests.fs" />
     <Compile Include="ManagerTests.fs" />
     <Compile Include="DefinitionsTests.fs" />
     <Compile Include="StoreTests.fs" />
+    <Compile Include="NotifierTests.fs" />
     <Compile Include="ClusterTests.fs" />
   </ItemGroup>
   <ItemGroup>

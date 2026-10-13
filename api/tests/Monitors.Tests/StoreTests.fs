@@ -1,15 +1,11 @@
 /// The groups an entity starts from, read back from transitions and
-/// evaluations stored through the real sink.
-///
-/// Needs ClickHouse (CLICKHOUSE_HTTP_ADDR, default localhost:8123); skipped
-/// when there is none. Works in a database of its own, built from the
-/// migrations and dropped afterwards.
+/// evaluations stored through the real sink, in a scratch database
+/// (TestClickHouse).
 module NinjaCat.Api.Monitors.Tests.StoreTests
 
 open System
 open System.Threading
 open ClickHouse.Driver
-open ClickHouse.Driver.ADO
 open Microsoft.Extensions.Logging.Abstractions
 open Xunit
 open NinjaCat.Api.Engine.Monitor.Evaluate
@@ -18,48 +14,7 @@ open NinjaCat.Api.Storage
 open NinjaCat.Api.Storage.Rows
 open NinjaCat.Api.Monitors
 open NinjaCat.Api.Monitors.Definitions
-
-let private env (name: string) (fallback: string) =
-    match Environment.GetEnvironmentVariable name with
-    | null
-    | "" -> fallback
-    | value -> value
-
-let private client (database: string) : ClickHouseClient =
-    let address = (env "CLICKHOUSE_HTTP_ADDR" "localhost:8123").Split ':'
-
-    new ClickHouseClient(
-        ClickHouseClientSettings(
-            Host = address[0],
-            Port = UInt16.Parse address[1],
-            Database = database,
-            Username = env "CLICKHOUSE_USER" "ninjacat",
-            Password = env "CLICKHOUSE_PASSWORD" "ninjacat",
-            Timeout = TimeSpan.FromMinutes 1.0
-        )
-    )
-
-let private inScratch (test: ClickHouseClient -> unit) : unit =
-    let admin = client "default"
-
-    try
-        admin.PingAsync().GetAwaiter().GetResult() |> ignore
-    with _ ->
-        Assert.Skip "ClickHouse is not reachable"
-
-    let database = "ninjacat_monitors_" + Guid.NewGuid().ToString "N"
-    admin.ExecuteNonQueryAsync($"CREATE DATABASE {database}").GetAwaiter().GetResult() |> ignore
-
-    try
-        let scratch = client database
-
-        match (Migrations.apply scratch).GetAwaiter().GetResult() with
-        | Error e -> Assert.Fail e
-        | Ok _ -> ()
-
-        test scratch
-    finally
-        admin.ExecuteNonQueryAsync($"DROP DATABASE IF EXISTS {database}").GetAwaiter().GetResult() |> ignore
+open NinjaCat.Api.Monitors.Tests.TestClickHouse
 
 let private key = { Tenant = "acme"; Id = 7L }
 let private now = DateTimeOffset(DateTimeOffset.UtcNow.UtcDateTime.Date.AddHours 10.0, TimeSpan.Zero)

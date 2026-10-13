@@ -1,5 +1,6 @@
 /// The cluster every node of the service joins: the region of monitor
-/// entities, the manager as its singleton, and how the nodes find each other.
+/// entities, the manager and the notifier as singletons, and how the nodes
+/// find each other.
 module NinjaCat.Api.Monitors.Cluster
 
 open System
@@ -19,6 +20,7 @@ open NinjaCat.Api.Monitors.Definitions
 open NinjaCat.Api.Monitors.Messages
 open NinjaCat.Api.Monitors.Entity
 open NinjaCat.Api.Monitors.Manager
+open NinjaCat.Api.Monitors.Notifier
 
 /// A monitor's shard is its key's hash modulo this, so changing it moves
 /// every monitor and needs every node stopped first.
@@ -26,6 +28,9 @@ let private shards = 100
 
 /// The role of the nodes that host the region and the manager.
 let private metrics = "metrics"
+
+/// The role of the nodes that may host the notifier.
+let private notifierRole = "notifier"
 
 /// A key that does not parse has no id, so the region drops its message with
 /// a warning; given to `entityProps`, it would fail the whole shard.
@@ -65,13 +70,13 @@ let configure
     (node: Node)
     (entity: Services)
     (manager: IReadOnlyActorRegistry -> ManagerServices)
+    (notifier: NotifierServices)
     (akka: AkkaConfigurationBuilder)
     : AkkaConfigurationBuilder =
     let clustering =
         ClusterOptions(
-            // `notifier` is the notifier's role; one Deployment carries both
-            // for now.
-            Roles = [| metrics; "notifier" |],
+            // One Deployment carries both roles for now.
+            Roles = [| metrics; notifierRole |],
             // Keep-majority, so with three replicas one lost node is downed
             // and the other two carry on.
             SplitBrainResolver = SplitBrainResolverOption.Default
@@ -117,6 +122,12 @@ let configure
             Func<ActorSystem, IActorRegistry, IDependencyResolver, Props>(fun _ registry _ ->
                 MonitorManager.Props(manager registry)),
             ClusterSingletonOptions(Role = metrics),
+            createProxyToo = false
+        )
+        .WithSingleton<MonitorNotifier>(
+            "monitor-notifier",
+            MonitorNotifier.Props notifier,
+            ClusterSingletonOptions(Role = notifierRole),
             createProxyToo = false
         )
     |> formation node

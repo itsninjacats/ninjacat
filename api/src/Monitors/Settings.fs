@@ -37,7 +37,10 @@ type Settings =
       /// The most groups one evaluation may yield (NINJACAT_MONITOR_MAX_GROUPS,
       /// 1000); more is an error, never a truncation.
       MaxGroups: int
-      Node: Node }
+      Node: Node
+      /// Where `/health/ready` and `/health/live` are served
+      /// (NINJACAT_MONITOR_HEALTH_ADDR, `:8559`).
+      HealthAddr: string }
 
 let private optional (key: string) : string option =
     match Environment.GetEnvironmentVariable key with
@@ -79,4 +82,5 @@ let load () : Settings =
     { Platform = Config.load ()
       Concurrency = positive "NINJACAT_MONITOR_CONCURRENCY" 8
       MaxGroups = positive "NINJACAT_MONITOR_MAX_GROUPS" 1000
-      Node = node () }
+      Node = node ()
+      HealthAddr = optional "NINJACAT_MONITOR_HEALTH_ADDR" |> Option.defaultValue ":8559" }

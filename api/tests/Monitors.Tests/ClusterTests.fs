@@ -53,9 +53,11 @@ let private addressOf (port: int) = $"akka.tcp://{systemName}@localhost:{port}"
 type private Unbound = { Monitor: string }
 
 /// What every node's fakes saw: which node read the manager's snapshot, and
-/// from when.
+/// from when, and on which node the notifier started.
 type Reads() =
     member val Snapshots = ConcurrentQueue<string * DateTimeOffset option>()
+    /// The nodes whose notifier started.
+    member val Notifiers = ConcurrentQueue<string>()
 
 let private entityServices () : Services =
     let row (key: MonitorKey) : MonitorRow =
@@ -80,7 +82,8 @@ let private entityServices () : Services =
       MaxGroups = 1000
       Log = NullLogger.Instance
       Retry = interval
-      Resync = interval }
+      Resync = interval
+      Counts = Telemetry.Counters() }
 
 let private managerServices
     (keys: MonitorKey list)
@@ -99,6 +102,18 @@ let private managerServices
       Listen = fun _ ct -> Task.Delay(Timeout.Infinite, ct)
       Registry = registry
       Interval = interval
+      Log = NullLogger.Instance }
+
+let private notifierServices (name: string) (reads: Reads) : Notifier.NotifierServices =
+    { Cursor =
+        fun _ ->
+            reads.Notifiers.Enqueue name
+            Task.FromResult None
+      Due = fun _ _ -> Task.FromResult { Found = []; Newest = None }
+      Write = fun _ _ -> Task.CompletedTask
+      Clock = fun () -> DateTimeOffset.UtcNow
+      Interval = interval
+      Counts = Telemetry.Counters()
       Log = NullLogger.Instance }
 
 type private Running =
@@ -141,7 +156,7 @@ let private startWith
             systemName,
             fun (akka: AkkaConfigurationBuilder) (_: IServiceProvider) ->
                 akka.AddHocon(faster, HoconAddMode.Prepend)
-                |> Cluster.configure node entity (managerServices keys name reads)
+                |> Cluster.configure node entity (managerServices keys name reads) (notifierServices name reads)
                 |> ignore
         )
         |> ignore
@@ -185,6 +200,11 @@ let private upMembers (count: int) (node: Running) () : Task =
         let members = Akka.Cluster.Cluster.Get(node.System).State.Members
         Assert.Equal(count, members |> Seq.filter (fun m -> m.Status = Akka.Cluster.MemberStatus.Up) |> Seq.length)
     }
+
+/// The notifier started on these nodes, in this order, and nowhere else.
+let private notifiersOn (names: string list) (reads: Reads) () : Task =
+    Assert.Equal<string list>(names, List.ofSeq reads.Notifiers)
+    Task.CompletedTask
 
 /// In the order given. The tests list the youngest first, so the oldest node,
 /// with the coordinator and the manager, goes last and nothing moves twice.
@@ -280,7 +300,7 @@ type ClusterTests() =
         }
 
     [<Fact>]
-    member _.``a node that leaves hands over its monitors and the manager``() : Task =
+    member _.``a node that leaves hands over its monitors, the manager and the notifier``() : Task =
         task {
             let reads = Reads()
             let seed = freePort ()
@@ -295,8 +315,9 @@ type ClusterTests() =
                 let! c = start "c" (freePort ()) [ addressOf seed ] reads
                 nodes <- [ c; b; a ]
                 do! eventually (spreadOver [ a; b; c ])
-                // The oldest node runs the manager.
+                // The oldest node runs the manager and the notifier.
                 Assert.All(reads.Snapshots, fun (name, _) -> Assert.Equal("a", name))
+                do! eventually (notifiersOn [ "a" ] reads)
 
                 do! stop [ a ]
                 nodes <- [ c; b ]
@@ -307,6 +328,7 @@ type ClusterTests() =
                 // reached a day back for the deletions it may have missed.
                 Assert.Contains(("b", None), reads.Snapshots)
                 Assert.DoesNotContain(reads.Snapshots, fun (name, _) -> name = "c")
+                do! eventually (notifiersOn [ "a"; "b" ] reads)
             finally
                 (stop nodes).Wait()
         }

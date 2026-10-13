@@ -6,6 +6,7 @@
 module NinjaCat.Api.Monitors.Entity
 
 open System
+open System.Diagnostics
 open System.Threading
 open System.Threading.Tasks
 open Akka.Actor
@@ -19,6 +20,7 @@ open NinjaCat.Api.Engine.Monitor.State
 open NinjaCat.Api.Storage.Rows
 open NinjaCat.Api.Monitors.Definitions
 open NinjaCat.Api.Monitors.Messages
+open NinjaCat.Api.Monitors.Telemetry
 
 /// The aligned tick `at`, the evaluation's identity.
 type Tick = | Tick of at: DateTimeOffset
@@ -49,7 +51,8 @@ type Services =
       /// How often the manager sends Ensure. After three or four resyncs
       /// without one the entity reads its definition itself, so a lost Delete
       /// still closes it.
-      Resync: TimeSpan }
+      Resync: TimeSpan
+      Counts: Counters }
 
 /// Fits the 10 s the region's shutdown gives a hand-off.
 let private insertTimeout = TimeSpan.FromSeconds 7.0
@@ -114,10 +117,20 @@ type MonitorEntity(key: MonitorKey, services: Services) =
         | Ok d -> Some d
         | Error _ -> None
 
+    let counts = services.Counts
+
     let record (rows: MonitorEvaluationRow[]) = if rows.Length > 0 then services.Record rows
 
     let recordMonitor (at: DateTimeOffset) (outcome: string) (detail: string) =
         record [| Store.monitorRow key at groups outcome detail |]
+
+    let skipped (counter: Counter) (at: DateTimeOffset) (detail: string) =
+        counter.Add 1L
+        recordMonitor at "skipped" detail
+
+    let failed (at: DateTimeOffset) (detail: string) =
+        counts.Errored.Add 1L
+        recordMonitor at "error" detail
 
     /// When a change outside a tick is stored: now, but after the last tick,
     /// so it is the group's latest row and never shares a tick's key.
@@ -205,6 +218,8 @@ type MonitorEntity(key: MonitorKey, services: Services) =
             queryHash <- hash
             record evaluations
         else
+            counts.TransitionsPending.Add(int64 rows.Length)
+
             pending <-
                 Some
                     { Rows = rows
@@ -291,12 +306,15 @@ type MonitorEntity(key: MonitorKey, services: Services) =
                 if not granted then
                     return GateRefused at
                 else
+                    let started = Stopwatch.GetTimestamp()
+
                     try
                         let! result =
                             evaluate (services.Execute ct) (TenantId key.Tenant) services.Retention services.MaxGroups d at
 
                         return Evaluated(at, result)
                     finally
+                        counts.EvaluationTicks.Add(Stopwatch.GetTimestamp() - started)
                         gate.Release() |> ignore
             })
 
@@ -308,10 +326,10 @@ type MonitorEntity(key: MonitorKey, services: Services) =
             if not busy then this.InsertPending()
         else
             match definition with
-            | Error problems -> recordMonitor at "error" ("the definition is not valid: " + problemsText problems)
-            | Ok _ when busy -> recordMonitor at "skipped" "busy: an evaluation, its insert or a definition read is still running"
+            | Error problems -> failed at ("the definition is not valid: " + problemsText problems)
+            | Ok _ when busy -> skipped counts.SkippedBusy at "busy: an evaluation, its insert or a definition read is still running"
             | Ok _ when pending.IsSome ->
-                recordMonitor at "skipped" "transitions of a failed insert are stored first"
+                skipped counts.SkippedPending at "transitions of a failed insert are stored first"
                 this.InsertPending()
             | Ok d -> this.Evaluate(d, at)
 
@@ -353,6 +371,15 @@ type MonitorEntity(key: MonitorKey, services: Services) =
         | Evaluated(at, Ok evaluation) ->
             busy <- false
 
+            // Groups found but none judged is a skip, as the evaluation's rows
+            // say; no group found at all is an evaluation (No Data).
+            if not evaluation.Groups.IsEmpty && evaluation.Groups |> List.forall (fun r -> r.Reading.IsSkipped) then
+                counts.SkippedWindow.Add 1L
+            else
+                counts.Evaluated.Add 1L
+
+            counts.EvaluationLag.Observe (services.Clock() - evaluation.Period.To).TotalSeconds
+
             // A definition is replaced only while nothing runs, so the one
             // evaluated is still the one held.
             match validDefinition () with
@@ -364,17 +391,19 @@ type MonitorEntity(key: MonitorKey, services: Services) =
             this.Settle()
         | Evaluated(at, Error error) ->
             busy <- false
-            recordMonitor at "error" error
+            failed at error
             this.Settle()
         | GateRefused at ->
             busy <- false
-            recordMonitor at "skipped" "gate: no evaluation slot on this node within one interval"
+            skipped counts.SkippedGate at "gate: no evaluation slot on this node within one interval"
             this.Settle()
         | Committed ->
             busy <- false
 
             match pending with
             | Some p ->
+                counts.TransitionsWritten.Add(int64 p.Rows.Length)
+                counts.TransitionsPending.Add(int64 -p.Rows.Length)
                 groups <- p.Groups
                 queryHash <- p.QueryHash
                 pending <- None
@@ -384,15 +413,20 @@ type MonitorEntity(key: MonitorKey, services: Services) =
             this.Settle()
         | CommitFailed error ->
             busy <- false
+            pending |> Option.iter (fun p -> counts.TransitionsFailed.Add(int64 p.Rows.Length))
             services.Log.LogWarning("Monitor {Monitor}: transitions not stored, retried at the next tick: {Error}", key.Text, error)
             this.Settle()
         | Unheard ->
             reloadDue <- true
             this.Settle()
 
-    override this.PreStart() = this.Load()
+    override this.PreStart() =
+        counts.Entities.Add 1L
+        this.Load()
 
     override _.PostStop() =
+        counts.Entities.Add -1L
+        pending |> Option.iter (fun p -> counts.TransitionsPending.Add(int64 -p.Rows.Length))
         cancel.Cancel()
         cancel.Dispose()
 

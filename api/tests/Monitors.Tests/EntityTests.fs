@@ -65,6 +65,7 @@ type Fakes() =
     member val Executions = 0 with get, set
     member val Reads = 0 with get, set
     member val Resync = TimeSpan.FromHours 1.0 with get, set
+    member val Counts = Telemetry.Counters()
 
 /// Answers the engine's SQL with one point per bucket of the window read, all
 /// of `value`, for a query without groups.
@@ -125,7 +126,8 @@ let private servicesOf (fakes: Fakes) (gate: SemaphoreSlim) (inserts: IActorRef)
       MaxGroups = 1000
       Log = NullLogger.Instance
       Retry = TimeSpan.FromMilliseconds 200.0
-      Resync = fakes.Resync }
+      Resync = fakes.Resync
+      Counts = fakes.Counts }
 
 let private single (attempt: Attempt) : MonitorTransitionRow =
     Assert.Single attempt.Rows
@@ -207,6 +209,50 @@ type EntityTests() =
         Assert.Equal(2, fakes.Executions)
 
     [<Fact>]
+    member this.``self-monitoring counts the evaluation and the stored transition``() =
+        let entity, inserts, records = this.Start()
+        this.AwaitAssert(fun () -> Assert.Equal(1.0, fakes.Counts.Entities.Value))
+        fakes.Clock <- t0.AddSeconds 2.0
+        entity.Tell(Tick t0)
+        inserts.ExpectMsg<Attempt>(wait) |> ignore
+        records.ExpectMsg<MonitorEvaluationRow[]>(wait) |> ignore
+
+        let counts = fakes.Counts
+        Assert.Equal((1.0, 0.0, 1.0, 0.0), (counts.Evaluated.Value, counts.Errored.Value, counts.TransitionsWritten.Value, counts.TransitionsPending.Value))
+        // The window ends 30 s before the tick.
+        Assert.Equal(32.0, counts.EvaluationLag.Take())
+        Assert.True(Double.IsNaN(counts.EvaluationLag.Take()))
+
+        this.Sys.Stop entity
+        this.AwaitAssert(fun () -> Assert.Equal(0.0, counts.Entities.Value))
+
+    [<Fact>]
+    member this.``self-monitoring counts failed inserts and the rows they leave pending``() =
+        fakes.FailingInserts <- 1
+        let entity, inserts, _ = this.Start()
+        entity.Tell(Tick t0)
+        inserts.ExpectMsg<Attempt>(wait) |> ignore
+
+        let counts = fakes.Counts
+        this.AwaitAssert(fun () -> Assert.Equal((1.0, 1.0, 0.0), (counts.TransitionsFailed.Value, counts.TransitionsPending.Value, counts.TransitionsWritten.Value)))
+
+        entity.Tell(Tick(t0 + minute))
+        inserts.ExpectMsg<Attempt>(wait) |> ignore
+        this.AwaitAssert(fun () -> Assert.Equal((1.0, 0.0, 1.0), (counts.TransitionsFailed.Value, counts.TransitionsPending.Value, counts.TransitionsWritten.Value)))
+        Assert.Equal(1.0, counts.SkippedPending.Value)
+
+    [<Fact>]
+    member this.``an evaluation that judged no group counts as skipped``() =
+        fakes.Value <- nan
+        let entity, inserts, records = this.Start()
+        entity.Tell(Tick t0)
+
+        let row = records.ExpectMsg<MonitorEvaluationRow[]>(wait) |> Array.exactlyOne
+        Assert.Equal(("*", "skipped"), (row.GroupKey, row.Outcome))
+        inserts.ExpectNoMsg quiet
+        Assert.Equal((0.0, 1.0), (fakes.Counts.Evaluated.Value, fakes.Counts.SkippedWindow.Value))
+
+    [<Fact>]
     member this.``a tick while the evaluation runs is skipped``() =
         let release = TaskCompletionSource()
         fakes.ExecuteGate <- release.Task
@@ -226,6 +272,7 @@ type EntityTests() =
         let row = single (inserts.ExpectMsg<Attempt>(wait))
         Assert.Equal(t0.UtcDateTime, row.At)
         Assert.Equal(1, fakes.Executions)
+        Assert.Equal(1.0, fakes.Counts.SkippedBusy.Value)
 
     [<Fact>]
     member this.``messages before the load are stashed``() =

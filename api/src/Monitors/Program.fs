@@ -3,7 +3,12 @@ module NinjaCat.Api.Monitors.Program
 
 open System
 open System.Threading
+open Akka.Actor
+open Akka.Cluster.Hosting
 open Akka.Hosting
+open Microsoft.AspNetCore.Builder
+open Microsoft.AspNetCore.Diagnostics.HealthChecks
+open Microsoft.AspNetCore.Hosting
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
@@ -15,6 +20,8 @@ open NinjaCat.Api.Monitors.Settings
 open NinjaCat.Api.Monitors.Definitions
 open NinjaCat.Api.Monitors.Entity
 open NinjaCat.Api.Monitors.Manager
+open NinjaCat.Api.Monitors.Notifier
+open NinjaCat.Api.Monitors.Telemetry
 
 /// ClickHouse's limit for one evaluation's query: a model's history read can
 /// pass the query process's 7 s.
@@ -23,7 +30,10 @@ let private queryLimitSeconds = 30
 /// How often the manager reads the monitor table again.
 let private resyncInterval = TimeSpan.FromSeconds 30.0
 
-let private servicesOf (settings: Settings) (provider: IServiceProvider) : Services =
+/// How often the notifier looks for new transitions.
+let private notifyInterval = TimeSpan.FromSeconds 5.0
+
+let private servicesOf (settings: Settings) (counts: Counters) (provider: IServiceProvider) : Services =
     let db = provider.GetRequiredService<NpgsqlDataSource>()
     let sink = provider.GetRequiredService<ClickHouseSink>()
     let reader = provider.GetRequiredService<ClickHouse.Driver.ClickHouseClient>()
@@ -40,12 +50,36 @@ let private servicesOf (settings: Settings) (provider: IServiceProvider) : Servi
       MaxGroups = settings.MaxGroups
       Log = provider.GetRequiredService<ILoggerFactory>().CreateLogger "NinjaCat.Api.Monitors"
       Retry = TimeSpan.FromSeconds 30.0
-      Resync = resyncInterval }
+      Resync = resyncInterval
+      Counts = counts }
+
+let private notifierOf (counts: Counters) (provider: IServiceProvider) : NotifierServices =
+    let sink = provider.GetRequiredService<ClickHouseSink>()
+    let reader = provider.GetRequiredService<ClickHouse.Driver.ClickHouseClient>()
+
+    { Cursor = cursor reader
+      Due = due reader
+      Write = fun rows ct -> sink.InsertAsync(MonitorNotifications.table, rows, ct)
+      Clock = fun () -> DateTimeOffset.UtcNow
+      Interval = notifyInterval
+      Counts = counts
+      Log = provider.GetRequiredService<ILoggerFactory>().CreateLogger "NinjaCat.Api.Monitors.Notifier" }
+
+let private systemOf (provider: IServiceProvider) () = provider.GetRequiredService<ActorSystem>()
+
+/// Kubernetes' probes: ready once the node has joined the cluster, live while
+/// its actor system runs. The tags are the ones Akka.Hosting gives its checks.
+let private probe (tag: string) =
+    HealthCheckOptions(Predicate = fun registration -> registration.Tags.Contains tag)
 
 let run (settings: Settings) (args: string[]) : int =
     let cfg = settings.Platform
-    let builder = Host.CreateApplicationBuilder(args)
-    builder.Logging.AddFilter("Npgsql", LogLevel.Warning) |> ignore
+    let counts = Counters()
+    let builder = Hosting.createBuilder args
+
+    // Health is all this process serves over HTTP.
+    builder.WebHost.ConfigureKestrel(fun options -> Hosting.listen options settings.HealthAddr ignore)
+    |> ignore
 
     // CoordinatedShutdown runs inside the host's stop; .NET's default 30 s
     // would cut a hand-off short.
@@ -59,6 +93,7 @@ let run (settings: Settings) (args: string[]) : int =
 
     builder.Services
         .AddNpgsqlDataSource(Postgres.connectionString cfg.DatabaseUrl)
+        .AddSingleton<Config.Config>(cfg)
         .AddSingleton<ClickHouse.Driver.ClickHouseClient>(fun _ -> ClickHouse.createReadClient cfg queryLimitSeconds)
         .AddSingleton<ClickHouseSink>(fun services ->
             ClickHouseSink(
@@ -79,13 +114,27 @@ let run (settings: Settings) (args: string[]) : int =
                       Interval = resyncInterval
                       Log = provider.GetRequiredService<ILoggerFactory>().CreateLogger "NinjaCat.Api.Monitors.Manager" }
 
-                akka.ConfigureLoggers(fun loggers -> loggers.ClearLoggers().AddLoggerFactory() |> ignore)
-                |> Cluster.configure settings.Node (servicesOf settings provider) manager
+                akka
+                    .ConfigureLoggers(fun loggers -> loggers.ClearLoggers().AddLoggerFactory() |> ignore)
+                    .WithActorSystemLivenessCheck()
+                    .WithAkkaClusterReadinessCheck()
+                |> Cluster.configure settings.Node (servicesOf settings counts provider) manager (notifierOf counts provider)
                 |> ignore
         )
+        .AddSingleton<Reading>(fun provider -> clusterMembers (systemOf provider))
+        .AddSingleton<Reading>(fun provider -> clusterUnreachable (systemOf provider))
+        // After Akka, so stopped before it.
+        .AddHostedService<SelfMonitor>()
+        .AddHealthChecks()
     |> ignore
 
-    builder.Build().Run()
+    for reading in readings counts do
+        builder.Services.AddSingleton<Reading>(reading) |> ignore
+
+    let app = builder.Build()
+    app.MapHealthChecks("/health/ready", probe "ready") |> ignore
+    app.MapHealthChecks("/health/live", probe "liveness") |> ignore
+    app.Run()
     0
 
 [<EntryPoint>]
