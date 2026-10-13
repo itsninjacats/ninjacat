@@ -1,7 +1,7 @@
 # Tables fed by `api.<site>` / `app.<site>`
 
 Everything `intake/router_api.go` stores, and everything it deliberately does
-not. Migration: `schema/migrations/0014_api_fidelity.sql`. The logs intake has
+not. Migration: `schema/migrations/0001_initial.sql`. The logs intake has
 its own page, `docs/tables/logs.md`.
 
 The rule this page records: a field of a decoded payload reaches a column, or a

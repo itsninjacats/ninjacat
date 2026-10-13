@@ -2,7 +2,7 @@
 
 Feeds: nothing yet. **Read** by `GET /api/unstable/synthetics/agents/tests` on
 `intake.synthetics.<site>` (`HandleSyntheticsAgentTests`,
-`intake/router_ciwebhook.go`). `schema/migrations/0017_ci_visibility.sql`
+`intake/router_ciwebhook.go`). `schema/migrations/0001_initial.sql`
 creates the table, `apps/storage/rows_ci.go` is the writer.
 
 This is the one table in the tree that exists to be read rather than written,

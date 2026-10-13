@@ -2,7 +2,7 @@
 
 Four hosts, five routes, one product (Network Device Monitoring), decoded and
 stored by `intake/router_ndm.go` into eight ClickHouse tables defined in
-`schema/migrations/0007_ndm.sql`:
+`schema/migrations/0001_initial.sql`:
 
 | Route | Host | Feeds |
 |---|---|---|

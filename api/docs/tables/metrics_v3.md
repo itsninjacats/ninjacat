@@ -32,7 +32,7 @@ point — a dashboard cannot ask which intake a point arrived on.
 | `sketches` | `MergeTree` | `(tenant_id, metric, host, timestamp)` | 30 days | v3 `Sketch` series, via `storage.SketchesWriter` (`WriteSketches{Sketches}`) |
 | `raw_payloads` | `MergeTree` | `(tenant_id, intake, received_at)` | 30 days | bodies this handler could not turn into rows, via `a.storeRaw` |
 
-Both writers keep the tuning migration `0001` sized them for: `metrics` 5000
+Both writers keep the tuning they were sized for: `metrics` 5000
 rows / 2 s, `sketches` 1000 rows / 5 s. v3 changes the encoding, not the
 volume class.
 
@@ -130,9 +130,9 @@ third case, the stored payload settles the question.
 | `unexpected_shape` | the payload decoded to zero series (usually a still-compressed body — `proto.Unmarshal` fails open on this format), an odd `Metadata.Resources` list, a per-series column shorter than `Types` (an empty one included), a reference outside its dictionary, a truncated dictionary, an unreadable `UnitRefs` length, or a value column that ran out mid-walk |
 | `int64_precision` | the walk widened a `sint64` past 2^53 into the `Float64` value column — the rows are still written, rounded, and the payload keeps the exact integers |
 
-`int64_precision` extends the three-word vocabulary migration `0002` documents
+`int64_precision` extends the three-word vocabulary `0001_initial.sql` documents
 for `raw_payloads.reason`. The column is a plain `LowCardinality(String)`, so
-this needs no schema change, but the comment in `0002_raw_payloads.sql` now
+this needs no schema change, but the comment in `0001_initial.sql` now
 lists one reason fewer than the code produces.
 
 A **partial** walk failure stores both: the rows it managed to read go to their

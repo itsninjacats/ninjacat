@@ -18,7 +18,7 @@ Feeds: three new intake hosts plus ten routes on `api.<site>`.
 | `api.<site>` | `POST /api/v2/ci/pipeline/metrics` | `HandleCIPipelineMetrics` | `ci_pipeline_events` |
 | `api.<site>` | `POST /api/intake/ci/custom_spans` | `HandleCICustomSpans` | `ci_pipeline_events` |
 
-`schema/migrations/0017_ci_visibility.sql` creates the tables,
+`schema/migrations/0001_initial.sql` creates the tables,
 `apps/storage/rows_ci.go` is the writer, `intake/router_civisibility.go` and
 `intake/router_ciwebhook.go` are the handlers.
 

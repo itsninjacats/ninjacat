@@ -1,7 +1,7 @@
 # The `logs` table
 
 What `intake/router_logs.go` stores, and what it deliberately does not.
-Migration: `schema/migrations/0014_api_fidelity.sql`. The `api.<site>` intake
+Migration: `schema/migrations/0001_initial.sql`. The `api.<site>` intake
 has its own page, `docs/tables/api.md`.
 
 Routes, all three aliasing one handler: `POST /api/v2/logs`, `POST /v1/input`,

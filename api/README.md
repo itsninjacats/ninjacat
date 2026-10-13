@@ -87,6 +87,8 @@ SHA-256 of a key.
 1. Rows: a record and a `Table` in `src/Storage/Rows/<X>.fs` (columns in
    INSERT order), and a migration in `schema/migrations/` if the table is new.
    A migration that has been applied anywhere is never edited; add the next one.
+   The history was squashed into one `0001_initial.sql` on 2026-10-13: a database
+   built before that has a ledger that no longer matches, and must be dropped.
 2. Handlers (`byte[] -> EndpointHandler`, bound with `bindBody`) in
    `src/Intake/Routers/<X>.fs`.
 3. In `Routes.fs`: the host's routes, and a line for the host in `configure`.

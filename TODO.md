@@ -193,7 +193,7 @@ decision; each item says which way it went.
       every other query; `Panel.querySeries` is gone. Checked against the live ClickHouse.
 - [x] **Dead code**: `Text.joinOrDash`, `ProcessFrame.typeName`, `DDSketch.bounds`,
       `/internal/metrics/hosts` with its query. Left: `SyntheticsTestConfigs.table` in
-      `Rows/Ci.fs` has a table (migration 0017) and no writer.
+      `Rows/Ci.fs` has a table and no writer.
 - [x] **Parity machinery**: `TraceSketch.GoMath` is `System.Math` now (stored sketch
       summaries differ from about the 13th digit; the sketch's accuracy is 1 %),
       `hasUnknownFields` is gone, and no note names a Go type or quotes a Go library.
@@ -459,6 +459,13 @@ data is here; the product is not.
       Deeper bodies are kept in raw_payloads. To lift the limit, the recursive walkers
       (`writeSorted`, `canonicalJson`, `Msgpack.value`) would have to become loops.
 
+- [ ] **`snmp_traps.timestamp` is `DateTime` (seconds)**, but the router reads the trap's
+      time in milliseconds (`Routers/Ndm.fs`), so the sub-second part is dropped. Found in
+      the squash of 2026-10-13, which had to keep the schema as it was.
+- [ ] **`processes.has_create_time` + `create_time`** would be one `Nullable(DateTime)`.
+      The squash kept the pair to stay identical to the old chain; folding it changes the
+      row writers in `Rows/Process.fs`.
+
 ## 7. Panel
 
 - [ ] Global time picker, with drag-to-zoom on charts.
@@ -467,9 +474,12 @@ data is here; the product is not.
 - [ ] Remove the unused `app/metrics/data` route and `fetchMetricSeries`.
 - [ ] Prettier: ignore shadcn and generated files.
 - [ ] Log search.
-- [ ] Monitors — the owner writes these himself. Design notes: evaluation per window length,
-      state transitions and evaluations in ClickHouse, definitions in Postgres, Akka.NET
-      with `IWithTimers`, notifications as their own actors behind an outbox.
+- [ ] Monitors and tenants: planned in `api/docs/zadania/monitors.md` and
+      `api/docs/zadania/tenants.md` (2026-10-13). The ClickHouse migrations are squashed into
+      one `0001_initial.sql`; a database from before the squash must be dropped.
+- [ ] Data retention set in the panel. For now `NINJACAT_METRICS_RETENTION_DAYS` and
+      `NINJACAT_METRICS_ROLLUP_RETENTION_DAYS` (planned, monitors.md); other tables keep a
+      fixed TTL.
 - [ ] On-call, built in-house (on-prem sovereignty): external services only as optional
       channels.
 - [ ] "NinjaCat on NinjaCat": a stateless watchdog that alerts through one simple channel

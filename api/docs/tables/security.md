@@ -1,7 +1,7 @@
 # Security tables
 
 Six ClickHouse tables fed by the five security intake hosts
-(`intake/router_security.go`, migration `schema/migrations/0009_security.sql`):
+(`intake/router_security.go`, migration `schema/migrations/0001_initial.sql`):
 
 | host prefix | route | table(s) |
 |---|---|---|

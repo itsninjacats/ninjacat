@@ -1,6 +1,6 @@
 # APM tables (`trace.agent.<site>`)
 
-Six tables, all created by `schema/migrations/0003_traces.sql`, all fed by
+Six tables, all created by `schema/migrations/0001_initial.sql`, all fed by
 `intake/router_trace.go`, all written through `apps/storage/rows_traces.go`.
 
 Until this work none of the four routes on this host stored a byte; they

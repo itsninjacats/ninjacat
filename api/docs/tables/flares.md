@@ -9,7 +9,7 @@ happens to resolve to. The `:case_id` path variant exists because `mkURL`
 (`send_flare.go`) appends `"/" + caseID` to the URL whenever a flare is
 attached to an already-known support case; both verbs are registered for
 both path shapes, and `HandleFlare` (`intake/server.go`) answers all four.
-`schema/migrations/0016_agent_flares.sql` creates the table;
+`schema/migrations/0001_initial.sql` creates the table;
 `apps/storage/rows_flares.go` is the writer.
 
 Before this work `HandleFlare` answered `c.Status(200)` and discarded the

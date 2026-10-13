@@ -27,7 +27,6 @@ Message keys and the `en` values are authored first; `es`/`pl` follow.
 Polish and should be converted to English when touched, not extended:
 
 - `api/docs/**` and `frontend/docs/**` — Polish prose.
-- `api/schema/migrations/0001_initial.sql` — Polish comments (an applied migration is never edited, so these stay).
 - `frontend/src/lib/server/api-keys.ts` — Polish identifiers (`nowyKlucz`, `skrotKlucza`, `prefiks`).
 - Polish route segments and form fields: `/app/ustawienia/klucze`, `?/utworz`, `?/usun`,
   `blad`, `nazwa`. Renaming a route changes a URL — batch those deliberately.
@@ -86,7 +85,9 @@ the frontend's.
 **An applied migration is immutable.** Its checksum is in the ledger; an edit makes the
 server refuse to start. In the dev stack the migrations are embedded resources that
 `dotnet watch` rebuilds on, so treat a saved migration as already applied. Fix a mistake with the next
-migration, never by editing the file or the ledger.
+migration, never by editing the file or the ledger. The history was squashed once, into
+`0001_initial.sql` (2026-10-13), before anyone ran NinjaCat; a database from before that
+must be dropped.
 
 Ports: 8080 agent intake, 8081 panel and query API (internal; the dev stack publishes it
 on 127.0.0.1 only), 10516 logs over TCP, 5173 panel (dev), 5433 Postgres, 8123/9000 ClickHouse.

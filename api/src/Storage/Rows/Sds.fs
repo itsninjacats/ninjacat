@@ -1,6 +1,6 @@
 /// Sensitive Data Scanner results: one payload is one scan of one resource,
 /// with a result per location scanned and a match per rule that hit.
-/// Reasoning per column: 0020_sds.sql.
+/// Reasoning per column: the sds_* tables in 0001_initial.sql.
 namespace NinjaCat.Api.Storage.Rows
 
 open System

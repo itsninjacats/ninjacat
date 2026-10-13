@@ -1,7 +1,7 @@
 # dbm_events
 
 Feeds: `dbm-metrics-intake.<site>`, all six Database Monitoring tracks
-(`intake/router_dbm.go`, `schema/migrations/0006_dbm.sql`):
+(`intake/router_dbm.go`, `schema/migrations/0001_initial.sql`):
 
 | Route                              | `track` value          |
 |-------------------------------------|-------------------------|

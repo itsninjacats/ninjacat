@@ -3,7 +3,7 @@
 Everything the browser, iOS and Android SDKs send lands on one host —
 `browser-intake.<site>` — and in six ClickHouse tables. The router is
 `intake/router_rum.go`, the rows are `apps/storage/rows_rum.go`, the schema is
-`schema/migrations/0013_rum.sql`. Pointing an SDK at us is
+`schema/migrations/0001_initial.sql`. Pointing an SDK at us is
 [docs/rum-sdk-setup.md](../rum-sdk-setup.md).
 
 ## The one thing to know before reading further

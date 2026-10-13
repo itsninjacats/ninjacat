@@ -1,7 +1,7 @@
 /// Universal Service Monitoring: what system-probe saw on a connection, per
 /// HTTP endpoint, Kafka topic and database operation. The agent ships these
 /// inside each Connection as serialized messages; here every entry is a row.
-/// Reasoning per column: 0019_usm.sql.
+/// Reasoning per column: the connection_*_stats tables in 0001_initial.sql.
 namespace NinjaCat.Api.Storage.Rows
 
 open System

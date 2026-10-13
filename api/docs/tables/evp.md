@@ -5,7 +5,7 @@ before this file: `agentdiscovery-intake`, `agenthealth-intake`,
 `event-management-intake`, `softinv-intake`, `http-synthetics` and
 `data-obs-intake` (seven routes — data-obs carries two). Handlers live in
 `server/intake/router_evp.go`; the schema is
-`server/schema/migrations/0010_evp.sql`; row types and writers are
+`schema/migrations/0001_initial.sql`; row types and writers are
 `server/apps/storage/rows_evp.go`.
 
 None of the seven routes share a wire shape, so each table follows the

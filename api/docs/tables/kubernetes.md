@@ -188,14 +188,13 @@ conditions and metrics are filled generically and its whole message is in
   `CollectorPod.Host` / `.Info` / `.IsTerminated` and
   `CollectorNode.HostAliasMapping` live.
 - **`k8s_resources_current` is fed only by the materialized view.** Nothing
-  writes to it from Go. A column added to `k8s_resources` needs the same
+  writes to it directly. A column added to `k8s_resources` needs the same
   column on `k8s_resources_current` AND a line in the view's SELECT, or the
-  view stops firing and the "right now" table silently freezes.
-  `0015` recreates the view with `DROP VIEW IF EXISTS` + `CREATE MATERIALIZED
-  VIEW IF NOT EXISTS` rather than `MODIFY QUERY`, because only that pair is
-  idempotent in both directions — the runner has no transactions and re-runs a
-  half-applied file as-is. Verified on ClickHouse 26.8 by
-  `TestK8sFidelityRoundTrip`, which SELECTs from `k8s_resources_current FINAL`.
+  view stops firing and the "right now" table silently freezes. A migration
+  that changes the view recreates it with `DROP VIEW IF EXISTS` + `CREATE
+  MATERIALIZED VIEW IF NOT EXISTS` rather than `MODIFY QUERY`, because only that
+  pair is idempotent in both directions — the runner has no transactions and
+  re-runs a half-applied file as-is.
   Read that table with `FINAL` or `argMax`.
 
 ## k8s_cluster — `CollectorCluster` (type 46)

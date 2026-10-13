@@ -4,7 +4,7 @@ Everything the process-agent sends on `process.<site>`, and where it lands.
 
 Four HTTP routes share one 16-byte frame and one reply; the frame's type byte,
 not the path, says what the body is. Six message types arrive, and each has a
-table. Schema: [`schema/migrations/0008_process.sql`](../../schema/migrations/0008_process.sql).
+table. Schema: [`schema/migrations/0001_initial.sql`](../../schema/migrations/0001_initial.sql).
 Converters: [`intake/router_process.go`](../../intake/router_process.go).
 Rows: [`apps/storage/rows_process.go`](../../apps/storage/rows_process.go) and
 [`rows_process_extra.go`](../../apps/storage/rows_process_extra.go).
@@ -51,8 +51,8 @@ what every item row of that frame carries back.
 | `agent_hostname`, `agent_version`, `agent_container_count`, `request_id` | `X-Dd-Hostname`, `X-Dd-Processagentversion`, `X-Dd-ContainerCount`, `X-DD-Request-ID` |
 
 ### `processes`
-The first eighteen columns are the ones the table shipped with and are
-unchanged. Migration 0008 appends the rest of `process.Process`:
+The first eighteen columns are the ones the table shipped with; the rest of
+`process.Process` follows them:
 
 | columns | source |
 |---|---|

@@ -1,7 +1,7 @@
 # misc: apm_telemetry, and what the other misc/install routes store
 
 Covers `intake/router_misc.go` and `intake/router_install.go`. One ClickHouse
-table (`apm_telemetry`), migration `schema/migrations/0011_apm_telemetry.sql`,
+table (`apm_telemetry`), migration `schema/migrations/0001_initial.sql`,
 writer file `apps/storage/rows_apm_telemetry.go`. Everything else in these two
 routers either has nothing to store (the install host's own routes) or has no
 published schema and goes to the shared `raw_payloads` fallback table instead.

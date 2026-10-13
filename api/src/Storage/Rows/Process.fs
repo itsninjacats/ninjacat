@@ -195,7 +195,7 @@ module Processes =
 // One frame carries one of six message types. Its envelope goes to
 // process_snapshots once; the item tables carry SnapshotID back to it and a
 // copy of the few envelope fields every query needs, so the common question
-// is not a join. Reasoning per column: 0008_process.sql.
+// is not a join. Reasoning per column: the process tables in 0001_initial.sql.
 
 /// One received frame, whatever its type.
 type ProcessSnapshotRow =

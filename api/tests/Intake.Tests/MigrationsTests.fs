@@ -7,14 +7,14 @@ open NinjaCat.Api.Storage
 // --- splitting a file into statements ---------------------------------------------------
 
 [<Fact>]
-let ``the real initial migration splits into its 17 CREATE statements`` () =
+let ``the real initial migration splits into its 94 CREATE statements`` () =
     let initial =
         match Migrations.load () with
         | Ok migrations -> migrations |> List.find (fun m -> m.Version = 1u)
         | Error e -> failwith e
 
     let statements = Migrations.splitStatements initial.Sql
-    Assert.Equal(17, statements.Length)
+    Assert.Equal(94, statements.Length)
 
     for statement in statements do
         Assert.StartsWith("CREATE ", statement)
@@ -26,7 +26,7 @@ let ``the real initial migration splits into its 17 CREATE statements`` () =
     for kept in
         [ "tags['env'][1]"
           "Enum8('OK' = 0, 'WARNING' = 1, 'CRITICAL' = 2, 'UNKNOWN' = 3)"
-          "sipHash64(tenant_id, metric, host, tags)"
+          "mapApply((k, v) -> (k, arraySort(v)), tags)"
           "ReplacingMergeTree(collected_at)" ] do
         Assert.Contains(kept, joined)
 
@@ -36,7 +36,7 @@ let ``a semicolon inside a string or a comment does not split`` () =
 
     Assert.Equal<string list>(
         [ "SELECT 1"; "SELECT 2" ],
-        Migrations.splitStatements "-- naglowek; z przecinkiem, i srednikiem\nSELECT 1; -- ogon; tez\nSELECT 2"
+        Migrations.splitStatements "-- a header; with a comma, and a semicolon\nSELECT 1; -- a tail; too\nSELECT 2"
     )
 
     Assert.Equal<string list>([ "SELECT 'a--b;c'" ], Migrations.splitStatements "SELECT 'a--b;c'")
