@@ -395,6 +395,10 @@ let private readModifiers (label: string) (modifiers: Modifier list) : Modifiers
 
     read, List.ofSeq errors
 
+/// The interval a query's `.rollup()` asks for, read by the same rules as
+/// the plan's.
+let rollupInterval (q: MetricQuery) : TimeSpan option = (fst (readModifiers "" q.Modifiers)).Interval
+
 let private timeAggregation (label: string) (m: Modifiers) : Result<TimeAggregation, string> =
     match m.Mode, m.Method with
     | None, None -> Ok(Plain Avg)

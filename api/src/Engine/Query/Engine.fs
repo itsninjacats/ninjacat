@@ -93,7 +93,9 @@ type ScalarResult =
 
 // --- running --------------------------------------------------------------------------
 
-let private tags (groupTags: string list) =
+/// A series' group tags, `k:v` as the engine keeps them, read into keys and
+/// values; `k:N/A` is a key without a value.
+let tags (groupTags: string list) : Tag list =
     groupTags
     |> List.map (fun t ->
         match t.IndexOf ':' with

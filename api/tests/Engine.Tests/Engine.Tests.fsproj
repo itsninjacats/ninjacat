@@ -21,6 +21,8 @@
     <Compile Include="ModelsTests.fs" />
     <Compile Include="MonitorParseTests.fs" />
     <Compile Include="MonitorValidateTests.fs" />
+    <Compile Include="MonitorEvaluateTests.fs" />
+    <Compile Include="MonitorStateTests.fs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Fixtures/*.json" CopyToOutputDirectory="PreserveNewest" />

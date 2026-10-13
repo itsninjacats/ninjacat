@@ -187,7 +187,8 @@ let private horizon (text: string) : Result<Window, string> =
 
 // --- the expression --------------------------------------------------------------------
 
-let rec private leaves (e: Expr<MetricQuery>) : MetricQuery list =
+/// The metric queries an expression reads.
+let rec leaves (e: Expr<MetricQuery>) : MetricQuery list =
     match e with
     | Leaf q -> [ q ]
     | Number _ -> []
