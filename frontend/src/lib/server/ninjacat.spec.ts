@@ -139,8 +139,11 @@ describe('the monitor calls', () => {
 		const ids = Array.from({ length: 450 }, (_, i) => 1000 - i);
 
 		const statuses = await fetchMonitorStatus(ids);
+		// The batches go out at once, so in no particular order.
 		expect(
-			fetchMock.mock.calls.map((_, i) => urlOf(i).searchParams.get('ids')!.split(',').length)
+			fetchMock.mock.calls
+				.map((_, i) => urlOf(i).searchParams.get('ids')!.split(',').length)
+				.toSorted((a, b) => b - a)
 		).toEqual([200, 200, 50]);
 		expect(statuses.map((s) => s.id)).toEqual(ids);
 	});

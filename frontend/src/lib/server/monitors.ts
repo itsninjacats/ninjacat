@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { Database } from './auth-options';
 import { monitor } from './db/schema';
 
@@ -47,6 +47,53 @@ function columnsOf(definition: MonitorDefinition) {
 // A live monitor of the tenant; a deleted one is not changed again.
 const live = (tenantId: string, id: number) =>
 	and(eq(monitor.id, id), eq(monitor.tenantId, tenantId), isNull(monitor.deletedAt));
+
+const listed = {
+	id: monitor.id,
+	name: monitor.name,
+	query: monitor.query,
+	tags: monitor.tags,
+	priority: monitor.priority,
+	// The list needs only the method, not the whole view.
+	editorMethod: sql<string | null>`${monitor.editor}->>'method'`,
+	updatedAt: monitor.updatedAt
+};
+
+/** The tenant's live monitors, by name. */
+export function listMonitors(db: Database, tenantId: string) {
+	return db
+		.select(listed)
+		.from(monitor)
+		.where(and(eq(monitor.tenantId, tenantId), isNull(monitor.deletedAt)))
+		.orderBy(asc(monitor.name), asc(monitor.id));
+}
+
+/** One live monitor of the tenant, or undefined. */
+export async function findMonitor(db: Database, tenantId: string, id: number) {
+	const [found] = await db
+		.select({
+			id: monitor.id,
+			name: monitor.name,
+			type: monitor.type,
+			query: monitor.query,
+			message: monitor.message,
+			options: monitor.options,
+			tags: monitor.tags,
+			priority: monitor.priority,
+			editor: monitor.editor,
+			version: monitor.version,
+			createdAt: monitor.createdAt,
+			updatedAt: monitor.updatedAt
+		})
+		.from(monitor)
+		.where(live(tenantId, id));
+	return found;
+}
+
+/** A monitor id from a URL: a positive integer, as Postgres' bigint holds it. */
+export function monitorId(text: string): number | null {
+	return /^[1-9]\d{0,14}$/.test(text) ? Number(text) : null;
+}
 
 export function createMonitor(
 	db: Database,

@@ -1,45 +1,40 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import * as Card from '$lib/components/ui/card';
-	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
 	import ActivityIcon from '@lucide/svelte/icons/activity';
 	import ServerIcon from '@lucide/svelte/icons/server';
 	import BellIcon from '@lucide/svelte/icons/bell';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
+	import { m } from '$lib/paraglide/messages';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 
-	// Zaslepka. Docelowo z ClickHouse przez API ninjacata.
-	const kafelki = [
+	// Hosts, metrics and logs are placeholders until the server counts them.
+	const placeholders = $derived([
+		{ label: m.overview_hosts(), value: '0', hint: m.overview_hosts_hint(), icon: ServerIcon },
 		{
-			etykieta: 'Hosty',
-			wartosc: '0',
-			opis: 'raportujących w ostatniej godzinie',
-			ikona: ServerIcon
+			label: m.overview_metrics(),
+			value: '0',
+			hint: m.overview_metrics_hint(),
+			icon: ActivityIcon
 		},
-		{ etykieta: 'Metryki', wartosc: '0', opis: 'serii czasowych', ikona: ActivityIcon },
-		{ etykieta: 'Monitory', wartosc: '0', opis: 'aktywnych', ikona: BellIcon },
-		{ etykieta: 'Logi', wartosc: '0', opis: 'wpisów dzisiaj', ikona: FileTextIcon }
-	];
+		{ label: m.overview_logs(), value: '0', hint: m.overview_logs_hint(), icon: FileTextIcon }
+	]);
 
-	const kroki = [
-		{
-			tytul: 'Podłącz pierwszego agenta',
-			opis: 'Ustaw DD_DD_URL na adres tej instancji i zrestartuj agenta.',
-			gotowe: false
-		},
-		{
-			tytul: 'Sprawdź, czy dane przychodzą',
-			opis: 'Pierwsze metryki powinny pojawić się w ciągu ~20 sekund.',
-			gotowe: false
-		},
-		{
-			tytul: 'Zdefiniuj pierwszy monitor',
-			opis: 'Próg na metryce, która Cię obchodzi.',
-			gotowe: false
-		}
-	];
+	const monitorsHint = $derived.by(() => {
+		const s = data.monitors;
+		if (!s.known) return m.overview_monitors_unknown();
+		if (s.alert + s.warn + s.noData === 0) return m.overview_monitors_quiet();
+		return m.overview_monitors_states({ alert: s.alert, warn: s.warn, noData: s.noData });
+	});
+
+	const steps = $derived([
+		{ title: m.overview_step_agent(), hint: m.overview_step_agent_hint() },
+		{ title: m.overview_step_data(), hint: m.overview_step_data_hint() },
+		{ title: m.overview_step_monitor(), hint: m.overview_step_monitor_hint() }
+	]);
 </script>
 
 <svelte:head><title>ninjacat</title></svelte:head>
@@ -47,40 +42,55 @@
 <main class="mx-auto max-w-6xl px-6 py-10">
 	<div class="mb-8">
 		<h1 class="font-heading text-3xl font-semibold tracking-tight wrap-anywhere">
-			Witaj{data.user.name ? `, ${data.user.name}` : ''}
+			{data.user.name ? m.overview_welcome_name({ name: data.user.name }) : m.overview_welcome()}
 		</h1>
-		<p class="mt-2 text-sm text-muted-foreground">
-			Instancja stoi i czeka na dane. Nic jeszcze nie przyszło.
-		</p>
+		<p class="mt-2 text-sm text-muted-foreground">{m.overview_intro()}</p>
 	</div>
 
 	<div class="mb-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-		{#each kafelki as k (k.etykieta)}
-			{@const Ikona = k.ikona}
+		{#each placeholders as tile (tile.label)}
 			<Card.Root>
 				<Card.Content>
 					<div class="flex items-start justify-between">
 						<div>
-							<p class="text-sm text-muted-foreground">{k.etykieta}</p>
-							<p class="mt-1 font-heading text-3xl font-semibold tabular-nums">{k.wartosc}</p>
-							<p class="mt-1 text-xs text-muted-foreground">{k.opis}</p>
+							<p class="text-sm text-muted-foreground">{tile.label}</p>
+							<p class="mt-1 font-heading text-3xl font-semibold tabular-nums">{tile.value}</p>
+							<p class="mt-1 text-xs text-muted-foreground">{tile.hint}</p>
 						</div>
-						<Ikona class="size-4 shrink-0 text-muted-foreground" />
+						<tile.icon class="size-4 shrink-0 text-muted-foreground" />
 					</div>
 				</Card.Content>
 			</Card.Root>
 		{/each}
+		<a href={resolve('/app/monitors')} class="rounded-xl hover:ring-1 hover:ring-ring">
+			<Card.Root class="h-full">
+				<Card.Content>
+					<div class="flex items-start justify-between">
+						<div>
+							<p class="text-sm text-muted-foreground">{m.monitors()}</p>
+							<p class="mt-1 font-heading text-3xl font-semibold tabular-nums">
+								{data.monitors.total}
+							</p>
+							<p class="mt-1 text-xs text-muted-foreground">{monitorsHint}</p>
+						</div>
+						<BellIcon class="size-4 shrink-0 text-muted-foreground" />
+					</div>
+				</Card.Content>
+			</Card.Root>
+		</a>
 	</div>
 
 	<Separator class="mb-10" />
 
 	<div class="grid gap-6 lg:grid-cols-3">
 		<div class="lg:col-span-2">
-			<h2 class="mb-1 font-heading text-xl font-semibold tracking-tight">Pierwsze kroki</h2>
-			<p class="mb-4 text-sm text-muted-foreground">Trzy rzeczy, żeby zacząć widzieć cokolwiek.</p>
+			<h2 class="mb-1 font-heading text-xl font-semibold tracking-tight">
+				{m.overview_first_steps()}
+			</h2>
+			<p class="mb-4 text-sm text-muted-foreground">{m.overview_first_steps_hint()}</p>
 
 			<div class="space-y-3">
-				{#each kroki as krok, i (krok.tytul)}
+				{#each steps as step, i (step.title)}
 					<Card.Root class="p-4">
 						<div class="flex gap-4">
 							<div
@@ -89,13 +99,8 @@
 								{i + 1}
 							</div>
 							<div class="min-w-0 flex-1">
-								<div class="flex items-center gap-2">
-									<p class="text-sm font-medium">{krok.tytul}</p>
-									{#if krok.gotowe}
-										<Badge variant="secondary">gotowe</Badge>
-									{/if}
-								</div>
-								<p class="mt-1 text-sm text-muted-foreground">{krok.opis}</p>
+								<p class="text-sm font-medium">{step.title}</p>
+								<p class="mt-1 text-sm text-muted-foreground">{step.hint}</p>
 							</div>
 						</div>
 					</Card.Root>
@@ -105,17 +110,16 @@
 
 		<Card.Root>
 			<Card.Header>
-				<Card.Title class="text-base">Podłączenie agenta</Card.Title>
-				<Card.Description>Jedna zmienna środowiskowa.</Card.Description>
+				<Card.Title class="text-base">{m.overview_connect()}</Card.Title>
+				<Card.Description>{m.overview_connect_hint()}</Card.Description>
 			</Card.Header>
 			<Card.Content>
 				<pre class="overflow-x-auto rounded-md bg-muted p-3 text-xs leading-relaxed"><code
 						>DD_DD_URL=http://ninjacat:8080</code
 					></pre>
 				<p class="mt-3 text-xs text-muted-foreground">
-					Reszta endpointów — logi, ślady, process-agent — ma osobne zmienne. Opisane w <code
-						class="whitespace-nowrap">docs/datadog-agent.md</code
-					>.
+					{m.overview_connect_more()}
+					<code class="whitespace-nowrap">docs/datadog-agent.md</code>.
 				</p>
 			</Card.Content>
 		</Card.Root>

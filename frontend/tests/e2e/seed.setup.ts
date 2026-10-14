@@ -2,13 +2,15 @@ import { createHash } from 'node:crypto';
 import { access } from 'node:fs/promises';
 import { expect, test as setup, type APIRequestContext } from '@playwright/test';
 import { betterAuth } from 'better-auth/minimal';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { authOptions } from '../../src/lib/server/auth-options';
 import * as schema from '../../src/lib/server/db/schema';
 import { routes } from './routes';
 import { keyNames, password, people, stateFile, tenants, type PersonKey } from './people';
+import { canonicalJson } from '../../src/lib/monitors/definition';
+import { definitionOf, historyOf, monitors } from './monitors';
 
 // The sign-ins need the seeded people.
 setup.describe.configure({ mode: 'serial' });
@@ -17,8 +19,8 @@ setup.describe.configure({ mode: 'serial' });
 // inserted when missing and updated when it differs. Nothing is deleted, so a
 // run can never disturb what else lives in the development database.
 setup('seed the e2e tenants, people and keys', async () => {
-	const sql = postgres(process.env.DATABASE_URL!, { max: 1, onnotice: () => {} });
-	const db = drizzle(sql, { schema });
+	const client = postgres(process.env.DATABASE_URL!, { max: 1, onnotice: () => {} });
+	const db = drizzle(client, { schema });
 	// The panel's own options, as scripts/create-user.ts uses them: passwords are
 	// hashed exactly as the panel hashes them.
 	const auth = betterAuth(authOptions(db, process.env));
@@ -103,10 +105,82 @@ setup('seed the e2e tenants, people and keys', async () => {
 					.onConflictDoNothing();
 			}
 		}
+
+		// A monitor is written as the panel writes it, but by its fixed id. A
+		// changed definition bumps the version, so the monitor service reloads it.
+		for (const monitor of Object.values(monitors)) {
+			const definition = definitionOf(monitor);
+			const [existing] = await db
+				.select({
+					name: schema.monitor.name,
+					type: schema.monitor.type,
+					query: schema.monitor.query,
+					message: schema.monitor.message,
+					tags: schema.monitor.tags,
+					priority: schema.monitor.priority,
+					options: schema.monitor.options,
+					editor: schema.monitor.editor,
+					deletedAt: schema.monitor.deletedAt
+				})
+				.from(schema.monitor)
+				.where(eq(schema.monitor.id, monitor.id));
+			if (!existing) {
+				await db
+					.insert(schema.monitor)
+					.overridingSystemValue()
+					.values({
+						...definition,
+						id: monitor.id,
+						tenantId: tenants[monitor.tenant].id,
+						createdById: userIds.admin,
+						updatedById: userIds.admin
+					});
+			} else if (canonicalJson(existing) !== canonicalJson({ ...definition, deletedAt: null })) {
+				await db
+					.update(schema.monitor)
+					.set({
+						...definition,
+						version: sql`${schema.monitor.version} + 1`,
+						deletedAt: null,
+						deletedById: null,
+						updatedAt: sql`now()`
+					})
+					.where(eq(schema.monitor.id, monitor.id));
+			}
+		}
 	} finally {
-		await sql.end();
+		await client.end();
 	}
 });
+
+// What the monitors went through, in ClickHouse, as the monitor service stores
+// it: the status pages read it. Aligned to six hours, so runs within them
+// write the same transitions, which ClickHouse collapses.
+setup('seed the e2e monitors history', async () => {
+	const base = Math.floor(Date.now() / (6 * 3_600_000)) * 6 * 3_600_000;
+	for (const key of Object.keys(monitors) as (keyof typeof monitors)[]) {
+		const { transitions, evaluations } = historyOf(key, tenants[monitors[key].tenant].id, base);
+		await insertRows('monitor_transitions', transitions);
+		await insertRows('monitor_evaluations', evaluations);
+	}
+});
+
+async function insertRows(table: string, rows: Record<string, unknown>[]) {
+	if (rows.length === 0) return;
+	const address = process.env.CLICKHOUSE_HTTP_ADDR ?? 'localhost:8123';
+	const user = process.env.CLICKHOUSE_USER ?? 'ninjacat';
+	const password = process.env.CLICKHOUSE_PASSWORD ?? 'ninjacat';
+	const url = new URL(`http://${address}/`);
+	url.searchParams.set('database', process.env.CLICKHOUSE_DB ?? 'ninjacat');
+	url.searchParams.set('query', `INSERT INTO ${table} FORMAT JSONEachRow`);
+	url.searchParams.set('date_time_input_format', 'best_effort');
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: { authorization: `Basic ${btoa(`${user}:${password}`)}` },
+		body: rows.map((row) => JSON.stringify(row)).join('\n')
+	});
+	expect(response.status, await response.text()).toBe(200);
+}
 
 // A session that still works, for the same person, is kept: each sign-in adds a session row, and the
 // limiter allows five a minute.

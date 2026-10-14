@@ -168,7 +168,7 @@ function pick<T extends string>(allowed: readonly T[], value: unknown, fallback:
 	return allowed.includes(value as T) ? (value as T) : fallback;
 }
 
-function asObject(value: unknown): Record<string, unknown> {
+export function asObject(value: unknown): Record<string, unknown> {
 	return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
 }
 
@@ -183,7 +183,7 @@ function readFunctions(value: unknown): FunctionCall[] {
 		}));
 }
 
-function readQuery(raw: unknown): ExplorerQuery {
+export function readQuery(raw: unknown): ExplorerQuery {
 	const r = asObject(raw);
 	const b = asObject(r.builder);
 
@@ -209,7 +209,7 @@ function readQuery(raw: unknown): ExplorerQuery {
 	};
 }
 
-function readFormula(raw: unknown): ExplorerFormula {
+export function readFormula(raw: unknown): ExplorerFormula {
 	// A bare string is how a formula was saved before rows had functions.
 	if (typeof raw === 'string') return emptyFormula(raw);
 	const r = asObject(raw);

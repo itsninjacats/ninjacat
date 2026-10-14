@@ -15,13 +15,22 @@ bunx playwright show-report         # the last run, with traces of what failed
 ## What it needs
 
 - **Postgres** from `DATABASE_URL` in `.env`. The seed (`tests/e2e/seed.setup.ts`) adds two
-  tenants, six people and four keys to it. Every row it writes is prefixed `e2e-`, and it
-  touches no other row: it inserts what is missing and brings its own rows back in line with
-  `tests/e2e/people.ts`, so it is safe against a development database. It deletes nothing;
-  to remove its rows, delete the `e2e-` ones by hand.
-- **The query process** on `NINJACAT_INTERNAL_URL`, which the metrics and logs pages read
-  from; without it they do not show what they would. The e2e tenants have no telemetry, so
-  those pages are tested empty: charts, facets and log rows are not covered yet.
+  tenants, six people, four keys and four monitors to it. Every row it writes is prefixed
+  `e2e-` (a monitor by its tenant, and by a fixed id from 990000001 up), and it touches no
+  other row: it inserts what is missing and brings its own rows back in line with
+  `tests/e2e/people.ts` and `tests/e2e/monitors.ts`, so it is safe against a development
+  database. It deletes nothing; to remove its rows, delete the `e2e-` ones by hand.
+- **ClickHouse** on `CLICKHOUSE_HTTP_ADDR` (default `localhost:8123`, user and password
+  `ninjacat`). The seed writes what the e2e monitors went through, transitions and evaluated
+  values for 40 groups, into `monitor_transitions` and `monitor_evaluations` under the e2e
+  tenants. Each transition carries its monitor's query hash, pinned in `monitors.ts`: under
+  another, the monitor service would take the history for a query change and close the
+  groups. A changed e2e query needs its hash recomputed with `State.queryHash`; the test
+  "monitor definitions keep their seeded groups" fails once the service has closed them.
+- **The query process** on `NINJACAT_INTERNAL_URL`, which the metrics, logs and monitor pages
+  read from; without it they do not show what they would. The e2e tenants have no
+  telemetry, so the explorers are tested empty: charts, facets and log rows are not covered
+  yet. The monitor pages show the seeded history.
 - **A panel on :5174.** Playwright starts `bun run dev --port 5174` itself, with
   `ORIGIN=http://localhost:5174`, or reuses one already running there (started with that
   `ORIGIN`). It is not :5173, so the suite can run beside a panel you are working in.

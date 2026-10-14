@@ -15,6 +15,7 @@
 		const p = page.url.pathname;
 		if (p.startsWith('/app/metrics')) return 'Metrics';
 		if (p.startsWith('/app/logs')) return 'Logs';
+		if (p.startsWith('/app/monitors')) return m.monitors();
 		if (p.startsWith('/app/settings/keys')) return m.api_keys();
 		if (p.startsWith('/app/admin/tenants')) return m.tenants();
 		if (p.startsWith('/app/admin/users')) return m.admin_users();

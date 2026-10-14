@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { ComponentProps } from 'svelte';
+	import BellIcon from '@lucide/svelte/icons/bell';
 	import ChartLineIcon from '@lucide/svelte/icons/chart-line';
 	import LayoutDashboardIcon from '@lucide/svelte/icons/layout-dashboard';
 	import ScrollTextIcon from '@lucide/svelte/icons/scroll-text';
@@ -31,11 +32,12 @@
 	// "Explore" is where you go to ask the data a question, "Settings" is where
 	// you go to change how it arrives. Only routes that actually exist are
 	// listed — a nav entry leading to a 404 is worse than a missing one.
-	const explore = [
+	const explore = $derived([
 		{ title: 'Overview', url: '/app', icon: LayoutDashboardIcon, exact: true },
 		{ title: 'Metrics', url: '/app/metrics', icon: ChartLineIcon },
-		{ title: 'Logs', url: '/app/logs', icon: ScrollTextIcon }
-	];
+		{ title: 'Logs', url: '/app/logs', icon: ScrollTextIcon },
+		{ title: m.monitors(), url: '/app/monitors', icon: BellIcon }
+	]);
 
 	const settings = $derived([
 		{ title: m.api_keys(), url: '/app/settings/keys', icon: KeyRoundIcon },

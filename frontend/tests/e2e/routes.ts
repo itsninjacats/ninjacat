@@ -1,8 +1,10 @@
-import { tenants, type PersonKey } from './people';
+import { monitors } from './monitors';
+import { tenants, type PersonKey, type TenantKey } from './people';
 
 // Every page of the panel, as the person who sees the most of it. A new page is
-// one more entry; `name` is the screenshot's folder.
-export type ViewRoute = { name: string; path: string; as: PersonKey | null };
+// one more entry; `name` is the screenshot's folder. `owner` is the tenant
+// whose record the path names: anyone else is answered 404.
+export type ViewRoute = { name: string; path: string; as: PersonKey | null; owner?: TenantKey };
 
 const longTag =
 	'kube_deployment:e2e-payments-reconciliation-worker-with-a-very-long-deployment-name';
@@ -58,6 +60,38 @@ export const routes: ViewRoute[] = [
 			['service', 'e2e-payments-reconciliation-worker-with-a-very-long-service-name']
 		])}`,
 		as: 'longEmail'
+	},
+	{ name: 'monitors', path: '/app/monitors', as: 'longEmail' },
+	{
+		name: 'monitors-filtered',
+		path: '/app/monitors?q=e2e-a%20payments&status=Alert',
+		as: 'longEmail'
+	},
+	{ name: 'monitor-new', path: '/app/monitors/new', as: 'longEmail' },
+	{
+		name: 'monitor-new-from-explorer',
+		path: `/app/monitors/new?${new URLSearchParams({ view: JSON.stringify(metricsView) })}`,
+		as: 'longEmail'
+	},
+	...(['threshold', 'anomaly', 'forecast'] as const).flatMap((kind) => [
+		{
+			name: `monitor-${kind}`,
+			path: `/app/monitors/${monitors[kind].id}`,
+			as: 'longEmail' as const,
+			owner: 'a' as const
+		},
+		{
+			name: `monitor-${kind}-edit`,
+			path: `/app/monitors/${monitors[kind].id}/edit`,
+			as: 'longEmail' as const,
+			owner: 'a' as const
+		}
+	]),
+	{
+		name: 'monitor-threshold-week',
+		path: `/app/monitors/${monitors.threshold.id}?range=-1w`,
+		as: 'longEmail',
+		owner: 'a'
 	},
 	{ name: 'keys', path: '/app/settings/keys', as: 'longEmail' },
 	{ name: 'admin-tenants', path: '/app/admin/tenants', as: 'admin' },

@@ -7,21 +7,40 @@
 		band: { t: number; lower: number; upper: number }[];
 		forecast: { t: number; v: number; lower: number; upper: number }[];
 	};
+
+	/** A horizontal line across the chart, such as a monitor's threshold. */
+	export type ChartRule = { value: number; label: string; color: string; dashed?: boolean };
+
+	/** A band of values, such as the values a monitor alerts on; null runs to the chart's edge. */
+	export type ChartZone = { from: number | null; to: number | null; color: string };
 </script>
 
 <script lang="ts">
 	import * as Chart from '$lib/components/ui/chart';
-	import { Area, AreaChart, BarChart, LineChart, Spline } from 'layerchart';
+	import {
+		AnnotationLine,
+		AnnotationRange,
+		Area,
+		AreaChart,
+		BarChart,
+		LineChart,
+		Spline
+	} from 'layerchart';
 
 	let {
 		lines,
 		display,
-		window
+		window,
+		rules = [],
+		zone = null
 	}: {
 		lines: ChartLine[];
 		display: 'line' | 'area' | 'bars';
 		/** The requested range in ms: the x axis spans all of it, not just where data is. */
 		window: { from: number; to: number };
+		/** Drawn on line charts only. */
+		rules?: ChartRule[];
+		zone?: ChartZone | null;
 	} = $props();
 
 	// The bucket width, read off the data: the API does not send it.
@@ -72,8 +91,8 @@
 		) as Chart.ChartConfig
 	);
 
-	// The chart sizes its y axis from the series alone; bands and forecasts
-	// reach further, so the domain is taken over everything drawn.
+	// The chart sizes its y axis from the series alone; bands, forecasts and
+	// rules reach further, so the domain is taken over everything drawn.
 	const yDomain = $derived.by(() => {
 		let min = Infinity;
 		let max = -Infinity;
@@ -82,6 +101,7 @@
 			for (const b of l.band) [min, max] = [Math.min(min, b.lower), Math.max(max, b.upper)];
 			for (const f of l.forecast) [min, max] = [Math.min(min, f.lower), Math.max(max, f.upper)];
 		}
+		for (const r of rules) [min, max] = [Math.min(min, r.value), Math.max(max, r.value)];
 		if (!Number.isFinite(min)) return undefined;
 		if (min === max) return [min - 1, max + 1];
 		return [min, max];
@@ -104,8 +124,13 @@
 			? d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 			: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-	// Time labels are wide; about eight of them fit without overlapping.
-	const timeAxis = $derived({ format: timeFormat, ticks: longWindow ? 6 : 8 });
+	// Time labels are wide: one per 100 px, or 150 px with the date, and never
+	// more than eight.
+	let width = $state(0);
+	const timeAxis = $derived({
+		format: timeFormat,
+		ticks: Math.max(2, Math.min(longWindow ? 6 : 8, Math.floor(width / (longWindow ? 150 : 100))))
+	});
 
 	const tooltipTime = (v: unknown) =>
 		v instanceof Date
@@ -134,85 +159,109 @@
 	};
 </script>
 
-<Chart.Container {config} class="h-[320px] w-full">
-	{#if display === 'line'}
-		<LineChart
-			data={rows}
-			x="time"
-			{xDomain}
-			{series}
-			{yDomain}
-			props={{ xAxis: timeAxis, yAxis: valueAxis }}
-		>
-			{#snippet marks()}
-				{#each lines as l (l.key)}
-					{#if l.band.length > 0}
-						<Area
-							y0={value(`${l.key}_lo`)}
-							y1={value(`${l.key}_hi`)}
-							defined={has(`${l.key}_lo`)}
-							fill={() => l.color}
-							style="opacity: 0.15"
+<div bind:clientWidth={width}>
+	<Chart.Container {config} class="h-[320px] w-full">
+		{#if display === 'line'}
+			<LineChart
+				data={rows}
+				x="time"
+				{xDomain}
+				{series}
+				{yDomain}
+				props={{ xAxis: timeAxis, yAxis: valueAxis }}
+			>
+				{#snippet marks()}
+					{#if zone}
+						<AnnotationRange
+							y={[zone.from, zone.to]}
+							fill={`color-mix(in oklch, ${zone.color} 10%, transparent)`}
 						/>
 					{/if}
-					{#if l.forecast.length > 0}
-						<Area
-							y0={value(`${l.key}_flo`)}
-							y1={value(`${l.key}_fhi`)}
-							defined={has(`${l.key}_flo`)}
-							fill={() => l.color}
-							style="opacity: 0.12"
+					{#each rules as r, i (i)}
+						<AnnotationLine
+							y={r.value}
+							label={r.label}
+							labelPlacement="top-left"
+							labelXOffset={4}
+							props={{
+								line: {
+									stroke: r.color,
+									'stroke-width': 1.5,
+									'stroke-dasharray': r.dashed ? '6 4' : undefined
+								},
+								label: { class: 'text-[10px]', fill: r.color }
+							}}
 						/>
-						<Spline
-							y={value(`${l.key}_f`)}
-							defined={has(`${l.key}_f`)}
-							stroke={() => l.color}
-							stroke-width={2}
-							stroke-dasharray="4 4"
-						/>
-					{/if}
-					<Spline seriesKey={l.key} defined={has(l.key)} stroke-width={2} />
-				{/each}
-			{/snippet}
-			{#snippet tooltip()}
-				<Chart.Tooltip labelFormatter={tooltipTime} />
-			{/snippet}
-		</LineChart>
-	{:else if display === 'area'}
-		<AreaChart
-			data={rows}
-			x="time"
-			{xDomain}
-			{series}
-			seriesLayout="overlap"
-			props={{
-				xAxis: timeAxis,
-				yAxis: valueAxis,
-				area: { opacity: 0.25, line: { 'stroke-width': 2 } }
-			}}
-		>
-			{#snippet tooltip()}
-				<Chart.Tooltip labelFormatter={tooltipTime} />
-			{/snippet}
-		</AreaChart>
-	{:else}
-		<BarChart
-			data={rows}
-			x="time"
-			{series}
-			seriesLayout="stack"
-			props={{
-				xAxis: { ticks: barTicks, format: timeFormat },
-				yAxis: valueAxis,
-				bars: { stroke: 'none' }
-			}}
-		>
-			{#snippet tooltip()}
-				<Chart.Tooltip labelFormatter={tooltipTime} />
-			{/snippet}
-		</BarChart>
-	{/if}
-</Chart.Container>
+					{/each}
+					{#each lines as l (l.key)}
+						{#if l.band.length > 0}
+							<Area
+								y0={value(`${l.key}_lo`)}
+								y1={value(`${l.key}_hi`)}
+								defined={has(`${l.key}_lo`)}
+								fill={() => l.color}
+								style="opacity: 0.15"
+							/>
+						{/if}
+						{#if l.forecast.length > 0}
+							<Area
+								y0={value(`${l.key}_flo`)}
+								y1={value(`${l.key}_fhi`)}
+								defined={has(`${l.key}_flo`)}
+								fill={() => l.color}
+								style="opacity: 0.12"
+							/>
+							<Spline
+								y={value(`${l.key}_f`)}
+								defined={has(`${l.key}_f`)}
+								stroke={() => l.color}
+								stroke-width={2}
+								stroke-dasharray="4 4"
+							/>
+						{/if}
+						<Spline seriesKey={l.key} defined={has(l.key)} stroke-width={2} />
+					{/each}
+				{/snippet}
+				{#snippet tooltip()}
+					<Chart.Tooltip labelFormatter={tooltipTime} />
+				{/snippet}
+			</LineChart>
+		{:else if display === 'area'}
+			<AreaChart
+				data={rows}
+				x="time"
+				{xDomain}
+				{series}
+				seriesLayout="overlap"
+				props={{
+					xAxis: timeAxis,
+					yAxis: valueAxis,
+					area: { opacity: 0.25, line: { 'stroke-width': 2 } }
+				}}
+			>
+				{#snippet tooltip()}
+					<Chart.Tooltip labelFormatter={tooltipTime} />
+				{/snippet}
+			</AreaChart>
+		{:else}
+			<BarChart
+				data={rows}
+				x="time"
+				{series}
+				seriesLayout="stack"
+				props={{
+					xAxis: { ticks: barTicks, format: timeFormat },
+					yAxis: valueAxis,
+					bars: { stroke: 'none' }
+				}}
+			>
+				{#snippet tooltip()}
+					<Chart.Tooltip labelFormatter={tooltipTime} />
+				{/snippet}
+			</BarChart>
+		{/if}
+	</Chart.Container>
+</div>
 
 <div class="flex flex-wrap gap-x-4 gap-y-1.5 border-t pt-3">
 	{#each lines as l (l.key)}

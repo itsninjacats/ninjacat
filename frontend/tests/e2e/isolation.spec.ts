@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { monitors } from './monitors';
 import { keyNames, password, people, stateFile, tenants, type TenantKey } from './people';
 import { routes } from './routes';
 import { expect, open, test } from './test';
@@ -14,7 +15,10 @@ test.skip(({ viewport }) => viewport?.width !== 1280, 'runs at desktop width onl
 function marks(tenant: TenantKey, { member }: { member: 'of one' | 'of both' }): string[] {
 	const others = tenant === 'a' ? people.memberA : people.memberB;
 	const names = member === 'of one' ? [tenants[tenant].name, tenants[tenant].slug] : [];
-	return [...names, ...keyNames[tenant], others.email];
+	const monitorNames = Object.values(monitors)
+		.filter((monitor) => monitor.tenant === tenant)
+		.map((monitor) => monitor.view.name);
+	return [...names, ...keyNames[tenant], ...monitorNames, others.email];
 }
 
 // The HTML holds what the page was first loaded with, so after a switch in
@@ -45,11 +49,18 @@ for (const [person, own, other] of [
 	['memberB', 'b', 'a']
 ] as const) {
 	test.describe(`${person} sees only ${tenants[own].id}`, () => {
-		test.use({ storageState: stateFile(person) });
+		// The browser logs each 404 it is answered.
+		test.use({ storageState: stateFile(person), allowedErrors: [/status of 404/] });
 
 		test('on every page of the panel', async ({ page }) => {
 			for (const route of tenantPages) {
-				await open(page, route.path);
+				if (route.owner === other) {
+					// Another tenant's monitor is not found, as if it did not exist.
+					const response = await page.goto(route.path);
+					expect(response?.status(), `${route.path} is not found`).toBe(404);
+				} else {
+					await open(page, route.path);
+				}
 				await expectNothingOf(page, other, 'of one');
 			}
 		});

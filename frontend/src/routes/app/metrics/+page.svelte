@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { afterNavigate, replaceState } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import BellPlusIcon from '@lucide/svelte/icons/bell-plus';
 	import { page } from '$app/state';
 	import ChartAreaIcon from '@lucide/svelte/icons/chart-area';
 	import ChartColumnIcon from '@lucide/svelte/icons/chart-column';
@@ -32,6 +34,7 @@
 		writeView,
 		type Display
 	} from '$lib/metrics/query';
+	import { m } from '$lib/paraglide/messages';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -232,11 +235,18 @@
 <svelte:head><title>Metrics — ninjacat</title></svelte:head>
 
 <div class="mx-auto max-w-6xl px-6 py-8">
-	<div class="mb-6">
-		<h1 class="font-heading text-2xl font-semibold tracking-tight">Metrics</h1>
-		<p class="text-sm text-muted-foreground">
-			Datadog's query language: queries, formulas and functions, straight from ClickHouse.
-		</p>
+	<div class="mb-6 flex flex-wrap items-end justify-between gap-4">
+		<div class="min-w-0">
+			<h1 class="font-heading text-2xl font-semibold tracking-tight">Metrics</h1>
+			<p class="text-sm text-muted-foreground">
+				Datadog's query language: queries, formulas and functions, straight from ClickHouse.
+			</p>
+		</div>
+		<!-- The monitor editor starts from this view: its queries and first formula. -->
+		<Button variant="outline" href={`${resolve('/app/monitors/new')}?${writeView(view)}`}>
+			<BellPlusIcon class="size-4" />
+			{m.monitor_create_from_explorer()}
+		</Button>
 	</div>
 
 	{#if data.error}

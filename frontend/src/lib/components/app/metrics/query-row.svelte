@@ -16,13 +16,16 @@
 		query = $bindable(),
 		color,
 		metrics,
-		onremove
+		onremove,
+		chartControls = true
 	}: {
 		query: ExplorerQuery;
 		color: string;
 		/** The first page of metric names, shown before anything is typed. */
 		metrics: string[];
 		onremove?: () => void;
+		// The alias and the hide toggle; a monitor's queries have no use for them.
+		chartControls?: boolean;
 	} = $props();
 
 	const TEXT_PLACEHOLDER = 'avg:system.cpu.user{env:prod} by {host}';
@@ -330,14 +333,16 @@
 		{/if}
 
 		<FunctionChips bind:functions={query.functions} allowModifiers />
-		<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-			as
-			<input
-				bind:value={query.alias}
-				placeholder="alias"
-				class="h-7 w-28 rounded-md border bg-transparent px-2 font-mono text-[11px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:ring-1 focus:ring-ring"
-			/>
-		</label>
+		{#if chartControls}
+			<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+				as
+				<input
+					bind:value={query.alias}
+					placeholder="alias"
+					class="h-7 w-28 rounded-md border bg-transparent px-2 font-mono text-[11px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:ring-1 focus:ring-ring"
+				/>
+			</label>
+		{/if}
 	</div>
 
 	<div class="flex shrink-0 flex-col items-center gap-0.5 pt-0.5 @md:flex-row">
@@ -356,19 +361,23 @@
 				<CodeIcon class="size-4" />
 			{/if}
 		</button>
-		<button
-			type="button"
-			class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-			onclick={() => (query.hidden = !query.hidden)}
-			title={query.hidden ? 'Show on the chart' : 'Hide from the chart (formulas can still use it)'}
-			aria-label={query.hidden ? 'Show query' : 'Hide query'}
-		>
-			{#if query.hidden}
-				<EyeOffIcon class="size-4" />
-			{:else}
-				<EyeIcon class="size-4" />
-			{/if}
-		</button>
+		{#if chartControls}
+			<button
+				type="button"
+				class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+				onclick={() => (query.hidden = !query.hidden)}
+				title={query.hidden
+					? 'Show on the chart'
+					: 'Hide from the chart (formulas can still use it)'}
+				aria-label={query.hidden ? 'Show query' : 'Hide query'}
+			>
+				{#if query.hidden}
+					<EyeOffIcon class="size-4" />
+				{:else}
+					<EyeIcon class="size-4" />
+				{/if}
+			</button>
+		{/if}
 		{#if onremove}
 			<button
 				type="button"
