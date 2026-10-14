@@ -23,7 +23,7 @@ open ClickHouse.Driver.ADO
 open NinjaCat.Api.Server
 open NinjaCat.Api.Platform
 
-let secret = "0123456789abcdef0123456789abcdef"
+let secret = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 let private env (name: string) (fallback: string) =
     match Environment.GetEnvironmentVariable name with

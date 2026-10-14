@@ -78,11 +78,7 @@ type ClickHouseSink(client: ClickHouseClient, log: ILogger) =
 
     /// Inserts rows into one table, adjusted to its column types; the types
     /// are read the first time, and read again after a failed read.
-    let inserter
-        (name: string)
-        (quotedColumns: string list)
-        (settings: (string * obj) list)
-        : CancellationToken -> obj[][] -> Task =
+    let inserter (name: string) (quotedColumns: string list) : CancellationToken -> obj[][] -> Task =
         // A column named like a keyword (`group`) is written with backticks
         // in a table's column list; the driver quotes names itself.
         let columns = quotedColumns |> List.map (fun column -> column.Trim '`')
@@ -94,16 +90,8 @@ type ClickHouseSink(client: ClickHouseClient, log: ILogger) =
                 | Some ready -> return ready
                 | None ->
                     let! types = columnTypes name cancel
-
-                    let adjusterOf (column: string) =
-                        match types.TryGetValue column with
-                        | true, columnType -> adjusterFor columnType
-                        | false, _ -> failwith $"{name} has no column {column}"
-
-                    let options =
-                        InsertOptions(ColumnTypes = types, CustomSettings = Dictionary(settings |> List.map KeyValuePair))
-
-                    let ready = options, columns |> List.map adjusterOf |> Array.ofList
+                    let adjusters = columns |> List.map (fun column -> adjusterFor types[column]) |> Array.ofList
+                    let ready = InsertOptions(ColumnTypes = types), adjusters
                     prepared <- Some ready
                     return ready
             }
@@ -121,26 +109,19 @@ type ClickHouseSink(client: ClickHouseClient, log: ILogger) =
             }
 
     let createWriter (name: string) (quotedColumns: string list) (limits: WriterLimits) : TableWriter =
-        TableWriter(name, limits, inserter name quotedColumns [] CancellationToken.None, log)
+        TableWriter(name, limits, inserter name quotedColumns CancellationToken.None, log)
 
     let inserters = ConcurrentDictionary<string, CancellationToken -> obj[][] -> Task>()
 
     member _.Stats: WriterStats list = writers.Values |> Seq.map _.Stats |> Seq.sortBy _.Table |> List.ofSeq
 
-    /// Inserts the rows now and fails if ClickHouse does not take them, for
-    /// rows that must be stored: the buffered writer drops a failed batch.
-    /// Inserting the same rows again is the caller's retry. Where async
-    /// inserts are on, ClickHouse answers when the rows are stored only if
-    /// told to wait, so this insert does not leave that to the server's
-    /// profile.
+    /// Inserts now and throws if ClickHouse refuses; for rows that must be
+    /// stored, as the buffered writer drops a failed batch.
     member _.InsertAsync(table: Table<'row>, rows: 'row[], cancel: CancellationToken) : Task =
         if rows.Length = 0 then
             Task.CompletedTask
         else
-            let awaited _ =
-                inserter table.Name table.Columns [ "wait_for_async_insert", box 1 ]
-
-            let insert = inserters.GetOrAdd(table.Writer, Func<_, _>(awaited))
+            let insert = inserters.GetOrAdd(table.Writer, Func<_, _>(fun _ -> inserter table.Name table.Columns))
             insert cancel (Array.map table.Values rows)
 
     member _.StopAsync() : Task =

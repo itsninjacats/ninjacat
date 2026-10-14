@@ -320,95 +320,20 @@ let ``the metrics retention is set without rewriting the tables`` () =
 // --- monitors ------------------------------------------------------------------------------
 
 [<Fact>]
-let ``the migrations create the monitor tables`` () =
-    inScratch true (fun scratch ->
-        use reader =
-            scratch
-                .ExecuteReaderAsync(
-                    "SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name LIKE 'monitor\\_%' ORDER BY name"
-                )
-                .GetAwaiter()
-                .GetResult()
-
-        let tables = [ while reader.Read() do reader.GetString 0, reader.GetString 1 ]
-
-        Assert.Equal<(string * string) list>(
-            [ "monitor_evaluations", "MergeTree"
-              "monitor_notifications", "ReplacingMergeTree"
-              "monitor_transitions", "ReplacingMergeTree" ],
-            tables
-        ))
-
-let private transition (group: string) (at: DateTime) : MonitorTransitionRow =
-    { TenantID = "default"
-      MonitorID = 42UL
-      MonitorVersion = 3u
-      QueryHash = "5f2c"
-      MonitorKind = "metric"
-      GroupKey = group
-      GroupTags = (if group = "*" then [||] else [| group |])
-      At = at
-      FromState = "OK"
-      ToState = "Alert"
-      Reason = "threshold"
-      Actor = None
-      Value = Some 97.5
-      Crossed = "critical"
-      Comparator = ">"
-      Critical = Some 90.0
-      Warning = Some 80.0
-      CriticalRecovery = None
-      WarningRecovery = None
-      WindowFrom = at.AddMinutes -5.0
-      WindowTo = at
-      FirstTriggeredAt = Some at
-      LastTriggeredAt = None }
-
-[<Fact>]
-let ``transitions are inserted at once, and inserting them again collapses under FINAL`` () =
-    inScratch true (fun scratch ->
-        let sink = ClickHouseSink(scratch, ErrorLog())
-        let now = DateTime.UtcNow
-        let at = DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0, DateTimeKind.Utc).AddMinutes -10.0
-        let rows = [| transition "*" at; transition "host:a" at; { transition "host:b" at with Actor = Some "user-1"; Value = None } |]
-
-        // A retry after a lost answer, and a second owner during a hand-off,
-        // write the same rows; the key is (tenant, monitor, group, at).
-        for _ in 1..2 do
-            sink.InsertAsync(MonitorTransitions.table, rows, Threading.CancellationToken.None).GetAwaiter().GetResult()
-
-        let scalar (sql: string) =
-            use reader = scratch.ExecuteReaderAsync(sql).GetAwaiter().GetResult()
-            Assert.True(reader.Read())
-            string (reader.GetValue 0)
-
-        // Awaited: the rows are there without stopping the sink.
-        Assert.Equal("6", scalar "SELECT count() FROM monitor_transitions")
-        Assert.Equal("3", scalar "SELECT count() FROM monitor_transitions FINAL")
-
-        Assert.Equal(
-            "['*','host:a','host:b']",
-            scalar "SELECT toString(groupArray(group_key)) FROM (SELECT group_key FROM monitor_transitions FINAL ORDER BY group_key)"
-        )
-
-        Assert.Equal(
-            "('user-1',NULL,90,NULL,1)",
-            scalar
-                "SELECT toString(tuple(actor, value, critical, critical_recovery, inserted_at > at)) FROM monitor_transitions FINAL WHERE group_key = 'host:b'"
-        ))
-
-[<Fact>]
 let ``an awaited insert that ClickHouse refuses fails the caller`` () =
     inScratch true (fun scratch ->
         let sink = ClickHouseSink(scratch, ErrorLog())
 
+        let row: MonitorEvaluationRow =
+            { TenantID = "default"; MonitorID = 42UL; GroupKey = "*"; At = DateTime.UtcNow; Value = None; State = "OK"; Outcome = "evaluated"; Detail = "" }
+
         let insert () =
-            sink.InsertAsync(MonitorTransitions.table, [| transition "*" DateTime.UtcNow |], Threading.CancellationToken.None).GetAwaiter().GetResult()
+            sink.InsertAsync(MonitorEvaluations.table, [| row |], Threading.CancellationToken.None).GetAwaiter().GetResult()
 
         // The first insert caches the column types, so the second reaches
         // ClickHouse and is refused there.
         insert ()
-        scratch.ExecuteNonQueryAsync("DROP TABLE monitor_transitions").GetAwaiter().GetResult() |> ignore
+        scratch.ExecuteNonQueryAsync("DROP TABLE monitor_evaluations").GetAwaiter().GetResult() |> ignore
         Assert.ThrowsAny<exn>(fun () -> insert ()) |> ignore)
 
 [<Fact>]

@@ -62,9 +62,7 @@ type MonitorNotificationRow =
       HandledAt: DateTime }
 
 module MonitorTransitions =
-    /// Written with `ClickHouseSink.InsertAsync`, never through the buffered
-    /// writer: a transition must be stored, and the writer drops a failed batch.
-    /// `inserted_at` is left to its default, the notifier's cursor.
+    /// Written with `ClickHouseSink.InsertAsync`; `inserted_at` is left to its default, the notifier's cursor.
     let table: Table<MonitorTransitionRow> =
         Table.create
             "storage_monitor_transitions"
@@ -88,9 +86,7 @@ module MonitorEvaluations =
             (fun r -> [| r.TenantID; r.MonitorID; r.GroupKey; r.At; Col.opt r.Value; r.State; r.Outcome; r.Detail |])
 
 module MonitorNotifications =
-    /// Written with `ClickHouseSink.InsertAsync`, never through the buffered
-    /// writer: the notifier moves its cursor past a transition only once its
-    /// row is stored, and the writer drops a failed batch.
+    /// Written with `ClickHouseSink.InsertAsync`.
     let table: Table<MonitorNotificationRow> =
         Table.create
             "storage_monitor_notifications"

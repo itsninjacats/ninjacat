@@ -13,11 +13,13 @@ open Microsoft.Extensions.DependencyInjection
 open Oxpecker
 open NinjaCat.Api.Platform
 
+let private queryLimitSeconds = 7
+
 let addServices (cfg: Config.Config) (services: IServiceCollection) : unit =
     // One client per database for the process: each owns its connection
     // pool. Registered through factories so the container disposes them.
     services
-        .AddSingleton<ClickHouse.Driver.ClickHouseClient>(fun _ -> ClickHouse.createClient cfg)
+        .AddSingleton<ClickHouse.Driver.ClickHouseClient>(fun _ -> ClickHouse.createReadClient cfg queryLimitSeconds)
         .AddNpgsqlDataSource(Postgres.connectionString cfg.DatabaseUrl)
         .AddSingleton<Config.Config>(cfg)
         .AddRouting()

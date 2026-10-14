@@ -1,4 +1,4 @@
-/// Executes what the engine compiled. The only file that knows the driver.
+/// The ClickHouse clients, the migrations, and running what the engine compiled.
 module NinjaCat.Api.Platform.ClickHouse
 
 open System
@@ -8,9 +8,6 @@ open ClickHouse.Driver
 open ClickHouse.Driver.ADO
 open ClickHouse.Driver.Utility
 open NinjaCat.Api.Engine
-
-/// Server-side limit for a single query of the query process, in seconds.
-let private maxExecutionSeconds = 7
 
 let private settings (cfg: Config.Config) (timeout: TimeSpan) =
     let host, port =
@@ -38,22 +35,14 @@ let createReadClient (cfg: Config.Config) (limitSeconds: int) =
     settings.CustomSettings["max_execution_time"] <- box limitSeconds
     new ClickHouseClient(settings)
 
-/// The client the query process's queries run on.
-let createClient (cfg: Config.Config) = createReadClient cfg maxExecutionSeconds
-
 /// The client the write path uses. Kept apart from the read client so no
 /// query can ever write, and so a slow query and a slow insert do not share a
 /// timeout.
 let createWriteClient (cfg: Config.Config) =
     new ClickHouseClient(settings cfg (TimeSpan.FromMinutes 2.0))
 
-/// What the migrating process does: the migrations, then the metrics
-/// tables' retention. Returns how many migrations ran.
-///
-/// A client of its own with an hour's timeout: a migration may rebuild a
-/// table from every row kept (0002 refills the rollup), and ClickHouse goes on
-/// with a write after the client gives up, so a migration cut short would
-/// block the next start's attempt on its own table.
+/// The migrations, then the metrics TTLs; how many migrations ran. An hour's timeout:
+/// ClickHouse goes on with a write after the client gives up, so a migration cut short blocks the next start.
 let migrate (cfg: Config.Config) : Task<Result<int, string>> =
     task {
         use client = new ClickHouseClient(settings cfg (TimeSpan.FromHours 1.0))

@@ -1,7 +1,5 @@
-/// The panel's monitor API (`/internal/monitors/*`): a definition checked
-/// before the panel saves it, and what the monitor service stored, for the
-/// tenant the token names. Read-only: the panel writes definitions to Postgres
-/// itself.
+/// `/internal/monitors/*`: validation, and what the monitor service stored, for
+/// the token's tenant. The panel writes definitions to Postgres itself.
 module NinjaCat.Api.Server.MonitorHandlers
 
 open System
@@ -34,8 +32,6 @@ let private optionalTime (r: DbDataReader) (i: int) = if r.IsDBNull i then None 
 // A reduction such as sum can overflow to infinity, which JSON cannot carry.
 let private optionalFloat (r: DbDataReader) (i: int) =
     if r.IsDBNull i then None else Some(r.GetDouble i) |> Option.filter Double.IsFinite
-
-let private optionalString (r: DbDataReader) (i: int) = if r.IsDBNull i then None else Some(r.GetString i)
 
 let private tags (r: DbDataReader) (i: int) = (r.GetValue i :?> string[]) |> List.ofArray
 
@@ -92,7 +88,7 @@ let private transition (r: DbDataReader) : Read.TransitionRecord =
       FromState = State.Status.ofText (r.GetString 3) |> Option.map _.Text
       ToState = r.GetString 4
       Reason = r.GetString 5
-      Actor = optionalString r 6
+      Actor = (if r.IsDBNull 6 then None else Some(r.GetString 6))
       Value = optionalFloat r 7
       Crossed = Some(r.GetString 8) |> Option.filter (fun s -> s <> "none")
       Comparator = r.GetString 9

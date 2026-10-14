@@ -4,7 +4,6 @@
 module NinjaCat.Api.Server.QueryToken
 
 open System
-open System.Security.Claims
 open System.Text
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Authentication
@@ -20,24 +19,14 @@ let issuer = "ninjacat-panel"
 let audience = "ninjacat-query"
 let tenantClaim = "tenant"
 
-/// The one tenant a token names. A JSON array in the claim arrives as several
-/// claims, and a token for more than one tenant is not a token for the first.
-let private namedTenant (principal: ClaimsPrincipal) : string option =
-    match principal.FindAll tenantClaim |> Seq.map _.Value |> Seq.toList with
-    | [ id ] when id <> "" -> Some id
-    | _ -> None
+let tenant (ctx: HttpContext) = TenantId(ctx.User.FindFirst(tenantClaim).Value)
 
-/// The tenant the request's token names. A token without one is refused
-/// before any handler runs, so only a route left open (a probe) can get here
-/// without it, and that is a wiring mistake rather than a request to answer.
-let tenant (ctx: HttpContext) : TenantId =
-    match namedTenant ctx.User with
-    | Some id -> TenantId id
-    | None -> invalidOp "no tenant claim: this route must require the panel's token"
-
+// A JSON array in the claim arrives as several claims; a token for more than
+// one tenant is not a token for the first.
 let private requireTenant (context: TokenValidatedContext) : Task =
-    if (namedTenant context.Principal).IsNone then
-        context.Fail "the token must name exactly one tenant"
+    match context.Principal.FindAll tenantClaim |> Seq.map _.Value |> Seq.toList with
+    | [ id ] when id <> "" -> ()
+    | _ -> context.Fail "the token must name exactly one tenant"
 
     Task.CompletedTask
 
@@ -48,11 +37,9 @@ let addTo (services: IServiceCollection) (secret: string) : unit =
     if key.Length < 32 then
         failwith "NINJACAT_QUERY_TOKEN_SECRET must be at least 32 bytes (openssl rand -hex 32)"
 
-    // AddAuthenticationCore, as in the intake (Intake/Auth.fs): AddAuthentication
-    // also brings data protection, whose hosted service writes a key ring to
-    // $HOME at startup, and nothing here is encrypted. AddJwtBearer needs one
-    // more of its services, the configuration scheme options are read from;
-    // every option is set in code below, so that configuration is empty.
+    // AddAuthenticationCore as in Intake/Auth.fs (AddAuthentication brings data
+    // protection, which writes a key ring to $HOME); JwtBearer then needs the
+    // empty configuration provider below.
     services.AddAuthenticationCore(fun options -> options.DefaultScheme <- JwtBearerDefaults.AuthenticationScheme).AddWebEncoders()
     |> ignore
 
@@ -65,8 +52,6 @@ let addTo (services: IServiceCollection) (secret: string) : unit =
 
     AuthenticationBuilder(services)
         .AddJwtBearer(fun options ->
-            // The claims keep the names the panel gave them (`sub`, `role`),
-            // not the URIs .NET would map them to.
             options.MapInboundClaims <- false
 
             options.TokenValidationParameters <-

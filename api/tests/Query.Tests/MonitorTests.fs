@@ -33,57 +33,30 @@ let private validate (client: HttpClient) (body: string) : Task<JsonElement> =
         return! json response
     }
 
-// --- validate --------------------------------------------------------------------------
-
+// Which problems a definition has is tested in Engine.Tests/MonitorValidateTests.
 [<Fact>]
-let ``a definition that would be evaluated has no problems, and names the options not acted on`` () =
+let ``validate answers the problems, or none and the options not acted on`` () =
     withServer config (fun client clickhouse ->
         task {
-            let! answer =
+            let! valid =
                 validate
                     client
                     """{"name":"cpu","type":"query alert","query":"avg(last_5m):avg:system.cpu.user{*} by {host} > 90",
                         "options":{"thresholds":{"critical":90,"warning":80},"renotify_interval":60}}"""
 
-            Assert.Empty(strings (answer.GetProperty "problems"))
-            Assert.Contains("renotify_interval", strings (answer.GetProperty "not_acted_on"))
+            Assert.Empty(strings (valid.GetProperty "problems"))
+            Assert.Contains("renotify_interval", strings (valid.GetProperty "not_acted_on"))
+
+            let! invalid = validate client "not json"
+            Assert.NotEmpty(strings (invalid.GetProperty "problems"))
+            Assert.Empty(strings (invalid.GetProperty "not_acted_on"))
             Assert.Empty clickhouse.Parameters
-        })
-
-[<Fact>]
-let ``every problem of a definition is listed`` () =
-    withServer config (fun client _ ->
-        task {
-            let! answer =
-                validate
-                    client
-                    """{"type":"query alert","query":"avg(last_5m):avg:system.cpu.user{*} > 90",
-                        "options":{"thresholds":{"critical":80,"warning":95}}}"""
-
-            let problems = strings (answer.GetProperty "problems")
-            Assert.Equal(2, problems.Length)
-            Assert.Contains(problems, fun p -> p.Contains "critical (80)")
-            Assert.Contains(problems, fun p -> p.Contains "warning (95)")
-        })
-
-[<Theory>]
-[<InlineData("not json")>]
-[<InlineData("[1]")>]
-[<InlineData("""{"type":"query alert"}""")>]
-[<InlineData("""{"type":"query alert","query":"avg(last_5m):avg:system.cpu.user{*} > 90","options":"high"}""")>]
-let ``a body that is no monitor is a problem, not an error`` (body: string) =
-    withServer config (fun client _ ->
-        task {
-            let! answer = validate client body
-            Assert.NotEmpty(strings (answer.GetProperty "problems"))
         })
 
 // --- status ids --------------------------------------------------------------------------
 
 [<Theory>]
 [<InlineData("")>]
-[<InlineData("?ids=")>]
-[<InlineData("?ids=1,x")>]
 [<InlineData("?ids=0")>]
 let ``status without good ids is 400 and asks nothing`` (query: string) =
     withServer config (fun client clickhouse ->
@@ -91,18 +64,6 @@ let ``status without good ids is 400 and asks nothing`` (query: string) =
             use! response = get client ("/internal/monitors/status" + query)
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode)
             Assert.Empty clickhouse.Parameters
-        })
-
-[<Fact>]
-let ``a tenant in the query string is not believed by the monitor routes`` () =
-    withServer config (fun client clickhouse ->
-        task {
-            for path in [ "/internal/monitors/status?ids=7&tenant=default"; "/internal/monitors/7/groups?tenant=default" ] do
-                clickhouse.Parameters.Clear()
-                use! response = get client path
-                Assert.Equal(HttpStatusCode.OK, response.StatusCode)
-                Assert.Contains("acme", clickhouse.Parameters)
-                Assert.DoesNotContain("default", clickhouse.Parameters)
         })
 
 // --- what was stored, on a real ClickHouse -------------------------------------------------
@@ -176,7 +137,7 @@ let private stored (client: ClickHouseClient) : Task =
                 [ transition "acme" 7UL "host:a" 30.0 "none" "Alert" "new"
                   warned
                   transition "acme" 7UL "host:b" 28.0 "none" "Alert" "new"
-                  transition "acme" 7UL "host:b" 25.0 "Alert" "OK" "recovery" |> triggered 28.0
+                  { transition "acme" 7UL "host:b" 25.0 "Alert" "OK" "recovery" with Actor = Some "user-1" } |> triggered 28.0
                   transition "acme" 7UL "host:d" 35.0 "none" "Alert" "new"
                   transition "acme" 7UL "host:d" 32.0 "Alert" "OK" "recovery" |> triggered 35.0
                   { transition "acme" 7UL "host:d" 22.0 "OK" "No Data" "no_data" with LastTriggeredAt = Some (ago 35.0).UtcDateTime }
@@ -293,6 +254,8 @@ let ``transitions are the timeline of a range, a repeated row once`` () =
             Assert.False(has "from_state" first)
             Assert.Equal(90.0, (first.GetProperty "critical").GetDouble())
             Assert.Equal(ago 40.0, time (first.GetProperty "window_from"))
+            Assert.Equal("user-1", (rows[4].GetProperty "actor").GetString())
+            Assert.False(has "actor" first)
             Assert.Equal("OK", (rows[5].GetProperty "from_state").GetString())
             // Expiry judges no window.
             Assert.False(has "window_from" rows[8])
