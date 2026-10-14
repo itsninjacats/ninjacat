@@ -198,12 +198,12 @@ setup('sign in the admin through the form', async ({ browser }) => {
 	if (!(await stillSignedIn(context.request, person.email))) {
 		const page = await context.newPage();
 		await page.goto('/login');
-		// Before hydration the form has no handler and submits itself as a GET,
-		// credentials in the query string.
-		await page.waitForLoadState('networkidle');
+		// Enabled once the page has hydrated, so what is typed is not reset.
+		const signIn = page.getByRole('button', { name: 'Sign in' });
+		await expect(signIn).toBeEnabled();
 		await page.getByLabel('E-mail address').fill(person.email);
 		await page.getByLabel('Password').fill(password);
-		await page.getByRole('button', { name: 'Sign in' }).click();
+		await signIn.click();
 		await page.waitForURL('**/app');
 	}
 	await context.storageState({ path: stateFile('admin') });

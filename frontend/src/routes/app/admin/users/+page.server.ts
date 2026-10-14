@@ -1,10 +1,11 @@
 import { fail } from '@sveltejs/kit';
+import { isAPIError } from 'better-auth/api';
 import { asc, eq } from 'drizzle-orm';
 import { auth } from '$lib/server/auth';
 import { isInstanceAdmin } from '$lib/server/auth-options';
 import { db } from '$lib/server/db';
 import { member, organization, user } from '$lib/server/db/schema';
-import { authErrorCode, requireInstanceAdmin } from '$lib/server/admin';
+import { requireInstanceAdmin } from '$lib/server/admin';
 import { formText } from '$lib/server/form';
 import { m } from '$lib/paraglide/messages';
 import type { Actions, PageServerLoad } from './$types';
@@ -71,7 +72,7 @@ export const actions: Actions = {
 				body: { email, password, name: name || email, role: admin ? 'admin' : 'user' }
 			});
 		} catch (e) {
-			switch (authErrorCode(e)) {
+			switch (isAPIError(e) ? e.body?.code : undefined) {
 				case 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL':
 					return fail(409, { ...values, error: m.admin_user_exists() });
 				case 'INVALID_EMAIL':

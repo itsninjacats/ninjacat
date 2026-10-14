@@ -1,13 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { randomBytes } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import { migrate } from 'drizzle-orm/postgres-js/migrator';
-import postgres from 'postgres';
 import * as schema from './db/schema';
-import type { Database } from './auth-options';
+import { reachable, scratchDatabase } from './db/scratch';
 import {
 	createMonitor,
 	deleteMonitor,
@@ -25,22 +20,6 @@ describe('the monitor notification', () => {
 	});
 });
 
-// Against a scratch database built from the Drizzle migrations, as in
-// admin.postgres.spec.ts. Skipped when Postgres is not reachable.
-const url = process.env.DATABASE_URL ?? 'postgres://root:mysecretpassword@localhost:5433/local';
-
-async function reachable(): Promise<boolean> {
-	const probe = postgres(url, { max: 1, connect_timeout: 2, onnotice: () => {} });
-	try {
-		await probe`select 1`;
-		return true;
-	} catch {
-		return false;
-	} finally {
-		await probe.end();
-	}
-}
-
 const { monitor, organization, user } = schema;
 
 const definition: MonitorDefinition = {
@@ -55,29 +34,15 @@ const definition: MonitorDefinition = {
 };
 
 describe.skipIf(!(await reachable()))('writing monitors, in Postgres', () => {
-	const name = `ninjacat_test_${randomBytes(6).toString('hex')}`;
-	const admin = postgres(url, { max: 1, onnotice: () => {} });
-	let sql: postgres.Sql;
-	let db: Database;
+	const scratch = scratchDatabase();
+	const db = scratch.db;
 	const notified: string[] = [];
 
 	beforeAll(async () => {
-		await admin.unsafe(`create database ${name}`);
-		const scratch = new URL(url);
-		scratch.pathname = `/${name}`;
-		sql = postgres(scratch.toString(), { onnotice: () => {} });
-		db = drizzle(sql, { schema });
-		await migrate(db, {
-			migrationsFolder: fileURLToPath(new URL('../../../drizzle', import.meta.url))
-		});
-		await sql.listen(monitorsChannel, (payload) => notified.push(payload));
+		await scratch.create();
+		await scratch.sql.listen(monitorsChannel, (payload) => notified.push(payload));
 	});
-
-	afterAll(async () => {
-		await sql?.end();
-		await admin.unsafe(`drop database if exists ${name} with (force)`);
-		await admin.end();
-	});
+	afterAll(scratch.drop);
 
 	beforeEach(async () => {
 		await db.delete(monitor);

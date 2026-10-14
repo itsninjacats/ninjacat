@@ -68,7 +68,9 @@ for (const [person, own, other] of [
 		test('in the tenant switcher', async ({ page }) => {
 			await open(page, '/app');
 			await openTenantMenu(page);
-			await expect(page.getByRole('menuitem')).toHaveText([new RegExp(escape(tenants[own].name))]);
+			const items = page.getByRole('menuitem');
+			await expect(items).toHaveCount(1);
+			await expect(items).toContainText(tenants[own].name);
 			await expectNothingOf(page, other, 'of one');
 		});
 
@@ -124,7 +126,3 @@ test.describe('switching tenants', () => {
 		expect(signOut.status()).toBe(200);
 	});
 });
-
-function escape(text: string): string {
-	return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}

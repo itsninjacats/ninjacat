@@ -8,7 +8,7 @@ where it should not. It also checks that one tenant's member sees nothing of ano
 bun run db:start                    # or the whole dev stack: docker compose up
 bunx playwright install chromium    # once
 bun run test:e2e                    # every page, at every width
-bun run test:e2e --project=phone-light views.spec.ts   # one width, one file
+bun run test:e2e --project=phone views.spec.ts   # one width, one file
 bunx playwright show-report         # the last run, with traces of what failed
 ```
 
@@ -40,8 +40,7 @@ bunx playwright show-report         # the last run, with traces of what failed
 Each page runs at four widths: `phone` (360), `tablet` (768), `desktop` (1280) and `wide`
 (1920). Phone and tablet are touch screens, where a `title` cannot be read, so text cut with an
 ellipsis passes there only inside a control that opens a popup. The isolation tests run at
-desktop width only. Dark mode is not tested, since nothing in the panel turns it on; add
-`'dark'` to `schemes` in `playwright.config.ts` once something does.
+desktop width only. Dark mode is not tested, since nothing in the panel turns it on.
 
 ## What counts as overflow
 
@@ -50,9 +49,6 @@ file: the page scrolling sideways, content spilling out of its box or cut off by
 with an ellipsis that cannot be read whole, a table that hides columns behind a sideways
 scroll, text squeezed to a word a line, text touching a border, and an item off the centre of
 its row. What is allowed to stick out is listed there too, each with its reason.
-
-A test that passes only on a retry fails the run (`failOnFlakyTests`), so an overflow that
-comes and goes is not let through.
 
 ## Adding a page
 

@@ -1,25 +1,18 @@
 import { error } from '@sveltejs/kit';
-import { isAPIError } from 'better-auth/api';
 import { and, DrizzleQueryError, eq } from 'drizzle-orm';
 import postgres from 'postgres';
 import type { TenantRole } from '$lib/tenant';
 import { isInstanceAdmin, type Database } from './auth-options';
 import { member } from './db/schema';
 
-// The guard keeps everyone but the instance admin off /app/admin, by route.
-// Every admin load and action asks again, so that one moved out from under
-// that route does not quietly open to every user.
+// The guard already refuses /app/admin by route; this keeps an admin load or
+// action moved out from under that route from opening to every user.
 export function requireInstanceAdmin(locals: App.Locals) {
 	const user = locals.user;
 	if (!user || !isInstanceAdmin(user.role)) {
 		error(403, 'forbidden');
 	}
 	return user;
-}
-
-// Better Auth reports what it refused as a code in the error's body.
-export function authErrorCode(e: unknown): string | undefined {
-	return isAPIError(e) ? e.body?.code : undefined;
 }
 
 // Better Auth checks a slug or a membership is free and then inserts; two

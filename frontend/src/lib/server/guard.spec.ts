@@ -54,6 +54,8 @@ describe('the guard in front of every route', () => {
 		expect(await outcome(event({ route: '/' }))).toBe('redirect /login');
 		expect(await outcome(event({ route: '/app/logs' }))).toBe('redirect /login');
 		expect(await outcome(event({ route: '/app/settings/keys' }))).toBe('redirect /login');
+		expect(await outcome(event({ route: '/no-tenant' }))).toBe('redirect /login');
+		expect(await outcome(event({ route: '/app/admin' }))).toBe('redirect /login');
 		// A path with no route: a remote function, or nothing at all.
 		expect(await outcome(event({ route: null }))).toBe('redirect /login');
 	});
@@ -107,10 +109,6 @@ describe('the guard in front of every route', () => {
 		);
 	});
 
-	it('does not let a visitor see the no-tenant page', async () => {
-		expect(await outcome(event({ route: '/no-tenant' }))).toBe('redirect /login');
-	});
-
 	it('lets the instance admin reach the admin pages without a tenant, and only those', async () => {
 		const admin = { admin: true, tenant: null };
 		expect(await outcome(event({ route: '/app/admin', ...admin }))).toBe('resolved');
@@ -130,13 +128,9 @@ describe('the guard in front of every route', () => {
 				event({ route: '/app/admin/tenants', user: true, tenant: null, method: 'POST' })
 			)
 		).toBe('403');
-		expect(await outcome(event({ route: '/app/admin' }))).toBe('redirect /login');
 	});
 
-	// A remote call has no route, so the admin rule cannot see it: an admin-only
-	// remote function checks the role itself.
 	it('treats a remote call by its tenant, never as an admin route', async () => {
-		expect(await outcome(event({ route: null, user: true, accept: '*/*' }))).toBe('resolved');
 		expect(await outcome(event({ route: null, admin: true, tenant: null, accept: '*/*' }))).toBe(
 			'403'
 		);

@@ -11,9 +11,6 @@ import { memberships } from './tenant';
 
 export type Database = PostgresJsDatabase<typeof schema>;
 
-// $env/dynamic/private in the panel, process.env in the script.
-export type AuthEnv = Record<string, string | undefined>;
-
 // The admin plugin's own admin role, less impersonation: an instance admin
 // manages accounts, but never acts as someone else.
 const instanceAdmin = defaultAc.newRole({
@@ -50,18 +47,16 @@ export function isInstanceAdmin(role: string | null | undefined): boolean {
 	return (role ?? '').split(',').includes('admin');
 }
 
-export function authOptions(db: Database, env: AuthEnv) {
+// env: $env/dynamic/private in the panel, process.env in the script.
+export function authOptions(db: Database, env: Record<string, string | undefined>) {
 	return {
 		baseURL: env.ORIGIN,
 		secret: env.BETTER_AUTH_SECRET,
 		database: drizzleAdapter(db, { provider: 'pg' }),
 		emailAndPassword: {
 			enabled: true,
-			// Registration is closed: an open sign-up on a panel that reads every
-			// metric in the cluster is a hole. Better Auth's sign-up route itself
-			// refuses, whatever the UI does. Accounts come from
-			// scripts/create-user.ts and the admin pages, through the admin
-			// plugin's createUser, which this flag does not stop.
+			// Accounts come from scripts/create-user.ts and the admin pages, through
+			// the admin plugin's createUser, which this flag does not stop.
 			disableSignUp: true
 		},
 		// Sign-in attempts are counted per client address. Better Auth's limiter is

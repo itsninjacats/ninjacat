@@ -1,29 +1,14 @@
 import { error, redirect, type Handle, type RequestEvent } from '@sveltejs/kit';
 import { isInstanceAdmin } from './auth-options';
 
-// Everything is private unless its route is listed here.
-//
-// The guard stands in front of the whole app because a layout's load does not
-// protect what is under it: the client chooses which loads a data request
-// runs (?x-sveltekit-invalidated), and endpoints, form actions and remote
-// functions never run the layout at all. Better Auth's own routes
-// (/api/auth/*) are answered by its handler above and do not get here.
+// Everything is private unless listed. A layout load does not protect what is
+// under it: data requests pick their loads, and endpoints, actions and remote
+// functions skip it.
 const publicRoutes = new Set(['/login']);
 
 // Where a signed-in user who is a member of no tenant is sent. Nothing falls
 // back to `default`: data read or written there would be another tenant's.
 const noTenantRoute = '/no-tenant';
-
-// The instance admin's pages. They work without a tenant, because the admin
-// is the one who creates tenants and adds their members.
-//
-// This covers pages, their form actions and endpoints. A remote function has
-// no route (SvelteKit does not match one for a remote call), so it never
-// counts as an admin route: one that only the instance admin may call checks
-// isInstanceAdmin itself.
-function isAdminRoute(routeId: string | null): boolean {
-	return routeId === '/app/admin' || (routeId?.startsWith('/app/admin/') ?? false);
-}
 
 // What can follow a redirect: a page, a data request, and an enhanced form
 // action, to which SvelteKit sends the redirect as an action result.
@@ -51,7 +36,9 @@ export const handleGuard: Handle = ({ event, resolve }) => {
 		error(401, 'unauthorized');
 	}
 
-	if (isAdminRoute(routeId)) {
+	// The admin pages work without a tenant: the admin is the one who creates tenants. A remote
+	// call has no route, so an admin-only remote function checks isInstanceAdmin itself.
+	if (routeId === '/app/admin' || routeId?.startsWith('/app/admin/')) {
 		if (!isInstanceAdmin(user.role)) {
 			error(403, 'forbidden');
 		}

@@ -1,55 +1,17 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { randomBytes } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
 import { asc, eq } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import { migrate } from 'drizzle-orm/postgres-js/migrator';
-import postgres from 'postgres';
 import * as schema from './db/schema';
+import { reachable, scratchDatabase } from './db/scratch';
 import { changeMember, isUniqueViolation } from './admin';
-import type { Database } from './auth-options';
 
-// Against a scratch database built from the Drizzle migrations, so the rules
-// that live in SQL (the tenant in every WHERE, the unique membership) are what
-// is tested. Skipped when Postgres is not reachable; the dev stack's by default.
-const url = process.env.DATABASE_URL ?? 'postgres://root:mysecretpassword@localhost:5433/local';
-
-async function reachable(): Promise<boolean> {
-	const probe = postgres(url, { max: 1, connect_timeout: 2, onnotice: () => {} });
-	try {
-		await probe`select 1`;
-		return true;
-	} catch {
-		return false;
-	} finally {
-		await probe.end();
-	}
-}
-
+// The rules that live in SQL: the tenant in every WHERE, the unique membership.
 const { member, organization, user } = schema;
 
 describe.skipIf(!(await reachable()))('changing a member, in Postgres', () => {
-	const name = `ninjacat_test_${randomBytes(6).toString('hex')}`;
-	const admin = postgres(url, { max: 1, onnotice: () => {} });
-	let sql: postgres.Sql;
-	let db: Database;
-
-	beforeAll(async () => {
-		await admin.unsafe(`create database ${name}`);
-		const scratch = new URL(url);
-		scratch.pathname = `/${name}`;
-		sql = postgres(scratch.toString(), { onnotice: () => {} });
-		db = drizzle(sql, { schema });
-		await migrate(db, {
-			migrationsFolder: fileURLToPath(new URL('../../../drizzle', import.meta.url))
-		});
-	});
-
-	afterAll(async () => {
-		await sql?.end();
-		await admin.unsafe(`drop database if exists ${name} with (force)`);
-		await admin.end();
-	});
+	const scratch = scratchDatabase();
+	const db = scratch.db;
+	beforeAll(scratch.create);
+	afterAll(scratch.drop);
 
 	beforeEach(async () => {
 		await db.delete(member);

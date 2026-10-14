@@ -14,30 +14,22 @@ export function memberships(db: Database, userId: string): Promise<Tenant[]> {
 		.orderBy(asc(member.createdAt), asc(member.id));
 }
 
-// The session's active organization counts only while the user is still a
-// member: removing a member does not clear it in their other sessions. Without
-// one, the first membership, as a new session gets; never `default`.
-export function activeTenant(tenants: Tenant[], activeOrganizationId: string | null | undefined) {
-	return tenants.find((tenant) => tenant.id === activeOrganizationId) ?? tenants[0] ?? null;
-}
-
-export type TenantStore = {
-	memberships(userId: string): Promise<Tenant[]>;
-	setActive(organizationId: string | null): Promise<unknown>;
-};
-
 // When the request falls back to another tenant, the session is moved there
 // too: Better Auth's calls that default to the session's active organization
 // would otherwise act on a tenant the panel does not show.
 export async function resolveTenant(
 	session: { userId: string; activeOrganizationId?: string | null } | null,
-	store: TenantStore
+	store: {
+		memberships(userId: string): Promise<Tenant[]>;
+		setActive(organizationId: string | null): Promise<unknown>;
+	}
 ): Promise<{ tenants: Tenant[]; tenant: Tenant | null }> {
 	if (!session) {
 		return { tenants: [], tenant: null };
 	}
 	const tenants = await store.memberships(session.userId);
-	const tenant = activeTenant(tenants, session.activeOrganizationId);
+	// Removing a member does not clear their other sessions' active organization.
+	const tenant = tenants.find((t) => t.id === session.activeOrganizationId) ?? tenants[0] ?? null;
 	if ((tenant?.id ?? null) !== (session.activeOrganizationId ?? null)) {
 		await store.setActive(tenant?.id ?? null);
 	}

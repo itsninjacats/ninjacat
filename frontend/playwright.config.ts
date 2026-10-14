@@ -16,25 +16,17 @@ const sizes = {
 	wide: { width: 1920, height: 1080, mobile: false }
 };
 
-// The panel has no dark mode yet: it defines a .dark palette, but nothing puts
-// the class on the page, so a dark colour scheme would render the same pixels.
-// Add 'dark' here once something does.
-const schemes = ['light'] as const;
-
-const views: Project[] = Object.entries(sizes).flatMap(([size, { width, height, mobile }]) =>
-	schemes.map((colorScheme) => ({
-		name: `${size}-${colorScheme}`,
-		dependencies: ['seed'],
-		testIgnore: /\.setup\.ts$/,
-		use: {
-			...devices['Desktop Chrome'],
-			viewport: { width, height },
-			isMobile: mobile,
-			hasTouch: mobile,
-			colorScheme
-		}
-	}))
-);
+const views: Project[] = Object.entries(sizes).map(([size, { width, height, mobile }]) => ({
+	name: size,
+	dependencies: ['seed'],
+	testIgnore: /\.setup\.ts$/,
+	use: {
+		...devices['Desktop Chrome'],
+		viewport: { width, height },
+		isMobile: mobile,
+		hasTouch: mobile
+	}
+}));
 
 export default defineConfig({
 	testDir: 'tests/e2e',
@@ -42,13 +34,6 @@ export default defineConfig({
 	// A page waits up to 10s for the query process (src/lib/server/ninjacat.ts).
 	timeout: 60_000,
 	forbidOnly: !!process.env.CI,
-	// On a development machine a container starting or stopping changes the
-	// network under Chromium, which aborts loads in flight (ERR_NETWORK_CHANGED)
-	// and fails the page; open() reloads it. A retry covers what else that
-	// aborts, and a test that passes only on a retry still fails the run, so an
-	// overflow that comes and goes is not let through.
-	retries: 2,
-	failOnFlakyTests: true,
 	reporter: [['list'], ['html', { open: 'never' }]],
 	use: { baseURL, trace: 'retain-on-failure' },
 	projects: [{ name: 'seed', testMatch: /\.setup\.ts$/ }, ...views],

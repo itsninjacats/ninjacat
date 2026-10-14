@@ -25,41 +25,23 @@ export type Overflow = {
 	detail: string;
 };
 
-export type Scan = { problems: Overflow[]; scrollers: string[] };
-
 // The app shell fixes the page to the viewport's height and scrolls the content
 // pane instead (src/routes/app/+layout.svelte), so that pane sideways is the
 // page sideways: it is held to the page's rule, not let off as a scroll area.
 export const contentPane = '[data-slot="sidebar-inset"] > .overflow-auto';
 
-// Each entry is an element allowed to stick out of its parent, with what is
-// inside it, and why.
-const allowedToStickOut = [
-	// The sidebar's rail is a hit area that straddles the sidebar's edge by design.
-	'[data-sidebar="rail"]'
-];
-
-// LayerChart pads its plot area off the axes and draws the chart's SVG from
-// inside it, so the SVG overhangs these boxes by design. They alone may be
-// exceeded: the SVG is still measured against the chart and the card around it.
-const chartPlotArea = '.lc-tooltip-context, .lc-tooltip-context-container';
-
 // Runs in the page, so it is self-contained: no imports, no closures.
-function scan({
-	pane,
-	allowed,
-	plotArea,
-	touch
-}: {
-	pane: string;
-	allowed: string[];
-	plotArea: string;
-	touch: boolean;
-}): Scan {
+function scan({ pane, touch }: { pane: string; touch: boolean }): Overflow[] {
+	// What may stick out of its parent, and why: the sidebar's rail is a hit
+	// area that straddles the sidebar's edge by design.
+	const allowedToStickOut = '[data-sidebar="rail"]';
+	// LayerChart pads its plot area off the axes and draws the chart's SVG from
+	// inside it, so the SVG overhangs these boxes by design. They alone may be
+	// exceeded: the SVG is still measured against the chart and the card around it.
+	const chartPlotArea = '.lc-tooltip-context, .lc-tooltip-context-container';
 	const tolerance = 1;
 	const viewport = document.documentElement.clientWidth;
 	const problems: Overflow[] = [];
-	const scrollers: string[] = [];
 	const controls = 'button, a, input, select, textarea, [role=button], [role=menuitem]';
 
 	// A title is read by hovering, which a touch screen cannot do. There, cut text
@@ -131,7 +113,7 @@ function scan({
 		// An SVG is measured whole: what it draws inside is its own affair.
 		if (node.parentElement?.closest('svg')) return true;
 		const el = node instanceof Element ? node : node.parentElement!;
-		if (allowed.some((selector) => el.closest(selector))) return true;
+		if (el.closest(allowedToStickOut)) return true;
 		return hidden(el);
 	}
 
@@ -263,7 +245,7 @@ function scan({
 		const tall = el.scrollHeight > el.clientHeight + tolerance;
 		if (!wide && !tall) continue;
 		if (style.display === 'inline' || style.display === 'contents') continue;
-		if (el.matches(plotArea)) continue;
+		if (el.matches(chartPlotArea)) continue;
 
 		const isPane = el.matches(pane);
 		if (isPane && wide) {
@@ -305,12 +287,8 @@ function scan({
 							`scrolls sideways (${el.scrollWidth}px in ${el.clientWidth}px) and hides ` +
 							`${beyond.length} ${beyond.length === 1 ? 'thing' : 'things'} past its right edge`
 					});
-					continue;
 				}
 			}
-			scrollers.push(
-				`${describe(el)} (${el.scrollWidth}x${el.scrollHeight} in ${el.clientWidth}x${el.clientHeight})`
-			);
 			continue;
 		}
 
@@ -448,7 +426,7 @@ function scan({
 		}
 	}
 
-	return { problems, scrollers };
+	return problems;
 }
 
 // Waits for transitions (sheets, dialogs, menus) and web fonts to finish, so
@@ -468,19 +446,10 @@ export async function expectNoOverflow(
 	label: string
 ): Promise<void> {
 	await settle(page);
-	const { problems, scrollers } = await page.evaluate(scan, {
+	const problems = await page.evaluate(scan, {
 		pane: contentPane,
-		allowed: allowedToStickOut,
-		plotArea: chartPlotArea,
 		touch: testInfo.project.use.hasTouch ?? false
 	});
-	await testInfo.attach(`overflow ${label}.json`, {
-		body: JSON.stringify({ problems, scrollers }, null, 2),
-		contentType: 'application/json'
-	});
-	for (const scroller of scrollers) {
-		testInfo.annotations.push({ type: 'scrolls', description: `${label}: ${scroller}` });
-	}
 	const report = problems.map((p) => `[${p.rule}] ${p.element}\n    "${p.text}"\n    ${p.detail}`);
 	expect.soft(report, `${label}: nothing overflows`).toEqual([]);
 }

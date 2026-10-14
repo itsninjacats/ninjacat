@@ -20,20 +20,13 @@ export function keyPrefix(key: string): string {
 	return key.slice(0, 8);
 }
 
-/**
- * Tells the intake that the keys changed, so it re-reads them now instead of
- * at its next periodic refresh. The message travels through Postgres (NOTIFY),
- * which the panel and the intake already share; the channel name is the one
- * the intake listens on (api/src/Server/ApiKeysKeeper.fs).
- *
- * NEVER throws: the key is already stored, and the intake picks it up within
- * 30 seconds anyway. It reports whether it worked instead.
- */
-export async function refreshApiKeys(): Promise<{ ok: boolean; reason?: string }> {
+// NOTIFY on the channel the intake listens on (api/src/Server/ApiKeysKeeper.fs).
+// Never throws: the key is stored, and the intake re-reads every 30s anyway.
+export async function refreshApiKeys(): Promise<boolean> {
 	try {
 		await db.execute(sql`NOTIFY ninjacat_api_keys`);
-		return { ok: true };
-	} catch (e) {
-		return { ok: false, reason: e instanceof Error ? e.message : 'unknown error' };
+		return true;
+	} catch {
+		return false;
 	}
 }

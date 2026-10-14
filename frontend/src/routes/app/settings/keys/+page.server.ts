@@ -10,10 +10,6 @@ import type { Actions, PageServerLoad } from './$types';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const load: PageServerLoad = async ({ locals }) => {
-	if (!locals.user) {
-		redirect(302, '/login');
-	}
-
 	const tenantId = locals.tenant?.id;
 	if (!tenantId) {
 		return { keys: [] };
@@ -51,9 +47,6 @@ export const actions: Actions = {
 		}
 
 		const tenantId = locals.tenant?.id;
-		if (!tenantId) {
-			return fail(403, { error: m.no_tenant(), name });
-		}
 		if (form.get('tenant') !== tenantId) {
 			return fail(409, { error: m.tenant_changed(), name });
 		}
@@ -68,18 +61,11 @@ export const actions: Actions = {
 			createdById: locals.user.id
 		});
 
-		// Without it the key works only after the intake's next periodic
-		// refresh, and the user is about to paste it into an agent's config.
-		const refresh = await refreshApiKeys();
-
-		return { created: key, name, activeNow: refresh.ok };
+		// Now, not at the intake's next refresh: the key is about to go into an agent's config.
+		return { created: key, name, activeNow: await refreshApiKeys() };
 	},
 
 	delete: async ({ request, locals }) => {
-		if (!locals.user) {
-			redirect(302, '/login');
-		}
-
 		const form = await request.formData();
 		const id = formText(form, 'id');
 
@@ -90,9 +76,6 @@ export const actions: Actions = {
 		}
 
 		const tenantId = locals.tenant?.id;
-		if (!tenantId) {
-			return fail(403, { deleteError: m.no_tenant() });
-		}
 		if (form.get('tenant') !== tenantId) {
 			return fail(409, { deleteError: m.tenant_changed() });
 		}
@@ -105,10 +88,7 @@ export const actions: Actions = {
 			return fail(404, { deleteError: m.api_key_not_found() });
 		}
 
-		// Matters more than on create: until the intake re-reads its keys, the
-		// deleted one is still accepted.
-		const refresh = await refreshApiKeys();
-
-		return { deleted: true, revokedNow: refresh.ok };
+		// Until the intake re-reads its keys, the deleted one is still accepted.
+		return { deleted: true, revokedNow: await refreshApiKeys() };
 	}
 };

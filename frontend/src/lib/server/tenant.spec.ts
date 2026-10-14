@@ -1,31 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Tenant } from '../tenant';
-import { activeTenant, resolveTenant } from './tenant';
+import { resolveTenant } from './tenant';
 
 const acme = { id: 'acme', name: 'Acme', role: 'owner' };
 const globex = { id: 'globex', name: 'Globex', role: 'member' };
-
-describe('the tenant a request is for', () => {
-	it("is the session's active organization while the user is a member of it", () => {
-		expect(activeTenant([acme, globex], 'globex')).toBe(globex);
-	});
-
-	it('is the first membership when the session has no active organization', () => {
-		expect(activeTenant([acme, globex], null)).toBe(acme);
-		expect(activeTenant([acme, globex], undefined)).toBe(acme);
-	});
-
-	// Removing a member leaves the active organization in their other sessions.
-	it('is never a tenant the user was removed from', () => {
-		expect(activeTenant([globex], 'acme')).toBe(globex);
-		expect(activeTenant([], 'acme')).toBeNull();
-	});
-
-	it('is none, never `default`, for a member of nothing', () => {
-		expect(activeTenant([], null)).toBeNull();
-		expect(activeTenant([], 'default')).toBeNull();
-	});
-});
 
 describe('resolving the tenant in the hook', () => {
 	function store(tenants: Tenant[]) {
@@ -62,11 +40,12 @@ describe('resolving the tenant in the hook', () => {
 		).toBe(globex);
 		expect(removed.calls.setActive).toEqual(['globex']);
 
-		const unset = store([acme]);
+		const unset = store([acme, globex]);
 		expect((await resolveTenant({ userId: 'u1', activeOrganizationId: null }, unset)).tenant).toBe(
 			acme
 		);
-		expect(unset.calls.setActive).toEqual(['acme']);
+		expect((await resolveTenant({ userId: 'u1' }, unset)).tenant).toBe(acme);
+		expect(unset.calls.setActive).toEqual(['acme', 'acme']);
 	});
 
 	it('clears the session of a user removed from every tenant', async () => {
@@ -76,9 +55,14 @@ describe('resolving the tenant in the hook', () => {
 		expect(s.calls.setActive).toEqual([null]);
 	});
 
-	it('writes nothing for a member of nothing whose session names nothing', async () => {
+	it('gives a member of nothing no tenant, never `default`, and writes nothing', async () => {
 		const s = store([]);
-		await resolveTenant({ userId: 'u1', activeOrganizationId: null }, s);
+		expect(
+			(await resolveTenant({ userId: 'u1', activeOrganizationId: null }, s)).tenant
+		).toBeNull();
 		expect(s.calls.setActive).toEqual([]);
+		expect(
+			(await resolveTenant({ userId: 'u1', activeOrganizationId: 'default' }, s)).tenant
+		).toBeNull();
 	});
 });

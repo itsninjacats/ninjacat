@@ -1,28 +1,17 @@
 /**
- * Create a panel account from the command line — the equivalent of Django's
- * `manage.py createsuperuser`.
- *
- * Public registration is disabled (src/lib/server/auth-options.ts), so on a
- * fresh install this is the only way in. The account is made by the admin
- * plugin's createUser, called as a system action: no session, so no
- * permission check, and disableSignUp does not apply to it. The script uses
- * the panel's own options, so it hashes and stores exactly as the panel does.
- *
- * Deliberately not importing anything from $lib or $env: those are SvelteKit
- * aliases and this runs as a plain process, exactly like scripts/migrate.ts.
+ * Create a panel account. Sign-up is closed, so on a fresh install this is the
+ * only way in. A plain process, outside SvelteKit: no $lib or $env imports.
  *
  *   bun run user:create -- someone@example.com --name 'Their Name'
  *       [--admin] [--tenant <id|slug>]... [--role owner|admin|member]
  *
- * --admin makes an instance admin, who creates tenants and accounts.
- * --tenant adds the account to an existing tenant, with --role (member by
- * default). The first account of an empty database is always an admin and
- * the owner of the tenant `default`, which it creates.
+ * --admin makes an instance admin. --tenant adds the account to an existing
+ * tenant, with --role (member by default). The first account of an empty
+ * database is always an admin and the owner of the tenant `default`.
  *
- * The password is asked for, twice and without echo, as createsuperuser does.
- * It is never an argument: an argument stays in the shell's history, in the
- * process list and in a Job's spec. Where nobody is there to type (a Job, a
- * script), it is read from NINJACAT_USER_PASSWORD instead.
+ * The password is asked for twice, without echo, and is never an argument (it
+ * would stay in the shell history and the process list); where nobody types
+ * (a Job), it comes from NINJACAT_USER_PASSWORD.
  */
 import { parseArgs } from 'node:util';
 import { betterAuth } from 'better-auth/minimal';
@@ -143,20 +132,14 @@ if (!url) {
 	fail('DATABASE_URL is not set');
 }
 
-// max: 1 — this is a one-shot script, not a server.
 const sql = postgres(url, { max: 1, onnotice: () => {} });
 const db = drizzle(sql, { schema });
 
 const auth = betterAuth(
 	authOptions(db, {
 		...process.env,
-		// Silences better-auth's "Base URL is not set" warning. Nothing here needs
-		// a real one: no session is issued, nothing is redirected, no cookie is
-		// signed — the script creates rows and exits.
+		// Placeholders: the script issues no session and signs no cookie.
 		ORIGIN: process.env.ORIGIN || 'http://localhost',
-		// A real secret is required for the instance to start, but nothing this
-		// script does depends on its value. A throwaway keeps the script runnable
-		// without the app's secret.
 		BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || 'create-user-cli-no-session-is-issued'
 	})
 );

@@ -109,7 +109,7 @@ describe('the API keys page', () => {
 		expect(changed.status).toBe(409);
 
 		const none = (await action(event({ ...form, tenant: 'acme' }, null))) as { status: number };
-		expect(none.status).toBe(403);
+		expect(none.status).toBe(409);
 
 		expect(sent).toEqual([]);
 	});

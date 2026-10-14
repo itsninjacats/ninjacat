@@ -1,14 +1,10 @@
 import { error, fail } from '@sveltejs/kit';
+import { isAPIError } from 'better-auth/api';
 import { asc, eq } from 'drizzle-orm';
 import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { member, organization, user } from '$lib/server/db/schema';
-import {
-	authErrorCode,
-	changeMember,
-	isUniqueViolation,
-	requireInstanceAdmin
-} from '$lib/server/admin';
+import { changeMember, isUniqueViolation, requireInstanceAdmin } from '$lib/server/admin';
 import { formText } from '$lib/server/form';
 import { isTenantRole, type TenantRole } from '$lib/tenant';
 import { m } from '$lib/paraglide/messages';
@@ -83,7 +79,7 @@ export const actions: Actions = {
 			if (isUniqueViolation(e)) {
 				return fail(409, { error: m.admin_member_exists() });
 			}
-			switch (authErrorCode(e)) {
+			switch (isAPIError(e) ? e.body?.code : undefined) {
 				case 'USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION':
 					return fail(409, { error: m.admin_member_exists() });
 				case 'USER_NOT_FOUND':
