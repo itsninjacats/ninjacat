@@ -1,10 +1,12 @@
 # ninjacat-api
 
-The NinjaCat server, in F#. One program, run as two processes that share
-ClickHouse and Postgres and nothing else: `intake` takes what Datadog Agents
-send and stores it, `query` answers questions about it. There is no mode that
-does both, so what agents can reach and what the panel reads from never share
-a port or a container.
+The NinjaCat server, in F#. Two programs, run as three long-lived processes
+that share ClickHouse and Postgres and nothing else. `ninjacat-api` is two of
+them: `intake` takes what Datadog Agents send and stores it, `query` answers
+questions about it. There is no mode that does both, so what agents can reach
+and what the panel reads from never share a port or a container.
+`ninjacat-monitors` is the third: it evaluates the metric monitors, as a
+cluster of its own (see "The monitor service").
 
 | Process | Port | Who reaches it | What it serves |
 | --- | --- | --- | --- |
@@ -12,6 +14,9 @@ a port or a container.
 | | 10516 (`NINJACAT_LOGS_TCP_ADDR`) | agent machines | the agent's TCP transport for logs; `off` disables it |
 | `ninjacat-api query` | 8081 (`NINJACAT_INTERNAL_ADDR`) | the panel only | `/internal/*` for the panel and Datadog's query API, behind a token the panel signs (below); still on an internal network. It only reads, and can be given a ClickHouse user that cannot write |
 | `ninjacat-api migrate` | | | applies the ClickHouse migrations and the metrics retention, and exits |
+| `ninjacat-monitors` | 2552 (`NINJACAT_MONITOR_PORT`) | the other monitor nodes | Akka remoting, the cluster's own traffic |
+| | 8558 (`NINJACAT_MONITOR_MANAGEMENT_PORT`) | the other monitor nodes | Akka.Management, for the cluster bootstrap in Kubernetes only |
+| | 8559 (`NINJACAT_MONITOR_HEALTH_ADDR`) | the kubelet | `/health/ready` and `/health/live`, nothing else |
 
 The query side speaks Datadog's public API (`/api/v1/...`, `/api/v2/...`)
 rather than one of our own, so the panel, `datadog-api-client`, Terraform and
@@ -23,12 +28,15 @@ Grafana's Datadog plugin can all point at it unchanged.
   The only C# in the tree, and none of it written by hand
   (`protos/README.md` says where each schema comes from).
 - `src/Engine` — parsers, AST, compiler to SQL. No reference to ASP.NET,
-  Oxpecker or the ClickHouse driver: it returns SQL text plus typed parameters
-  (`Sql.fs`) and nothing else, so it is tested without a server.
+  Oxpecker, Akka or the ClickHouse driver: it returns SQL text plus typed
+  parameters (`Sql.fs`) and nothing else, so it is tested without a server.
   `Api/V2/Wire.fs` holds Datadog's v2 query shapes, each type named exactly
   after its schema in Datadog's OpenAPI spec; `Panel.fs` holds the panel's
   own queries (its metric series go through the same planner as the query
-  API).
+  API). `Monitor/` is everything a monitor means, as pure functions: the
+  definition, its parser, options and validation, the evaluation of each
+  monitor type, and the state machine of its groups. The query process
+  validates with it and the monitor service evaluates with it.
 - `src/Storage` — the write path. `Rows/*.fs` has one record and one
   `Table` per ClickHouse table; `Writer.fs` buffers and flushes one table;
   `ClickHouseSink.fs` owns one writer per table; `Migrations.fs` applies
@@ -39,14 +47,17 @@ Grafana's Datadog plugin can all point at it unchanged.
   `Routers/*.fs` hold the handlers, Oxpecker's own, which turn a payload into
   rows.
 - `src/Platform` — what every process shares: configuration, the web host's
-  defaults, self-monitoring. Its `ClickHouse.fs` and `Postgres.fs` are the
-  only files that open a database connection.
-- `src/Server` — the program: the two HTTP surfaces and the API key keeper.
-- `tests/Engine.Tests`, `tests/Intake.Tests` — xunit v3 on
-  Microsoft.Testing.Platform.
+  defaults, self-monitoring. Every ClickHouse client is made in its
+  `ClickHouse.fs`, and every Postgres URL becomes a connection string in its
+  `Postgres.fs`.
+- `src/Server` — `ninjacat-api`: the two HTTP surfaces and the API key keeper.
+- `src/Monitors` — `ninjacat-monitors`: the actors, the reads of the
+  `monitor` table, the writes of what the monitors went through.
+- `tests/Engine.Tests`, `tests/Intake.Tests`, `tests/Query.Tests`,
+  `tests/Monitors.Tests` — xunit v3 on Microsoft.Testing.Platform.
 
-Postgres (users, API keys, later monitors and dashboards) is reached through
-plain Npgsql, no ORM. Its schema belongs to Drizzle in `frontend/`: this
+Postgres (users, tenants, API keys, monitors) is reached through plain
+Npgsql, no ORM. Its schema belongs to Drizzle in `frontend/`: this
 service never migrates it, and a table it needs is added there first. Its
 history was squashed into one `0000` on 2026-10-13, like ClickHouse's: a
 Postgres built before that must be dropped.
@@ -71,6 +82,8 @@ before anything reaches ClickHouse.
 from delaying metrics; several writers for one table would shrink the batches
 and bring back ClickHouse's "Too many parts". A slow insert is handled by
 flushing in the background, up to `MaxInFlight` at once, not by adding writers.
+The rule holds per process: each monitor node has its own writers for
+`monitor_evaluations` and its self-monitoring `metrics`.
 
 **A payload that cannot be stored as rows is kept whole** in `raw_payloads`,
 with the reason, so nothing an agent sent is lost to a decoder we have not
@@ -101,12 +114,123 @@ request, and nothing falls back to `default`.
 
 `Routers/Logs.fs` with `Rows/Logs.fs` is the example to read first.
 
+## The monitor service
+
+`ninjacat-monitors` evaluates Datadog-style metric monitors: threshold,
+change, anomaly, forecast and outlier, simple or multi alert. The panel owns
+the definitions (`/app/monitors`); this process only reads them, evaluates,
+and stores what happened.
+
+```
+panel ──(monitor row + pg_notify, one transaction)──▶ Postgres `monitor`
+                                                          │ LISTEN ninjacat_monitors + re-read every 30 s
+manager (cluster singleton) ── Ensure / Delete ──▶ shard region "metric-monitor", one entity per monitor
+entity: aligned tick → node's gate → Engine/Monitor → ClickHouse
+        → monitor_transitions, monitor_evaluations
+notifier (cluster singleton): monitor_transitions → monitor_notifications
+query process: /internal/monitors/* reads those tables for the panel
+```
+
+**It is an Akka.NET cluster.** Every node carries the `metrics` and `notifier`
+roles; each monitor is one sharded entity (`Cluster.fs`, 100 shards, fixed:
+changing the count moves every monitor). The manager and the notifier are
+cluster singletons. Nothing asks an actor for its state, so the panel never
+depends on the cluster being up: it reads ClickHouse through the query
+process. There is no Akka.Persistence: Postgres holds the definitions,
+ClickHouse holds the transitions, and an entity rebuilds its groups from their
+latest transitions when it starts.
+
+An entity is given the tick time, since the engine never reads the clock; the
+tenant comes from the definition and is bound into every statement.
+
+**Load is capped per node.** Loads, evaluations and transition inserts take a
+slot of one `SemaphoreSlim` per node (`NINJACAT_MONITOR_CONCURRENCY`). A tick
+that finds no slot within one interval, or finds the previous evaluation still
+running, is recorded as skipped: overload shows as skipped evaluations, not as
+errors, so watch `ninjacat.monitor.evaluations{outcome:skipped}`.
+
+**Transitions are awaited, evaluations are not.** The buffered writer drops a
+failed batch by design, so transitions are inserted directly and awaited
+(`ClickHouseSink.InsertAsync`), and an evaluation is not adopted until its
+transitions are stored. A failed insert is retried with the same rows before
+anything new is evaluated, for as long as the entity lives. On a hand-off it
+makes one more attempt and stops; the next owner starts from the last stored
+state, so a change that still holds is recorded again on its next tick and one
+that reverted in between is not. A crash loses what was pending the same way.
+The key is `(tenant, monitor, group, at)`: a tick's transitions are keyed by
+the aligned tick, a definition change or a delete by when it was handled.
+`ReplacingMergeTree` collapses a retried batch's identical rows; read with
+`FINAL` or `argMax`.
+
+**The notifier is a stub.** Every 5 s it finds the transitions that would be
+notified, logs them and writes a `stub` row to `monitor_notifications`.
+Message rendering, channels, renotify and downtimes are open work (`TODO.md`).
+
+**Formation.** Without `NINJACAT_MONITOR_DISCOVERY`, a node seeds a cluster of
+its own at `NINJACAT_MONITOR_HOST:NINJACAT_MONITOR_PORT`: one node, which is
+how compose runs it. With `NINJACAT_MONITOR_DISCOVERY=kubernetes`,
+Akka.Management's cluster bootstrap lists the pods through the Kubernetes API
+(the chart's ServiceAccount may `get/list/watch` pods), and the first
+formation waits for two contact points; `NINJACAT_MONITOR_HOST` must then be
+the pod's IP. Split-brain resolution is keep-majority, so run three replicas
+on three nodes (the chart's default anti-affinity). Remoting is plain TCP;
+the chart admits only monitor pods to 2552 and 8558 (`TODO.md`, section 0).
+
+**Health.** Akka.Management for .NET serves no health routes, so the process
+has a small listener of its own: `/health/ready` is 200 once the node has
+joined the cluster, `/health/live` while its actor system runs. Discovery
+lists running pods, not ready ones, so readiness does not hold up the
+bootstrap. A stop runs Akka's coordinated shutdown, given 45 s (the chart
+gives the pod 60).
+
+**Databases.** Read-only on Postgres's `monitor` table; on ClickHouse it reads
+the metrics and writes its own tables and self-monitoring, with no DDL: the
+intake (or `ninjacat-api migrate`) creates them. The statements are in
+`helm/ninjacat/values.yaml` (`clickhouse.monitorsUser`,
+`monitors.ownDatabaseUrl`).
+
+**Self-monitoring** adds `ninjacat.monitor.*` (`src/Monitors/Telemetry.fs`) to
+the usual `ninjacat.node.*` and `ninjacat.storage.*`.
+
+### Running it
+
+```bash
+export DATABASE_URL=postgres://root:mysecretpassword@localhost:5433/local
+dotnet run --project src/Monitors          # one node, health on :8559
+curl localhost:8559/health/ready
+```
+
+The dev stack runs it as the compose service `monitors` (`dotnet watch`, one
+node, no published port): `docker compose logs -f monitors`, and
+`docker exec ninjacat-monitors curl -s localhost:8559/health/ready`. Stop
+that service before running a second node by hand against the same
+databases: two clusters would both evaluate every monitor. The image is the
+`monitors` target of `api/Dockerfile`; `compose.prod.yaml` runs one node of
+it, and the chart (`helm/ninjacat/templates/monitors.yaml`) three.
+
+Its own settings:
+
+| Variable | Default |
+| --- | --- |
+| `NINJACAT_MONITOR_CONCURRENCY` | `8` — loads, evaluations and transition inserts at once on this node |
+| `NINJACAT_MONITOR_MAX_GROUPS` | `1000` — the most groups one evaluation may yield; more is an error (`too_many_groups`), never a truncation |
+| `NINJACAT_MONITOR_HOST` | `localhost` — the address other nodes reach this one at; required, as the pod's IP, with discovery |
+| `NINJACAT_MONITOR_PORT` | `2552` — Akka remoting |
+| `NINJACAT_MONITOR_DISCOVERY` | unset: the node seeds itself. `kubernetes`: cluster bootstrap over the Kubernetes API |
+| `NINJACAT_MONITOR_POD_SELECTOR` | `app=ninjacat-monitors` — the label selector discovery lists pods by (the chart sets its own labels) |
+| `NINJACAT_MONITOR_MANAGEMENT_PORT` | `8558` — Akka.Management, used only with discovery |
+| `NINJACAT_MONITOR_HEALTH_ADDR` | `:8559` — where the health routes are served |
+
+A set value that is not a positive whole number, or a discovery other than
+`kubernetes`, stops the start.
+
 ## Tests
 
 ```bash
 dotnet test                                         # everything
 cd tests/Intake.Tests && dotnet test                # the intake and storage
 NINJACAT_GOLDEN_ROUTES=routeLogs,routeAPI dotnet test   # golden fixtures of those route sets only
+cd tests/Monitors.Tests && dotnet test              # the monitor service
 ```
 
 - **Golden fixtures** (`tests/Intake.Tests/Fixtures`): requests recorded from
@@ -122,11 +246,19 @@ NINJACAT_GOLDEN_ROUTES=routeLogs,routeAPI dotnet test   # golden fixtures of tho
   what the decoders are held to where the Go recordings say nothing.
   `lab/README.md` says how they were recorded.
 - One `<Router>Tests.fs` per router for what the fixtures do not reach.
+- **Monitors**: `Engine.Tests` covers what a monitor means; `Monitors.Tests`
+  runs the actors on Akka's TestKit and three nodes on localhost, and skips a
+  test whose database is not running.
+- **Query** (`Query.Tests`): the query token, that a request answers for
+  its token's tenant alone, and `/internal/monitors/*`.
 
 ## Calling the engine from F#
 
-Monitors and other in-process code use `Query.Engine`, not HTTP: the same
-query and formula strings go in, plain records come out.
+In-process code uses `Query.Engine`, not HTTP: the same query and formula
+strings go in, plain records come out. Monitors go one level lower
+(`Monitor/Evaluate.fs` calls `Plan.plan` and `Execute`), since they cache
+anomaly models between ticks and reduce `.as_count()` queries before the
+formula.
 
 ```fsharp
 let! result =
@@ -268,6 +400,7 @@ dotnet run --project src/Server -- intake    # :8080
 dotnet run --project src/Server -- query     # :8081
 dotnet watch --project src/Server run -- intake   # with reload
 dotnet run --project src/Server -- migrate   # apply the ClickHouse migrations and exit
+dotnet run --project src/Monitors            # the monitor service, one node
 ```
 
 Package versions live in `Directory.Packages.props` only.
@@ -293,6 +426,10 @@ Package versions live in `Directory.Packages.props` only.
 | `DEBUG` | `true` dumps every intake request to `NINJACAT_CAPTURE_DIR` (default `captures`) |
 | `NINJACAT_SELFMON_INTERVAL`, `NINJACAT_SELFMON_TENANT`, `NINJACAT_SELFMON_HOST` | `15s`, `default`, the machine's name |
 
+The connection, retention and self-monitoring variables apply to
+`ninjacat-monitors` as well; its own `NINJACAT_MONITOR_*` are listed under
+"The monitor service".
+
 ## What `query` serves (:8081)
 
 | | |
@@ -303,6 +440,11 @@ Package versions live in `Directory.Packages.props` only.
 | `POST /api/v2/query/timeseries`, `/api/v2/query/scalar` | Datadog's v2 query API: queries, formulas, functions |
 | `GET /internal/metrics/{names,tags,tag-values,query}` | the panel's metric pages |
 | `GET /internal/logs/{search,facets}` | the panel's log pages |
+| `POST /internal/monitors/validate` | checks a monitor in Datadog's JSON with the code the service evaluates with: `{problems, notActedOn}`, the options stored but not acted on |
+| `GET /internal/monitors/status?ids=` | per monitor: its state, its open groups by state, when it last triggered |
+| `GET /internal/monitors/{id}/groups` | the open groups, with their state and latest value |
+| `GET /internal/monitors/{id}/transitions?from&to[&group]` | the state timeline |
+| `GET /internal/monitors/{id}/evaluations?from&to[&group]` | the evaluated values, for the graph |
 
 **Metrics come from two tables.** `metrics` holds every point;
 `metrics_1m` holds one row per series per minute, with the tags and the
@@ -315,9 +457,9 @@ back past the raw retention gets whole-minute steps, since only the rollup
 still holds it. The two retentions are set by the process that migrates, after
 the migrations, as `ALTER TABLE … MODIFY TTL` with
 `materialize_ttl_after_modify = 0`: the TTL changes in the table's metadata
-only, and parts already written take it as they merge. The query process plans
-by the same two settings and does not read the TTLs back, so it must be given
-the same values: one that believes the raw table keeps more than it does reads
+only, and parts already written take it as they merge. The query process and
+the monitor service plan by the same two settings and do not read the TTLs
+back, so they must be given the same values: one that believes the raw table keeps more than it does reads
 fine steps from days that are gone, and gets empty charts. A step of whole
 minutes reads the rollup at any age, so the rollup is never kept shorter than
 the raw points (the start stops if it would be). When `to` falls inside a

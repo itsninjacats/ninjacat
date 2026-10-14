@@ -30,6 +30,9 @@ changes.
   digest.
 - **API keys** — Datadog-shaped, created in the panel, enforced at intake.
 - **Query API + panel** — metric search, per-host series, charts over an arbitrary range.
+- **Monitors** — Datadog-style metric monitors (threshold, change, anomaly, forecast,
+  outlier), defined in the panel and evaluated by a service of their own. Notifications
+  are a stub so far.
 - **Self-monitoring** — NinjaCat reports its own metrics through its own pipeline.
 - **Capture lab** — a sealed network that records exactly what a real agent sends, which
   is how the protocol is being worked out endpoint by endpoint.
@@ -43,7 +46,7 @@ git clone <this repo> && cd ninjacat
 docker compose up
 ```
 
-That brings up ClickHouse, Postgres, the server's two processes and the panel, applies
+That brings up ClickHouse, Postgres, the server's three processes and the panel, applies
 both schemas, and watches both source trees: saving an F# file rebuilds and restarts the
 server (via `dotnet watch`), saving a Svelte file hot-reloads the browser.
 
@@ -55,7 +58,7 @@ server (via `dotnet watch`), saving a Svelte file hot-reloads the browser.
 
 To work on the host instead, run just the databases with
 `docker compose up -d postgres clickhouse`, then `dotnet run --project src/Server -- intake`
-and `dotnet run --project src/Server -- query` in `api/`, and `bun run dev` in `frontend/`. Development needs the .NET 10 SDK and
+`dotnet run --project src/Server -- query` and `dotnet run --project src/Monitors` in `api/`, and `bun run dev` in `frontend/`. Development needs the .NET 10 SDK and
 [Bun](https://bun.sh).
 
 Nobody can register: accounts are made on the server. Create the first one, then sign in:
@@ -102,7 +105,7 @@ DD_API_KEY=<key> docker compose -f compose.yaml -f compose.lab.yaml up
 ### NinjaCat watching itself
 
 `compose.self.yaml` makes the installation its own first customer. The panel reports
-through Datadog's browser SDKs (RUM, browser logs), the server's two processes through
+through Datadog's browser SDKs (RUM, browser logs), the server's three processes through
 Datadog's .NET tracer (traces, runtime metrics, profiles, logs), and an agent reports the
 host — all of it to this installation's own intake, none of it to Datadog. It is off
 unless the file is named:
@@ -118,13 +121,16 @@ Use a key made for this alone: the panel hands it to every browser that opens it
 ```
 Datadog Agent ──:8080──▶ intake ──▶ one writer per table ──▶ ClickHouse
                                                                  ▲
-SvelteKit panel ──:8081──▶ query (panel and query API) ─────────┘
-       │
-       └──▶ Postgres (users, sessions, tenants and their members, API keys)
+SvelteKit panel ──:8081──▶ query (panel and query API) ─────────┤
+       │                                                         │
+       │                     monitors (Akka.NET cluster) ────────┘
+       │                         ▲ reads `monitor`, LISTEN ninjacat_monitors
+       └──▶ Postgres (users, sessions, tenants and their members, API keys, monitors)
 ```
 
-The server is one F# program (`api/`) run as two processes: agents reach `intake` and only
-`intake`; the panel's API and Datadog's query API are served by `query`, on a port of its own. The agent
+The server is two F# programs (`api/`) run as three processes: agents reach `intake` and only
+`intake`; the panel's API and Datadog's query API are served by `query`, on a port of its own;
+`ninjacat-monitors` evaluates the monitors and writes what they went through. The agent
 gets its answer before anything is written — rows are buffered per table and inserted in
 batches, so a burst of logs cannot delay metrics.
 

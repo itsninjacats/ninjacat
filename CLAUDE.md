@@ -41,9 +41,10 @@ The F# server under `api/src/` is already English — match that register: comme
 
 Independent units, no shared build:
 
-- `api/` — **the server**, in F# (.NET 10): one program run as two processes. `intake`
-  takes what agents send and owns the write path and the ClickHouse migrations; `query`
-  serves the panel API and Datadog's query API. `api/README.md` is the detailed guide.
+- `api/` — **the server**, in F# (.NET 10): two programs run as three processes. `intake`
+  takes what agents send and owns the ingest path and the ClickHouse migrations; `query`
+  serves the panel API and Datadog's query API; `ninjacat-monitors` evaluates the metric
+  monitors as an Akka.NET cluster. `api/README.md` is the detailed guide.
   `api/docs/` holds the protocol notes. They were written beside the Go server this one
   replaced (removed on 2026-10-02), so the Go files they name no longer exist.
 - `frontend/` — SvelteKit 5 panel + Postgres (Better Auth, Drizzle). Bun.
@@ -56,7 +57,7 @@ Independent units, no shared build:
 ```bash
 docker compose up                # full dev stack, hot reload
 docker compose up -d postgres clickhouse   # just the databases
-docker compose logs -f intake query
+docker compose logs -f intake query monitors
 docker compose down -v           # also drops the volumes
 DD_API_KEY=<key> docker compose -f compose.yaml -f compose.lab.yaml up   # capture lab, see below
 NINJACAT_SELF_KEY=<key> docker compose -f compose.yaml -f compose.self.yaml up   # NinjaCat watching itself
@@ -95,6 +96,8 @@ must be dropped.
 
 Ports: 8080 agent intake, 8081 panel and query API (internal; the dev stack publishes it
 on 127.0.0.1 only), 10516 logs over TCP, 5173 panel (dev), 5433 Postgres, 8123/9000 ClickHouse.
+The monitor service listens on 2552 (Akka remoting), 8558 (Akka.Management, Kubernetes
+only) and 8559 (health); the dev stack publishes none of them.
 
 Note the intake routes on the `Host` header, so `curl localhost:8080/ping` returns 404
 by design. Use `curl -H 'Host: api.ninjacat.local' localhost:8080/ping`.
@@ -107,10 +110,11 @@ dotnet test                      # xunit v3 on Microsoft.Testing.Platform (opted
 dotnet run --project src/Server -- intake   # :8080 (needs ClickHouse + DATABASE_URL)
 dotnet run --project src/Server -- query    # :8081
 dotnet run --project src/Server -- migrate
+dotnet run --project src/Monitors           # one monitor node, health on :8559 (stop the compose one first)
 cd tests/Intake.Tests && NINJACAT_GOLDEN_ROUTES=routeLogs dotnet test   # one route set's fixtures
 ```
 
-`src/Engine` must stay free of ASP.NET, Oxpecker and the ClickHouse driver — it compiles
+`src/Engine` must stay free of ASP.NET, Oxpecker, Akka and the ClickHouse driver — it compiles
 to `Sql` (text with `{name:Type}` placeholders + typed values) and the server executes it.
 Package versions are pinned only in `Directory.Packages.props`.
 The compose container builds into `NINJACAT_ARTIFACTS_PATH` (a volume), never into the
@@ -146,31 +150,41 @@ Copy `.env.example` to `.env`: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ORIGIN`,
 
 ## Server architecture
 
-One program (`api/src/Server`, `ninjacat-api`) run as two processes, six projects:
+Two programs, `ninjacat-api` (`api/src/Server`) and `ninjacat-monitors` (`api/src/Monitors`),
+run as three processes, seven projects:
 
 ```
 src/Proto     agent protobuf schemas → generated C#
-src/Engine    query language → SQL text + typed parameters; the panel's queries
+src/Engine    query language → SQL text + typed parameters; the panel's queries;
+              Monitor/: what a monitor means (parse, validate, evaluate, the group state machine)
 src/Storage   rows, one writer per table, the sink, migrations
 src/Intake    host dispatch, route matching, auth, one router per Datadog product
 src/Platform  what every process shares: config, the ClickHouse and Postgres clients, self-monitoring
-src/Server    the program: the two hosts, key keeper, logs over TCP
+src/Server    ninjacat-api: the two hosts, key keeper, logs over TCP
+src/Monitors  ninjacat-monitors: the actors, the reads of `monitor`, the monitor tables' writes and its self-monitoring
 ```
 
-Two processes, deliberately not one (`Program.fs` picks by the first argument; there is no
-mode that serves both ports):
+`ninjacat-api` is two processes, deliberately not one (`Program.fs` picks by the first
+argument; there is no mode that serves both ports):
 
 - **`ninjacat-api intake`, :8080** (`NINJACAT_ADDR`, `IntakeHost.fs`) — reachable from agent
-  machines; every route asks for an API key. Owns every write: the table writers, the
-  schema, the key keeper, self-monitoring, logs over TCP.
+  machines; every route asks for an API key. Owns the schema (the ClickHouse migrations)
+  and every write of what agents send: the table writers, the key keeper, logs over TCP.
 - **`ninjacat-api query`, :8081** (`NINJACAT_INTERNAL_ADDR`, `QueryHost.fs`) — `/internal/*`
   for the panel and Datadog's query API (`/api/v1/metrics`, `/api/v2/query/*`). It only
   reads. Every route but the probes asks for a short-lived HS256 JWT the panel signs
   (`Server/QueryToken.fs`, ASP.NET's JwtBearer); its `tenant` claim is the only source of
-  the tenant. It still belongs on a network only the panel reaches.
+  the tenant. It still belongs on a network only the panel reaches. `/internal/monitors/*`
+  validates monitor definitions and reads what the monitor service stored.
+- **`ninjacat-monitors`** (`src/Monitors`) — an Akka.NET cluster, reached only by its own
+  nodes and the health probes (:8559). Reads the panel's `monitor` table, evaluates through
+  `Engine/Monitor`, writes the `monitor_*` tables (transitions as an awaited insert, retried
+  while the entity lives); the intake creates them.
 
-They share ClickHouse and Postgres and nothing else. The panel tells the intake that a key
-changed through Postgres (`NOTIFY ninjacat_api_keys`), so the intake has no port for the panel.
+All three share ClickHouse and Postgres and nothing else. The panel tells the
+intake that a key changed through Postgres (`NOTIFY ninjacat_api_keys`), and the monitor
+service that a monitor changed (`pg_notify('ninjacat_monitors', …)` in the same transaction
+as the write), so neither has a port for the panel.
 
 ### The rules that shape this code
 
@@ -212,7 +226,8 @@ immediately. `Storage` knows nothing about HTTP or Datadog; that is what lets a 
 **One writer per table, never a pool.** Separate buffers stop a burst of logs from
 delaying metrics; a pool for the *same* table would shrink batches and recreate ClickHouse's
 "Too many parts" problem. A slow flush is handled by flushing in the background (up to
-`MaxInFlight`), not by adding writers.
+`MaxInFlight`), not by adding writers. The rule holds per process: each monitor node has its
+own writers for `monitor_evaluations` and its self-monitoring `metrics`.
 
 **API key lookup takes no lock.** `Intake/ApiKeys.fs` publishes an immutable snapshot; the
 keeper (`Server/ApiKeysKeeper.fs`) alone replaces it, every 30s and when the panel asks.
@@ -225,9 +240,10 @@ it is cheap to carry and expensive to add later. A tenant is a Better Auth organ
 `tenant_id` is its `organization.id`. Writes: Postgres `api_key.tenant_id` →
 `ApiKeys.Key.TenantID` → the key's `tenant` claim → every ClickHouse row. Reads: the panel's
 `locals.tenant` → the `tenant` claim of the query token → a parameter bound into every query
-the Engine compiles. Nothing falls back to `default`: that tenant exists only because
-`create-user.ts` makes it with the first account, under that id, and self-monitoring writes
-there (`NINJACAT_SELFMON_TENANT`).
+the Engine compiles. Monitors: `monitor.tenant_id` → the entity's key `<tenant>/<id>` →
+every statement it evaluates and every monitor row it writes. Nothing falls back to
+`default`: that tenant exists only because `create-user.ts` makes it with the first account,
+under that id, and self-monitoring writes there (`NINJACAT_SELFMON_TENANT`).
 
 **Plain F#.** `match`, `if`, small named functions. No custom operators, no home-made DSLs
 or computation expressions.
@@ -243,6 +259,9 @@ A deliberate change to what a route stores means updating its fixture by hand an
 in an `edited` key inside it. `ClickHouseRoundTripTests.fs` inserts every fixture's rows through the real
 sink into a scratch database built from the migrations (skipped when ClickHouse is not
 running).
+
+`tests/Monitors.Tests` uses xunit's own `[Fact]`/`[Theory]`, not Akka's attributes; its
+database tests skip when the database is down.
 
 `Fixtures/real/` are payloads recorded from **real senders** against this server: the browser
 SDK, the agent's DBM integrations (seven databases), its network checks, its data security
@@ -279,9 +298,9 @@ Retention: `NINJACAT_METRICS_RETENTION_DAYS` (30, raw `metrics`) and
 `NINJACAT_METRICS_ROLLUP_RETENTION_DAYS` (400, `metrics_1m`). The migrating process applies
 them as TTLs after the migrations (a migration cannot read configuration), and the engine
 reads a whole-minute step from the rollup and anything older than the raw retention there.
-Give `intake`, `migrate` and `query` the same values: the query process plans by them, and
-a raw retention it believes longer than the TTL reads days that are gone. The rollup may not
-be kept shorter than the raw points; the start stops if it is.
+Give `intake`, `migrate`, `query` and `ninjacat-monitors` the same values: the readers plan
+by them, and a raw retention they believe longer than the TTL reads days that are gone. The
+rollup may not be kept shorter than the raw points; the start stops if it is.
 
 Limits: `NINJACAT_MAX_BODY_BYTES` (64 MiB) is the largest body the intake reads; a body may
 inflate to 64 MiB (`Body.maxInflatedBytes`).
@@ -293,18 +312,24 @@ the CORS policy of browser-intake (ASP.NET's CORS middleware), any origin by def
 Debugging: `DEBUG=true` (dumps), `NINJACAT_CAPTURE_DIR`, `NINJACAT_ACK_UNKNOWN` (202 instead
 of 404 on unknown paths), `NINJACAT_SELFMON_INTERVAL`/`_TENANT`/`_HOST`.
 
+Monitor service: the connection, retention and self-monitoring variables above, plus
+`NINJACAT_MONITOR_*` (concurrency, max groups, cluster address and discovery, health address),
+read in `Monitors/Settings.fs` and listed in `api/README.md`.
+
 ## Frontend architecture
 
 SvelteKit 5 (runes forced on for project files), Tailwind 4, shadcn-svelte in
-`src/lib/components/ui/`, node adapter. Remote functions are not enabled: the flag went with
-the scaffolding routes in the security review of 2026-10-02. The panel uses routes, form
-actions and `+server.ts` endpoints.
+`src/lib/components/ui/`, node adapter. SvelteKit is configured in `vite.config.ts`
+(`sveltekit()` options; there is no `svelte.config.js`). Remote functions are not enabled;
+the panel uses loads, form actions and `+server.ts` endpoints.
 
 Two data sources, and the split matters:
 
 - **Postgres via Drizzle** — users, sessions, tenants (Better Auth's `organization`) and their
-  members, API keys. Schema in `src/lib/server/db/schema.ts`; the Better Auth tables are in
-  the generated `auth.schema.ts` beside it.
+  members, API keys, monitor definitions (`monitor`, written through
+  `src/lib/server/monitors.ts` with the `pg_notify` in the same transaction). Schema in
+  `src/lib/server/db/schema.ts`; the Better Auth tables are in the generated `auth.schema.ts`
+  beside it.
 - **The server's internal port via `src/lib/server/ninjacat.ts`** — all telemetry. Server-side
   only, so the browser never learns :8081 exists. Timeouts here are shorter than the server's,
   so a slow query surfaces as our error rather than a hang. The metrics explorer

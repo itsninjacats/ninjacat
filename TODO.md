@@ -305,7 +305,7 @@ far found something, so expect findings. How to record: `lab/README.md`.
       uploads, Data Streams Monitoring, tracer telemetry, CI Visibility (test cycle,
       coverage, git endpoints).
 - [x] **NinjaCat sending to NinjaCat** (`compose.self.yaml`, off unless named): the panel
-      through `@datadog/browser-rum` and `@datadog/browser-logs` with `proxy`, both server
+      through `@datadog/browser-rum` and `@datadog/browser-logs` with `proxy`, the server's
       processes through `dd-trace-dotnet` 3.54.0 (traces, runtime metrics, the continuous
       profiler, logs by direct submission, tracer telemetry) and an agent on a network with
       no route out. Checked on 2026-10-01: the browser talks to the panel and the intake
@@ -316,7 +316,10 @@ far found something, so expect findings. How to record: `lab/README.md`.
         links to the server span that answered it;
   - [ ] the agent there sees only its own container: no container logs, no host metrics
         (both need mounts from the host, which is the operator's call);
-  - [ ] `ninjacat.node.*` self-metrics come from `intake` only; `query` holds no writer;
+  - [ ] `ninjacat.node.*` self-metrics come from `intake` and `ninjacat-monitors` only;
+        `query` holds no writer;
+  - [ ] `ninjacat-monitors` under the tracer has not been checked, nor whether
+        `DD_PROFILER_PROCESSES` takes `;` as its list separator;
   - [ ] the tracer's telemetry and profiles arrive, but nothing reads them yet (sections 3
         and 4).
 - [ ] **Agent and tracer telemetry** (`instrumentation-telemetry-intake`,
@@ -448,8 +451,8 @@ data is here; the product is not.
       Datadog's .NET tracer (`@l`), which is mapped to `info`/`warn`/`error`…. Datadog
       normalises every status (its status remapper: by first letters, syslog numbers);
       until we do, `Warning`, `warn` and `WARN` are three facet values.
-- [ ] The dev stack builds the server twice on every save, once per process, each into its
-      own volume. Two executables that share only what they need would halve that
+- [ ] The dev stack builds the server up to three times on every save, once per process,
+      each into its own volume. Executables that share only what they need would cut that
       (`TODO_POSSIBLY.md`).
 - [ ] `/api/v2/validate`: the org id is derived from the tenant, so two installations that
       both use `default` share an Org Propagation Marker. Needs an installation id.
@@ -498,10 +501,11 @@ data is here; the product is not.
       point kept. Fine on the databases that exist; on a large `metrics` it could run past
       the migration client's hour or out of memory, and the next start would redo it. Batch
       it by day if such a database ever has to take it.
-- [ ] **The query process does not read the metrics TTLs back.** It plans by
-      `NINJACAT_METRICS_RETENTION_DAYS`/`_ROLLUP_RETENTION_DAYS` from its own environment,
-      so the chart and the compose files must hand `query` the same values as `intake` and
-      the migrate job (not passed anywhere yet). Reading `system.tables` at start would
+- [ ] **The query process and the monitor service do not read the metrics TTLs back.**
+      They plan by `NINJACAT_METRICS_RETENTION_DAYS`/`_ROLLUP_RETENTION_DAYS` from their own
+      environment, so every process must be handed the same values as `intake` and the
+      migrate job. The chart does (`metrics.*`); the compose files pass none and rely on
+      every process having the same defaults. Reading `system.tables` at start would
       remove the duplication.
 - [ ] **The intake's API-key keeper does not notice a LISTEN link that died silently.**
       `api/src/Server/ApiKeysKeeper.fs` waits on its connection with no keepalive, so a
@@ -531,7 +535,8 @@ data is here; the product is not.
       creates tenants and adds members under `/app/admin`, API keys belong to a tenant at
       `/app/settings/keys`, and the query port takes the tenant from the panel's token. Both
       migration histories were squashed; a database from before 2026-10-13 must be dropped.
-- [ ] Monitors: planned in `api/docs/zadania/monitors.md` (2026-10-13), on top of tenants.
+- [x] Monitors (2026-10-14; planned in `api/docs/zadania/monitors.md`): `api/README.md`,
+      "The monitor service"; what is left is section 7a.
 - [ ] **RBAC.** The tenant roles are the organization plugin's (owner, admin, member), and
       only Better Auth's own organization routes check them: the panel's pages do not, and
       the query port ignores the token's `role` claim. Decide what each role may do (keys,
@@ -565,6 +570,40 @@ data is here; the product is not.
       channels.
 - [ ] "NinjaCat on NinjaCat": a stateless watchdog that alerts through one simple channel
       when the main stack is down.
+
+## 7a. Monitors
+
+What the first version of monitors left out, on purpose. TLS for Akka remoting and the run
+at the capacity target are in section 0; the anomaly model cache in section 6.
+
+- [ ] **Notifications for real.** The notifier is a stub: it logs and writes a `stub` row.
+      Missing: rendering the message template, channels (built in, external ones only as
+      optional plug-ins), renotify, `notify_by`, escalations. The options are stored and
+      validated, not acted on, and the panel says so.
+- [ ] **Manual resolve.** The `resolved` reason and the `actor` column of
+      `monitor_transitions` are ready for it.
+- [ ] **Downtimes**, decided when notifying (a `muted` notification), not on the transition.
+- [ ] **Composite monitors.**
+- [ ] **Groups removed on purpose still alert.** A deleted deployment or node is No Data
+      under `notify_no_data` until the group expires after 24 h, as in Datadog; Datadog
+      auto-mutes cloud hosts shut down by autoscaling, and Kubernetes knows a deployment is
+      gone. Tell a deliberate removal from an outage.
+- [ ] **Custom schedules and cumulative windows** (`scheduling_options`, `current_*`
+      windows): refused today.
+- [ ] **Retention of the tables other than `metrics` and `metrics_1m`** is fixed in their
+      migrations (the monitor tables: 400 days of transitions and notifications, 7 of
+      evaluations). Make it configurable as the metrics' is.
+- [ ] **Percentile and distribution monitors.** The `percentile` time aggregator is
+      refused by the monitor parser (`Monitor/Parse.fs`).
+- [ ] **A Datadog-compatible `/api/v1/monitor`** on the `app.` host, so Terraform and
+      Datadog's clients can manage monitors. The stored shape is already Datadog's.
+- [ ] **Log monitors**, as a new shard region on a `logs` role.
+- [ ] **Akka.NET 1.6.** The service is on 1.5.73.
+- [ ] Deleting monitors logs dead letters: a `Delete` from the manager reaches an entity
+      that is already stopping (`Message [Delete] … was not delivered`, at info level in
+      the monitor service's log). Harmless, but noise that hides real dead letters.
+- [ ] The monitor list loads every monitor of the tenant and asks for all their states in
+      one call; no paging.
 
 ## 8. Language debt
 
