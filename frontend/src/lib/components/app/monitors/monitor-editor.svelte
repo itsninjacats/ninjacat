@@ -13,10 +13,7 @@
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import FunctionChips from '$lib/components/app/metrics/function-chips.svelte';
-	import MetricsChart, {
-		type ChartLine,
-		type ChartRule
-	} from '$lib/components/app/metrics/metrics-chart.svelte';
+	import MetricsChart, { type ChartLine } from '$lib/components/app/metrics/metrics-chart.svelte';
 	import QueryRow from '$lib/components/app/metrics/query-row.svelte';
 	import MonitorConditions from './monitor-conditions.svelte';
 	import NumberInput from './number-input.svelte';
@@ -29,12 +26,10 @@
 		effectiveComparator,
 		groupKeysOf,
 		switchMethod,
-		thresholdLines,
 		type Method,
-		type MonitorView,
-		type ThresholdLine
+		type MonitorView
 	} from '$lib/monitors/definition';
-	import { methodLabel } from '$lib/monitors/states';
+	import { methodLabel, thresholdRules } from '$lib/monitors/states';
 	import { emptyFormula, emptyQuery, nextQueryName } from '$lib/metrics/query';
 	import { m } from '$lib/paraglide/messages';
 
@@ -70,12 +65,7 @@
 
 	const color = (i: number) => `var(--chart-${(i % 5) + 1})`;
 
-	// Datadog's template syntax, the same in every language.
-	const MESSAGE_EXAMPLE = '{{#is_alert}}CPU is high on {{host.name}}{{/is_alert}} @team-infra';
-
 	const groupKeys = $derived(groupKeysOf(view));
-
-	// ---- rows ----
 
 	function addQuery() {
 		view.queries.push(emptyQuery(nextQueryName(view.queries.map((q) => q.name))));
@@ -83,12 +73,6 @@
 			view.formulas.push(emptyFormula(view.queries.map((q) => q.name).join(' + ')));
 		}
 	}
-
-	function removeQuery(i: number) {
-		view.queries.splice(i, 1);
-	}
-
-	// ---- the live chart ----
 
 	const RANGES = [
 		{ seconds: 3600, label: '1h' },
@@ -173,29 +157,12 @@
 		};
 	});
 
-	const ruleLabel: Record<ThresholdLine['kind'], () => string> = {
-		critical: m.monitor_critical,
-		warning: m.monitor_warning,
-		critical_recovery: m.monitor_critical_recovery,
-		warning_recovery: m.monitor_warning_recovery
-	};
-
-	const rules = $derived<ChartRule[]>(
-		thresholdLines(view).map((t) => ({
-			value: t.value,
-			label: ruleLabel[t.kind](),
-			color: t.kind.startsWith('critical') ? 'var(--state-alert)' : 'var(--state-warn)',
-			dashed: t.kind.endsWith('recovery')
-		}))
+	const rules = $derived(
+		view.method === 'anomaly' || view.method === 'outlier' ? [] : thresholdRules(view)
 	);
-
-	const zone = $derived.by(() => {
-		if (rules.length === 0) return null;
-		const z = alertZone(effectiveComparator(view), view.critical);
-		return z ? { ...z, color: 'var(--state-alert)' } : null;
-	});
-
-	// ---- the check, as a save would make it ----
+	const zone = $derived(
+		rules.length === 0 ? null : alertZone(effectiveComparator(view), view.critical)
+	);
 
 	let checked = $state<{
 		problems: string[];
@@ -228,8 +195,6 @@
 			controller.abort();
 		};
 	});
-
-	// ---- tags ----
 
 	let tagInput = $state('');
 
@@ -359,7 +324,7 @@
 						bind:query={view.queries[i]}
 						color={color(i)}
 						{metrics}
-						onremove={view.queries.length > 1 ? () => removeQuery(i) : undefined}
+						onremove={view.queries.length > 1 ? () => view.queries.splice(i, 1) : undefined}
 						chartControls={false}
 					/>
 				{/each}
@@ -441,7 +406,7 @@
 					id="monitor-message"
 					bind:value={view.message}
 					rows={5}
-					placeholder={MESSAGE_EXAMPLE}
+					placeholder={'{{#is_alert}}CPU is high on {{host.name}}{{/is_alert}} @team-infra'}
 					class="font-mono text-xs md:text-xs"
 				/>
 				<p class="text-xs text-muted-foreground">{m.monitor_message_hint()}</p>

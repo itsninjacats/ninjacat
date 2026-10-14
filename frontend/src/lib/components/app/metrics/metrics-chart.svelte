@@ -11,8 +11,8 @@
 	/** A horizontal line across the chart, such as a monitor's threshold. */
 	export type ChartRule = { value: number; label: string; color: string; dashed?: boolean };
 
-	/** A band of values, such as the values a monitor alerts on; null runs to the chart's edge. */
-	export type ChartZone = { from: number | null; to: number | null; color: string };
+	/** The values a monitor alerts on, drawn in its alert colour; null runs to the chart's edge. */
+	export type ChartZone = { from: number | null; to: number | null };
 </script>
 
 <script lang="ts">
@@ -174,7 +174,7 @@
 					{#if zone}
 						<AnnotationRange
 							y={[zone.from, zone.to]}
-							fill={`color-mix(in oklch, ${zone.color} 10%, transparent)`}
+							fill="color-mix(in oklch, var(--state-alert) 10%, transparent)"
 						/>
 					{/if}
 					{#each rules as r, i (i)}

@@ -9,10 +9,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
 	import LocalTime from '$lib/components/app/local-time.svelte';
-	import MetricsChart, {
-		type ChartLine,
-		type ChartRule
-	} from '$lib/components/app/metrics/metrics-chart.svelte';
+	import MetricsChart, { type ChartLine } from '$lib/components/app/metrics/metrics-chart.svelte';
 	import StateBadge from '$lib/components/app/monitors/state-badge.svelte';
 	import { alertZone } from '$lib/monitors/definition';
 	import {
@@ -21,7 +18,8 @@
 		reasonLabel,
 		severity,
 		stateClass,
-		stateLabel
+		stateLabel,
+		thresholdRules
 	} from '$lib/monitors/states';
 	import { timelines } from '$lib/monitors/timeline';
 	import { m } from '$lib/paraglide/messages';
@@ -29,13 +27,6 @@
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
-
-	const RANGES = [
-		{ value: '-1h', label: '1h' },
-		{ value: '-4h', label: '4h' },
-		{ value: '-1d', label: '1d' },
-		{ value: '-1w', label: '1w' }
-	];
 
 	// Rows beyond these are counted, not drawn.
 	const MAX_TIMELINES = 50;
@@ -51,8 +42,6 @@
 
 	const from = $derived(Date.parse(data.window.from));
 	const to = $derived(Date.parse(data.window.to));
-
-	// ---- the evaluated values ----
 
 	const number = $derived(new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 4 }));
 
@@ -84,27 +73,12 @@
 		}));
 	});
 
-	const rules = $derived.by<ChartRule[]>(() => {
-		if (data.monitor.method === 'outlier') return [];
-		const t = data.thresholds;
-		const rules: ChartRule[] = [];
-		const add = (value: number | null, label: string, color: string, dashed = false) => {
-			if (value !== null) rules.push({ value, label, color, dashed });
-		};
-		add(t.critical, m.monitor_critical(), 'var(--state-alert)');
-		add(t.warning, m.monitor_warning(), 'var(--state-warn)');
-		add(t.criticalRecovery, m.monitor_critical_recovery(), 'var(--state-alert)', true);
-		add(t.warningRecovery, m.monitor_warning_recovery(), 'var(--state-warn)', true);
-		return rules;
-	});
-
-	const zone = $derived.by(() => {
-		if (rules.length === 0 || !data.thresholds.comparator) return null;
-		const z = alertZone(data.thresholds.comparator, data.thresholds.critical);
-		return z ? { ...z, color: 'var(--state-alert)' } : null;
-	});
-
-	// ---- the state timeline ----
+	const rules = $derived(data.monitor.method === 'outlier' ? [] : thresholdRules(data.thresholds));
+	const zone = $derived(
+		rules.length === 0 || !data.thresholds.comparator
+			? null
+			: alertZone(data.thresholds.comparator, data.thresholds.critical)
+	);
 
 	const rows = $derived(
 		data.transitions
@@ -204,14 +178,14 @@
 			{zoneName ? m.monitor_times_local({ zone: zoneName }) : m.monitor_times_utc()}
 		</p>
 		<div class="flex flex-wrap gap-1">
-			{#each RANGES as r (r.value)}
+			{#each ['-1h', '-4h', '-1d', '-1w'] as r (r)}
 				<Button
 					size="sm"
-					variant={data.range === r.value ? 'default' : 'ghost'}
-					href={`?range=${r.value}`}
+					variant={data.range === r ? 'default' : 'ghost'}
+					href={`?range=${r}`}
 					data-sveltekit-noscroll
 				>
-					{r.label}
+					{r.slice(1)}
 				</Button>
 			{/each}
 		</div>

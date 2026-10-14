@@ -1,14 +1,11 @@
-// A monitor as the editor holds it, and the Datadog monitor it is saved as.
-// The Datadog JSON is what is stored and evaluated; the view is stored beside
-// it (`editor`) and is what the editor reopens. The query is never parsed back
-// here: the monitor service's parser (api/src/Engine/Monitor/Parse.fs) is the
-// only one.
+// The query is never parsed back here: api/src/Engine/Monitor/Parse.fs is the only parser.
 
 // Relative, not $lib: the e2e seed builds its monitors with this module, outside Vite.
 import { wrap } from '../metrics/functions';
 import {
 	asObject,
 	emptyQuery,
+	pick,
 	queryText,
 	readFormula,
 	readQuery,
@@ -263,21 +260,20 @@ export function expressionOf(queries: ExplorerQuery[], formulas: ExplorerFormula
 	);
 }
 
-function monitoredQueries(view: MonitorView): ExplorerQuery[] {
-	const formula = monitoredFormula(view.formulas);
-	if (!formula) return view.queries.slice(0, 1);
-	const used = new Set<string>();
-	replaceNames(formula.text, (name) => {
-		used.add(name);
-		return undefined;
-	});
-	return view.queries.filter((q) => used.has(q.name));
-}
-
 /** The `by` keys of the monitored queries: one alert per combination, none for a simple alert. */
 export function groupKeysOf(view: MonitorView): string[] {
+	const formula = monitoredFormula(view.formulas);
+	let monitored = view.queries.slice(0, 1);
+	if (formula) {
+		const used = new Set<string>();
+		replaceNames(formula.text, (name) => {
+			used.add(name);
+			return undefined;
+		});
+		monitored = view.queries.filter((q) => used.has(q.name));
+	}
 	const keys: string[] = [];
-	for (const q of monitoredQueries(view)) {
+	for (const q of monitored) {
 		for (const match of queryText(q).matchAll(/\bby\s*\{([^}]*)\}/g)) {
 			for (const key of match[1].split(',').map((k) => k.trim())) {
 				if (key && !keys.includes(key)) keys.push(key);
@@ -434,10 +430,6 @@ export function monitorOf(view: MonitorView): DatadogMonitor {
 }
 
 // ---- reading a stored monitor back ------------------------------------------------
-
-function pick<T extends string>(allowed: readonly T[], value: unknown, fallback: T): T {
-	return allowed.includes(value as T) ? (value as T) : fallback;
-}
 
 function numberOr(value: unknown, fallback: number | null): number | null {
 	if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -654,15 +646,7 @@ export function windowSeconds(text: string): number {
 	return m ? Number(m[1]) * UNIT_SECONDS[m[2]] : 0;
 }
 
-function spanText(seconds: number): string {
-	return seconds % 86_400 === 0 ? `${seconds / 86_400}d` : `${Math.round(seconds / 3600)}h`;
-}
-
-/**
- * What the editor's chart asks the query API for: the builder's queries, and
- * formulas that draw what the monitor measures. A change is drawn per bucket,
- * as it is computed before the time aggregation.
- */
+// A change is drawn per bucket, as it is computed before the time aggregation.
 export function chartRequest(view: MonitorView): {
 	queries: { name: string; query: string }[];
 	formulas: string[];
@@ -703,7 +687,9 @@ export function chartRequest(view: MonitorView): {
 				f.algorithm === 'linear'
 					? `model='${f.model}', history='${f.history}'`
 					: `seasonality='${f.seasonality}'`;
-			const horizon = spanText(windowSeconds(f.horizon));
+			const seconds = windowSeconds(f.horizon);
+			const horizon =
+				seconds % 86_400 === 0 ? `${seconds / 86_400}d` : `${Math.round(seconds / 3600)}h`;
 			return {
 				queries,
 				formulas: [
@@ -724,7 +710,6 @@ export function chartRequest(view: MonitorView): {
 	}
 }
 
-/** How far back the editor's chart looks: a few windows, or a forecast's history. */
 export function chartRangeSeconds(view: MonitorView): number {
 	if (view.method === 'forecast') {
 		return view.forecast.algorithm === 'linear'
@@ -733,24 +718,6 @@ export function chartRangeSeconds(view: MonitorView): number {
 	}
 	const wanted = 4 * windowSeconds(view.window);
 	return [3600, 4 * 3600, 86_400, 604_800].find((s) => s >= wanted) ?? 604_800;
-}
-
-export type ThresholdLine = {
-	value: number;
-	kind: 'critical' | 'warning' | 'critical_recovery' | 'warning_recovery';
-};
-
-/** The thresholds on the value axis: none for anomaly and outlier monitors, whose thresholds are not values. */
-export function thresholdLines(view: MonitorView): ThresholdLine[] {
-	if (view.method === 'anomaly' || view.method === 'outlier') return [];
-	const lines: ThresholdLine[] = [];
-	if (view.critical !== null) lines.push({ value: view.critical, kind: 'critical' });
-	if (view.warning !== null) lines.push({ value: view.warning, kind: 'warning' });
-	if (view.criticalRecovery !== null)
-		lines.push({ value: view.criticalRecovery, kind: 'critical_recovery' });
-	if (view.warningRecovery !== null)
-		lines.push({ value: view.warningRecovery, kind: 'warning_recovery' });
-	return lines;
 }
 
 /** The values that alert: above or below critical; none for == and !=. */

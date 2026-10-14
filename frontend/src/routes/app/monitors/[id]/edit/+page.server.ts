@@ -3,7 +3,7 @@ import { viewOf } from '$lib/monitors/definition';
 import { db } from '$lib/server/db';
 import { saveMonitor } from '$lib/server/monitor-save';
 import { findMonitor, monitorId } from '$lib/server/monitors';
-import { fetchMetricNames, NinjacatError } from '$lib/server/ninjacat';
+import { fetchMetricNames, reasonOf } from '$lib/server/ninjacat';
 import { m } from '$lib/paraglide/messages';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -22,17 +22,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		initial: opened?.view ?? null,
 		drifted: opened?.drifted ?? false
 	};
-	if (!opened) {
-		return { ...page, metrics: [] as string[], metricsError: null };
-	}
 	try {
-		return { ...page, metrics: await fetchMetricNames(), metricsError: null };
+		return { ...page, metrics: opened ? await fetchMetricNames() : [], metricsError: null };
 	} catch (e) {
-		return {
-			...page,
-			metrics: [] as string[],
-			metricsError: e instanceof NinjacatError ? e.message : String(e)
-		};
+		return { ...page, metrics: [] as string[], metricsError: reasonOf(e) };
 	}
 };
 

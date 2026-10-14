@@ -9,7 +9,7 @@ import {
 	fetchMonitorEvaluations,
 	fetchMonitorGroups,
 	fetchMonitorTransitions,
-	NinjacatError,
+	reasonOf,
 	type MonitorGroup,
 	type MonitorRange
 } from '$lib/server/ninjacat';
@@ -27,8 +27,6 @@ const RANGE_MS: Record<(typeof RANGES)[number], number> = {
 
 // Lines beyond these are counted, not drawn.
 const MAX_LINES = 20;
-
-const reasonOf = (e: unknown) => (e instanceof NinjacatError ? e.message : String(e));
 
 const numberOrNull = (value: unknown) => (typeof value === 'number' ? value : null);
 

@@ -1,6 +1,6 @@
 import { db } from '$lib/server/db';
 import { listMonitors } from '$lib/server/monitors';
-import { fetchMonitorStatus, NinjacatError, type MonitorStatus } from '$lib/server/ninjacat';
+import { fetchMonitorStatus, reasonOf, type MonitorStatus } from '$lib/server/ninjacat';
 import { editorMethod } from '$lib/monitors/definition';
 import type { PageServerLoad } from './$types';
 
@@ -16,12 +16,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const rows = await listMonitors(db, tenantId);
 	const statuses = new Map<number, MonitorStatus>();
 	let statusError: string | null = null;
-	if (rows.length > 0) {
-		try {
-			for (const s of await fetchMonitorStatus(rows.map((r) => r.id))) statuses.set(s.id, s);
-		} catch (e) {
-			statusError = e instanceof NinjacatError ? e.message : String(e);
-		}
+	try {
+		for (const s of await fetchMonitorStatus(rows.map((r) => r.id))) statuses.set(s.id, s);
+	} catch (e) {
+		statusError = reasonOf(e);
 	}
 
 	return {

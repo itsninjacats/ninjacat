@@ -4,7 +4,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import * as NativeSelect from '$lib/components/ui/native-select';
 	import NumberInput from './number-input.svelte';
-	import WindowSelect from './window-select.svelte';
+	import OptionSelect from './option-select.svelte';
 	import {
 		ANOMALY_ALGORITHMS,
 		COMPARATORS,
@@ -39,7 +39,6 @@
 		resolve: m.monitor_missing_resolve
 	};
 
-	const hasThresholds = $derived(view.method !== 'outlier');
 	const fractions = $derived(view.method === 'anomaly');
 	// Anomalies and forecasts each have one; the field shows the current method's.
 	const timezone = {
@@ -74,22 +73,17 @@
 		{#if view.method !== 'forecast'}
 			<div class="space-y-1">
 				<Label for="monitor-aggregator">{m.monitor_aggregator()}</Label>
-				<NativeSelect.Root
+				<OptionSelect
 					id="monitor-aggregator"
 					bind:value={view.aggregator}
-					size="sm"
-					class="w-full font-mono [&>select]:text-xs"
-				>
-					{#each TIME_AGGREGATORS as a (a)}
-						<NativeSelect.Option value={a}>{a}</NativeSelect.Option>
-					{/each}
-				</NativeSelect.Root>
+					options={TIME_AGGREGATORS}
+				/>
 			</div>
 			<div class="space-y-1">
 				<Label for="monitor-window">
 					{view.method === 'anomaly' ? m.monitor_graph_window() : m.monitor_window()}
 				</Label>
-				<WindowSelect
+				<OptionSelect
 					id="monitor-window"
 					bind:value={view.window}
 					options={view.method === 'change' ? changeWindows : WINDOWS}
@@ -100,23 +94,18 @@
 		{#if view.method === 'change'}
 			<div class="space-y-1">
 				<Label for="monitor-shift">{m.monitor_change_shift()}</Label>
-				<WindowSelect id="monitor-shift" bind:value={view.change.shift} options={SHIFTS} />
+				<OptionSelect id="monitor-shift" bind:value={view.change.shift} options={SHIFTS} />
 			</div>
 		{/if}
 
 		{#if view.method === 'anomaly'}
 			<div class="space-y-1">
 				<Label for="monitor-anomaly-algorithm">{m.monitor_algorithm()}</Label>
-				<NativeSelect.Root
+				<OptionSelect
 					id="monitor-anomaly-algorithm"
 					bind:value={view.anomaly.algorithm}
-					size="sm"
-					class="w-full font-mono [&>select]:text-xs"
-				>
-					{#each ANOMALY_ALGORITHMS as a (a)}
-						<NativeSelect.Option value={a}>{a}</NativeSelect.Option>
-					{/each}
-				</NativeSelect.Root>
+					options={ANOMALY_ALGORITHMS}
+				/>
 			</div>
 			<div class="space-y-1">
 				<Label for="monitor-bounds">{m.monitor_anomaly_bounds()}</Label>
@@ -144,21 +133,16 @@
 			{#if view.anomaly.algorithm !== 'basic'}
 				<div class="space-y-1">
 					<Label for="monitor-anomaly-seasonality">{m.monitor_seasonality()}</Label>
-					<NativeSelect.Root
+					<OptionSelect
 						id="monitor-anomaly-seasonality"
 						bind:value={view.anomaly.seasonality}
-						size="sm"
-						class="w-full font-mono [&>select]:text-xs"
-					>
-						{#each SEASONALITIES as s (s)}
-							<NativeSelect.Option value={s}>{s}</NativeSelect.Option>
-						{/each}
-					</NativeSelect.Root>
+						options={SEASONALITIES}
+					/>
 				</div>
 			{/if}
 			<div class="space-y-1">
 				<Label for="monitor-alert-window">{m.monitor_alert_window()}</Label>
-				<WindowSelect
+				<OptionSelect
 					id="monitor-alert-window"
 					bind:value={view.anomaly.alertWindow}
 					options={alertWindows}
@@ -166,7 +150,7 @@
 			</div>
 			<div class="space-y-1">
 				<Label for="monitor-recovery-window">{m.monitor_recovery_window()}</Label>
-				<WindowSelect
+				<OptionSelect
 					id="monitor-recovery-window"
 					bind:value={view.anomaly.recoveryWindow}
 					options={alertWindows}
@@ -192,16 +176,11 @@
 		{#if view.method === 'forecast'}
 			<div class="space-y-1">
 				<Label for="monitor-forecast-algorithm">{m.monitor_algorithm()}</Label>
-				<NativeSelect.Root
+				<OptionSelect
 					id="monitor-forecast-algorithm"
 					bind:value={view.forecast.algorithm}
-					size="sm"
-					class="w-full font-mono [&>select]:text-xs"
-				>
-					{#each FORECAST_ALGORITHMS as a (a)}
-						<NativeSelect.Option value={a}>{a}</NativeSelect.Option>
-					{/each}
-				</NativeSelect.Root>
+					options={FORECAST_ALGORITHMS}
+				/>
 			</div>
 			<div class="space-y-1">
 				<Label for="monitor-deviations">{m.monitor_forecast_deviations()}</Label>
@@ -214,25 +193,20 @@
 			</div>
 			<div class="space-y-1">
 				<Label for="monitor-horizon">{m.monitor_forecast_horizon()}</Label>
-				<WindowSelect id="monitor-horizon" bind:value={view.forecast.horizon} options={HORIZONS} />
+				<OptionSelect id="monitor-horizon" bind:value={view.forecast.horizon} options={HORIZONS} />
 			</div>
 			{#if view.forecast.algorithm === 'linear'}
 				<div class="space-y-1">
 					<Label for="monitor-model">{m.monitor_forecast_model()}</Label>
-					<NativeSelect.Root
+					<OptionSelect
 						id="monitor-model"
 						bind:value={view.forecast.model}
-						size="sm"
-						class="w-full font-mono [&>select]:text-xs"
-					>
-						{#each FORECAST_MODELS as model (model)}
-							<NativeSelect.Option value={model}>{model}</NativeSelect.Option>
-						{/each}
-					</NativeSelect.Root>
+						options={FORECAST_MODELS}
+					/>
 				</div>
 				<div class="space-y-1">
 					<Label for="monitor-history">{m.monitor_forecast_history()}</Label>
-					<WindowSelect
+					<OptionSelect
 						id="monitor-history"
 						bind:value={view.forecast.history}
 						options={HISTORIES}
@@ -241,16 +215,11 @@
 			{:else}
 				<div class="space-y-1">
 					<Label for="monitor-forecast-seasonality">{m.monitor_seasonality()}</Label>
-					<NativeSelect.Root
+					<OptionSelect
 						id="monitor-forecast-seasonality"
 						bind:value={view.forecast.seasonality}
-						size="sm"
-						class="w-full font-mono [&>select]:text-xs"
-					>
-						{#each SEASONALITIES as s (s)}
-							<NativeSelect.Option value={s}>{s}</NativeSelect.Option>
-						{/each}
-					</NativeSelect.Root>
+						options={SEASONALITIES}
+					/>
 				</div>
 			{/if}
 			<div class="space-y-1">
@@ -267,16 +236,11 @@
 		{#if view.method === 'outlier'}
 			<div class="space-y-1">
 				<Label for="monitor-outlier-algorithm">{m.monitor_algorithm()}</Label>
-				<NativeSelect.Root
+				<OptionSelect
 					id="monitor-outlier-algorithm"
 					bind:value={view.outlier.algorithm}
-					size="sm"
-					class="w-full font-mono [&>select]:text-xs"
-				>
-					{#each OUTLIER_ALGORITHMS as a (a)}
-						<NativeSelect.Option value={a}>{a}</NativeSelect.Option>
-					{/each}
-				</NativeSelect.Root>
+					options={OUTLIER_ALGORITHMS}
+				/>
 			</div>
 			<div class="space-y-1">
 				<Label for="monitor-tolerance">{m.monitor_outlier_tolerance()}</Label>
@@ -323,24 +287,19 @@
 		<h3 class="text-sm font-medium">{m.monitor_thresholds()}</h3>
 		{#if view.method === 'outlier'}
 			<p class="text-xs text-muted-foreground">{m.monitor_outlier_explained()}</p>
-		{:else if fractions}
-			<p class="text-xs text-muted-foreground">{m.monitor_anomaly_thresholds_explained()}</p>
-		{/if}
-		{#if hasThresholds}
+		{:else}
+			{#if fractions}
+				<p class="text-xs text-muted-foreground">{m.monitor_anomaly_thresholds_explained()}</p>
+			{/if}
 			<div class="grid grid-cols-1 gap-3 @md:grid-cols-2 @3xl:grid-cols-5">
 				{#if !fractions}
 					<div class="space-y-1">
 						<Label for="monitor-comparator">{m.monitor_comparator()}</Label>
-						<NativeSelect.Root
+						<OptionSelect
 							id="monitor-comparator"
 							bind:value={view.comparator}
-							size="sm"
-							class="w-full font-mono [&>select]:text-xs"
-						>
-							{#each comparators as c (c)}
-								<NativeSelect.Option value={c}>{c}</NativeSelect.Option>
-							{/each}
-						</NativeSelect.Root>
+							options={comparators}
+						/>
 					</div>
 				{/if}
 				<div class="space-y-1">

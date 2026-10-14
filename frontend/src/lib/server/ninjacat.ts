@@ -1,6 +1,7 @@
 import { env } from '$env/dynamic/private';
 import { getRequestEvent } from '$app/server';
 import { SignJWT } from 'jose';
+import type { State } from '$lib/monitors/states';
 
 // Address of the server's internal port. This is NOT the agent intake port (8080),
 // which is exposed to the machines running agents. The panel talks to 8081,
@@ -55,6 +56,8 @@ export type LogFacets = {
 
 /** Thrown by the query helpers when the server cannot answer. */
 export class NinjacatError extends Error {}
+
+export const reasonOf = (e: unknown) => (e instanceof NinjacatError ? e.message : String(e));
 
 /**
  * The query process answers only a token the panel signed, and runs every
@@ -391,26 +394,15 @@ export async function fetchLogFacets(from: string, to?: string): Promise<LogFace
 
 // ---- monitors ----------------------------------------------------------------------
 
-// What the monitor service stored, for the token's tenant, and the check a
-// definition passes before it is saved (api/src/Server/MonitorHandlers.fs).
+// What the monitor service stored for the token's tenant (api/src/Server/MonitorHandlers.fs).
 // Times are RFC 3339 strings in UTC.
-
-/** Datadog's states of a monitor group. */
-export type MonitorState = 'OK' | 'Warn' | 'Alert' | 'No Data';
-
-export type MonitorValidation = {
-	/** Empty when the monitor would be evaluated. */
-	problems: string[];
-	/** Options Datadog has that are stored but not acted on yet. */
-	notActedOn: string[];
-};
 
 /** Checks a monitor as it would be saved: its type, query and options. */
 export async function validateMonitor(definition: {
 	type: string;
 	query: string;
 	options: Record<string, unknown>;
-}): Promise<MonitorValidation> {
+}): Promise<{ problems: string[]; notActedOn: string[] }> {
 	const body = await post<{ problems: string[]; not_acted_on: string[] }>(
 		'/internal/monitors/validate',
 		definition
@@ -420,11 +412,9 @@ export async function validateMonitor(definition: {
 
 export type MonitorStatus = {
 	id: number;
-	/** The most severe open group's; null when no group is open ("no groups found"). */
-	state: MonitorState | null;
-	/** Open groups by state. */
-	groups: Record<MonitorState, number>;
-	/** When a group last went into Alert or Warn. */
+	/** null when no group is open ("no groups found"). */
+	state: State | null;
+	groups: Record<State, number>;
 	lastTriggeredAt: string | null;
 };
 
@@ -444,8 +434,8 @@ async function fetchStatusBatch(ids: number[]): Promise<MonitorStatus[]> {
 	const body = await get<{
 		monitors: {
 			id: number;
-			state?: MonitorState;
-			groups: Record<MonitorState, number>;
+			state?: State;
+			groups: Record<State, number>;
 			last_triggered_at?: string;
 		}[];
 	}>(`/internal/monitors/status?${q}`);
@@ -460,17 +450,12 @@ async function fetchStatusBatch(ids: number[]): Promise<MonitorStatus[]> {
 export type MonitorGroup = {
 	/** Sorted `key:value` pairs joined with `,`; `*` for a simple alert. */
 	group: string;
-	tags: string[];
-	state: MonitorState;
+	state: State;
 	since: string;
-	/** Why it is in that state: the reason of the transition into it. */
 	reason: string;
-	/** null when OK. */
-	firstTriggeredAt: string | null;
 	lastTriggeredAt: string | null;
-	/** The latest evaluated value; null when none judged the group in the last day. */
+	/** null when no evaluation judged the group in the last day. */
 	value: number | null;
-	evaluatedAt: string | null;
 };
 
 /** The open groups of a monitor. */
@@ -478,30 +463,24 @@ export async function fetchMonitorGroups(id: number): Promise<MonitorGroup[]> {
 	const body = await get<{
 		groups: {
 			group: string;
-			tags: string[];
-			state: MonitorState;
+			state: State;
 			since: string;
 			reason: string;
-			first_triggered_at?: string;
 			last_triggered_at?: string;
 			value?: number;
-			evaluated_at?: string;
 		}[];
 	}>(`/internal/monitors/${id}/groups`);
 	return body.groups.map((g) => ({
 		group: g.group,
-		tags: g.tags,
 		state: g.state,
 		since: g.since,
 		reason: g.reason,
-		firstTriggeredAt: g.first_triggered_at ?? null,
 		lastTriggeredAt: g.last_triggered_at ?? null,
-		value: g.value ?? null,
-		evaluatedAt: g.evaluated_at ?? null
+		value: g.value ?? null
 	}));
 }
 
-/** `from` and `to` as the other queries take them: RFC 3339, "now" or an offset like "-1d". */
+/** `from` and `to`: RFC 3339, "now" or an offset like "-1d". */
 export type MonitorRange = { from: string; to?: string; group?: string };
 
 function rangeQuery(range: MonitorRange): URLSearchParams {
@@ -511,89 +490,34 @@ function rangeQuery(range: MonitorRange): URLSearchParams {
 	return q;
 }
 
-export type MonitorTransition = {
-	group: string;
-	tags: string[];
-	at: string;
-	/** null for the group's first transition. */
-	fromState: MonitorState | null;
-	toState: MonitorState;
-	reason: string;
-	/** The user whose change caused it. */
-	actor: string | null;
-	value: number | null;
-	/** The threshold crossed: critical, warning, critical_recovery or warning_recovery. */
-	crossed: string | null;
-	comparator: string;
-	/** The thresholds it was judged by, which may since have changed. */
-	critical: number | null;
-	warning: number | null;
-	criticalRecovery: number | null;
-	warningRecovery: number | null;
-	/** The window judged; null for a transition outside an evaluation. */
-	windowFrom: string | null;
-	windowTo: string | null;
-	firstTriggeredAt: string | null;
-	lastTriggeredAt: string | null;
-	monitorVersion: number;
-};
-
 type TransitionJson = {
 	group: string;
-	tags: string[];
 	at: string;
-	from_state?: MonitorState;
-	to_state: MonitorState;
+	from_state?: State;
+	to_state: State;
 	reason: string;
-	actor?: string;
 	value?: number;
 	crossed?: string;
-	comparator: string;
-	critical?: number;
-	warning?: number;
-	critical_recovery?: number;
-	warning_recovery?: number;
-	window_from?: string;
-	window_to?: string;
-	first_triggered_at?: string;
-	last_triggered_at?: string;
-	monitor_version: number;
 };
 
-function transitionOf(t: TransitionJson): MonitorTransition {
+function transitionOf(t: TransitionJson) {
 	return {
 		group: t.group,
-		tags: t.tags,
 		at: t.at,
 		fromState: t.from_state ?? null,
 		toState: t.to_state,
 		reason: t.reason,
-		actor: t.actor ?? null,
 		value: t.value ?? null,
-		crossed: t.crossed ?? null,
-		comparator: t.comparator,
-		critical: t.critical ?? null,
-		warning: t.warning ?? null,
-		criticalRecovery: t.critical_recovery ?? null,
-		warningRecovery: t.warning_recovery ?? null,
-		windowFrom: t.window_from ?? null,
-		windowTo: t.window_to ?? null,
-		firstTriggeredAt: t.first_triggered_at ?? null,
-		lastTriggeredAt: t.last_triggered_at ?? null,
-		monitorVersion: t.monitor_version
+		crossed: t.crossed ?? null
 	};
 }
 
 /**
- * A monitor's transitions in a range, oldest first: its state timeline.
- * `initial` is each open group's latest transition before `from`, the state it
- * enters the range in. Past the server's limit the oldest transitions are left
- * out and `truncated` says so.
+ * A monitor's transitions in a range, oldest first. `initial` is each open
+ * group's latest transition before `from`; past the server's limit the oldest
+ * are left out and `truncated` says so.
  */
-export async function fetchMonitorTransitions(
-	id: number,
-	range: MonitorRange
-): Promise<{ initial: MonitorTransition[]; transitions: MonitorTransition[]; truncated: boolean }> {
+export async function fetchMonitorTransitions(id: number, range: MonitorRange) {
 	const body = await get<{
 		initial: TransitionJson[];
 		transitions: TransitionJson[];
@@ -606,42 +530,17 @@ export async function fetchMonitorTransitions(
 	};
 }
 
-export type MonitorEvaluation = {
-	/** Empty for an evaluation skipped or failed as a whole. */
-	group: string;
-	at: string;
-	value: number | null;
-	/** The group's state after it; "none" before its first transition. */
-	state: MonitorState | 'none';
-	outcome: 'evaluated' | 'skipped' | 'error';
-	/** Why it was skipped or failed. */
-	detail: string | null;
-};
-
-/** A monitor's evaluations in a range, oldest first: the values for its graph. */
-export async function fetchMonitorEvaluations(
-	id: number,
-	range: MonitorRange
-): Promise<{ evaluations: MonitorEvaluation[]; truncated: boolean }> {
+/** A monitor's evaluated values in a range, oldest first; `group` is empty for a whole-monitor skip or failure. */
+export async function fetchMonitorEvaluations(id: number, range: MonitorRange) {
 	const body = await get<{
-		evaluations: {
-			group: string;
-			at: string;
-			value?: number;
-			state: MonitorState | 'none';
-			outcome: MonitorEvaluation['outcome'];
-			detail?: string;
-		}[];
+		evaluations: { group: string; at: string; value?: number }[];
 		truncated: boolean;
 	}>(`/internal/monitors/${id}/evaluations?${rangeQuery(range)}`);
 	return {
 		evaluations: body.evaluations.map((e) => ({
 			group: e.group,
 			at: e.at,
-			value: e.value ?? null,
-			state: e.state,
-			outcome: e.outcome,
-			detail: e.detail ?? null
+			value: e.value ?? null
 		})),
 		truncated: body.truncated
 	};

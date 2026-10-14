@@ -12,7 +12,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	}
 	const rows = await listMonitors(db, tenantId);
 	try {
-		const statuses = rows.length > 0 ? await fetchMonitorStatus(rows.map((r) => r.id)) : [];
+		const statuses = await fetchMonitorStatus(rows.map((r) => r.id));
 		const count = (state: string) => statuses.filter((s) => s.state === state).length;
 		return {
 			monitors: {

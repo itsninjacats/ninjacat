@@ -2,7 +2,7 @@ import { fail, redirect, type RequestEvent } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { formText } from '$lib/server/form';
 import { createMonitor, findMonitor, updateMonitor } from '$lib/server/monitors';
-import { NinjacatError, validateMonitor } from '$lib/server/ninjacat';
+import { reasonOf, validateMonitor } from '$lib/server/ninjacat';
 import {
 	monitorOf,
 	otherOptionsOf,
@@ -17,7 +17,7 @@ const NAME_MAX = 500;
 // Datadog's limit for a tag.
 const TAG_MAX = 200;
 
-export function unfilledMessage(what: Unfilled): string {
+function unfilledMessage(what: Unfilled): string {
 	switch (what) {
 		case 'name':
 			return m.monitor_unfilled_name();
@@ -44,11 +44,7 @@ export function panelProblems(view: MonitorView): string[] {
 	return problems;
 }
 
-/**
- * The editor's save: the view it submitted becomes the Datadog monitor, which
- * the query process checks with the code the monitor service evaluates with;
- * only then is it written, with the notification, for the request's tenant.
- */
+// The query process checks the monitor with the code the monitor service evaluates with.
 export async function saveMonitor({ request, locals }: RequestEvent, id: number | null) {
 	if (!locals.user) {
 		redirect(302, '/login');
@@ -90,8 +86,7 @@ export async function saveMonitor({ request, locals }: RequestEvent, id: number 
 			return fail(400, { problems: checked.problems });
 		}
 	} catch (e) {
-		const reason = e instanceof NinjacatError ? e.message : String(e);
-		return fail(502, { problems: [m.monitor_validate_failed({ reason })] });
+		return fail(502, { problems: [m.monitor_validate_failed({ reason: reasonOf(e) })] });
 	}
 
 	const definition = { ...monitor, editor: view };

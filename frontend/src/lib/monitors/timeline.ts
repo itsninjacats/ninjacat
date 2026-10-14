@@ -19,15 +19,8 @@ export type TimelineRow = { group: string; segments: Segment[] };
 /** After these the group is closed: no longer evaluated or shown. */
 const CLOSING = ['expired', 'definition_changed', 'deleted'];
 
-/**
- * `initial` is each open group's latest transition before `from`, the state
- * it entered the range in; `steps` are the transitions inside the range.
- * Rows come worst state at `to` first, then by group.
- *
- * `truncated`: `steps` are only the newest of the range, so `initial` no
- * longer says what came before them. Before the oldest step nothing is known;
- * after it, a group was in its first step's from-state until that step.
- */
+// `initial`: each group's last transition before `from`. `truncated`: `steps` are only
+// the newest, so nothing is claimed before the oldest. Rows come worst state first.
 export function timelines(
 	initial: Step[],
 	steps: Step[],

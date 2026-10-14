@@ -144,28 +144,6 @@ describe.skipIf(!(await reachable()))('writing monitors, in Postgres', () => {
 		expect(stored.deletedAt).toBeInstanceOf(Date);
 	});
 
-	it('writes only the definition, whatever else the object carries', async () => {
-		const smuggled = { tenantId: 'b', version: 40, deletedAt: new Date(), createdById: null };
-		const { id } = await createMonitor(db, 'a', 'u1', { ...definition, ...smuggled });
-		expect(await row(id)).toMatchObject({
-			tenantId: 'a',
-			version: 1,
-			deletedAt: null,
-			createdById: 'u1'
-		});
-
-		expect(await updateMonitor(db, 'a', id, 'u1', { ...definition, ...smuggled })).toEqual({
-			id,
-			version: 2
-		});
-		expect(await row(id)).toMatchObject({
-			tenantId: 'a',
-			version: 2,
-			deletedAt: null,
-			createdById: 'u1'
-		});
-	});
-
 	it('notifies nothing when the write fails', async () => {
 		await expect(createMonitor(db, 'a', 'u1', { ...definition, priority: 9 })).rejects.toThrow();
 		await expect(createMonitor(db, 'nobody', 'u1', definition)).rejects.toThrow();

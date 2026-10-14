@@ -1,6 +1,7 @@
 // How a monitor's states, reasons and methods are shown.
 
 import { m } from '$lib/paraglide/messages';
+import type { ChartRule } from '$lib/components/app/metrics/metrics-chart.svelte';
 import type { Method } from './definition';
 
 /** Datadog's group states, most severe first: a monitor shows its worst group's. */
@@ -85,4 +86,21 @@ export function reasonLabel(reason: string): string {
 		default:
 			return reason;
 	}
+}
+
+export function thresholdRules(t: {
+	critical: number | null;
+	warning: number | null;
+	criticalRecovery: number | null;
+	warningRecovery: number | null;
+}): ChartRule[] {
+	const rules: ChartRule[] = [];
+	const add = (value: number | null, label: string, color: string, dashed = false) => {
+		if (value !== null) rules.push({ value, label, color, dashed });
+	};
+	add(t.critical, m.monitor_critical(), 'var(--state-alert)');
+	add(t.warning, m.monitor_warning(), 'var(--state-warn)');
+	add(t.criticalRecovery, m.monitor_critical_recovery(), 'var(--state-alert)', true);
+	add(t.warningRecovery, m.monitor_warning_recovery(), 'var(--state-warn)', true);
+	return rules;
 }

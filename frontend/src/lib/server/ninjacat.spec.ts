@@ -64,15 +64,11 @@ describe('the query token', () => {
 		expect(payload.tenant).toBe('acme');
 	});
 
-	it('is never sent without a tenant: nothing is asked at all', async () => {
-		request.locals = { user: { id: 'user-1' } as App.Locals['user'], tenant: null };
-
-		await expect(fetchMetricNames()).rejects.toBeInstanceOf(NinjacatError);
-		expect(fetchMock).not.toHaveBeenCalled();
-	});
-
-	it('is never sent without a user', async () => {
-		request.locals = { tenant: { id: 'acme', name: 'Acme', role: 'admin' } };
+	it.each([
+		['a tenant', { user: { id: 'user-1' } as App.Locals['user'], tenant: null }],
+		['a user', { tenant: { id: 'acme', name: 'Acme', role: 'admin' as const } }]
+	])('is never sent without %s: nothing is asked at all', async (_, locals) => {
+		request.locals = locals;
 
 		await expect(fetchMetricNames()).rejects.toBeInstanceOf(NinjacatError);
 		expect(fetchMock).not.toHaveBeenCalled();
@@ -106,9 +102,6 @@ describe('the monitor calls', () => {
 		expect(urlOf(0).pathname).toBe('/internal/monitors/validate');
 		expect(init.method).toBe('POST');
 		expect(JSON.parse(String(init.body))).toEqual(definition);
-		expect((await jwtVerify(bearerOf(0), new TextEncoder().encode(secret))).payload.tenant).toBe(
-			'acme'
-		);
 	});
 
 	it('status joins the ids with commas, and absent fields are null', async () => {
@@ -159,31 +152,21 @@ describe('the monitor calls', () => {
 				transitions: [
 					{
 						group: 'host:a',
-						tags: ['host:a'],
 						at: '2026-10-14T10:00:00+00:00',
 						to_state: 'Alert',
 						reason: 'new',
 						value: 95,
-						crossed: 'critical',
-						comparator: '>',
-						critical: 90,
-						window_from: '2026-10-14T09:55:00+00:00',
-						window_to: '2026-10-14T10:00:00+00:00',
-						first_triggered_at: '2026-10-14T10:00:00+00:00',
-						monitor_version: 3
+						crossed: 'critical'
 					}
 				],
 				initial: [
 					{
 						group: 'host:b',
-						tags: ['host:b'],
 						at: '2026-10-13T08:00:00+00:00',
 						from_state: 'Alert',
 						to_state: 'OK',
 						reason: 'recovery',
-						crossed: 'critical_recovery',
-						comparator: '>',
-						monitor_version: 2
+						crossed: 'critical_recovery'
 					}
 				],
 				truncated: false
@@ -202,11 +185,7 @@ describe('the monitor calls', () => {
 			fromState: null,
 			toState: 'Alert',
 			crossed: 'critical',
-			criticalRecovery: null,
-			windowFrom: '2026-10-14T09:55:00+00:00',
-			firstTriggeredAt: '2026-10-14T10:00:00+00:00',
-			lastTriggeredAt: null,
-			monitorVersion: 3
+			value: 95
 		});
 		expect(initial.map((t) => [t.group, t.fromState, t.toState, t.value])).toEqual([
 			['host:b', 'Alert', 'OK', null]

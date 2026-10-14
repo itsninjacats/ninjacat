@@ -1,92 +1,43 @@
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import type { DatadogMonitor } from '$lib/monitors/definition';
 import type { Database } from './auth-options';
 import { monitor } from './db/schema';
 
-// What the panel saves of a monitor; the rest of the row is the server's.
-export type MonitorDefinition = {
-	name: string;
-	type: string;
-	query: string;
-	message: string;
-	options: Record<string, unknown>;
-	tags: string[];
-	priority: number | null;
-	editor: unknown;
-};
+export type MonitorDefinition = DatadogMonitor & { editor: unknown };
 
 export type MonitorVersion = { id: number; version: number };
 
 export const monitorsChannel = 'ninjacat_monitors';
 
-/**
- * The notification that tells the monitor service a monitor changed. Run
- * inside the transaction that writes the row, so it leaves only on commit; it
- * can still be lost, and the service re-reads the table every 30 s anyway.
- */
+// Sent inside the transaction that writes the row, so it leaves only on commit. It can
+// still be lost; the monitor service re-reads the table every 30 s anyway.
 export function monitorChanged(tenantId: string, change: MonitorVersion) {
 	return sql`select pg_notify(${monitorsChannel}, ${`${tenantId}/${change.id}/${change.version}`})`;
 }
 
 const returned = { id: monitor.id, version: monitor.version };
 
-// Field by field: a definition parsed at runtime may carry more keys than its
-// type, and Drizzle writes every key that names a column (tenantId among them).
-function columnsOf(definition: MonitorDefinition) {
-	return {
-		name: definition.name,
-		type: definition.type,
-		query: definition.query,
-		message: definition.message,
-		options: definition.options,
-		tags: definition.tags,
-		priority: definition.priority,
-		editor: definition.editor
-	};
-}
-
 // A live monitor of the tenant; a deleted one is not changed again.
 const live = (tenantId: string, id: number) =>
 	and(eq(monitor.id, id), eq(monitor.tenantId, tenantId), isNull(monitor.deletedAt));
 
-const listed = {
-	id: monitor.id,
-	name: monitor.name,
-	query: monitor.query,
-	tags: monitor.tags,
-	priority: monitor.priority,
-	// The list needs only the method, not the whole view.
-	editorMethod: sql<string | null>`${monitor.editor}->>'method'`,
-	updatedAt: monitor.updatedAt
-};
-
-/** The tenant's live monitors, by name. */
 export function listMonitors(db: Database, tenantId: string) {
 	return db
-		.select(listed)
+		.select({
+			id: monitor.id,
+			name: monitor.name,
+			query: monitor.query,
+			tags: monitor.tags,
+			priority: monitor.priority,
+			editorMethod: sql<string | null>`${monitor.editor}->>'method'`
+		})
 		.from(monitor)
 		.where(and(eq(monitor.tenantId, tenantId), isNull(monitor.deletedAt)))
 		.orderBy(asc(monitor.name), asc(monitor.id));
 }
 
-/** One live monitor of the tenant, or undefined. */
 export async function findMonitor(db: Database, tenantId: string, id: number) {
-	const [found] = await db
-		.select({
-			id: monitor.id,
-			name: monitor.name,
-			type: monitor.type,
-			query: monitor.query,
-			message: monitor.message,
-			options: monitor.options,
-			tags: monitor.tags,
-			priority: monitor.priority,
-			editor: monitor.editor,
-			version: monitor.version,
-			createdAt: monitor.createdAt,
-			updatedAt: monitor.updatedAt
-		})
-		.from(monitor)
-		.where(live(tenantId, id));
+	const [found] = await db.select().from(monitor).where(live(tenantId, id));
 	return found;
 }
 
@@ -104,7 +55,7 @@ export function createMonitor(
 	return db.transaction(async (tx) => {
 		const [created] = await tx
 			.insert(monitor)
-			.values({ ...columnsOf(definition), tenantId, createdById: actorId, updatedById: actorId })
+			.values({ ...definition, tenantId, createdById: actorId, updatedById: actorId })
 			.returning(returned);
 		await tx.execute(monitorChanged(tenantId, created));
 		return created;
@@ -123,7 +74,7 @@ export function updateMonitor(
 		const [updated] = await tx
 			.update(monitor)
 			.set({
-				...columnsOf(definition),
+				...definition,
 				version: sql`${monitor.version} + 1`,
 				updatedById: actorId,
 				updatedAt: sql`now()`

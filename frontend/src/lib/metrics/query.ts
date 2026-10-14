@@ -164,7 +164,7 @@ export function defaultView(): ExplorerView {
 	};
 }
 
-function pick<T extends string>(allowed: readonly T[], value: unknown, fallback: T): T {
+export function pick<T extends string>(allowed: readonly T[], value: unknown, fallback: T): T {
 	return allowed.includes(value as T) ? (value as T) : fallback;
 }
 

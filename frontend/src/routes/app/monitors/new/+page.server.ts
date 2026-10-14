@@ -1,7 +1,7 @@
 import { defaultMonitorView, fromExplorer } from '$lib/monitors/definition';
 import { readView } from '$lib/metrics/query';
 import { saveMonitor } from '$lib/server/monitor-save';
-import { fetchMetricNames, NinjacatError } from '$lib/server/ninjacat';
+import { fetchMetricNames, reasonOf } from '$lib/server/ninjacat';
 import type { Actions, PageServerLoad } from './$types';
 
 // The explorer's "Create monitor" opens this page with its view (?view=).
@@ -15,7 +15,7 @@ export const load: PageServerLoad = async ({ url }) => {
 		return {
 			initial,
 			metrics: [] as string[],
-			metricsError: e instanceof NinjacatError ? e.message : String(e)
+			metricsError: reasonOf(e)
 		};
 	}
 };
