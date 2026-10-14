@@ -503,8 +503,9 @@ data is here; the product is not.
 - [ ] **Anomaly monitors keep their models in the entity's memory**
       (`Monitor/Evaluate.fit`, `Monitors/Entity.fs`). So: a group that appears between
       refits is learning until the next refit (up to an hour); a hand-off or a restart
-      refits every model; and refits are not counted in `ninjacat.monitor.*`, so their
-      cost is visible only in `evaluation.time`.
+      refits every model; a seasonal forecast refits on every evaluation, as nothing
+      caches it; and refits are not counted in `ninjacat.monitor.*`, so their cost is
+      visible only in `evaluation.time`.
 
 ## 7. Panel
 

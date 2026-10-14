@@ -521,15 +521,36 @@ let ``models are fitted again once they are stale or the query changed`` () =
     Assert.Equal(at.AddMinutes 1.0, (fitAt (Some first) (at.AddMinutes 1.0) other).At)
     Assert.Equal(Ok None, (fit execute tenant Plan.defaultRetention (basic "" "") None at).Result)
 
-// --- not yet ------------------------------------------------------------------------------
+// --- forecast ---------------------------------------------------------------------------
+
+/// A line through the last hour: `slope` a minute, `start` an hour ago.
+let private line (start: float) (slope: float) =
+    [ for m in 0..59 ->
+          { Metric = "cpu"
+            Groups = []
+            Time = windowTo.AddMinutes(float (m - 60))
+            Value = start + slope * float m } ]
 
 [<Fact>]
-let ``forecast monitors are refused until they are evaluated`` () =
+let ``a forecast is the highest upper bound over its horizon`` () =
     let d = definition "max(next_1d):forecast(avg:cpu{*}, 'linear', 1, history='1h') >= 2000" ""
+    let e = evaluated (line 0.0 1.0) d
+    Assert.Equal(TimeSpan.FromHours 1.0, e.Period.To - e.Period.From)
+    // A minute a minute: 60 by the window's end, a day of minutes more.
+    Assert.InRange(value e "*", 1450.0, 1550.0)
 
-    match evaluateWith 1000 [] d with
-    | Error e -> Assert.Contains("not evaluated yet", e)
-    | Ok e -> Assert.Fail $"expected an error, got {e}"
+[<Fact>]
+let ``a forecast with <= is the lowest lower bound`` () =
+    let d = definition "min(next_1d):forecast(avg:cpu{*}, 'linear', 1, history='1h') <= -1000" ""
+    Assert.InRange(value (evaluated (line 0.0 -1.0) d) "*", -1550.0, -1450.0)
+
+[<Fact>]
+let ``a forecast without the history to fit is learning`` () =
+    let d = definition "max(next_1d):forecast(avg:cpu{*}, 'linear', 1, history='1h') >= 90" ""
+    let g = group (evaluated (line 0.0 1.0 |> List.truncate 1) d)
+    Assert.Contains("learning", string g.Reading)
+
+// --- not yet ------------------------------------------------------------------------------
 
 [<Fact>]
 let ``outlier monitors are refused until they are evaluated`` () =

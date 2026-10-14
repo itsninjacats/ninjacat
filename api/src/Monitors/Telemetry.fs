@@ -45,7 +45,7 @@ type Counters() =
     member val SkippedPending = Counter()
     /// The engine judged no group: the window was not full, or had no value.
     member val SkippedWindow = Counter()
-    /// No group judged while a seasonal model has too little history.
+    /// No group judged while a model, or a forecast, has too little history.
     member val SkippedLearning = Counter()
     /// Stopwatch ticks spent evaluating, the wait for the gate left out.
     member val EvaluationTicks = Counter()

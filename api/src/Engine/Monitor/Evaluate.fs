@@ -26,7 +26,7 @@ type Period = { From: DateTimeOffset; To: DateTimeOffset }
 type SkipCause =
     /// The window is not full, or has no value.
     | Incomplete
-    /// A seasonal model has too little history yet.
+    /// A seasonal model, or a forecast, has too little history yet.
     | Learning
 
 type Reading =
@@ -126,6 +126,9 @@ let private dividing (shift: TimeSpan) (step: TimeSpan) : TimeSpan =
 /// 1500 points in the window, and for a change to divide its shift.
 ///
 /// WARNING(undocumented): 15 s, so one agent point falls in one bucket.
+///
+/// WARNING(undocumented): a forecast's step also fits 1500 points in its
+/// horizon, which the forecast is drawn over at the same step.
 let private stepOf (q: MonitorQuery) : TimeSpan =
     let rollup = rollupInterval q
 
@@ -136,7 +139,12 @@ let private stepOf (q: MonitorQuery) : TimeSpan =
         | None, Forecast { Interval = Some interval } -> interval
         | None, _ -> TimeSpan.FromSeconds 15.0
 
-    let fitted = Plan.step (reach q) (Some hint)
+    let span =
+        match q.Detection with
+        | Forecast _ -> max (reach q) q.Window.Length
+        | _ -> reach q
+
+    let fitted = Plan.step span (Some hint)
 
     match rollup, q.Detection with
     | None, Change c -> dividing c.Shift.Length fitted
@@ -159,9 +167,13 @@ let private request (q: MonitorQuery) (p: Period) (step: TimeSpan) : ParsedTimes
             match formula with
             | Call(fn, Value inner :: rest) -> [ Call(fn, Value(Call("default_zero", [ Value inner ])) :: rest) ]
             | other -> [ other ]
+        // The engine's horizon is the monitor's next_… window.
+        | Forecast _ ->
+            match formula with
+            | Call(fn, args) -> [ Call(fn, args @ [ Named("horizon", Quoted $"{int64 q.Window.Length.TotalSeconds}s") ]) ]
+            | other -> [ other ]
         | Threshold
         | Anomaly _
-        | Forecast _
         | Outlier _ -> [ formula ]
 
     { From = p.From
@@ -198,7 +210,8 @@ let period (retention: Plan.Retention) (d: Definition) (at: DateTimeOffset) : Pe
 type private Line =
     { Tags: Engine.Tag list
       Points: (DateTimeOffset * float) list
-      Expected: Map<DateTimeOffset, Engine.Band> }
+      Expected: Map<DateTimeOffset, Engine.Band>
+      Forecast: Engine.Band list }
 
 /// The group a series belongs to; None for an N/A group, which Datadog drops.
 /// A series with several values of a `by` tag is already one series per value
@@ -324,6 +337,21 @@ let private anomalyReading (d: Definition) (a: AnomalySpec) (p: Period) (step: T
             let recovery = anomalous a (p.To - recoveryWindow.Length) line points
             Judged fraction, Some(defaultArg recovery fraction)
 
+/// A forecast's value: the highest upper bound over the horizon for `>=`, the
+/// lowest lower bound for `<=`.
+let private forecastReading (q: MonitorQuery) (line: Line) : Reading =
+    match finite line.Points, line.Forecast with
+    | [], _ -> Skipped(Incomplete, "no bucket in the window has a value")
+    | _, [] -> Skipped(Learning, "learning: too little history to forecast")
+    | _, ranges ->
+        match q.Comparator with
+        | Le
+        | Lt -> Judged(ranges |> List.map _.Lower |> List.min)
+        | Ge
+        | Gt
+        | Eq
+        | Ne -> Judged(ranges |> List.map _.Upper |> List.max)
+
 // --- running ---------------------------------------------------------------------------
 
 let private timeOf (ms: int64) = DateTimeOffset.FromUnixTimeMilliseconds ms
@@ -368,7 +396,8 @@ let private timeseries execute tenant retention at (models: Fit option) (req: Pa
                           [ for s in r.Series ->
                                 { Tags = s.Tags
                                   Points = s.Points |> List.map (fun p -> p.Time, p.Value)
-                                  Expected = s.Points |> List.choose (fun p -> p.Expected |> Option.map (fun e -> p.Time, e)) |> Map.ofList } ] ]
+                                  Expected = s.Points |> List.choose (fun p -> p.Expected |> Option.map (fun e -> p.Time, e)) |> Map.ofList
+                                  Forecast = s.Forecast |> List.map _.Band } ] ]
     }
 
 /// Each output's series as one value: each query reduced by the time
@@ -387,7 +416,8 @@ let private scalar execute tenant retention at (agg: TimeAggregator) (req: Parse
                               [ for s in series ->
                                     { Tags = Engine.tags s.GroupTags
                                       Points = s.Points |> Map.toList |> List.map (fun (t, v) -> timeOf t, v)
-                                      Expected = Map.empty } ] ]
+                                      Expected = Map.empty
+                                      Forecast = [] } ] ]
     }
 
 /// The models an evaluation of `d` at `at` uses: `previous` while it is
@@ -437,13 +467,13 @@ let evaluate
         let detection =
             match q.Detection with
             | Threshold
-            | Anomaly _ -> Ok()
+            | Anomaly _
+            | Forecast _ -> Ok()
             | Change _ when q.AsCount -> Ok()
             | Change c when c.Shift.Length.Ticks % step.Ticks = 0L -> Ok()
             | Change c ->
                 Error
                     $"change over {c.Shift.Text}: the step is {step.TotalSeconds} s, which does not divide the shift, so no bucket has one to compare with"
-            | Forecast _ -> Error "forecast monitors are not evaluated yet"
             | Outlier _ -> Error "outlier monitors are not evaluated yet"
 
         match detection with
@@ -479,9 +509,9 @@ let evaluate
                         match q.Detection with
                         | Threshold
                         | Change _
-                        | Forecast _
                         | Outlier _ -> readingOf d p step (points key line), None
                         | Anomaly a -> anomalyReading d a p step line
+                        | Forecast _ -> forecastReading q line, None
 
                     // WARNING(undocumented): on the as_count path the one
                     // point stands for a window whose empty buckets read 0, so
