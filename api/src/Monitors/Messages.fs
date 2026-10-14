@@ -1,7 +1,4 @@
-/// What one node sends another. Every such message implements
-/// `IMonitorMessage`, the one type the serializer is bound to; strict
-/// serialization refuses anything else, so a message without the marker fails
-/// in the cluster tests rather than in production.
+/// What nodes send each other; every message implements IMonitorMessage, the one type the serializer is bound to.
 module NinjaCat.Api.Monitors.Messages
 
 open System.Runtime.Serialization
@@ -10,9 +7,7 @@ open System.Text.Json.Serialization
 open Akka.Actor
 open Akka.Serialization
 
-/// Its own options, not the engine's: those follow Datadog's wire format, and
-/// a change made there must not change what nodes of two versions say to
-/// each other during a rollout.
+/// Own options, so a change to the engine's cannot break a rolling upgrade.
 let private json =
     let o = JsonSerializerOptions(JsonSerializerDefaults.Web)
     o.Converters.Add(JsonFSharpConverter())
@@ -22,27 +17,24 @@ type IMonitorMessage =
     interface
     end
 
-/// A version of the monitor exists; a newer one than the entity has is read.
 type Ensure =
     { Monitor: string
       Version: int }
 
     interface IMonitorMessage
 
-/// The monitor was deleted: its groups are closed and the entity stops.
 type Delete =
     { Monitor: string
       Version: int }
 
     interface IMonitorMessage
 
-/// Stop for a hand-off, once nothing is left to store.
+/// The hand-off stop.
 type Stop =
     | Stop
 
     interface IMonitorMessage
 
-/// The monitor messages as JSON, the manifest naming the type.
 type MessageSerializer(system: ExtendedActorSystem) =
     inherit SerializerWithStringManifest(system)
 

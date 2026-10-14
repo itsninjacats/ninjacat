@@ -27,43 +27,9 @@ open NinjaCat.Api.Monitors.Telemetry
 /// pass the query process's 7 s.
 let private queryLimitSeconds = 30
 
-/// How often the manager reads the monitor table again.
 let private resyncInterval = TimeSpan.FromSeconds 30.0
 
-/// How often the notifier looks for new transitions.
 let private notifyInterval = TimeSpan.FromSeconds 5.0
-
-let private servicesOf (settings: Settings) (counts: Counters) (provider: IServiceProvider) : Services =
-    let db = provider.GetRequiredService<NpgsqlDataSource>()
-    let sink = provider.GetRequiredService<ClickHouseSink>()
-    let reader = provider.GetRequiredService<ClickHouse.Driver.ClickHouseClient>()
-
-    { Definition = byKey db
-      History = Store.history reader
-      Execute = fun ct sql -> ClickHouse.metricRows reader ct sql
-      Insert = fun rows ct -> sink.InsertAsync(MonitorTransitions.table, rows, ct)
-      Record = fun rows -> Sink.write (sink :> ISink) MonitorEvaluations.table rows
-      Gate = provider.GetRequiredService<SemaphoreSlim>()
-      GateWait = id
-      Clock = fun () -> DateTimeOffset.UtcNow
-      Retention = settings.Platform.MetricsRetention
-      MaxGroups = settings.MaxGroups
-      Log = provider.GetRequiredService<ILoggerFactory>().CreateLogger "NinjaCat.Api.Monitors"
-      Retry = TimeSpan.FromSeconds 30.0
-      Resync = resyncInterval
-      Counts = counts }
-
-let private notifierOf (counts: Counters) (provider: IServiceProvider) : NotifierServices =
-    let sink = provider.GetRequiredService<ClickHouseSink>()
-    let reader = provider.GetRequiredService<ClickHouse.Driver.ClickHouseClient>()
-
-    { Cursor = cursor reader
-      Due = due reader
-      Write = fun rows ct -> sink.InsertAsync(MonitorNotifications.table, rows, ct)
-      Clock = fun () -> DateTimeOffset.UtcNow
-      Interval = notifyInterval
-      Counts = counts
-      Log = provider.GetRequiredService<ILoggerFactory>().CreateLogger "NinjaCat.Api.Monitors.Notifier" }
 
 let private systemOf (provider: IServiceProvider) () = provider.GetRequiredService<ActorSystem>()
 
@@ -75,6 +41,8 @@ let private probe (tag: string) =
 let run (settings: Settings) (args: string[]) : int =
     let cfg = settings.Platform
     let counts = Counters()
+    let gate = new SemaphoreSlim(settings.Concurrency, settings.Concurrency)
+    use reader = ClickHouse.createReadClient cfg queryLimitSeconds
     let builder = Hosting.createBuilder args
 
     // Health is all this process serves over HTTP.
@@ -94,31 +62,58 @@ let run (settings: Settings) (args: string[]) : int =
     builder.Services
         .AddNpgsqlDataSource(Postgres.connectionString cfg.DatabaseUrl)
         .AddSingleton<Config.Config>(cfg)
-        .AddSingleton<ClickHouse.Driver.ClickHouseClient>(fun _ -> ClickHouse.createReadClient cfg queryLimitSeconds)
         .AddSingleton<ClickHouseSink>(fun services ->
             ClickHouseSink(
                 ClickHouse.createWriteClient cfg,
                 services.GetRequiredService<ILoggerFactory>().CreateLogger "NinjaCat.Api.Storage"
             ))
-        .AddSingleton<SemaphoreSlim>(new SemaphoreSlim(settings.Concurrency, settings.Concurrency))
         // Registered before Akka, so stopped after it: the entities' last
         // evaluations are flushed.
         .AddHostedService<Hosting.SinkLifetime>()
         .AddAkka(
             systemName,
             fun (akka: AkkaConfigurationBuilder) (provider: IServiceProvider) ->
+                let db = provider.GetRequiredService<NpgsqlDataSource>()
+                let sink = provider.GetRequiredService<ClickHouseSink>()
+                let loggers = provider.GetRequiredService<ILoggerFactory>()
+
+                let entity: Services =
+                    { Definition = byKey db
+                      History = Store.history reader
+                      Execute = fun ct sql -> ClickHouse.metricRows reader ct sql
+                      Insert = fun rows ct -> sink.InsertAsync(MonitorTransitions.table, rows, ct)
+                      Record = fun rows -> Sink.write (sink :> ISink) MonitorEvaluations.table rows
+                      Gate = gate
+                      GateWait = id
+                      Clock = fun () -> DateTimeOffset.UtcNow
+                      Retention = cfg.MetricsRetention
+                      MaxGroups = settings.MaxGroups
+                      Log = loggers.CreateLogger "NinjaCat.Api.Monitors"
+                      Retry = TimeSpan.FromSeconds 30.0
+                      Resync = resyncInterval
+                      Counts = counts }
+
+                let notifier: NotifierServices =
+                    { Cursor = cursor reader
+                      Due = due reader
+                      Write = fun rows ct -> sink.InsertAsync(MonitorNotifications.table, rows, ct)
+                      Clock = fun () -> DateTimeOffset.UtcNow
+                      Interval = notifyInterval
+                      Counts = counts
+                      Log = loggers.CreateLogger "NinjaCat.Api.Monitors.Notifier" }
+
                 let manager (registry: IReadOnlyActorRegistry) : ManagerServices =
-                    { Snapshot = snapshot (provider.GetRequiredService<NpgsqlDataSource>())
+                    { Snapshot = snapshot db
                       Listen = listen listenDb channel
                       Registry = registry
                       Interval = resyncInterval
-                      Log = provider.GetRequiredService<ILoggerFactory>().CreateLogger "NinjaCat.Api.Monitors.Manager" }
+                      Log = loggers.CreateLogger "NinjaCat.Api.Monitors.Manager" }
 
                 akka
                     .ConfigureLoggers(fun loggers -> loggers.ClearLoggers().AddLoggerFactory() |> ignore)
                     .WithActorSystemLivenessCheck()
                     .WithAkkaClusterReadinessCheck()
-                |> Cluster.configure settings.Node (servicesOf settings counts provider) manager (notifierOf counts provider)
+                |> Cluster.configure settings.Node entity manager notifier
                 |> ignore
         )
         .AddSingleton<Reading>(fun provider -> clusterMembers (systemOf provider))

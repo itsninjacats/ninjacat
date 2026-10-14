@@ -100,23 +100,15 @@ type NotifierActorTests() =
     [<Fact>]
     member this.``a write that fails leaves the cursor where it was, and is counted``() =
         fakes.FailingWrites <- 1
-        let batch = polled [ due "host:a" (t0.AddMinutes 1.0) ]
-        fakes.Batches.Enqueue batch
-        fakes.Batches.Enqueue batch
+        fakes.Batches.Enqueue(polled [ due "host:a" (t0.AddMinutes 1.0) ])
+        // Lag 120 s, so the 240 s below can only come from the failed poll.
+        fakes.Batches.Enqueue(polled [ due "host:a" (t0.AddMinutes 3.0) ])
         this.Start()
 
         this.AwaitAssert((fun () -> Assert.Single fakes.Written |> ignore), wait)
         Assert.Equal<DateTimeOffset list>([ t0; t0 ], fakes.Polls |> Seq.take 2 |> List.ofSeq)
         Assert.Equal(1.0, fakes.Counts.NotifierFailed.Value)
-
-    [<Fact>]
-    member this.``a notifier that cannot write still reports its lag``() =
-        fakes.FailingWrites <- 1
-        fakes.Batches.Enqueue(polled [ due "host:a" (t0.AddMinutes 1.0) ])
-        this.Start()
-
-        this.AwaitAssert((fun () -> Assert.Equal(1.0, fakes.Counts.NotifierFailed.Value)), wait)
-        Assert.Empty fakes.Written
+        // Reported even by a poll whose write failed.
         Assert.Equal(240.0, fakes.Counts.NotifierLag.Take())
 
     [<Fact>]
@@ -143,8 +135,6 @@ type NotifierActorTests() =
 
         this.AwaitAssert((fun () -> Assert.NotEmpty fakes.Polls), wait)
         Assert.Equal(t0.AddMinutes(5.0).AddDays -1.0, Seq.head fakes.Polls)
-
-// --- ClickHouse ------------------------------------------------------------------------
 
 let private transition (monitor: uint64) (group: string) (at: DateTime) (into: string) (reason: string) : MonitorTransitionRow =
     { TenantID = "acme"

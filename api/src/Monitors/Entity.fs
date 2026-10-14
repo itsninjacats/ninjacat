@@ -1,8 +1,4 @@
-/// One monitor, alive: it evaluates on its ticks, moves its groups through
-/// the state machine and stores the transitions before it adopts them.
-///
-/// No handler awaits, so ticks, Ensure and a hand-off Stop never queue
-/// behind a slow query: every slow step runs detached (`Detached.run`).
+/// One monitor: evaluates on its ticks and stores transitions before adopting them; slow work runs detached.
 module NinjaCat.Api.Monitors.Entity
 
 open System
@@ -25,32 +21,21 @@ open NinjaCat.Api.Monitors.Telemetry
 /// The aligned tick `at`, the evaluation's identity.
 type Tick = | Tick of at: DateTimeOffset
 
-/// What an entity reaches outside itself. The host passes Postgres,
-/// ClickHouse and the sink; tests pass functions over lists.
 type Services =
     { Definition: MonitorKey -> CancellationToken -> Task<MonitorRow option>
       History: MonitorKey -> DateTimeOffset -> CancellationToken -> Task<Store.History>
-      /// Runs the engine's SQL.
       Execute: CancellationToken -> Sql -> Task<Compile.Row list>
-      /// Stores transitions, and fails if they were not stored.
       Insert: MonitorTransitionRow[] -> CancellationToken -> Task
-      /// Hands evaluations to the sink; losing one is acceptable.
       Record: MonitorEvaluationRow[] -> unit
-      /// The node's slots for loads, evaluations and transition inserts.
       Gate: SemaphoreSlim
-      /// How long an evaluation waits for a slot, given its interval; the
-      /// host waits the whole interval.
+      /// The host waits the whole interval.
       GateWait: TimeSpan -> TimeSpan
       Clock: unit -> DateTimeOffset
       Retention: Plan.Retention
       MaxGroups: int
       Log: ILogger
-      /// How long after a failed read of Postgres or ClickHouse it is read
-      /// again.
       Retry: TimeSpan
-      /// How often the manager sends Ensure. After three or four resyncs
-      /// without one the entity reads its definition itself, so a lost Delete
-      /// still closes it.
+      /// After 3 to 4 silent resyncs the entity rereads, so a lost Delete still closes it.
       Resync: TimeSpan
       Counts: Counters }
 
@@ -79,8 +64,6 @@ type private Pending =
       QueryHash: string option
       Evaluations: MonitorEvaluationRow[] }
 
-let private problemsText (problems: string list) = String.concat "; " problems
-
 type MonitorEntity(key: MonitorKey, services: Services) =
     inherit UntypedActor()
 
@@ -90,17 +73,12 @@ type MonitorEntity(key: MonitorKey, services: Services) =
     let mutable row: MonitorRow option = None
     let mutable definition: Result<Definition, string list> = Error [ "not loaded" ]
     let mutable groups: Map<string, Group> = Map.empty
-    /// The hash the groups were judged under.
     let mutable queryHash: string option = None
     let mutable lastAt: DateTimeOffset option = None
     let mutable models: Fit option = None
-    /// Evaluating, storing or reading the definition.
     let mutable busy = false
     let mutable pending: Pending option = None
-    /// A newer version or a deletion was announced: read the row again once
-    /// idle.
     let mutable reloadDue = false
-    /// The monitor is gone; only its last transitions are left to store.
     let mutable closing = false
     let mutable stopping = false
     let mutable lastAttemptMade = false
@@ -112,11 +90,6 @@ type MonitorEntity(key: MonitorKey, services: Services) =
     let unheardAfter =
         let spread = float ((key.Text.GetHashCode() &&& 0x7fffffff) % 1000) / 1000.0
         services.Resync * (3.0 + spread)
-
-    let validDefinition () =
-        match definition with
-        | Ok d -> Some d
-        | Error _ -> None
 
     let counts = services.Counts
 
@@ -146,7 +119,7 @@ type MonitorEntity(key: MonitorKey, services: Services) =
         let version = row |> Option.map _.Version |> Option.defaultValue 0
 
         transitions
-        |> List.map (Store.transitionRow key version (defaultArg hash "") (validDefinition ()) actor)
+        |> List.map (Store.transitionRow key version (defaultArg hash "") (Result.toOption definition) actor)
         |> Array.ofList
 
     member private this.Arm() =
@@ -163,36 +136,33 @@ type MonitorEntity(key: MonitorKey, services: Services) =
         this.timers.StartSingleTimer("unheard", Unheard, unheardAfter)
 
     member private this.Load() =
-        let gate = services.Gate
         let now = services.Clock()
 
         Detached.run cancel.Token this.Self (fun e -> LoadFailed e.Message) (fun ct ->
             task {
-                do! gate.WaitAsync ct
+                do! services.Gate.WaitAsync ct
 
                 try
                     let! found = services.Definition key ct
                     let! history = services.History key now ct
                     return Loaded(found, history)
                 finally
-                    gate.Release() |> ignore
+                    services.Gate.Release() |> ignore
             })
 
     member private this.Reload() =
         busy <- true
         reloadDue <- false
 
-        let gate = services.Gate
-
         Detached.run cancel.Token this.Self (fun e -> ReloadFailed e.Message) (fun ct ->
             task {
-                do! gate.WaitAsync ct
+                do! services.Gate.WaitAsync ct
 
                 try
                     let! found = services.Definition key ct
                     return Reloaded found
                 finally
-                    gate.Release() |> ignore
+                    services.Gate.Release() |> ignore
             })
 
     member private this.InsertPending() =
@@ -200,11 +170,10 @@ type MonitorEntity(key: MonitorKey, services: Services) =
         | None -> ()
         | Some p ->
             busy <- true
-            let gate = services.Gate
 
             Detached.run cancel.Token this.Self (fun e -> CommitFailed e.Message) (fun ct ->
                 task {
-                    do! gate.WaitAsync ct
+                    do! services.Gate.WaitAsync ct
 
                     try
                         use timeout = CancellationTokenSource.CreateLinkedTokenSource ct
@@ -212,11 +181,9 @@ type MonitorEntity(key: MonitorKey, services: Services) =
                         do! services.Insert p.Rows timeout.Token
                         return Committed
                     finally
-                        gate.Release() |> ignore
+                        services.Gate.Release() |> ignore
                 })
 
-    /// Stores the transitions and adopts `next` once they are stored; with
-    /// none, adopts at once.
     member private this.Commit
         (rows: MonitorTransitionRow[], next: Map<string, Group>, hash: string option, evaluations: MonitorEvaluationRow[])
         =
@@ -236,22 +203,18 @@ type MonitorEntity(key: MonitorKey, services: Services) =
 
             this.InsertPending()
 
-    /// The monitor is gone: every judged group goes to OK, not notified, and
-    /// the entity stops once that is stored.
     member private this.Close(actor: string option) =
         let next, transitions = close Reason.Deleted (changeAt ()) groups
         closing <- true
         this.Commit(rowsOf actor queryHash transitions, next, queryHash, [||])
 
-    /// A definition read from Postgres becomes the one evaluated. A changed
-    /// query closes the groups judged under the old one.
     member private this.Apply(r: MonitorRow) =
         row <- Some r
         definition <- Validate.definition services.Retention (services.Clock()) r.Type r.Query r.Options
 
         match definition with
         | Error problems ->
-            services.Log.LogWarning("Monitor {Monitor} version {Version} is not valid: {Problems}", key.Text, r.Version, problemsText problems)
+            services.Log.LogWarning("Monitor {Monitor} version {Version} is not valid: {Problems}", key.Text, r.Version, String.concat "; " problems)
         | Ok d ->
             let hash = Some(State.queryHash d.Query)
 
@@ -286,7 +249,6 @@ type MonitorEntity(key: MonitorKey, services: Services) =
         | Some r when row.IsNone || r.Version > row.Value.Version -> this.Apply r
         | Some _ -> ()
 
-    /// What is due once nothing is running.
     member private this.Settle() =
         if busy then
             ()
@@ -303,13 +265,12 @@ type MonitorEntity(key: MonitorKey, services: Services) =
 
     member private this.Evaluate(d: Definition, at: DateTimeOffset) =
         busy <- true
-        let gate = services.Gate
         let wait = services.GateWait(frequency d.Query)
         let previous = models
 
         Detached.run cancel.Token this.Self (fun e -> Evaluated(at, Error e.Message, previous)) (fun ct ->
             task {
-                let! granted = gate.WaitAsync(wait, ct)
+                let! granted = services.Gate.WaitAsync(wait, ct)
 
                 if not granted then
                     return GateRefused at
@@ -329,7 +290,7 @@ type MonitorEntity(key: MonitorKey, services: Services) =
                                 return Evaluated(at, Error e.Message, current)
                     finally
                         counts.EvaluationTicks.Add(Stopwatch.GetTimestamp() - started)
-                        gate.Release() |> ignore
+                        services.Gate.Release() |> ignore
             })
 
     member private this.OnTick(at: DateTimeOffset) =
@@ -340,7 +301,7 @@ type MonitorEntity(key: MonitorKey, services: Services) =
             if not busy then this.InsertPending()
         else
             match definition with
-            | Error problems -> failed at ("the definition is not valid: " + problemsText problems)
+            | Error problems -> failed at ("the definition is not valid: " + String.concat "; " problems)
             | Ok _ when busy -> skipped counts.SkippedBusy at "busy: an evaluation, its insert or a definition read is still running"
             | Ok _ when pending.IsSome ->
                 skipped counts.SkippedPending at "transitions of a failed insert are stored first"
@@ -374,9 +335,7 @@ type MonitorEntity(key: MonitorKey, services: Services) =
 
             // With Postgres down every entity fails here; one warning each
             // is enough.
-            if reloadFailing then
-                services.Log.LogDebug("Monitor {Monitor}: its definition could not be read again: {Error}", key.Text, error)
-            else
+            if not reloadFailing then
                 services.Log.LogWarning("Monitor {Monitor}: its definition could not be read, retrying every {Retry}: {Error}", key.Text, services.Retry, error)
 
             reloadFailing <- true
@@ -406,7 +365,7 @@ type MonitorEntity(key: MonitorKey, services: Services) =
 
             // A definition is replaced only while nothing runs, so the one
             // evaluated is still the one held.
-            match validDefinition () with
+            match Result.toOption definition with
             | Some d ->
                 let next, transitions = step d groups evaluation at
                 this.Commit(rowsOf None queryHash transitions, next, queryHash, Store.evaluationRows key at next evaluation)
@@ -458,14 +417,11 @@ type MonitorEntity(key: MonitorKey, services: Services) =
     override this.OnReceive(message: obj) =
         match message with
         | :? Outcome as outcome -> this.OnOutcome outcome
-        // Matched before the stash, so a hand-off never waits for a load.
-        // With nothing to store, a running load, read or evaluation is
-        // cancelled in PostStop; the next owner evaluates the next tick.
+        // Before the stash, so a hand-off never waits for a load. PostStop cancels
+        // what is running; the next owner evaluates the next tick.
         | :? Stop when pending.IsNone -> UntypedActor.Context.Stop this.Self
         | _ when not loaded -> this.stash.Stash()
-        | :? Tick as tick ->
-            let (Tick at) = tick
-            this.OnTick at
+        | :? Tick as (Tick at) -> this.OnTick at
         | :? Ensure as ensure ->
             this.Heard()
 
@@ -482,8 +438,7 @@ type MonitorEntity(key: MonitorKey, services: Services) =
             this.Settle()
         | _ -> this.Unhandled message
 
-    // Akka sets these from the base constructor, before a `let` initializer
-    // would run and overwrite them; a DefaultValue field is not initialized.
+    // Akka sets these from the base constructor; a `let` initializer would overwrite them.
     [<DefaultValue>]
     val mutable private timers: ITimerScheduler
 

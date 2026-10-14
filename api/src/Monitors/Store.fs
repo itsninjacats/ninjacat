@@ -1,5 +1,3 @@
-/// What a monitor leaves in ClickHouse: its transitions and evaluations as
-/// rows, and the groups an entity starts from, read back from them.
 module NinjaCat.Api.Monitors.Store
 
 open System
@@ -15,8 +13,6 @@ open NinjaCat.Api.Platform
 open NinjaCat.Api.Storage.Rows
 open NinjaCat.Api.Monitors.Definitions
 
-/// The groups an entity starts from, and the query hash they were judged
-/// under; None when no group is open.
 type History =
     { Groups: Map<string, Group>
       QueryHash: string option }
@@ -28,12 +24,7 @@ let private stateText (s: Status option) =
     | Some s -> s.Text
     | None -> "none"
 
-let private utc (t: DateTimeOffset) = t.UtcDateTime
-
-/// A transition as stored, with what judged it: the definition's thresholds
-/// (Postgres keeps only the latest), its version and query hash, and the user
-/// whose change caused it. Without a valid definition the thresholds are left
-/// empty.
+/// The thresholds are kept on the row because Postgres has only the latest definition.
 let transitionRow
     (key: MonitorKey)
     (version: int)
@@ -42,10 +33,6 @@ let transitionRow
     (actor: string option)
     (t: Transition)
     : MonitorTransitionRow =
-    let thresholds = definition |> Option.map _.Options.Thresholds
-
-    let threshold (pick: Thresholds -> float option) = thresholds |> Option.bind pick
-
     { TenantID = key.Tenant
       MonitorID = uint64 key.Id
       MonitorVersion = uint32 version
@@ -53,7 +40,7 @@ let transitionRow
       MonitorKind = "metric"
       GroupKey = t.Key
       GroupTags = Array.ofList t.Tags
-      At = utc t.At
+      At = t.At.UtcDateTime
       FromState = stateText t.From
       ToState = t.To.Text
       Reason = t.Reason.Text
@@ -67,18 +54,17 @@ let transitionRow
         match definition with
         | Some d -> d.Query.Comparator.Text
         | None -> ""
-      Critical = threshold _.Critical
-      Warning = threshold _.Warning
-      CriticalRecovery = threshold _.CriticalRecovery
-      WarningRecovery = threshold _.WarningRecovery
+      Critical = definition |> Option.bind _.Options.Thresholds.Critical
+      Warning = definition |> Option.bind _.Options.Thresholds.Warning
+      CriticalRecovery = definition |> Option.bind _.Options.Thresholds.CriticalRecovery
+      WarningRecovery = definition |> Option.bind _.Options.Thresholds.WarningRecovery
       // A transition outside a tick judged no window; the zero time is
       // stored as the epoch.
-      WindowFrom = t.Period |> Option.map (fun p -> utc p.From) |> Option.defaultValue DateTime.MinValue
-      WindowTo = t.Period |> Option.map (fun p -> utc p.To) |> Option.defaultValue DateTime.MinValue
-      FirstTriggeredAt = t.FirstTriggeredAt |> Option.map utc
-      LastTriggeredAt = t.LastTriggeredAt |> Option.map utc }
+      WindowFrom = t.Period |> Option.map _.From.UtcDateTime |> Option.defaultValue DateTime.MinValue
+      WindowTo = t.Period |> Option.map _.To.UtcDateTime |> Option.defaultValue DateTime.MinValue
+      FirstTriggeredAt = t.FirstTriggeredAt |> Option.map _.UtcDateTime
+      LastTriggeredAt = t.LastTriggeredAt |> Option.map _.UtcDateTime }
 
-/// One row per group in the result, with the state the evaluation left it in.
 let evaluationRows (key: MonitorKey) (at: DateTimeOffset) (groups: Map<string, Group>) (e: Evaluation) : MonitorEvaluationRow[] =
     [| for r in e.Groups ->
            let value, outcome, detail =
@@ -89,79 +75,35 @@ let evaluationRows (key: MonitorKey) (at: DateTimeOffset) (groups: Map<string, G
            { TenantID = key.Tenant
              MonitorID = uint64 key.Id
              GroupKey = r.Key
-             At = utc at
+             At = at.UtcDateTime
              Value = value
              State = groups.TryFind r.Key |> Option.bind _.State |> stateText
              Outcome = outcome
              Detail = detail } |]
 
-/// The row of an evaluation that judged no group: skipped or failed as a
-/// whole. Its group key is empty, which no group has.
+/// An evaluation skipped or failed as a whole; its group key is empty, which no group has.
 let monitorRow (key: MonitorKey) (at: DateTimeOffset) (groups: Map<string, Group>) (outcome: string) (detail: string) : MonitorEvaluationRow =
     { TenantID = key.Tenant
       MonitorID = uint64 key.Id
       GroupKey = ""
-      At = utc at
+      At = at.UtcDateTime
       Value = None
       State = stateText (overall groups)
       Outcome = outcome
       Detail = detail }
-
-// --- reading back ----------------------------------------------------------------------
 
 let private closing = closes |> List.map _.Text |> set
 
 let private keyParameters (key: MonitorKey) =
     [ "tenant", SqlValue.String key.Tenant; "monitor", SqlValue.Int64 key.Id ]
 
-let private time (r: DbDataReader) (i: int) : DateTimeOffset =
+let time (r: DbDataReader) (i: int) : DateTimeOffset =
     DateTimeOffset(DateTime.SpecifyKind(r.GetDateTime i, DateTimeKind.Utc))
 
-let private optionalTime (r: DbDataReader) (i: int) : DateTimeOffset option =
+let optionalTime (r: DbDataReader) (i: int) : DateTimeOffset option =
     if r.IsDBNull i then None else Some(time r i)
 
-type private Latest =
-    { Key: string
-      Tags: string list
-      From: Status option
-      State: Status option
-      Reason: string
-      At: DateTimeOffset
-      FirstAt: DateTimeOffset
-      FirstTriggeredAt: DateTimeOffset option
-      LastTriggeredAt: DateTimeOffset option
-      QueryHash: string }
-
-/// Each group's latest transition. A repeated row (a retried insert, two
-/// owners during a handoff) has the same `at` and the same values.
-let private latest (client: ClickHouseClient) (key: MonitorKey) (ct: CancellationToken) : Task<Latest list> =
-    ClickHouse.query
-        client
-        ct
-        (fun r ->
-            { Key = r.GetString 0
-              Tags = (r.GetValue 1 :?> string[]) |> List.ofArray
-              State = Status.ofText (r.GetString 2)
-              Reason = r.GetString 3
-              At = time r 4
-              FirstAt = time r 5
-              FirstTriggeredAt = optionalTime r 6
-              LastTriggeredAt = optionalTime r 7
-              QueryHash = r.GetString 8
-              From = Status.ofText (r.GetString 9) })
-        { Text =
-            // argMax skips a NULL argument and would return an older trigger
-            // time; inside a tuple the NULL is kept.
-            "SELECT group_key, argMax(group_tags, at), argMax(to_state, at), argMax(reason, at), max(at), min(at), "
-            + "tupleElement(argMax(tuple(first_triggered_at, last_triggered_at), at), 1), "
-            + "tupleElement(argMax(tuple(first_triggered_at, last_triggered_at), at), 2), argMax(query_hash, at), "
-            + "argMax(from_state, at) "
-            + "FROM monitor_transitions WHERE tenant_id = {tenant:String} AND monitor_id = {monitor:Int64} "
-            + "GROUP BY group_key"
-          Parameters = keyParameters key }
-
-/// When each group was last in a result, from the evaluations of the last
-/// day: a group unseen longer is dropped at the next evaluation anyway.
+/// Only the last day: a group unseen longer is dropped at the next evaluation anyway.
 let private lastSeen (client: ClickHouseClient) (key: MonitorKey) (now: DateTimeOffset) (ct: CancellationToken) : Task<Map<string, DateTimeOffset>> =
     task {
         let! rows =
@@ -178,35 +120,63 @@ let private lastSeen (client: ClickHouseClient) (key: MonitorKey) (now: DateTime
         return Map.ofList rows
     }
 
-/// The open groups of a monitor, as its transitions and evaluations left
-/// them. A group whose latest transition closed it is not loaded.
 let history (client: ClickHouseClient) (key: MonitorKey) (now: DateTimeOffset) (ct: CancellationToken) : Task<History> =
     task {
-        let! transitions = latest client key ct
         let! seen = lastSeen client key now ct
-        let openGroups = transitions |> List.filter (fun t -> t.State.IsSome && not (closing.Contains t.Reason))
 
-        let groupOf (t: Latest) : Group =
-            let lastSeen = seen.TryFind t.Key |> Option.defaultValue t.At |> max t.At
+        // A repeated row (a retried insert, two owners during a hand-off) has
+        // the same `at` and the same values.
+        let! latest =
+            ClickHouse.query
+                client
+                ct
+                (fun r ->
+                    let groupKey = r.GetString 0
+                    let state = Status.ofText (r.GetString 2)
+                    let reason = r.GetString 3
+                    let at = time r 4
+                    let lastSeen = seen.TryFind groupKey |> Option.defaultValue at |> max at
 
-            { Key = t.Key
-              Tags = t.Tags
-              State = t.State
-              Since = t.At
-              FirstTriggeredAt = (if t.State = Some OK then None else t.FirstTriggeredAt)
-              LastTriggeredAt = t.LastTriggeredAt
-              FirstSeen = t.FirstAt
-              LastSeen = lastSeen
-              // Points are not stored with the evaluation; the last tick that
-              // saw the group is the nearest bound. It errs late, so No Data
-              // comes at most a window and the evaluation delay later.
-              LastPoint = lastSeen
-              Interrupted = (if t.State = Some NoData && t.Reason = Reason.NoDataShown.Text then t.From else None) }
+                    let group: Group =
+                        { Key = groupKey
+                          Tags = (r.GetValue 1 :?> string[]) |> List.ofArray
+                          State = state
+                          Since = at
+                          FirstTriggeredAt = (if state = Some OK then None else optionalTime r 6)
+                          LastTriggeredAt = optionalTime r 7
+                          FirstSeen = time r 5
+                          LastSeen = lastSeen
+                          // Points are not stored with the evaluation; the last tick that
+                          // saw the group is the nearest bound. It errs late, so No Data
+                          // comes at most a window and the evaluation delay later.
+                          LastPoint = lastSeen
+                          Interrupted =
+                            if state = Some NoData && reason = Reason.NoDataShown.Text then
+                                Status.ofText (r.GetString 9)
+                            else
+                                None }
+
+                    reason, r.GetString 8, group)
+                { Text =
+                    // argMax skips a NULL argument and would return an older trigger
+                    // time; inside a tuple the NULL is kept.
+                    "SELECT group_key, argMax(group_tags, at), argMax(to_state, at), argMax(reason, at), max(at), min(at), "
+                    + "tupleElement(argMax(tuple(first_triggered_at, last_triggered_at), at), 1), "
+                    + "tupleElement(argMax(tuple(first_triggered_at, last_triggered_at), at), 2), argMax(query_hash, at), "
+                    + "argMax(from_state, at) "
+                    + "FROM monitor_transitions WHERE tenant_id = {tenant:String} AND monitor_id = {monitor:Int64} "
+                    + "GROUP BY group_key"
+                  Parameters = keyParameters key }
+
+        let openGroups =
+            latest |> List.filter (fun (reason, _, g) -> g.State.IsSome && not (closing.Contains reason))
 
         return
-            { Groups = openGroups |> List.map (fun t -> t.Key, groupOf t) |> Map.ofList
+            { Groups = openGroups |> List.map (fun (_, _, g) -> g.Key, g) |> Map.ofList
               QueryHash =
                 match openGroups with
                 | [] -> None
-                | groups -> Some (List.maxBy _.At groups).QueryHash }
+                | groups ->
+                    let _, hash, _ = groups |> List.maxBy (fun (_, _, g) -> g.Since)
+                    Some hash }
     }

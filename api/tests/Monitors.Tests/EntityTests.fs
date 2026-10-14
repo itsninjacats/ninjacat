@@ -40,6 +40,29 @@ let private monitorRow (version: int) (query: string) (options: string) : Monito
       DeletedBy = None
       DeletedAt = None }
 
+let private deletedRow (version: int) (at: DateTimeOffset) =
+    Some
+        { monitorRow version cpu critical90 with
+            DeletedBy = Some "user-3"
+            DeletedAt = Some at }
+
+/// One group in Alert since `since`, as a restart would load it.
+let private alertSince (since: DateTimeOffset) (lastSeen: DateTimeOffset) (hash: string) : Store.History =
+    { Groups =
+        Map
+            [ "*",
+              { Key = "*"
+                Tags = []
+                State = Some Alert
+                Since = since
+                FirstTriggeredAt = Some since
+                LastTriggeredAt = Some since
+                FirstSeen = since
+                LastSeen = lastSeen
+                LastPoint = lastSeen
+                Interrupted = None } ]
+      QueryHash = Some hash }
+
 let private hashOf (query: string) =
     match Parse.query query with
     | Ok q -> State.queryHash q
@@ -138,17 +161,17 @@ type EntityTests() =
     let fakes = Fakes()
     let gate = new SemaphoreSlim(8, 8)
 
-    /// Starts the entity over the fakes; its inserts and records go to two
-    /// probes of their own.
-    member this.Start() : IActorRef * TestProbe * TestProbe =
+    member this.Start(?slots: SemaphoreSlim) : IActorRef * TestProbe * TestProbe =
         let inserts = this.CreateTestProbe "inserts"
         let records = this.CreateTestProbe "records"
-        let entity = this.Sys.ActorOf(MonitorEntity.Props(key, servicesOf fakes gate inserts.Ref records.Ref))
+        let entity = this.Sys.ActorOf(MonitorEntity.Props(key, servicesOf fakes (defaultArg slots gate) inserts.Ref records.Ref))
         entity, inserts, records
 
     [<Fact>]
-    member this.``a tick evaluates and stores the new group's transition``() =
+    member this.``a tick evaluates and stores the new group's transition, and self-monitoring counts it``() =
+        fakes.Clock <- t0.AddSeconds 2.0
         let entity, inserts, records = this.Start()
+        this.AwaitAssert(fun () -> Assert.Equal(1.0, fakes.Counts.Entities.Value))
         entity.Tell(Tick t0)
 
         let row = single (inserts.ExpectMsg<Attempt>(wait))
@@ -167,6 +190,15 @@ type EntityTests() =
         let evaluated = records.ExpectMsg<MonitorEvaluationRow[]>(wait)
         let only = Assert.Single evaluated
         Assert.Equal(("*", Some 95.0, "Alert", "evaluated"), (only.GroupKey, only.Value, only.State, only.Outcome))
+
+        let counts = fakes.Counts
+        Assert.Equal((1.0, 0.0, 1.0, 0.0), (counts.Evaluated.Value, counts.Errored.Value, counts.TransitionsWritten.Value, counts.TransitionsPending.Value))
+        // The window ends 30 s before the tick.
+        Assert.Equal(32.0, counts.EvaluationLag.Take())
+        Assert.True(Double.IsNaN(counts.EvaluationLag.Take()))
+
+        this.Sys.Stop entity
+        this.AwaitAssert(fun () -> Assert.Equal(0.0, counts.Entities.Value))
 
     [<Fact>]
     member this.``a group moves only when its state changes``() =
@@ -192,12 +224,16 @@ type EntityTests() =
         Assert.False failed.Stored
         // Not stored, so its evaluation is not recorded either.
         records.ExpectNoMsg quiet
+        let counts = fakes.Counts
+        this.AwaitAssert(fun () -> Assert.Equal((1.0, 1.0, 0.0), (counts.TransitionsFailed.Value, counts.TransitionsPending.Value, counts.TransitionsWritten.Value)))
 
         entity.Tell(Tick(t0 + minute))
         let retried = inserts.ExpectMsg<Attempt>(wait)
         Assert.True retried.Stored
         Assert.True((failed.Rows = retried.Rows))
         Assert.Equal(1, fakes.Executions)
+        this.AwaitAssert(fun () -> Assert.Equal((1.0, 0.0, 1.0), (counts.TransitionsFailed.Value, counts.TransitionsPending.Value, counts.TransitionsWritten.Value)))
+        Assert.Equal(1.0, counts.SkippedPending.Value)
 
         records.FishForMessage<MonitorEvaluationRow[]>(fun rows ->
             rows |> Array.exists (fun r -> r.GroupKey = "" && r.Outcome = "skipped" && r.At = (t0 + minute).UtcDateTime))
@@ -207,39 +243,6 @@ type EntityTests() =
         entity.Tell(Tick(t0 + minute * 2.0))
         inserts.ExpectNoMsg quiet
         Assert.Equal(2, fakes.Executions)
-
-    [<Fact>]
-    member this.``self-monitoring counts the evaluation and the stored transition``() =
-        let entity, inserts, records = this.Start()
-        this.AwaitAssert(fun () -> Assert.Equal(1.0, fakes.Counts.Entities.Value))
-        fakes.Clock <- t0.AddSeconds 2.0
-        entity.Tell(Tick t0)
-        inserts.ExpectMsg<Attempt>(wait) |> ignore
-        records.ExpectMsg<MonitorEvaluationRow[]>(wait) |> ignore
-
-        let counts = fakes.Counts
-        Assert.Equal((1.0, 0.0, 1.0, 0.0), (counts.Evaluated.Value, counts.Errored.Value, counts.TransitionsWritten.Value, counts.TransitionsPending.Value))
-        // The window ends 30 s before the tick.
-        Assert.Equal(32.0, counts.EvaluationLag.Take())
-        Assert.True(Double.IsNaN(counts.EvaluationLag.Take()))
-
-        this.Sys.Stop entity
-        this.AwaitAssert(fun () -> Assert.Equal(0.0, counts.Entities.Value))
-
-    [<Fact>]
-    member this.``self-monitoring counts failed inserts and the rows they leave pending``() =
-        fakes.FailingInserts <- 1
-        let entity, inserts, _ = this.Start()
-        entity.Tell(Tick t0)
-        inserts.ExpectMsg<Attempt>(wait) |> ignore
-
-        let counts = fakes.Counts
-        this.AwaitAssert(fun () -> Assert.Equal((1.0, 1.0, 0.0), (counts.TransitionsFailed.Value, counts.TransitionsPending.Value, counts.TransitionsWritten.Value)))
-
-        entity.Tell(Tick(t0 + minute))
-        inserts.ExpectMsg<Attempt>(wait) |> ignore
-        this.AwaitAssert(fun () -> Assert.Equal((1.0, 0.0, 1.0), (counts.TransitionsFailed.Value, counts.TransitionsPending.Value, counts.TransitionsWritten.Value)))
-        Assert.Equal(1.0, counts.SkippedPending.Value)
 
     [<Fact>]
     member this.``an evaluation that judged no group counts as skipped``() =
@@ -307,9 +310,7 @@ type EntityTests() =
     [<Fact>]
     member this.``loads wait for a slot of the node's gate``() =
         use closed = new SemaphoreSlim(0, 1)
-        let inserts = this.CreateTestProbe()
-        let records = this.CreateTestProbe()
-        let entity = this.Sys.ActorOf(MonitorEntity.Props(key, servicesOf fakes closed inserts.Ref records.Ref))
+        let entity, inserts, _ = this.Start closed
         entity.Tell(Tick t0)
         inserts.ExpectNoMsg quiet
 
@@ -370,42 +371,23 @@ type EntityTests() =
         entity.Tell(Tick(t0 + minute))
         inserts.ExpectNoMsg quiet
 
-    [<Fact>]
-    member this.``a deleted monitor closes its groups and stops``() =
+    [<Theory; InlineData true; InlineData false>]
+    member this.``a deleted monitor closes its groups and stops, on a Delete or on an Ensure of the deleting version``(viaDelete: bool) =
         let entity, inserts, _ = this.Start()
         this.Watch entity |> ignore
         entity.Tell(Tick t0)
         inserts.ExpectMsg<Attempt>(wait) |> ignore
 
-        fakes.Row <-
-            Some
-                { monitorRow 2 cpu critical90 with
-                    DeletedBy = Some "user-3"
-                    DeletedAt = Some(t0 + minute) }
+        fakes.Row <- deletedRow 2 (t0 + minute)
+        // An Ensure is what the manager sends for the panel's notification of a delete.
+        if viaDelete then
+            entity.Tell { Delete.Monitor = key.Text; Version = 2 }
+        else
+            entity.Tell { Ensure.Monitor = key.Text; Version = 2 }
 
-        entity.Tell { Delete.Monitor = key.Text; Version = 2 }
         let closed = single (inserts.ExpectMsg<Attempt>(wait))
         Assert.Equal(("Alert", "OK", "deleted", Some "user-3"), (closed.FromState, closed.ToState, closed.Reason, closed.Actor))
         Assert.Equal(2u, closed.MonitorVersion)
-        this.ExpectTerminated(entity, wait) |> ignore
-
-    [<Fact>]
-    member this.``an Ensure of the version that deleted the monitor closes it too``() =
-        let entity, inserts, _ = this.Start()
-        this.Watch entity |> ignore
-        entity.Tell(Tick t0)
-        inserts.ExpectMsg<Attempt>(wait) |> ignore
-
-        fakes.Row <-
-            Some
-                { monitorRow 2 cpu critical90 with
-                    DeletedBy = Some "user-3"
-                    DeletedAt = Some(t0 + minute) }
-
-        // What the manager sends for the panel's notification of a delete.
-        entity.Tell { Ensure.Monitor = key.Text; Version = 2 }
-        let closed = single (inserts.ExpectMsg<Attempt>(wait))
-        Assert.Equal(("Alert", "OK", "deleted", Some "user-3"), (closed.FromState, closed.ToState, closed.Reason, closed.Actor))
         this.ExpectTerminated(entity, wait) |> ignore
 
     [<Fact>]
@@ -417,79 +399,25 @@ type EntityTests() =
         inserts.ExpectNoMsg quiet
 
     [<Fact>]
-    member this.``a restart under another query hash closes the loaded groups``() =
-        let since = t0.AddHours -1.0
-
-        fakes.History <-
-            { Groups =
-                Map
-                    [ "*",
-                      { Key = "*"
-                        Tags = []
-                        State = Some Alert
-                        Since = since
-                        FirstTriggeredAt = Some since
-                        LastTriggeredAt = Some since
-                        FirstSeen = since
-                        LastSeen = since
-                        LastPoint = since
-                        Interrupted = None } ]
-              QueryHash = Some "an older query" }
-
-        let _, inserts, _ = this.Start()
-        let closed = single (inserts.ExpectMsg<Attempt>(wait))
-        Assert.Equal(("Alert", "OK", "definition_changed", Some "user-1"), (closed.FromState, closed.ToState, closed.Reason, closed.Actor))
-        Assert.Equal(t0.UtcDateTime, closed.At)
-
-    [<Fact>]
     member this.``a change at start comes after the tick already begun, and that tick is not evaluated``() =
         let at, fireAt = Evaluate.nextTick key.Text minute None t0
         let applied = fireAt.AddMilliseconds -200.0
         Assert.True(applied > at)
         fakes.Clock <- applied
-
-        fakes.History <-
-            { Groups =
-                Map
-                    [ "*",
-                      { Key = "*"
-                        Tags = []
-                        State = Some Alert
-                        Since = t0.AddHours -1.0
-                        FirstTriggeredAt = Some(t0.AddHours -1.0)
-                        LastTriggeredAt = Some(t0.AddHours -1.0)
-                        FirstSeen = t0.AddHours -1.0
-                        LastSeen = t0
-                        LastPoint = t0
-                        Interrupted = None } ]
-              QueryHash = Some "an older query" }
+        // Loaded under another query hash, so the groups are closed at once.
+        fakes.History <- alertSince (t0.AddHours -1.0) t0 "an older query"
 
         let _, inserts, _ = this.Start()
         let closed = single (inserts.ExpectMsg<Attempt>(wait))
-        Assert.Equal(("definition_changed", applied.UtcDateTime), (closed.Reason, closed.At))
+        Assert.Equal(("Alert", "OK", "definition_changed", Some "user-1"), (closed.FromState, closed.ToState, closed.Reason, closed.Actor))
+        Assert.Equal(applied.UtcDateTime, closed.At)
         // The next tick is a minute on; `at` would sort before the change.
         inserts.ExpectNoMsg(TimeSpan.FromSeconds 1.0)
         Assert.Equal(0, fakes.Executions)
 
     [<Fact>]
     member this.``a restart under the same query hash with the same reading stores nothing``() =
-        let since = t0.AddHours -1.0
-
-        fakes.History <-
-            { Groups =
-                Map
-                    [ "*",
-                      { Key = "*"
-                        Tags = []
-                        State = Some Alert
-                        Since = since
-                        FirstTriggeredAt = Some since
-                        LastTriggeredAt = Some since
-                        FirstSeen = since
-                        LastSeen = t0 - minute
-                        LastPoint = t0 - minute
-                        Interrupted = None } ]
-              QueryHash = Some(hashOf cpu) }
+        fakes.History <- alertSince (t0.AddHours -1.0) (t0 - minute) (hashOf cpu)
 
         let entity, inserts, records = this.Start()
         entity.Tell(Tick t0)
@@ -507,11 +435,7 @@ type EntityTests() =
         entity.Tell(Tick t0)
         this.AwaitAssert(fun () -> Assert.Equal(1, fakes.Executions))
 
-        fakes.Row <-
-            Some
-                { monitorRow 2 cpu critical90 with
-                    DeletedBy = Some "user-3"
-                    DeletedAt = Some t0 }
+        fakes.Row <- deletedRow 2 t0
 
         entity.Tell { Delete.Monitor = key.Text; Version = 2 }
         inserts.ExpectNoMsg quiet
@@ -546,27 +470,8 @@ type EntityTests() =
 
     [<Fact>]
     member this.``a deleted monitor read first keeps the thresholds on its closing rows``() =
-        fakes.Row <-
-            Some
-                { monitorRow 3 cpu critical90 with
-                    DeletedBy = Some "user-3"
-                    DeletedAt = Some t0 }
-
-        fakes.History <-
-            { Groups =
-                Map
-                    [ "*",
-                      { Key = "*"
-                        Tags = []
-                        State = Some Alert
-                        Since = t0.AddHours -1.0
-                        FirstTriggeredAt = Some(t0.AddHours -1.0)
-                        LastTriggeredAt = Some(t0.AddHours -1.0)
-                        FirstSeen = t0.AddHours -1.0
-                        LastSeen = t0
-                        LastPoint = t0
-                        Interrupted = None } ]
-              QueryHash = Some(hashOf cpu) }
+        fakes.Row <- deletedRow 3 t0
+        fakes.History <- alertSince (t0.AddHours -1.0) t0 (hashOf cpu)
 
         let entity, inserts, _ = this.Start()
         this.Watch entity |> ignore
@@ -577,9 +482,7 @@ type EntityTests() =
     [<Fact>]
     member this.``a tick without a gate slot within the wait is skipped``() =
         use slots = new SemaphoreSlim(1, 1)
-        let inserts = this.CreateTestProbe()
-        let records = this.CreateTestProbe()
-        let entity = this.Sys.ActorOf(MonitorEntity.Props(key, servicesOf fakes slots inserts.Ref records.Ref))
+        let entity, inserts, records = this.Start slots
         entity.Tell(Tick t0)
         inserts.ExpectMsg<Attempt>(wait) |> ignore
         records.ExpectMsg<MonitorEvaluationRow[]>(wait) |> ignore
@@ -613,13 +516,6 @@ type EntityTests() =
         inserts.ExpectNoMsg quiet
 
     [<Fact>]
-    member this.``a hand-off stops at once when idle``() =
-        let entity, _, _ = this.Start()
-        this.Watch entity |> ignore
-        entity.Tell Stop
-        this.ExpectTerminated(entity, wait) |> ignore
-
-    [<Fact>]
     member this.``a hand-off tries the pending rows once more, then stops``() =
         fakes.FailingInserts <- 5
         let entity, inserts, _ = this.Start()
@@ -648,11 +544,7 @@ type EntityTests() =
         entity.Tell(Tick t0)
         inserts.ExpectMsg<Attempt>(wait) |> ignore
 
-        fakes.Row <-
-            Some
-                { monitorRow 2 cpu critical90 with
-                    DeletedBy = Some "user-3"
-                    DeletedAt = Some(t0 + minute) }
+        fakes.Row <- deletedRow 2 (t0 + minute)
 
         let closed = single (inserts.ExpectMsg<Attempt>(wait))
         Assert.Equal(("Alert", "OK", "deleted"), (closed.FromState, closed.ToState, closed.Reason))

@@ -1,9 +1,4 @@
-/// Keeps the entities in step with Postgres: every resync tells the region
-/// about each live monitor and each recent deletion, and a notification from
-/// the panel tells it about one change at once.
-///
-/// It keeps nothing Postgres does not have, so a new owner after a hand-over
-/// starts from the table alone.
+/// Keeps the entities in step with Postgres; it holds nothing the table does not, so a new owner starts from the table alone.
 module NinjaCat.Api.Monitors.Manager
 
 open System
@@ -15,19 +10,14 @@ open Microsoft.Extensions.Logging
 open NinjaCat.Api.Monitors.Definitions
 open NinjaCat.Api.Monitors.Messages
 
-/// The key the region of monitor entities is registered under.
+/// The registry key of the region.
 type MonitorRegion = class end
 
-/// What the manager reaches outside itself. The host passes Postgres; tests
-/// pass functions over values they set.
 type ManagerServices =
     { Snapshot: DateTimeOffset option -> CancellationToken -> Task<Snapshot>
-      /// Hands each notification's payload to its callback until the
-      /// connection fails or the token is cancelled.
       Listen: (string -> unit) -> CancellationToken -> Task
       Registry: IReadOnlyActorRegistry
-      /// How often the table is read again; also how long after a broken
-      /// connection LISTEN is tried again.
+      /// Also the LISTEN retry delay.
       Interval: TimeSpan
       Log: ILogger }
 
@@ -45,7 +35,6 @@ type MonitorManager(services: ManagerServices) =
     let cancel = new CancellationTokenSource()
     let mutable region: IActorRef = ActorRefs.Nobody
     let mutable reading = false
-    /// Postgres's clock at the last snapshot read.
     let mutable lastRead: DateTimeOffset option = None
 
     member private this.Listen() =
@@ -57,10 +46,8 @@ type MonitorManager(services: ManagerServices) =
                 return ListenEnded "the connection closed"
             })
 
-    /// Deletions are read from one interval before the last snapshot, so a
-    /// deletion committed while that one was read is not missed. The first
-    /// snapshot after a start reaches a day back: the previous owner may have
-    /// missed some before it handed over.
+    /// From one interval before the last snapshot, so a deletion committed during that read is not
+    /// missed; the first after a start reaches a day back, for what the previous owner missed.
     member private this.Resync() =
         if not reading then
             reading <- true
@@ -72,9 +59,7 @@ type MonitorManager(services: ManagerServices) =
                     return Read(Ok snapshot)
                 })
 
-    /// Not once the node is shutting down: on the last node a message for a
-    /// shard already handed off has nowhere to go, and the region would hold
-    /// it until its shutdown phase timed out.
+    /// Not while shutting down: the last node would hold a message for a handed-off shard until the phase times out.
     member private this.Send(message: obj) =
         if isNull (CoordinatedShutdown.Get(UntypedActor.Context.System).ShutdownReason) then
             region.Tell(message, this.Self)

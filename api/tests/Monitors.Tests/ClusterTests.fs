@@ -225,11 +225,9 @@ type private SlowInsert =
       Stored: TaskCompletionSource }
 
 let private slowInsert (key: MonitorKey) : SlowInsert =
-    let target = DateTimeOffset.UtcNow + TimeSpan.FromSeconds 15.0
-    let offset = NinjaCat.Api.Engine.Monitor.Evaluate.offset key.Text
-    let minute = TimeSpan.FromMinutes(1.0).Ticks
-    let tick = DateTimeOffset((target - offset).UtcTicks / minute * minute + minute, TimeSpan.Zero)
-    let shift = tick + offset - target
+    let now = DateTimeOffset.UtcNow
+    let _, fireAt = NinjaCat.Api.Engine.Monitor.Evaluate.nextTick key.Text (TimeSpan.FromMinutes 1.0) None now
+    let shift = fireAt - now - TimeSpan.FromSeconds 15.0
     let clock () = DateTimeOffset.UtcNow + shift
 
     let started = TaskCompletionSource()

@@ -1,11 +1,7 @@
-/// The notifier, a stub: it finds the transitions that would be notified,
-/// logs them and records a `stub` notification for each. Rendering messages
-/// and real channels come later; the cursor and the idempotency key are
-/// already the ones they will use.
+/// The notifier, a stub: logs the transitions it would notify and records a `stub` row for each.
 module NinjaCat.Api.Monitors.Notifier
 
 open System
-open System.Data.Common
 open System.Threading
 open System.Threading.Tasks
 open Akka.Actor
@@ -16,7 +12,6 @@ open NinjaCat.Api.Platform
 open NinjaCat.Api.Storage.Rows
 open NinjaCat.Api.Monitors.Telemetry
 
-/// A transition to notify.
 type Due =
     { Tenant: string
       MonitorId: uint64
@@ -30,36 +25,24 @@ type Due =
 
 /// What one poll read.
 type Polled =
-    { /// Transitions to notify, oldest first, those already notified left out.
+    { /// Oldest first, those already notified left out.
       Found: Due list
-      /// The newest `inserted_at` of any transition read, notified or not, so
-      /// the cursor also moves through transitions that are never notified.
+      /// Of any transition read, notified or not, so the cursor also moves
+      /// through transitions that are never notified.
       Newest: DateTimeOffset option }
 
-/// The most transitions one poll handles; a full batch is followed by another
-/// poll at once.
+/// A full batch is followed by another poll at once.
 let batch = 1000
 
-/// What the notifier reaches outside itself. The host passes ClickHouse;
-/// tests pass functions over lists.
 type NotifierServices =
-    { /// The insert time of the newest transition a notification was stored
-      /// for; None before the first.
+    { /// The insert time of the newest transition notified; None before the first.
       Cursor: CancellationToken -> Task<DateTimeOffset option>
-      /// The transitions inserted after the time given.
       Due: DateTimeOffset -> CancellationToken -> Task<Polled>
-      /// Stores the notifications, and fails if they were not stored.
       Write: MonitorNotificationRow[] -> CancellationToken -> Task
       Clock: unit -> DateTimeOffset
-      /// How often it polls.
       Interval: TimeSpan
       Counts: Counters
       Log: ILogger }
-
-// --- ClickHouse --------------------------------------------------------------------------
-
-let private time (r: DbDataReader) (i: int) : DateTimeOffset =
-    DateTimeOffset(DateTime.SpecifyKind(r.GetDateTime i, DateTimeKind.Utc))
 
 let cursor (client: ClickHouseClient) (ct: CancellationToken) : Task<DateTimeOffset option> =
     task {
@@ -67,21 +50,16 @@ let cursor (client: ClickHouseClient) (ct: CancellationToken) : Task<DateTimeOff
             ClickHouse.query
                 client
                 ct
-                (fun r -> if r.IsDBNull 0 then None else Some(time r 0))
+                (fun r -> Store.optionalTime r 0)
                 { Text = "SELECT maxOrNull(transition_inserted_at) FROM monitor_notifications"
                   Parameters = [] }
 
         return rows |> List.tryHead |> Option.flatten
     }
 
-/// Reads from 30 s before `since`: rows of two inserts become visible in
-/// either order, whatever their `inserted_at` says. A transition is taken to
-/// be stored within a day of its `at`, which lets ClickHouse skip the older
-/// partitions. The reasons in State.neverNotified and a new group that is OK
-/// are never notified.
-///
-/// The newest is read first, so every row it covers is visible to the read
-/// of the due ones.
+/// From 30 s before `since`, since rows of two inserts become visible in either order.
+/// A transition is taken to be stored within a day of its `at`, so older partitions are skipped.
+/// The newest is read first, so every row it covers is visible to the read of the due ones.
 let due (client: ClickHouseClient) (since: DateTimeOffset) (ct: CancellationToken) : Task<Polled> =
     let from = since.AddSeconds -30.0
 
@@ -97,7 +75,7 @@ let due (client: ClickHouseClient) (since: DateTimeOffset) (ct: CancellationToke
             ClickHouse.query
                 client
                 ct
-                (fun r -> if r.IsDBNull 0 then None else Some(time r 0))
+                (fun r -> Store.optionalTime r 0)
                 { Text = "SELECT maxOrNull(inserted_at) FROM monitor_transitions WHERE " + window
                   Parameters = bounds }
 
@@ -109,8 +87,8 @@ let due (client: ClickHouseClient) (since: DateTimeOffset) (ct: CancellationToke
                     { Tenant = r.GetString 0
                       MonitorId = Convert.ToUInt64(r.GetValue 1)
                       GroupKey = r.GetString 2
-                      At = time r 3
-                      InsertedAt = time r 4
+                      At = Store.time r 3
+                      InsertedAt = Store.time r 4
                       FromState = r.GetString 5
                       ToState = r.GetString 6
                       Reason = r.GetString 7
@@ -132,8 +110,6 @@ let due (client: ClickHouseClient) (since: DateTimeOffset) (ct: CancellationToke
             { Found = found
               Newest = newest |> List.tryHead |> Option.flatten }
     }
-
-// --- the actor ---------------------------------------------------------------------------
 
 let private stub (now: DateTimeOffset) (d: Due) : MonitorNotificationRow =
     { TenantID = d.Tenant
@@ -168,8 +144,7 @@ type MonitorNotifier(services: NotifierServices) =
         Detached.run cancel.Token this.Self (fun e -> Failed e.Message) (fun ct ->
             task {
                 let! newest = services.Cursor ct
-                // A notifier that never stored one starts a day back: an
-                // older transition is history, not news.
+                // An older transition is history, not news.
                 return Started(newest |> Option.defaultWith (fun () -> services.Clock().AddDays -1.0))
             })
 
@@ -232,8 +207,7 @@ type MonitorNotifier(services: NotifierServices) =
                 let handled = List.map _.InsertedAt polled.Found
                 let full = polled.Found.Length >= batch
 
-                // A full batch may have left due transitions older than the
-                // newest read.
+                // A full batch may have left due transitions older than the newest read.
                 let passed =
                     if full then handled else Option.toList polled.Newest @ handled
 
@@ -246,9 +220,7 @@ type MonitorNotifier(services: NotifierServices) =
                 services.Counts.NotifierFailed.Add 1L
 
                 // A ClickHouse outage fails every poll; one warning is enough.
-                if failing then
-                    services.Log.LogDebug("Notifier: transitions still not read or not marked: {Error}", error)
-                else
+                if not failing then
                     services.Log.LogWarning("Notifier: transitions not read or not marked, retrying every {Interval}: {Error}", services.Interval, error)
 
                 failing <- true

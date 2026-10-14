@@ -1,6 +1,4 @@
-/// What a node counts about its monitors, reported by self-monitoring as
-/// `ninjacat.monitor.*`. Entities and the notifier add to it from their own
-/// threads; the sampler reads it from another.
+/// `ninjacat.monitor.*`, written from the actors' threads and read by the sampler from another.
 module NinjaCat.Api.Monitors.Telemetry
 
 open System
@@ -10,7 +8,6 @@ open Akka.Actor
 open Akka.Cluster
 open NinjaCat.Api.Platform
 
-/// A running total, or a level when it is also subtracted from.
 type Counter() =
     let mutable value = 0L
 
@@ -36,29 +33,27 @@ type Peak() =
 type Counters() =
     member val Evaluated = Counter()
     member val Errored = Counter()
-    /// A tick that came while the previous evaluation, its insert or a
-    /// definition read was still running.
+    /// The previous evaluation, its insert or a definition read was still running.
     member val SkippedBusy = Counter()
-    /// No slot on the node's gate within one interval: the node is overloaded.
+    /// No gate slot within one interval: the node is overloaded.
     member val SkippedGate = Counter()
     /// A tick spent storing the transitions of a failed insert.
     member val SkippedPending = Counter()
     /// The engine judged no group: the window was not full, or had no value.
     member val SkippedWindow = Counter()
-    /// No group judged while a model, or a forecast, has too little history.
+    /// A model or a forecast has too little history.
     member val SkippedLearning = Counter()
-    /// No group judged: an outlier monitor has fewer than 3 to compare.
+    /// An outlier monitor has fewer than 3 groups to compare.
     member val SkippedFewGroups = Counter()
-    /// Stopwatch ticks spent evaluating, the wait for the gate left out.
+    /// Stopwatch ticks, the wait for the gate left out.
     member val EvaluationTicks = Counter()
-    /// Seconds from the end of the window to the evaluation's result.
+    /// Seconds from the window's end to the result.
     member val EvaluationLag = Peak()
     member val Entities = Counter()
     member val TransitionsWritten = Counter()
     member val TransitionsFailed = Counter()
     member val TransitionsPending = Counter()
-    /// Seconds from a transition's insert to the poll that found it, so a
-    /// notifier that keeps failing reports a growing lag rather than none.
+    /// Taken at the poll, so a notifier that keeps failing reports a growing lag rather than none.
     member val NotifierLag = Peak()
     member val NotifierFailed = Counter()
 
@@ -90,10 +85,7 @@ let readings (counts: Counters) : Reading list =
       reading "notifier.lag" "second" Gauge [] counts.NotifierLag.Take
       reading "notifier.failed" "" Count [] (fun () -> counts.NotifierFailed.Value) ]
 
-// The system is asked for at each sample: it starts after the readings are
-// made.
-
-/// The members this node sees Up.
+// The system is asked for at each sample: it starts after the readings are made.
 let clusterMembers (system: unit -> ActorSystem) : Reading =
     reading "cluster.members" "" Gauge [] (fun () ->
         Cluster.Get(system ()).State.Members
@@ -101,6 +93,5 @@ let clusterMembers (system: unit -> ActorSystem) : Reading =
         |> Seq.length
         |> float)
 
-/// The members this node sees unreachable.
 let clusterUnreachable (system: unit -> ActorSystem) : Reading =
     reading "cluster.unreachable" "" Gauge [] (fun () -> float (Cluster.Get(system ()).State.Unreachable.Count))

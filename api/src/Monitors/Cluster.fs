@@ -1,6 +1,4 @@
-/// The cluster every node of the service joins: the region of monitor
-/// entities, the manager and the notifier as singletons, and how the nodes
-/// find each other.
+/// The region of monitor entities, the manager and the notifier as singletons, and how nodes find each other.
 module NinjaCat.Api.Monitors.Cluster
 
 open System
@@ -26,10 +24,8 @@ open NinjaCat.Api.Monitors.Notifier
 /// every monitor and needs every node stopped first.
 let private shards = 100
 
-/// The role of the nodes that host the region and the manager.
 let private metrics = "metrics"
 
-/// The role of the nodes that may host the notifier.
 let private notifierRole = "notifier"
 
 /// A key that does not parse has no id, so the region drops its message with
@@ -46,28 +42,9 @@ let private entityId (message: obj) : string =
     | None -> null
 
 let private entityProps (services: Services) (entityId: string) : Props =
-    match MonitorKey.Parse entityId with
-    | Some key -> MonitorEntity.Props(key, services)
-    | None -> invalidArg (nameof entityId) $"Not a monitor key: {entityId}"
+    MonitorEntity.Props(Option.get (MonitorKey.Parse entityId), services)
 
-let private formation (node: Node) (akka: AkkaConfigurationBuilder) : AkkaConfigurationBuilder =
-    match node.Formation with
-    | Seeds _ -> akka
-    | Kubernetes selector ->
-        // Two, not the replica count: with three, a first formation while
-        // only two pods can be scheduled would never complete.
-        // The chart names the management container port "management";
-        // discovery takes the contact point's port from it.
-        akka
-            .WithAkkaManagement(hostName = node.Host, port = Nullable node.ManagementPort)
-            .WithClusterBootstrap(portName = "management", requiredContactPoints = Nullable 2)
-            .WithKubernetesDiscovery(fun (options: KubernetesDiscoveryOptions) ->
-                match selector with
-                | Some s -> options.PodLabelSelector <- s
-                | None -> ())
-
-/// Configures this node. `manager` is given the node's registry, where the
-/// region is found once it has started.
+/// `manager` is given the node's registry, where the region is found once it has started.
 let configure
     (node: Node)
     (entity: Services)
@@ -75,20 +52,20 @@ let configure
     (notifier: NotifierServices)
     (akka: AkkaConfigurationBuilder)
     : AkkaConfigurationBuilder =
+    let seeds =
+        match node.Formation with
+        | Seeds seeds -> Array.ofList seeds
+        | Kubernetes _ -> null
+
     let clustering =
         ClusterOptions(
             // One Deployment carries both roles for now.
             Roles = [| metrics; notifierRole |],
             // Keep-majority, so with three replicas one lost node is downed
             // and the other two carry on.
-            SplitBrainResolver = SplitBrainResolverOption.Default
+            SplitBrainResolver = SplitBrainResolverOption.Default,
+            SeedNodes = seeds
         )
-    // AppVersion is the entry assembly's version, stamped by the image build
-    // (api/Dockerfile).
-
-    match node.Formation with
-    | Seeds seeds -> clustering.SeedNodes <- Array.ofList seeds
-    | Kubernetes _ -> ()
 
     let sharding =
         ShardOptions(
@@ -103,32 +80,47 @@ let configure
             HandOffStopMessage = Stop
         )
 
-    akka
-        .WithRemoting(RemoteOptions(HostName = "0.0.0.0", PublicHostName = node.Host, Port = Nullable node.Port))
-        .WithClustering(clustering)
-        .WithStrictSerialization()
-        .WithCustomSerializer(
-            "monitors",
-            [ typeof<IMonitorMessage> ],
-            fun (system: ExtendedActorSystem) -> MessageSerializer system :> Serializer
-        )
-        .WithShardRegion<MonitorRegion>(
-            "metric-monitor",
-            Func<string, Props>(entityProps entity),
-            HashCodeMessageExtractor.Create(shards, Func<obj, string> entityId),
-            sharding
-        )
-        .WithSingleton<MonitorManager>(
-            "monitor-manager",
-            Func<ActorSystem, IActorRegistry, IDependencyResolver, Props>(fun _ registry _ ->
-                MonitorManager.Props(manager registry)),
-            ClusterSingletonOptions(Role = metrics),
-            createProxyToo = false
-        )
-        .WithSingleton<MonitorNotifier>(
-            "monitor-notifier",
-            MonitorNotifier.Props notifier,
-            ClusterSingletonOptions(Role = notifierRole),
-            createProxyToo = false
-        )
-    |> formation node
+    let configured =
+        akka
+            .WithRemoting(RemoteOptions(HostName = "0.0.0.0", PublicHostName = node.Host, Port = Nullable node.Port))
+            .WithClustering(clustering)
+            .WithStrictSerialization()
+            .WithCustomSerializer(
+                "monitors",
+                [ typeof<IMonitorMessage> ],
+                fun (system: ExtendedActorSystem) -> MessageSerializer system :> Serializer
+            )
+            .WithShardRegion<MonitorRegion>(
+                "metric-monitor",
+                Func<string, Props>(entityProps entity),
+                HashCodeMessageExtractor.Create(shards, Func<obj, string> entityId),
+                sharding
+            )
+            .WithSingleton<MonitorManager>(
+                "monitor-manager",
+                Func<ActorSystem, IActorRegistry, IDependencyResolver, Props>(fun _ registry _ ->
+                    MonitorManager.Props(manager registry)),
+                ClusterSingletonOptions(Role = metrics),
+                createProxyToo = false
+            )
+            .WithSingleton<MonitorNotifier>(
+                "monitor-notifier",
+                MonitorNotifier.Props notifier,
+                ClusterSingletonOptions(Role = notifierRole),
+                createProxyToo = false
+            )
+
+    match node.Formation with
+    | Seeds _ -> configured
+    | Kubernetes selector ->
+        // Two, not the replica count: with three, a first formation while
+        // only two pods can be scheduled would never complete.
+        // The chart names the management container port "management";
+        // discovery takes the contact point's port from it.
+        configured
+            .WithAkkaManagement(hostName = node.Host, port = Nullable node.ManagementPort)
+            .WithClusterBootstrap(portName = "management", requiredContactPoints = Nullable 2)
+            .WithKubernetesDiscovery(fun (options: KubernetesDiscoveryOptions) ->
+                match selector with
+                | Some s -> options.PodLabelSelector <- s
+                | None -> ())
