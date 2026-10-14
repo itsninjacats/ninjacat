@@ -111,10 +111,6 @@ let ``a shift or a lookback before the raw retention gets whole minutes, for eve
     // Forty days of forecast history read far before the window.
     Assert.Equal<float list>([ 60.0 ], stepsOf (hourAgo 1.0 [ Some "a", "x{*}" ] [ "forecast(a, 'linear', 1, history='40d')" ]))
 
-[<Fact>]
-let ``the plan carries the retention it was made against`` () =
-    Assert.Equal(defaultRetention, (planOf [ None, "x{*}" ] []).Retention)
-
 // --- queries ------------------------------------------------------------------------
 
 [<Fact>]

@@ -120,10 +120,8 @@ let ``ticks sit on the wall clock, each monitor offset within 20 s`` () =
         Assert.Equal(tick + offset "default/7", fires)
         Assert.True(fires > now && fires <= now + minute, $"{now}: fires at {fires}")
 
-[<Fact>]
-let ``ten-minute ticks sit on ten minutes`` () =
-    let tick, _ = nextTick "default/1" (TimeSpan.FromMinutes 10.0) None (at.AddMinutes 3.0)
-    Assert.Equal(at.AddMinutes 10.0, tick)
+    let tenMinutes, _ = nextTick "default/1" (TimeSpan.FromMinutes 10.0) None (at.AddMinutes 3.0)
+    Assert.Equal(at.AddMinutes 10.0, tenMinutes)
 
 [<Fact>]
 let ``a tick re-armed before the last one fired is still the next one`` () =
@@ -531,18 +529,14 @@ let private line (start: float) (slope: float) =
             Time = windowTo.AddMinutes(float (m - 60))
             Value = start + slope * float m } ]
 
-[<Fact>]
-let ``a forecast is the highest upper bound over its horizon`` () =
-    let d = definition "max(next_1d):forecast(avg:cpu{*}, 'linear', 1, history='1h') >= 2000" ""
-    let e = evaluated (line 0.0 1.0) d
+// A minute a minute: 60 by the window's end, a day of minutes more.
+[<Theory>]
+[<InlineData("max(next_1d):forecast(avg:cpu{*}, 'linear', 1, history='1h') >= 2000", 1.0, 1450.0, 1550.0)>]
+[<InlineData("min(next_1d):forecast(avg:cpu{*}, 'linear', 1, history='1h') <= -1000", -1.0, -1550.0, -1450.0)>]
+let ``a forecast is the highest upper bound over its horizon, or with <= the lowest lower bound`` (query: string, slope: float, low: float, high: float) =
+    let e = evaluated (line 0.0 slope) (definition query "")
     Assert.Equal(TimeSpan.FromHours 1.0, e.Period.To - e.Period.From)
-    // A minute a minute: 60 by the window's end, a day of minutes more.
-    Assert.InRange(value e "*", 1450.0, 1550.0)
-
-[<Fact>]
-let ``a forecast with <= is the lowest lower bound`` () =
-    let d = definition "min(next_1d):forecast(avg:cpu{*}, 'linear', 1, history='1h') <= -1000" ""
-    Assert.InRange(value (evaluated (line 0.0 -1.0) d) "*", -1550.0, -1450.0)
+    Assert.InRange(value e "*", low, high)
 
 [<Fact>]
 let ``a forecast without the history to fit is learning`` () =

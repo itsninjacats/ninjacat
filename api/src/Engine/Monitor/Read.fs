@@ -10,6 +10,9 @@ open NinjaCat.Api.Engine.Monitor.State
 
 let private tenantOf (TenantId tenant) = SqlValue.String tenant
 
+let private scope (bound: SqlParams) (tenant: TenantId) (monitor: int64) =
+    $"tenant_id = {bound.Add(tenantOf tenant)} AND monitor_id = {bound.Add(SqlValue.Int64 monitor)}"
+
 let private millis (t: DateTimeOffset) = SqlValue.Int64(t.ToUnixTimeMilliseconds())
 
 let private closed = SqlValue.StringArray(closes |> List.map _.Text)
@@ -23,24 +26,21 @@ let maxIds = 200
 let parseIds (raw: string list) : Result<int64 list, string> =
     let parts = raw |> List.collect (fun value -> value.Split(',', StringSplitOptions.TrimEntries ||| StringSplitOptions.RemoveEmptyEntries) |> List.ofArray)
 
-    let parsed =
-        parts
-        |> List.map (fun part ->
-            match Int64.TryParse part with
-            | true, id when id > 0L -> Ok id
-            | _ -> Error $"bad monitor id \"{part}\"")
+    let isId (part: string) =
+        match Int64.TryParse part with
+        | true, id -> id > 0L
+        | _ -> false
 
-    match parsed |> List.tryPick (fun p -> match p with Error e -> Some e | Ok _ -> None) with
-    | Some e -> Error e
+    match parts |> List.tryFind (isId >> not) with
+    | Some bad -> Error $"bad monitor id \"{bad}\""
     | None ->
-        match parsed |> List.choose Result.toOption |> List.distinct with
+        match parts |> List.map (fun part -> Int64.Parse part) |> List.distinct with
         | [] -> Error "ids is required"
         | ids when ids.Length > maxIds -> Error $"at most {maxIds} ids at once"
         | ids -> Ok ids
 
 // --- status ----------------------------------------------------------------------------
 
-/// Groups of one monitor that share a state and are open or closed alike.
 type StatusRow =
     { Monitor: int64
       State: string
@@ -50,12 +50,10 @@ type StatusRow =
 
 type MonitorStatus =
     { Id: int64
-      /// The most severe open group's; None when no group is open, which a
-      /// multi alert shows as "no groups found".
+      /// None when no group is open, which a multi alert shows as "no groups found".
       State: string option
-      /// Open groups by state, every state present.
       Groups: Map<string, int64>
-      /// When a group last went into Alert or Warn, closed groups included.
+      /// Closed groups included.
       LastTriggeredAt: DateTimeOffset option }
 
 let status (tenant: TenantId) (ids: int64 list) : Sql =
@@ -74,11 +72,6 @@ let status (tenant: TenantId) (ids: int64 list) : Sql =
         + $"FROM ({latest}) GROUP BY monitor_id, group_state, is_open"
       Parameters = bound.All }
 
-let private severityOf (state: string) =
-    match Status.ofText state with
-    | Some s -> severity s
-    | None -> -1
-
 /// One status per id asked for, in that order; a monitor with nothing stored
 /// has no state and no groups.
 let statuses (ids: int64 list) (rows: StatusRow list) : MonitorStatus list =
@@ -92,7 +85,7 @@ let statuses (ids: int64 list) (rows: StatusRow list) : MonitorStatus list =
             State =
               match opened with
               | [] -> None
-              | rows -> Some (rows |> List.maxBy (fun r -> severityOf r.State)).State
+              | rows -> Some (rows |> List.maxBy (fun r -> Status.ofText r.State |> Option.map severity |> Option.defaultValue -1)).State
             Groups = zero |> Map.map (fun state _ -> opened |> List.filter (fun r -> r.State = state) |> List.sumBy _.Groups)
             LastTriggeredAt =
               match mine |> List.choose _.LastTriggeredAt with
@@ -105,14 +98,11 @@ type GroupStatus =
     { Group: string
       Tags: string list
       State: string
-      /// When the group came into its state.
       Since: DateTimeOffset
-      /// Why: the reason of the transition into it.
       Reason: string
       /// None when OK: the trigger it carries is the one the recovery ended.
       FirstTriggeredAt: DateTimeOffset option
       LastTriggeredAt: DateTimeOffset option
-      /// The value of the group's latest evaluation that judged it, and when;
       /// None when no evaluation judged it in the last day.
       Value: float option
       EvaluatedAt: DateTimeOffset option }
@@ -121,9 +111,6 @@ type GroupStatus =
 let groups (tenant: TenantId) (monitor: int64) : Sql =
     let bound = SqlParams()
 
-    let scope () =
-        $"tenant_id = {bound.Add(tenantOf tenant)} AND monitor_id = {bound.Add(SqlValue.Int64 monitor)}"
-
     // argMax skips a NULL argument and would return an older trigger time;
     // inside a tuple the NULL is kept.
     let latest =
@@ -131,13 +118,13 @@ let groups (tenant: TenantId) (monitor: int64) : Sql =
         + "argMax(reason, at) AS group_reason, max(at) AS since, "
         + "tupleElement(argMax(tuple(first_triggered_at, last_triggered_at), at), 1) AS first_triggered, "
         + "tupleElement(argMax(tuple(first_triggered_at, last_triggered_at), at), 2) AS last_triggered "
-        + $"FROM monitor_transitions WHERE {scope ()} GROUP BY group_key"
+        + $"FROM monitor_transitions WHERE {scope bound tenant monitor} GROUP BY group_key"
 
     // A group unseen for a day is closed as expired, so older rows never
     // belong to an open group.
     let evaluated =
         "SELECT group_key, argMax(value, at) AS last_value, max(at) AS evaluated_at "
-        + $"FROM monitor_evaluations WHERE {scope ()} AND outcome = 'evaluated' "
+        + $"FROM monitor_evaluations WHERE {scope bound tenant monitor} AND outcome = 'evaluated' "
         + "AND at >= now64(3) - INTERVAL 1 DAY GROUP BY group_key"
 
     { Text =
@@ -154,21 +141,18 @@ let groups (tenant: TenantId) (monitor: int64) : Sql =
 /// The most rows a transitions or evaluations request returns.
 let rowLimit = 10_000
 
-/// The newest rows of a range, oldest first: the SQL asks for one row more
-/// than the limit, and the oldest is the one dropped. True when rows were left
-/// out.
+/// The SQL asks for one row more than the limit; the oldest is dropped, and true says rows were left out.
 let newest (rows: 'T list) : 'T list * bool =
     match rows with
     | _ :: newer when rows.Length > rowLimit -> newer, true
     | _ -> rows, false
 
-/// `columns` of `table` in [from, to), the rows of `groups` or all, newest
-/// rowLimit + 1 rows, oldest first.
+/// The newest rowLimit + 1 rows in [from, to), oldest first.
 let private range (table: string) (columns: string) (tenant: TenantId) (monitor: int64) (from: DateTimeOffset) (until: DateTimeOffset) (groups: string list) =
     let bound = SqlParams()
 
     let where =
-        $"tenant_id = {bound.Add(tenantOf tenant)} AND monitor_id = {bound.Add(SqlValue.Int64 monitor)}"
+        scope bound tenant monitor
         + $" AND at >= fromUnixTimestamp64Milli({bound.Add(millis from)}) AND at < fromUnixTimestamp64Milli({bound.Add(millis until)})"
         + (if groups.IsEmpty then "" else $" AND group_key IN {bound.Add(SqlValue.StringArray groups)}")
 
@@ -181,11 +165,9 @@ type TransitionRecord =
     { Group: string
       Tags: string list
       At: DateTimeOffset
-      /// None for the group's first transition.
       FromState: string option
       ToState: string
       Reason: string
-      /// The user whose change caused it.
       Actor: string option
       Value: float option
       Crossed: string option
@@ -194,7 +176,6 @@ type TransitionRecord =
       Warning: float option
       CriticalRecovery: float option
       WarningRecovery: float option
-      /// The window judged; None for a transition outside a tick.
       WindowFrom: DateTimeOffset option
       WindowTo: DateTimeOffset option
       FirstTriggeredAt: DateTimeOffset option
@@ -218,7 +199,7 @@ let initial (tenant: TenantId) (monitor: int64) (from: DateTimeOffset) (group: s
     let bound = SqlParams()
 
     let where =
-        $"tenant_id = {bound.Add(tenantOf tenant)} AND monitor_id = {bound.Add(SqlValue.Int64 monitor)}"
+        scope bound tenant monitor
         + $" AND at < fromUnixTimestamp64Milli({bound.Add(millis from)})"
         + (if group = "" then "" else $" AND group_key = {bound.Add(SqlValue.String group)}")
 
@@ -232,9 +213,8 @@ type EvaluationRecord =
       Group: string
       At: DateTimeOffset
       Value: float option
-      /// The group's state after it; "none" before its first transition.
+      /// "none" before the group's first transition.
       State: string
-      /// evaluated, skipped or error.
       Outcome: string
       Detail: string option }
 

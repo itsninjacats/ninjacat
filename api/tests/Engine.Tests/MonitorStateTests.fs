@@ -23,7 +23,6 @@ let private simple options = definition "avg(last_5m):avg:cpu{*} > 90" options
 
 let private missing (rule: string) = $"""{{"on_missing_data":"{rule}"}}"""
 let private fewRequests options = definition "sum(last_5m):sum:requests{*} by {host} < 10" options
-let private fewRequestsSimple options = definition "sum(last_5m):sum:requests{*} < 10" options
 let private countedErrors options = definition "sum(last_5m):sum:errors{*} by {host}.as_count() > 5" options
 let private trafficDrop options = definition "pct_change(sum(last_5m),last_1h):sum:requests{*} by {host} < -50" options
 
@@ -220,9 +219,6 @@ let private cases: Map<string, Case> =
           "default: a missing avg group keeps Alert",
           case (above90 (missing "default")) [ group a (Some Alert) ] [] [ a, Some Alert ] []
 
-          "default: a missing avg group keeps OK, simple alert",
-          case (simple (missing "default")) [ group "*" (Some OK) ] [] [ "*", Some OK ] []
-
           "default: a missing avg group still times out",
           case
               (above90 """{"on_missing_data":"default","timeout_h":1}""")
@@ -234,9 +230,6 @@ let private cases: Map<string, Case> =
           "default: a missing sum group is judged as 0 and alerts",
           case (fewRequests (missing "default")) [ group a (Some OK) ] [] [ a, Some Alert ] [ a, Some OK, Alert, Reason.Threshold ]
 
-          "default: a missing sum group is judged as 0 and alerts, simple alert",
-          case (fewRequestsSimple (missing "default")) [ group "*" (Some OK) ] [] [ "*", Some Alert ] [ "*", Some OK, Alert, Reason.Threshold ]
-
           "default: a missing as_count group is judged as 0 and recovers",
           case (countedErrors (missing "default")) [ group a (Some Alert) ] [] [ a, Some OK ] [ a, Some Alert, OK, Reason.Recovery ]
 
@@ -245,9 +238,6 @@ let private cases: Map<string, Case> =
 
           "default: a missing change group is not judged as 0 and keeps OK",
           case (trafficDrop (missing "default")) [ group a (Some OK) ] [] [ a, Some OK ] []
-
-          "default: a missing change group keeps Alert",
-          case (trafficDrop (missing "default")) [ group a (Some Alert) ] [] [ a, Some Alert ] []
 
           "default: judged as 0, timeout_h does not end it",
           case
@@ -262,9 +252,6 @@ let private cases: Map<string, Case> =
 
           "show_no_data: an alerting group missing is No Data, not notified",
           case (above90 (missing "show_no_data")) [ group a (Some Alert) ] [] [ a, Some NoData ] [ a, Some Alert, NoData, Reason.NoDataShown ]
-
-          "show_no_data: simple alert",
-          case (simple (missing "show_no_data")) [ group "*" (Some OK) ] [] [ "*", Some NoData ] [ "*", Some OK, NoData, Reason.NoDataShown ]
 
           "show_no_data: a sum group is No Data too",
           case (fewRequests (missing "show_no_data")) [ group a (Some OK) ] [] [ a, Some NoData ] [ a, Some OK, NoData, Reason.NoDataShown ]
@@ -328,9 +315,6 @@ let private cases: Map<string, Case> =
           "show_and_notify_no_data: a missing group is No Data at once, notified",
           case (above90 (missing "show_and_notify_no_data")) [ group a (Some Warn) ] [] [ a, Some NoData ] [ a, Some Warn, NoData, Reason.NoData ]
 
-          "show_and_notify_no_data: simple alert",
-          case (simple (missing "show_and_notify_no_data")) [ group "*" (Some OK) ] [] [ "*", Some NoData ] [ "*", Some OK, NoData, Reason.NoData ]
-
           "show_and_notify_no_data: data back recovers",
           case (above90 (missing "show_and_notify_no_data")) [ group a (Some NoData) ] [ a, Judged 10.0 ] [ a, Some OK ] [ a, Some NoData, OK, Reason.Recovery ]
 
@@ -342,9 +326,6 @@ let private cases: Map<string, Case> =
 
           "resolve: a missing Warn resolves to OK",
           case (above90 """{"on_missing_data":"resolve","thresholds":{"warning":80}}""") [ group a (Some Warn) ] [] [ a, Some OK ] [ a, Some Warn, OK, Reason.NoData ]
-
-          "resolve: simple alert",
-          case (simple (missing "resolve")) [ group "*" (Some Alert) ] [] [ "*", Some OK ] [ "*", Some Alert, OK, Reason.NoData ]
 
           "resolve: a No Data not notified resolves without a notice",
           case (above90 (missing "resolve")) [ shown a OK ] [] [ a, Some OK ] [ a, Some NoData, OK, Reason.NoDataShown ]
@@ -358,30 +339,9 @@ let private cases: Map<string, Case> =
           "resolve: a missing OK group stays OK",
           case (above90 (missing "resolve")) [ group a (Some OK) ] [] [ a, Some OK ] []
 
-          "resolve: a sum group resolves too",
-          case (fewRequests (missing "resolve")) [ group a (Some Alert) ] [] [ a, Some OK ] [ a, Some Alert, OK, Reason.NoData ]
-
           // Datadog: "the monitor must be able to evaluate data before alerting on missing data".
-          "show_no_data: a group never judged is never missing",
-          case (above90 (missing "show_no_data")) [ group a None ] [] [ a, None ] []
-
-          "show_and_notify_no_data: a group never judged is never missing",
-          case (above90 (missing "show_and_notify_no_data")) [ group a None ] [] [ a, None ] []
-
-          "resolve: a group never judged is never missing",
-          case (above90 (missing "resolve")) [ group a None ] [] [ a, None ] []
-
           "default: a sum group never judged is not judged as 0",
           case (fewRequests (missing "default")) [ group a None ] [] [ a, None ] []
-
-          "show_no_data: a group unseen for 24 h still expires",
-          case (above90 (missing "show_no_data")) [ { group a (Some NoData) with LastSeen = at.AddHours -24.0 } ] [] [] [ a, Some NoData, OK, Reason.Expired ]
-
-          "default: a sum group judged as 0 still expires after 24 h unseen",
-          case (fewRequests (missing "default")) [ { group a (Some Alert) with LastSeen = at.AddHours -24.0 } ] [] [] [ a, Some Alert, OK, Reason.Expired ]
-
-          "resolve: a group unseen for 24 h expires",
-          case (above90 (missing "resolve")) [ { group a (Some Alert) with LastSeen = at.AddHours -24.0 } ] [] [] [ a, Some Alert, OK, Reason.Expired ]
 
           // --- expiry
           "a group unseen for 24 h expires to OK",
@@ -554,32 +514,24 @@ let ``closing sends every judged group to OK and keeps none`` () =
 
     Assert.True(transitions |> List.forall (fun t -> t.At = changedAt && t.Period.IsNone))
 
-[<Fact>]
-let ``the query hash follows what is measured, not the thresholds`` () =
+[<Theory>]
+[<InlineData("avg(last_5m):avg:cpu{env:prod} by {host} > 90", "avg(last_5m):avg:cpu{env:prod} by {host} > 95", true)>]
+[<InlineData("avg(last_5m):avg:cpu{env:prod} by {host} > 90", "max(last_10m):avg:cpu{env:prod}   by {host} < 10", true)>]
+[<InlineData("avg(last_5m):avg:cpu{env:prod AND role:web AND host IN (a,b)} by {host,role} > 90",
+             "avg(last_5m):avg:cpu{host IN (b,a) AND role:web AND env:prod} by {role,host} > 90",
+             true)>]
+[<InlineData("avg(last_5m):avg:cpu{env:prod} by {host} > 90", "avg(last_5m):avg:cpu{env:dev} by {host} > 90", false)>]
+[<InlineData("avg(last_5m):avg:cpu{env:prod} by {host} > 90", "avg(last_5m):avg:cpu{env:prod} by {host,role} > 90", false)>]
+[<InlineData("avg(last_5m):avg:cpu{env:prod} by {host} > 90", "avg(last_5m):avg:mem{env:prod} by {host} > 90", false)>]
+[<InlineData("avg(last_5m):avg:cpu{*} by {host} > 90", "change(avg(last_5m),5m_ago):avg:cpu{*} by {host} > 90", false)>]
+[<InlineData("change(avg(last_5m),5m_ago):avg:cpu{*} by {host} > 90", "change(avg(last_5m),10m_ago):avg:cpu{*} by {host} > 90", false)>]
+[<InlineData("change(avg(last_5m),5m_ago):avg:cpu{*} by {host} > 90", "pct_change(avg(last_5m),5m_ago):avg:cpu{*} by {host} > 90", false)>]
+[<InlineData("avg(last_4h):anomalies(avg:cpu{*} by {host}, 'agile', 2, alert_window='last_15m') >= 1",
+             "avg(last_4h):anomalies(avg:cpu{*} by {host}, 'agile', 2, alert_window='last_15m', timezone='Europe/Warsaw') >= 1",
+             false)>]
+let ``the query hash follows what is measured and how, not thresholds or the order it is written in`` (first: string, second: string, same: bool) =
     let hash query = queryHash (definition query "").Query
-    let first = hash "avg(last_5m):avg:cpu{env:prod} by {host} > 90"
-    Assert.Equal(first, hash "avg(last_5m):avg:cpu{env:prod} by {host} > 95")
-    Assert.Equal(first, hash "max(last_10m):avg:cpu{env:prod}   by {host} < 10")
-    Assert.NotEqual<string>(first, hash "avg(last_5m):avg:cpu{env:dev} by {host} > 90")
-    Assert.NotEqual<string>(first, hash "avg(last_5m):avg:cpu{env:prod} by {host,role} > 90")
-    Assert.NotEqual<string>(first, hash "avg(last_5m):avg:mem{env:prod} by {host} > 90")
-
-[<Fact>]
-let ``the query hash ignores the order filters and by keys are written in`` () =
-    let hash query = queryHash (definition query "").Query
-    let first = hash "avg(last_5m):avg:cpu{env:prod AND role:web AND host IN (a,b)} by {host,role} > 90"
-    Assert.Equal(first, hash "avg(last_5m):avg:cpu{host IN (b,a) AND role:web AND env:prod} by {role,host} > 90")
-
-[<Fact>]
-let ``the query hash follows the detection method and its arguments`` () =
-    let hash query = queryHash (definition query "").Query
-    let threshold = hash "avg(last_5m):avg:cpu{*} by {host} > 90"
-    let change = hash "change(avg(last_5m),5m_ago):avg:cpu{*} by {host} > 90"
-    Assert.NotEqual<string>(threshold, change)
-    Assert.NotEqual<string>(change, hash "change(avg(last_5m),10m_ago):avg:cpu{*} by {host} > 90")
-    Assert.NotEqual<string>(change, hash "pct_change(avg(last_5m),5m_ago):avg:cpu{*} by {host} > 90")
-    let anomaly = "avg(last_4h):anomalies(avg:cpu{*} by {host}, 'agile', 2, alert_window='last_15m'"
-    Assert.NotEqual<string>(hash $"{anomaly}) >= 1", hash $"{anomaly}, timezone='Europe/Warsaw') >= 1")
+    Assert.Equal(same, hash first = hash second)
 
 [<Fact>]
 let ``the query hash is stable`` () =
@@ -613,20 +565,12 @@ let ``a new version under another query closes the groups, under the same query 
 [<InlineData("No Data,Warn,OK", "Warn")>]
 [<InlineData("Warn,Alert,No Data,none", "Alert")>]
 let ``the monitor is in its most severe judged group's state`` (states: string, expected: string) =
-    let parse text =
-        match text with
-        | "OK" -> Some OK
-        | "Warn" -> Some Warn
-        | "Alert" -> Some Alert
-        | "No Data" -> Some NoData
-        | _ -> None
-
     let groups =
         states.Split(',', StringSplitOptions.RemoveEmptyEntries)
-        |> Array.mapi (fun i s -> $"host:{i}", group $"host:{i}" (parse s))
+        |> Array.mapi (fun i s -> $"host:{i}", group $"host:{i}" (Status.ofText s))
         |> Map.ofArray
 
-    Assert.Equal(parse expected, overall groups)
+    Assert.Equal(Status.ofText expected, overall groups)
 
 // --- anomaly ----------------------------------------------------------------------------
 

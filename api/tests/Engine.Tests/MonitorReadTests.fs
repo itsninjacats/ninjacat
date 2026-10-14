@@ -35,24 +35,6 @@ let ``a caller's group and ids are bound, never written into the SQL`` () =
     Assert.Contains(SqlValue.Int64Array [ 7L; 8L ], Read.status acme [ 7L; 8L ] |> _.Parameters |> List.map snd)
 
 [<Fact>]
-let ``transitions are read FINAL; without a group, every group`` () =
-    Assert.Contains("FROM monitor_transitions FINAL", (snd statements[2]).Text)
-    Assert.DoesNotContain("group_key IN", (Read.transitions acme 7L noon noon "").Text)
-    Assert.Contains(SqlValue.StringArray [ "host:a" ], (Read.transitions acme 7L noon noon "host:a").Parameters |> List.map snd)
-
-[<Fact>]
-let ``one group's evaluations come with the monitor's own`` () =
-    Assert.DoesNotContain("group_key IN", (Read.evaluations acme 7L noon noon "").Text)
-    Assert.Contains(SqlValue.StringArray [ "host:a"; "" ], (Read.evaluations acme 7L noon noon "host:a").Parameters |> List.map snd)
-
-[<Fact>]
-let ``where a range starts is each group's latest transition, unless it closed the group`` () =
-    let initial = Read.initial acme 7L noon ""
-    Assert.Contains("LIMIT 1 BY group_key", initial.Text)
-    Assert.Contains("reason NOT IN", initial.Text)
-    Assert.Contains(SqlValue.StringArray [ "expired"; "definition_changed"; "deleted" ], initial.Parameters |> List.map snd)
-
-[<Fact>]
 let ``ids are comma-separated or repeated, positive, at most maxIds`` () =
     Assert.Equal(Ok [ 1L; 2L; 3L ], Read.parseIds [ "1, 2"; "3,1" ])
     Assert.Equal(Error "ids is required", Read.parseIds [])

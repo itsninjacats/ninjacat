@@ -92,32 +92,26 @@ type Crossed =
 type Group =
     { Key: string
       Tags: string list
-      /// None until the group is first judged: its transition from `none` is
-      /// still to come.
+      /// None until the group is first judged.
       State: Status option
       Since: DateTimeOffset
-      /// When the current trigger began; None outside one.
       FirstTriggeredAt: DateTimeOffset option
       LastTriggeredAt: DateTimeOffset option
-      /// Ticks at which the group was in the result.
       FirstSeen: DateTimeOffset
       LastSeen: DateTimeOffset
       LastPoint: DateTimeOffset
-      /// In a No Data that was not notified (show_no_data): the state it
-      /// interrupted, which the group resumes from. None otherwise.
+      /// In a No Data that show_no_data did not notify: the state it interrupted, to resume from.
       Interrupted: Status option }
 
 type Transition =
     { Key: string
       Tags: string list
       At: DateTimeOffset
-      /// None: the group's first transition.
       From: Status option
       To: Status
       Reason: Reason
       Value: float option
       Crossed: Crossed option
-      /// The window judged; None for a transition outside a tick.
       Period: Period option
       FirstTriggeredAt: DateTimeOffset option
       LastTriggeredAt: DateTimeOffset option }
@@ -217,10 +211,13 @@ let private move (g: Group) (next: Status) (reason: Reason) (value: float option
       FirstTriggeredAt = first
       LastTriggeredAt = last }
 
-let private newGroupDelay (d: Definition) =
-    if d.Query.GroupBy.IsEmpty then TimeSpan.Zero else d.Options.NewGroupDelay
+let private into (g: Group) (next: Status) (reason: Reason) (value: float option) (crossed: Crossed option) (p: Period) (at: DateTimeOffset) =
+    if g.State = Some next then
+        g, None
+    else
+        let moved, transition = move g next reason value crossed (Some p) at
+        moved, Some transition
 
-/// The transition a value makes from the group's state.
 let private judged (d: Definition) (g: Group) (value: float) (recovery: float option) (p: Period) (at: DateTimeOffset) : Group * Transition option =
     let next, crossed = judge d.Query d.Options.Thresholds (resumed g) value recovery
 
@@ -234,42 +231,16 @@ let private judged (d: Definition) (g: Group) (value: float) (recovery: float op
         | Some _, OK -> Reason.Recovery
         | Some _, _ -> Reason.Threshold
 
-    match g.State with
-    | Some state when state = next -> g, None
-    | _ ->
-        let moved, transition = move g next reason (Some value) crossed (Some p) at
-        moved, Some transition
+    into g next reason (Some value) crossed p at
 
-let private into (g: Group) (next: Status) (reason: Reason) (p: Period) (at: DateTimeOffset) : Group * Transition option =
-    if g.State = Some next then
-        g, None
-    else
-        let moved, transition = move g next reason None None (Some p) at
-        moved, Some transition
-
-/// on_missing_data `default`: a sum over no points is 0. `.as_count()`
-/// takes only sum, so this covers it too.
-///
-/// WARNING(undocumented): only for a threshold. A change monitor judges the
-/// change, not the sum, so a missing group of one keeps its state.
+/// on_missing_data `default`: a sum over no points is 0 (`.as_count()` takes only sum).
+/// WARNING(undocumented): only for a threshold; a missing group of a change monitor keeps its state.
 let private zeroWhenMissing (d: Definition) =
-    let threshold =
-        match d.Query.Detection with
-        | Threshold -> true
-        | Change _
-        | Anomaly _
-        | Forecast _
-        | Outlier _ -> false
+    d.Options.OnMissingData = Some MissingData.Default && d.Query.Detection.IsThreshold && d.Query.Aggregator = Sum
 
-    d.Options.OnMissingData = Some MissingData.Default && threshold && d.Query.Aggregator = Sum
-
-/// A judged group with no point in the window read. Under on_missing_data it
-/// is missing at once; otherwise, after timeout_h in Alert or Warn it goes to
-/// OK, after no_data_timeframe to No Data. Silence runs from its last point to
-/// the end of that window, so an evaluation delay does not count as silence.
-///
-/// WARNING(undocumented): from the last point, not from the last evaluation
-/// that had the group.
+/// A judged group with no point in the window. Silence runs to the window's end, so an evaluation
+/// delay does not count as silence.
+/// WARNING(undocumented): from the last point, not from the last evaluation that had the group.
 let private silent (d: Definition) (g: Group) (p: Period) (at: DateTimeOffset) : Group * Transition option =
     let silence = p.To - g.LastPoint
     let noDataAfter = defaultArg d.Options.NoDataTimeframe (d.Query.Window.Length * 2.0)
@@ -278,7 +249,7 @@ let private silent (d: Definition) (g: Group) (p: Period) (at: DateTimeOffset) :
     | None, _ -> g, None
     // Judged as 0, it is not without data, so timeout_h does not end it.
     | Some _, _ when zeroWhenMissing d -> judged d g 0.0 None p at
-    | Some _, Some timeout when triggered (resumed g) && silence >= timeout -> into g OK Reason.Timeout p at
+    | Some _, Some timeout when triggered (resumed g) && silence >= timeout -> into g OK Reason.Timeout None None p at
     | Some state, _ ->
         // WARNING(undocumented): Datadog documents on_missing_data for
         // event-based monitors; its migration guide offers it for metrics.
@@ -287,11 +258,11 @@ let private silent (d: Definition) (g: Group) (p: Period) (at: DateTimeOffset) :
         // was not.
         match d.Options.OnMissingData with
         | Some MissingData.Default -> g, None
-        | Some MissingData.ShowNoData -> into g NoData Reason.NoDataShown p at
-        | Some MissingData.ShowAndNotifyNoData -> into g NoData Reason.NoData p at
-        | Some MissingData.Resolve when g.Interrupted = Some OK -> into g OK Reason.NoDataShown p at
-        | Some MissingData.Resolve -> into g OK Reason.NoData p at
-        | None when d.Options.NotifyNoData && state <> NoData && silence >= noDataAfter -> into g NoData Reason.NoData p at
+        | Some MissingData.ShowNoData -> into g NoData Reason.NoDataShown None None p at
+        | Some MissingData.ShowAndNotifyNoData -> into g NoData Reason.NoData None None p at
+        | Some MissingData.Resolve when g.Interrupted = Some OK -> into g OK Reason.NoDataShown None None p at
+        | Some MissingData.Resolve -> into g OK Reason.NoData None None p at
+        | None when d.Options.NotifyNoData && state <> NoData && silence >= noDataAfter -> into g NoData Reason.NoData None None p at
         | None -> g, None
 
 let private seen (d: Definition) (g: Group) (r: GroupResult) (p: Period) (at: DateTimeOffset) : Group * Transition option =
@@ -300,10 +271,12 @@ let private seen (d: Definition) (g: Group) (r: GroupResult) (p: Period) (at: Da
             LastSeen = at
             LastPoint = max g.LastPoint (defaultArg r.LastPoint g.LastPoint) }
 
+    let delay = if d.Query.GroupBy.IsEmpty then TimeSpan.Zero else d.Options.NewGroupDelay
+
     match r.Reading, g.State with
     | Skipped _, _ when r.LastPoint.IsNone -> silent d g p at
     | Skipped _, _ -> g, None
-    | Judged _, None when at - g.FirstSeen < newGroupDelay d -> g, None
+    | Judged _, None when at - g.FirstSeen < delay -> g, None
     | Judged value, _ -> judged d g value r.Recovery p at
 
 /// A known group missing from the result: silent, and forgotten after 24 h
@@ -355,9 +328,7 @@ let step (d: Definition) (groups: Map<string, Group>) (evaluation: Evaluation) (
 
 // --- outside a tick --------------------------------------------------------------------
 
-/// Closes every judged group with a transition to OK, not notified: the query
-/// changed, or the monitor was deleted. `at` is when that was applied; the
-/// caller keeps it with the pending rows, so a retry writes the same key.
+/// Every judged group to OK, not notified. The caller keeps `at` with the pending rows, so a retry writes the same key.
 let close (reason: Reason) (at: DateTimeOffset) (groups: Map<string, Group>) : Map<string, Group> * Transition list =
     Map.empty,
     [ for g in groups.Values do
@@ -393,11 +364,8 @@ let rec private canonical (e: Expr<MetricQuery>) : Expr<MetricQuery> =
                 | Named _ -> arg)
         )
 
-/// A hash of what the monitor measures and how: the metric, its scope, its
-/// `by`, the functions over it, and the detection method with its arguments.
-/// A new version with another hash closes the groups; thresholds, the time
-/// aggregator, the window and the message do not change it. A test pins one
-/// hash, as a JSON library upgrade that changed it would reset every monitor.
+/// What the monitor measures and how, not its thresholds, aggregator, window or message: a new
+/// version with another hash closes the groups.
 let queryHash (q: MonitorQuery) : string =
     let measured = JsonSerializer.Serialize((canonical q.Measured, q.Detection), Serialization.options)
     Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes measured))

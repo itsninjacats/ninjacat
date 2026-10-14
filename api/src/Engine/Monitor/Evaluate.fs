@@ -1,11 +1,5 @@
-/// One evaluation of a metric monitor: when it runs, the window it reads, and
-/// one value per group, through the engine. The tick time `at` is passed in;
-/// it is the evaluation's identity, and nothing here reads the clock.
-///
-/// Arithmetic follows Datadog's order. Without `.as_count()` the formula runs
-/// per bucket and the time aggregator reduces the window after it, which is
-/// the timeseries path. With it each query is reduced first and the formula
-/// runs on the reduced values, which is the scalar path.
+/// One evaluation of a metric monitor at the tick `at`; nothing here reads the clock. As in
+/// Datadog, `.as_count()` reduces each query before the formula, otherwise the window is reduced after it.
 module NinjaCat.Api.Engine.Monitor.Evaluate
 
 open System
@@ -42,20 +36,15 @@ type GroupResult =
       Key: string
       Tags: string list
       Reading: Reading
-      /// An anomaly's fraction over recovery_window, which it recovers by;
-      /// None for the other methods, which recover by the value itself.
+      /// An anomaly's fraction over recovery_window, which it recovers by.
       Recovery: float option
-      /// The newest point the group had in the window. None: the engine kept
-      /// the series (a function's lookback held points) but the window has
-      /// none, which is no data.
+      /// None: the engine kept the series for a function's lookback, but the window has no point.
       LastPoint: DateTimeOffset option }
 
 /// An evaluation that judged. A group absent from it had no data.
 type Evaluation =
     { Period: Period
       Groups: GroupResult list }
-
-let simpleGroup = "*"
 
 // --- when ------------------------------------------------------------------------------
 
@@ -81,18 +70,14 @@ let frequency (q: MonitorQuery) : TimeSpan =
     elif judged <= TimeSpan.FromHours 48.0 then TimeSpan.FromMinutes 10.0
     else TimeSpan.FromMinutes 30.0
 
-/// Where in the first 20 s after each tick a monitor runs, so monitors on the
-/// same frequency do not all query at once. Stable across processes, as
-/// string.GetHashCode is not.
+/// Spreads monitors over the first 20 s after a tick; SHA-256, as string.GetHashCode differs per process.
 let offset (monitor: string) : TimeSpan =
     let hash = SHA256.HashData(Encoding.UTF8.GetBytes monitor)
     TimeSpan.FromMilliseconds(float (BitConverter.ToUInt32(hash, 0) % 20_000u))
 
-/// The next tick: `at`, a multiple of the frequency on the wall clock, and
-/// when it fires, `at` plus the monitor's offset. It fires after `now` and
-/// comes after `previous`, the tick last evaluated, even when a timer fired
-/// early or the clock stepped back: a group gets one transition per `at`. A
-/// missed tick is not made up.
+/// The next tick on the wall clock, and when it fires. It comes after `previous` even when a timer
+/// fired early or the clock stepped back, so a group gets one transition per tick. A missed tick
+/// is not made up.
 let nextTick (monitor: string) (frequency: TimeSpan) (previous: DateTimeOffset option) (now: DateTimeOffset) : DateTimeOffset * DateTimeOffset =
     let delay = offset monitor
     let f = frequency.Ticks
@@ -107,14 +92,7 @@ let nextTick (monitor: string) (frequency: TimeSpan) (previous: DateTimeOffset o
 
 // --- the window and its step -----------------------------------------------------------
 
-let private rollupInterval (q: MonitorQuery) : TimeSpan option =
-    match fst (Engine.split q.Measured) |> List.choose (fun p -> Plan.rollupInterval p.Query) with
-    | [] -> None
-    | intervals -> Some(List.max intervals)
-
-/// The smallest step of whole seconds, at least `step`, that divides the
-/// shift; `step` when the shift is shorter. Buckets sit on the epoch, so only
-/// then does a shifted bucket land on a current one.
+/// The smallest step of whole seconds, at least `step`, that divides the shift, so a shifted bucket lands on a current one.
 let private dividing (shift: TimeSpan) (step: TimeSpan) : TimeSpan =
     let shiftSeconds = int64 shift.TotalSeconds
     let least = int64 (Math.Ceiling step.TotalSeconds)
@@ -123,16 +101,13 @@ let private dividing (shift: TimeSpan) (step: TimeSpan) : TimeSpan =
     | Some seconds -> TimeSpan.FromSeconds(float seconds)
     | None -> step
 
-/// An explicit `.rollup()` interval, then an anomaly's or forecast's
-/// `interval`, otherwise 15 s; widened, as the engine widens any step, to fit
-/// 1500 points in the window, and for a change to divide its shift.
-///
-/// WARNING(undocumented): 15 s, so one agent point falls in one bucket.
-///
-/// WARNING(undocumented): a forecast's step also fits 1500 points in its
-/// horizon, which the forecast is drawn over at the same step.
+/// WARNING(undocumented): 15 s without an interval, so one agent point falls in one bucket.
+/// WARNING(undocumented): a forecast's step also fits 1500 points in its horizon.
 let private stepOf (q: MonitorQuery) : TimeSpan =
-    let rollup = rollupInterval q
+    let rollup =
+        match fst (Engine.split q.Measured) |> List.choose (fun p -> Plan.rollupInterval p.Query) with
+        | [] -> None
+        | intervals -> Some(List.max intervals)
 
     let hint =
         match rollup, q.Detection with
@@ -214,30 +189,23 @@ let period (retention: Plan.Retention) (d: Definition) (at: DateTimeOffset) : Pe
 
 // --- groups and values -----------------------------------------------------------------
 
-type private Line =
-    { Tags: Engine.Tag list
-      Points: (DateTimeOffset * float) list
-      Expected: Map<DateTimeOffset, Engine.Band>
-      Forecast: Engine.Band list }
-
-/// The group a series belongs to; None for an N/A group, which Datadog drops.
-/// A series with several values of a `by` tag is already one series per value
-/// (Compile.groupSql), so it is judged in each group.
-///
-/// WARNING(undocumented): Datadog's template docs suggest it may join the
-/// values into one group instead.
+/// None for an N/A group, which Datadog drops.
+/// WARNING(undocumented): a series with several values of a `by` tag is judged in each group;
+/// Datadog's template docs suggest it may join them into one.
 let private groupOf (q: MonitorQuery) (tags: Engine.Tag list) : (string * string list) option =
     if tags |> List.exists (fun t -> t.Value.IsNone) then
         None
     else
         match tags |> List.map (fun t -> $"{t.Key}:{t.Value.Value}") |> List.sort with
-        | [] when q.GroupBy.IsEmpty -> Some(simpleGroup, [])
+        | [] when q.GroupBy.IsEmpty -> Some("*", [])
         // A series without tags in a multi alert is no group of it:
         // default_zero over no series gives one.
         | [] -> None
         | pairs -> Some(String.concat "," pairs, pairs)
 
-let private finite (points: (DateTimeOffset * float) list) = points |> List.filter (snd >> Double.IsFinite)
+let private finite (points: Engine.Point list) = points |> List.filter (fun p -> Double.IsFinite p.Value)
+
+let private pairs (points: Engine.Point list) = points |> List.map (fun p -> p.Time, p.Value)
 
 let private reduce (agg: TimeAggregator) (values: float list) : float =
     match agg with
@@ -273,7 +241,7 @@ let private isFull (bucket: TimeSpan) (p: Period) (times: DateTimeOffset list) :
 /// WARNING(undocumented): Skipped, not No Data, when nothing is left. One
 /// Datadog page says No Data.
 let private readingOf (d: Definition) (p: Period) (step: TimeSpan) (points: (DateTimeOffset * float) list) : Reading =
-    let finite = finite points
+    let finite = points |> List.filter (snd >> Double.IsFinite)
     let values = List.map snd finite
     let bucket = fullWindowBucket d.Query.Window step
 
@@ -289,13 +257,13 @@ let private readingOf (d: Definition) (p: Period) (step: TimeSpan) (points: (Dat
 
 /// Per bucket, the change from the shifted value: `a − b`, or `(a − b) / b × 100`.
 /// A bucket with no shifted value has no change.
-let private changeOf (measure: ChangeMeasure) (current: Line) (previous: Line option) : (DateTimeOffset * float) list =
+let private changeOf (measure: ChangeMeasure) (current: Engine.TimeSeries) (previous: Engine.TimeSeries option) : (DateTimeOffset * float) list =
     let before =
         match previous with
-        | Some line -> Map.ofList line.Points
+        | Some line -> Map.ofList (pairs line.Points)
         | None -> Map.empty
 
-    [ for t, a in current.Points do
+    [ for t, a in pairs current.Points do
           match before.TryFind t, measure with
           | Some b, Absolute -> t, a - b
           | Some b, Percent -> t, (a - b) / b * 100.0
@@ -307,18 +275,14 @@ let private outside (direction: Direction) (expected: Engine.Band) (value: float
     | Below -> value < expected.Lower
     | Both -> value > expected.Upper || value < expected.Lower
 
-/// The fraction of the buckets from `from` on outside their expected range in
-/// the anomaly's direction. A bucket the model has no expectation for is left
-/// out; None when none has one.
-///
-/// WARNING(undocumented): the denominator is the buckets present, after the
-/// count_default_zero fill when it is asked for.
-let private anomalous (a: AnomalySpec) (from: DateTimeOffset) (line: Line) (points: (DateTimeOffset * float) list) : float option =
+/// The fraction of the buckets from `from` on outside their band; None when no bucket has one.
+/// WARNING(undocumented): the denominator is the buckets present, after any count_default_zero fill.
+let private anomalous (a: AnomalySpec) (from: DateTimeOffset) (points: Engine.Point list) : float option =
     let judged =
-        [ for t, v in points do
-              if t >= from then
-                  match line.Expected.TryFind t with
-                  | Some expected -> outside a.Direction expected v
+        [ for p in points do
+              if p.Time >= from then
+                  match p.Expected with
+                  | Some expected -> outside a.Direction expected p.Value
                   | None -> () ]
 
     if judged.IsEmpty then
@@ -326,42 +290,38 @@ let private anomalous (a: AnomalySpec) (from: DateTimeOffset) (line: Line) (poin
     else
         Some(judged |> List.averageBy (fun o -> if o then 1.0 else 0.0))
 
-/// An anomaly's value: the fraction anomalous over alert_window, and over
-/// recovery_window the fraction it recovers by. While the model is learning
-/// no bucket has an expectation, and the group is Skipped, never OK.
-let private anomalyReading (d: Definition) (a: AnomalySpec) (p: Period) (step: TimeSpan) (line: Line) : Reading * float option =
+/// The fraction anomalous over alert_window, and the fraction over recovery_window it recovers by.
+let private anomalyReading (d: Definition) (a: AnomalySpec) (p: Period) (step: TimeSpan) (line: Engine.TimeSeries) : Reading * float option =
     let points = finite line.Points
     let recoveryWindow = defaultArg d.Options.RecoveryWindow a.AlertWindow
 
-    if d.Options.RequireFullWindow && not (isFull (fullWindowBucket a.AlertWindow step) p (List.map fst points)) then
+    if d.Options.RequireFullWindow && not (isFull (fullWindowBucket a.AlertWindow step) p (points |> List.map _.Time)) then
         Skipped(Incomplete, "require_full_window: the window is not full"), None
     elif points.IsEmpty then
         Skipped(Incomplete, "no bucket in the window has a value"), None
     else
-        match anomalous a p.From line points with
+        match anomalous a p.From points with
         | None -> Skipped(Learning, "learning: the model has too little history yet"), None
         | Some fraction ->
-            let recovery = anomalous a (p.To - recoveryWindow.Length) line points
+            let recovery = anomalous a (p.To - recoveryWindow.Length) points
             Judged fraction, Some(defaultArg recovery fraction)
 
 /// A forecast's value: the highest upper bound over the horizon for `>=`, the
 /// lowest lower bound for `<=`.
-let private forecastReading (q: MonitorQuery) (line: Line) : Reading =
+let private forecastReading (q: MonitorQuery) (line: Engine.TimeSeries) : Reading =
     match finite line.Points, line.Forecast with
     | [], _ -> Skipped(Incomplete, "no bucket in the window has a value")
     | _, [] -> Skipped(Learning, "learning: too little history to forecast")
-    | _, ranges ->
+    | _, forecast ->
         match q.Comparator with
         | Le
-        | Lt -> Judged(ranges |> List.map _.Lower |> List.min)
+        | Lt -> Judged(forecast |> List.map _.Band.Lower |> List.min)
         | Ge
         | Gt
         | Eq
-        | Ne -> Judged(ranges |> List.map _.Upper |> List.max)
+        | Ne -> Judged(forecast |> List.map _.Band.Upper |> List.max)
 
 // --- running ---------------------------------------------------------------------------
-
-let private timeOf (ms: int64) = DateTimeOffset.FromUnixTimeMilliseconds ms
 
 let private scalarAggregator (agg: TimeAggregator) : ScalarAggregator =
     match agg with
@@ -370,16 +330,13 @@ let private scalarAggregator (agg: TimeAggregator) : ScalarAggregator =
     | Min -> ScalarMin
     | Max -> ScalarMax
 
-/// The seasonal anomaly models a monitor evaluates with, and the tick they
-/// were fitted at.
+/// The seasonal anomaly models a monitor evaluates with, the tick and the query they were fitted for.
 type Fit =
     { At: DateTimeOffset
-      /// What they were fitted for; a model of another query is never used.
       Expression: Expr<MetricQuery>
       Models: Map<int, Execute.AnomalyModels> }
 
-/// How long a fit is used: an hour, or ten minutes for an hourly season. A
-/// robust level lags the data by up to this long.
+/// How long a fit is used; a robust level lags the data by up to this long.
 let private refitEvery (q: MonitorQuery) : TimeSpan option =
     match q.Detection with
     | Anomaly { Algorithm = (Plan.Robust Plan.Hourly | Plan.Agile Plan.Hourly) } -> Some(TimeSpan.FromMinutes 10.0)
@@ -390,47 +347,31 @@ let private refitEvery (q: MonitorQuery) : TimeSpan option =
     | Forecast _
     | Outlier _ -> None
 
-let private timeseries execute tenant retention at (models: Fit option) (req: ParsedTimeseriesRequest) : Task<Result<Line list list, string list>> =
+let private timeseries execute tenant (models: Fit option) (formulas: int) plan : Task<Result<Engine.TimeSeries list list, string list>> =
     task {
-        match Plan.plan retention at req with
-        | Error problems -> return Error problems
-        | Ok plan ->
-            let! outputs = Execute.evaluateWith execute tenant plan (models |> Option.map _.Models)
+        let! outputs = Execute.evaluate execute tenant plan (models |> Option.map _.Models)
+        return Ok [ for r in Engine.results (List.init formulas string) outputs -> r.Series ]
+    }
 
+/// Each query reduced by the time aggregator first, the formula after.
+let private scalar execute tenant (agg: TimeAggregator) (plan: Plan.Plan) : Task<Result<Engine.TimeSeries list list, string list>> =
+    task {
+        match! Execute.evaluateScalar execute tenant plan (plan.Queries |> List.map (fun _ -> scalarAggregator agg)) with
+        | Error problems -> return Error problems
+        | Ok outputs ->
             return
                 Ok
-                    [ for r in Engine.results (req.Formulas |> List.mapi (fun i _ -> string i)) outputs ->
-                          [ for s in r.Series ->
-                                { Tags = s.Tags
-                                  Points = s.Points |> List.map (fun p -> p.Time, p.Value)
-                                  Expected = s.Points |> List.choose (fun p -> p.Expected |> Option.map (fun e -> p.Time, e)) |> Map.ofList
-                                  Forecast = s.Forecast |> List.map _.Band } ] ]
+                    [ for series in outputs ->
+                          [ for s in series ->
+                                ({ Tags = Engine.tags s.GroupTags
+                                   Points =
+                                     [ for KeyValue(t, v) in s.Points ->
+                                           { Time = DateTimeOffset.FromUnixTimeMilliseconds t; Value = v; Expected = None } ]
+                                   Forecast = [] }: Engine.TimeSeries) ] ]
     }
 
-/// Each output's series as one value: each query reduced by the time
-/// aggregator first, the formula after.
-let private scalar execute tenant retention at (agg: TimeAggregator) (req: ParsedTimeseriesRequest) : Task<Result<Line list list, string list>> =
-    task {
-        match Plan.plan retention at req with
-        | Error problems -> return Error problems
-        | Ok plan ->
-            match! Execute.evaluateScalar execute tenant plan (plan.Queries |> List.map (fun _ -> scalarAggregator agg)) with
-            | Error problems -> return Error problems
-            | Ok outputs ->
-                return
-                    Ok
-                        [ for series in outputs ->
-                              [ for s in series ->
-                                    { Tags = Engine.tags s.GroupTags
-                                      Points = s.Points |> Map.toList |> List.map (fun (t, v) -> timeOf t, v)
-                                      Expected = Map.empty
-                                      Forecast = [] } ] ]
-    }
-
-/// The models an evaluation of `d` at `at` uses: `previous` while it is
-/// fresh and fitted for this query, otherwise new ones, fitted on each
-/// group's seasonal history. None for anything but a robust or agile anomaly
-/// monitor.
+/// `previous` while it is fresh and fitted for this query, otherwise new models; None for anything
+/// but a robust or agile anomaly monitor.
 let fit
     (execute: Sql -> Task<Compile.Row list>)
     (tenant: TenantId)
@@ -453,11 +394,7 @@ let fit
                 return Ok(Some { At = at; Expression = d.Query.Expression; Models = models })
     }
 
-/// Evaluates `d` at the tick `at`, with the anomaly `models` when given;
-/// without them a seasonal model is fitted for this evaluation alone.
-/// `execute` runs the engine's SQL; the caller passes ClickHouse, tests a
-/// list. Error is the evaluation's error: the engine refused the request, or
-/// the query yields more than `maxGroups` groups. Nothing is truncated.
+/// Evaluates `d` at the tick `at`; without `models` a seasonal model is fitted for this evaluation alone.
 let evaluate
     (execute: Sql -> Task<Compile.Row list>)
     (tenant: TenantId)
@@ -470,34 +407,25 @@ let evaluate
     task {
         let q = d.Query
         let p, step = period retention d at
+        let req = request q p step
 
-        let detection =
-            match q.Detection with
-            | Threshold
-            | Anomaly _
-            | Forecast _
-            | Outlier _ -> Ok()
-            | Change _ when q.AsCount -> Ok()
-            | Change c when c.Shift.Length.Ticks % step.Ticks = 0L -> Ok()
-            | Change c ->
+        match q.Detection, Plan.plan retention at req with
+        | Change c, _ when not q.AsCount && c.Shift.Length.Ticks % step.Ticks <> 0L ->
+            return
                 Error
                     $"change over {c.Shift.Text}: the step is {step.TotalSeconds} s, which does not divide the shift, so no bucket has one to compare with"
-
-        match detection with
-        | Error e -> return Error e
-        | Ok() ->
-            let req = request q p step
-
+        | _, Error problems -> return Error(String.concat "; " problems)
+        | _, Ok plan ->
             let! outputs =
                 if q.AsCount then
-                    scalar execute tenant retention at q.Aggregator req
+                    scalar execute tenant q.Aggregator plan
                 else
-                    timeseries execute tenant retention at models req
+                    timeseries execute tenant models req.Formulas.Length plan
 
             match outputs with
             | Error problems -> return Error(String.concat "; " problems)
             | Ok outputs ->
-                let byGroup (lines: Line list) =
+                let byGroup (lines: Engine.TimeSeries list) =
                     lines |> List.choose (fun line -> groupOf q line.Tags |> Option.map (fun (key, tags) -> key, (tags, line)))
 
                 // An outlier monitor's groups are the query's; the first
@@ -512,19 +440,17 @@ let evaluate
                 if current.Length > maxGroups then
                     return Error $"too_many_groups: the query yields {current.Length} groups, at most {maxGroups} are evaluated"
                 else
-                    let points =
+                    let shifted =
                         match q.Detection, outputs with
-                        | Change c, [ _; shifted ] ->
-                            let previous = byGroup shifted |> List.map (fun (key, (_, line)) -> key, line) |> Map.ofList
-                            fun key (line: Line) -> changeOf c.Measure line (previous.TryFind key)
-                        | _ -> fun _ (line: Line) -> line.Points
+                        | Change _, [ _; s ] -> byGroup s |> List.map (fun (key, (_, line)) -> key, line) |> Map.ofList
+                        | _ -> Map.empty
 
                     let compared = current |> List.filter (fun (_, (_, line)) -> not (finite line.Points).IsEmpty) |> List.length
 
-                    let reading key (line: Line) : Reading * float option =
+                    let reading key (line: Engine.TimeSeries) : Reading * float option =
                         match q.Detection with
-                        | Threshold
-                        | Change _ -> readingOf d p step (points key line), None
+                        | Threshold -> readingOf d p step (pairs line.Points), None
+                        | Change c -> readingOf d p step (changeOf c.Measure line (shifted.TryFind key)), None
                         | Anomaly a -> anomalyReading d a p step line
                         | Forecast _ -> forecastReading q line, None
                         | Outlier _ when (finite line.Points).IsEmpty -> Skipped(Incomplete, "no bucket in the window has a value"), None
@@ -533,16 +459,14 @@ let evaluate
                         // 0, so `> 0` alerts on the outliers.
                         | Outlier _ -> Judged(if outliers.Contains key then 1.0 else 0.0), None
 
-                    // WARNING(undocumented): on the as_count path the one
-                    // point stands for a window whose empty buckets read 0, so
-                    // the newest real bucket is unknown; the last one is taken.
-                    // A group that stops reporting there goes to No Data up to
-                    // a window late.
-                    let lastPoint (line: Line) =
+                    // WARNING(undocumented): on the as_count path the window is one point, so the
+                    // newest real bucket is unknown and the last one is taken; a group that stops
+                    // reporting goes to No Data up to a window late.
+                    let lastPoint (line: Engine.TimeSeries) =
                         match line.Points with
                         | [] -> None
                         | _ when q.AsCount -> Some(p.To - step)
-                        | pts -> Some(pts |> List.map fst |> List.max)
+                        | points -> Some(points |> List.map _.Time |> List.max)
 
                     return
                         Ok

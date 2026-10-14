@@ -150,7 +150,7 @@ let parsed
         match Plan.plan retention now request with
         | Error problems -> return Error problems
         | Ok plan ->
-            let! outputs = Execute.evaluate execute tenant plan
+            let! outputs = Execute.evaluate execute tenant plan None
             return Ok(results labels outputs)
     }
 

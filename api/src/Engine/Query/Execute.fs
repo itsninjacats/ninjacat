@@ -106,8 +106,7 @@ let private modelInput (s: Seasonality) (seasons: int) (fromMs: int64) (toMs: in
 
 /// A seasonal anomaly model, fitted on one group's history before a window.
 type AnomalyModel =
-    /// The trend's last level and the season's latest cycle, by phase: the
-    /// expectation does not move with what comes after the fit.
+    /// The trend's last level and the season's latest cycle, by phase.
     | RobustModel of level: float * profile: float[] * sigma: float
     /// The airline model, run one step ahead over the latest data.
     | AgileModel of Models.Airline
@@ -115,19 +114,15 @@ type AnomalyModel =
 /// One output's models, by the group's tags.
 type AnomalyModels = Map<string list, AnomalyModel>
 
-/// Where in its season a time falls: a bucket's index from the epoch, so a
-/// profile fitted once still lines up with any later window.
+/// Counted from the epoch, so a profile fitted once lines up with any later window.
 let private phase (s: Seasonality) (t: int64) =
     let step = int64 s.Step.TotalMilliseconds
     int ((t / step) % int64 s.Period)
 
-/// The newest bucket of a grid at `step` ending at `toMs`, a partial one when
-/// `toMs` is not on the step.
+/// The newest bucket before `toMs`, a partial one when `toMs` is not on the step.
 let private lastBucket (step: int64) (toMs: int64) = (toMs - 1L) / step * step
 
-/// The node's series over `length` back from the plan's end, at a seasonal
-/// model's step: the same queries and functions, a longer window, a coarser
-/// step.
+/// The node's series over `length` back from the plan's end, at the seasonal model's step.
 let private seasonalRead execute tenant (plan: Plan) (s: Seasonality) (length: TimeSpan) (node: Node) =
     task {
         let window =
@@ -222,13 +217,9 @@ let private fitGroups execute tenant (plan: Plan) (algorithm: AnomalyAlgorithm) 
         return historyFrom, histories, models
     }
 
-/// Runs a timeseries plan: for each output, in plan order, its query_index
-/// and its series with their extras.
-///
-/// `models` are seasonal anomaly models from `fit`, by query_index, perhaps
-/// fitted for an earlier window; with them no whole history is read, and a
-/// group without one has no band. None fits them here.
-let evaluateWith
+/// Runs a timeseries plan. With `models` from `fit` no whole history is read and a group without
+/// one has no band; None fits them here.
+let evaluate
     (execute: Sql -> Task<Row list>)
     (tenant: TenantId)
     (plan: Plan)
@@ -423,13 +414,7 @@ let evaluateWith
         return List.ofArray outputs
     }
 
-/// Runs a timeseries plan, fitting any seasonal anomaly model it needs.
-let evaluate (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<Series.OutputResult list> =
-    evaluateWith execute tenant plan None
-
-/// Reads each seasonal anomaly output's history and fits a model per group,
-/// by the output's query_index: the costly half of `evaluate`, which a monitor
-/// repeats only now and then.
+/// Each seasonal anomaly output's models by query_index: the costly half of `evaluate`.
 let fit (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<Map<int, AnomalyModels>> =
     task {
         let! fitted =
@@ -454,7 +439,7 @@ let fit (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<
 /// Runs a timeseries plan into Datadog's response shape.
 let run (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<Api.V2.Wire.TimeseriesFormulaQueryResponse> =
     task {
-        let! outputs = evaluate execute tenant plan
+        let! outputs = evaluate execute tenant plan None
         return Series.responseWith outputs
     }
 
@@ -480,20 +465,12 @@ let private reduce (agg: ScalarAggregator) (stepMs: int64) (points: (int64 * flo
         | ScalarArea -> Array.sum values * float stepMs / 1000.0
         |> Some
 
-/// Runs a scalar request: each query's window reduced to one value by its
-/// aggregator, then the formulas over those values.
+/// Runs a scalar plan: each query's window reduced by its aggregator first (spec:
+/// MetricsScalarQuery.aggregator), so `a / b` with avg is avg(a) / avg(b); then the formulas over
+/// those one-point series.
 ///
-/// The aggregator belongs to the query, not the formula (spec:
-/// MetricsScalarQuery.aggregator), so reduction comes first: `a / b` with avg
-/// is avg(a) / avg(b). A reduced series is a series with one point, which is
-/// all the evaluator needs — every function and all arithmetic work on it
-/// unchanged; time-wise ones have one point to work with.
-///
-/// WARNING(undocumented): what a sum or area of a gauge adds up. The window's
-/// buckets as the timeseries endpoint would draw them — the same points a
-/// graph of the query shows.
-/// Runs a scalar plan: for each output, in plan order, its series, each with
-/// one point — the reduced value — at the window's start.
+/// WARNING(undocumented): a sum or area of a gauge adds up the window's buckets as a graph of the
+/// query draws them.
 let evaluateScalar
     (execute: Sql -> Task<Row list>)
     (tenant: TenantId)

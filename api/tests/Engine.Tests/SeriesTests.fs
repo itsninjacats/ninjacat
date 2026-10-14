@@ -10,6 +10,11 @@ open NinjaCat.Api.Engine.Query.Compile
 
 let private row groups bucket value = { Groups = List.map Some groups; BucketMs = bucket; Value = value; SeriesId = None }
 
+let private int64Param (sql: Sql) (prefix: string) =
+    sql.Parameters |> List.pick (fun (n, v) -> match v with Int64 f when n.StartsWith prefix -> Some f | _ -> None)
+
+let private tenant = TenantId "default"
+
 /// Every window here lies within the raw retention counted back from it.
 let private planNow = Plan.plan Plan.defaultRetention (DateTimeOffset.UnixEpoch.AddDays 1.0)
 
@@ -83,7 +88,7 @@ let ``a request runs end to end`` () =
         | Ok p -> p
         | Error es -> failwith (String.Join("\n", es))
 
-    let r = (Execute.run execute (TenantId "default") plan).Result.Data.Attributes
+    let r = (Execute.run execute tenant plan).Result.Data.Attributes
 
     // Only the query a formula uses went to the database.
     Assert.Equal(String "cpu", Assert.Single(asked).Parameters |> List.find (fst >> _.StartsWith("metric")) |> snd)
@@ -101,7 +106,7 @@ let ``a shifted read queries the past and draws it now`` () =
     let asked = System.Collections.Concurrent.ConcurrentBag<int64>()
 
     let execute (sql: Sql) =
-        let from = sql.Parameters |> List.pick (fun (n, v) -> match v with Int64 f when n.StartsWith "from" -> Some f | _ -> None)
+        let from = int64Param sql "from"
         asked.Add from
         // Whatever window was asked, one point at its start, valued by window.
         Task.FromResult [ { Groups = []; BucketMs = from; Value = (if from = 0L then 1.0 else 2.0); SeriesId = None } ]
@@ -111,7 +116,7 @@ let ``a shifted read queries the past and draws it now`` () =
         | Ok p -> p
         | Error es -> failwith (String.Join("\n", es))
 
-    let r = (Execute.run execute (TenantId "default") plan).Result.Data.Attributes
+    let r = (Execute.run execute tenant plan).Result.Data.Attributes
 
     // Two reads: the window itself, and the same window a day earlier.
     Assert.Equal<int64 list>([ 0L; 86400000L ], asked |> Seq.sort |> List.ofSeq)
@@ -197,7 +202,7 @@ let ``a forecast runs end to end, past the window`` () =
         | Ok p -> p
         | Error es -> failwith (String.Join("\n", es))
 
-    let a = (Execute.run execute (TenantId "default") plan).Result.Data.Attributes
+    let a = (Execute.run execute tenant plan).Result.Data.Attributes
     Assert.Equal<int64 list>([ 0L; 20000L; 40000L; 60000L; 80000L ], a.Times) // the window only
     let f = (Option.get a.NinjacatForecast).Head |> Option.get
     Assert.Equal<int64 list>([ 100000L; 120000L ], f.Times)
@@ -216,8 +221,7 @@ let ``a seasonal forecast fits the history and continues the season`` () =
     let shape (t: int64) = 50.0 + 10.0 * sin (2.0 * Math.PI * float ((t / 60000L) % 60L) / 60.0)
 
     let execute (sql: Sql) =
-        let int64Param (prefix: string) = sql.Parameters |> List.pick (fun (n, v) -> match v with Int64 f when n.StartsWith prefix -> Some f | _ -> None)
-        let from, until, step = int64Param "from", int64Param "to", int64Param "step" * 1000L
+        let from, until, step = int64Param sql "from", int64Param sql "to", int64Param sql "step" * 1000L
         let first = (from + step - 1L) / step * step
         Task.FromResult [ for t in first .. step .. until - 1L -> { Groups = []; BucketMs = t; Value = shape t; SeriesId = None } ]
 
@@ -226,7 +230,7 @@ let ``a seasonal forecast fits the history and continues the season`` () =
         | Ok p -> p
         | Error es -> failwith (String.Join("\n", es))
 
-    let a = (Execute.run execute (TenantId "default") plan).Result.Data.Attributes
+    let a = (Execute.run execute tenant plan).Result.Data.Attributes
     let f = (Option.get a.NinjacatForecast).Head |> Option.get
     Assert.Equal(10, f.Times.Length)
     for t, v in List.zip f.Times f.Values do
@@ -235,8 +239,7 @@ let ``a seasonal forecast fits the history and continues the season`` () =
 /// Hourly-seasonal data at 1-minute buckets, with a lasting +20 shift from
 /// `shiftAt` on; the engine asks for whatever window and step it needs.
 let private seasonalWithShift (shiftAt: int64) (sql: Sql) =
-    let int64Param (prefix: string) = sql.Parameters |> List.pick (fun (n, v) -> match v with Int64 f when n.StartsWith prefix -> Some f | _ -> None)
-    let from, until, step = int64Param "from", int64Param "to", int64Param "step" * 1000L
+    let from, until, step = int64Param sql "from", int64Param sql "to", int64Param sql "step" * 1000L
     let first = (from + step - 1L) / step * step
     let value (t: int64) =
         50.0 + 10.0 * sin (2.0 * Math.PI * float ((t / 60000L) % 60L) / 60.0)
@@ -244,19 +247,24 @@ let private seasonalWithShift (shiftAt: int64) (sql: Sql) =
         + (if t >= shiftAt then 20.0 else 0.0)
     Task.FromResult [ for t in first .. step .. until - 1L -> { Groups = []; BucketMs = t; Value = value t; SeriesId = None } ]
 
-let private bandAfterShift algorithm =
-    // Window: hour 10 to hour 11; the shift lands at 10:20.
+/// One query of cpu, `interval` ms apart, from `from` to `until`.
+let private planAt (interval: int64) (from: int64) (until: int64) (formula: string) =
     let body =
-        $"""{{"data":{{"type":"timeseries_request","attributes":{{"from":36000000,"to":39600000,"interval":60000,
+        $"""{{"data":{{"type":"timeseries_request","attributes":{{"from":{from},"to":{until},"interval":{interval},
             "queries":[{{"data_source":"metrics","name":"a","query":"avg:cpu{{*}}.fill(null)"}}],
-            "formulas":[{{"formula":"anomalies(a, '{algorithm}', 3, seasonality='hourly')"}}]}}}}}}"""
+            "formulas":[{{"formula":"{formula}"}}]}}}}}}"""
 
-    let plan =
-        match read body |> Result.bind planNow with
-        | Ok p -> p
-        | Error es -> failwith (String.Join("\n", es))
+    match read body |> Result.bind planNow with
+    | Ok p -> p
+    | Error es -> failwith (String.Join("\n", es))
 
-    let a = (Execute.run (seasonalWithShift 37200000L) (TenantId "default") plan).Result.Data.Attributes
+/// Hour 10 to hour 11, every minute.
+let private hourTen = planAt 60000L 36000000L 39600000L
+
+let private bandAfterShift algorithm =
+    // The shift lands at 10:20.
+    let plan = hourTen $"anomalies(a, '{algorithm}', 3, seasonality='hourly')"
+    let a = (Execute.run (seasonalWithShift 37200000L) tenant plan).Result.Data.Attributes
     let b = (Option.get a.NinjacatBounds).Head |> Option.get
     // Points 30–60 minutes into the window: well after the shift.
     [ for i in 0 .. a.Times.Length - 1 do
@@ -276,3 +284,81 @@ let ``agile follows a lasting shift`` () =
     let outside = bandAfterShift "agile"
     Assert.NotEmpty outside
     Assert.True(outside |> List.filter id |> List.length < outside.Length / 4, "agile should have caught up with the shift")
+
+// --- anomaly models fitted apart from the window they judge -------------------------------
+
+let private bands (outputs: Series.OutputResult list) =
+    let line = Assert.Single(Assert.Single(outputs).Lines)
+    line.Data.Points, defaultArg line.Extra.Band Map.empty
+
+/// How far each point lies from the middle of its band.
+let private offCentre (outputs: Series.OutputResult list) =
+    let points, band = bands outputs
+
+    [ for KeyValue(t, v) in points do
+          match band.TryFind t with
+          | Some r -> abs (v - (r.Lower + r.Upper) / 2.0)
+          | None -> () ]
+
+[<Fact>]
+let ``robust fitted apart draws the band evaluate draws`` () =
+    let plan = hourTen "anomalies(a, 'robust', 3, seasonality='hourly')"
+    let execute = seasonalWithShift 37200000L
+    let models = (Execute.fit execute tenant plan).Result
+    Assert.True(models[0].ContainsKey [])
+    Assert.Equal<Map<int64, Series.Range>>(snd (bands (Execute.evaluate execute tenant plan None).Result), snd (bands (Execute.evaluate execute tenant plan (Some models)).Result))
+
+[<Theory>]
+[<InlineData("robust")>]
+[<InlineData("agile")>]
+let ``models fitted at one window judge a later one, in phase`` (algorithm: string) =
+    let formula = $"anomalies(a, '{algorithm}', 3, seasonality='hourly')"
+    let execute = seasonalWithShift Int64.MaxValue
+    let models = (Execute.fit execute tenant (hourTen formula)).Result
+    // Half an hour later, 45 minutes: not a whole season, so a profile out of
+    // phase would miss the season of amplitude 10 by up to 14.
+    let later = planAt 60000L 39600000L 42300000L formula
+
+    for outputs in [ Execute.evaluate execute tenant later None; Execute.evaluate execute tenant later (Some models) ] do
+        let distances = offCentre outputs.Result
+        Assert.Equal(45, distances.Length)
+        Assert.InRange(List.max distances, 0.0, 1.0)
+
+[<Theory>]
+[<InlineData("robust")>]
+[<InlineData("agile")>]
+let ``a window that ends off the model's step is expected in phase to its last point`` (algorithm: string) =
+    let formula = $"anomalies(a, '{algorithm}', 3, seasonality='hourly')"
+    let execute = seasonalWithShift Int64.MaxValue
+    // Points every 15 s, the window ending half a minute into a model bucket.
+    let plan = planAt 15000L 36030000L 39630000L formula
+    let models = (Execute.fit execute tenant plan).Result
+
+    for outputs in [ Execute.evaluate execute tenant plan None; Execute.evaluate execute tenant plan (Some models) ] do
+        let distances = offCentre outputs.Result
+        Assert.Equal(240, distances.Length)
+        Assert.InRange(List.max distances, 0.0, 1.0)
+
+[<Fact>]
+let ``agile with a model reads a few seasons, not the whole history`` () =
+    let reads = ResizeArray<int64>()
+
+    let execute (sql: Sql) =
+        lock reads (fun () -> reads.Add(int64Param sql "to" - int64Param sql "from"))
+        seasonalWithShift Int64.MaxValue sql
+
+    let plan = hourTen "anomalies(a, 'agile', 3, seasonality='hourly')"
+    let models = (Execute.fit execute tenant plan).Result
+    let fitRead = Seq.max reads
+    reads.Clear()
+    (Execute.evaluate execute tenant plan (Some models)).Result |> ignore
+    // Six seasons to fit; three and the window to run.
+    Assert.Equal(TimeSpan.FromHours 6.0, TimeSpan.FromMilliseconds(float fitRead) - TimeSpan.FromMinutes 61.0)
+    Assert.Equal(TimeSpan.FromHours 4.0, TimeSpan.FromMilliseconds(float (Seq.max reads)) - TimeSpan.FromMinutes 61.0)
+
+[<Fact>]
+let ``a group without a model has no band`` () =
+    let plan = hourTen "anomalies(a, 'robust', 3, seasonality='hourly')"
+    let line = Assert.Single(Assert.Single((Execute.evaluate (seasonalWithShift Int64.MaxValue) tenant plan (Some Map.empty)).Result).Lines)
+    Assert.NotEmpty line.Data.Points
+    Assert.True(line.Extra.Band.IsNone)
