@@ -1,8 +1,4 @@
-/// A whole monitor definition, checked: its query, its options and how they
-/// fit. The query process runs this on the panel's save, and the monitor
-/// service on what it loads, so both refuse the same definitions.
-///
-/// The tenant plays no part: it enters only when SQL is compiled.
+/// A monitor definition checked whole; the query process and the monitor service both run it.
 module NinjaCat.Api.Engine.Monitor.Validate
 
 open System
@@ -11,9 +7,6 @@ open System.Text.Json
 open NinjaCat.Api.Engine.Api.V2.Timeseries
 open NinjaCat.Api.Engine.Query
 open NinjaCat.Api.Engine.Monitor.Definition
-
-/// Datadog's type for a metric monitor; it still accepts the older name.
-let private monitorTypes = [ "query alert"; "metric alert" ]
 
 /// Whether threshold `a` is reached after `b` on the way to alerting.
 let private stricter (c: Comparator) (a: float) (b: float) =
@@ -38,15 +31,13 @@ let private laxSide (c: Comparator) =
 let private warningProblems (q: MonitorQuery) (t: Thresholds) : string list =
     let critical = q.Threshold
 
-    [ match q.Comparator, t.Warning with
-      | _, None -> ()
-      // WARNING(undocumented): "less strict" has no direction for == and !=;
-      // the warning only has to differ from critical.
-      | (Eq | Ne), Some w when w = critical -> $"options.thresholds.warning ({w}) must differ from critical ({critical})"
-      | (Eq | Ne), Some _ -> ()
-      | c, Some w when not (stricter c critical w) ->
-          $"options.thresholds.warning ({w}) must be less strict than critical ({critical}), so {laxSide c} it"
-      | _, Some _ -> () ]
+    match q.Comparator, t.Warning with
+    // WARNING(undocumented): "less strict" has no direction for == and !=;
+    // the warning only has to differ from critical.
+    | (Eq | Ne), Some w when w = critical -> [ $"options.thresholds.warning ({w}) must differ from critical ({critical})" ]
+    | (Gt | Ge | Lt | Le) as c, Some w when not (stricter c critical w) ->
+        [ $"options.thresholds.warning ({w}) must be less strict than critical ({critical}), so {laxSide c} it" ]
+    | _ -> []
 
 /// WARNING(undocumented): Datadog does not say whether a recovery threshold
 /// may equal the one it recovers from. Ours must sit strictly on the recovery
@@ -189,12 +180,7 @@ let private problemsOf (result: Result<'T, string list>) : string list =
     | Error problems -> problems
     | Ok _ -> []
 
-/// Parses and checks a definition as Datadog's API takes it: the type, the
-/// query and the options JSON. `now` is the evaluation's time; the engine
-/// never reads the clock.
-///
-/// The options come back with the critical threshold filled in from the
-/// query, and a forecast's threshold_windows named as not acted on.
+/// `now` is the evaluation's time; the engine never reads the clock.
 let definition
     (retention: Plan.Retention)
     (now: DateTimeOffset)
@@ -203,7 +189,8 @@ let definition
     (options: string)
     : Result<Definition, string list> =
     let typeProblems =
-        if List.contains monitorType monitorTypes then
+        // Datadog still accepts the older name.
+        if monitorType = "query alert" || monitorType = "metric alert" then
             []
         else
             [ $"monitor type '{monitorType}' is not supported; a metric monitor is a 'query alert'" ]
@@ -240,9 +227,7 @@ let definition
         | problems -> Error problems
     | problems, q, o -> Error(problems @ problemsOf q @ problemsOf o)
 
-/// A monitor as Datadog's API takes it, as JSON: its type, query and options
-/// are checked as `definition` checks them, and its other fields are left to
-/// the panel.
+/// A monitor as Datadog's API takes it, as JSON; fields other than type, query and options are the panel's.
 let monitor (retention: Plan.Retention) (now: DateTimeOffset) (json: string) : Result<Definition, string list> =
     let text (root: JsonElement) (name: string) =
         match root.TryGetProperty name with

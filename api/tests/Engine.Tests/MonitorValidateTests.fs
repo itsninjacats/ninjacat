@@ -28,7 +28,6 @@ let private refused (query: string) (options: string) (fragment: string) =
     validateWith Plan.defaultRetention query options |> problemsOf |> mentions fragment
 
 let private above90 = "avg(last_5m):avg:system.cpu.user{*} by {host} > 90"
-let private below10 = "avg(last_5m):avg:system.disk.free{*} by {host} < 10"
 
 // --- options --------------------------------------------------------------------------
 
@@ -48,6 +47,7 @@ let ``options as Datadog exports them`` () =
     Assert.Equal(Some 60.0, o.Thresholds.WarningRecovery)
     Assert.True o.NotifyNoData
     Assert.Equal(Some(TimeSpan.FromMinutes 10.0), o.NoDataTimeframe)
+    Assert.Equal(None, o.OnMissingData)
     Assert.Equal(TimeSpan.FromSeconds 60.0, o.EvaluationDelay)
     Assert.Equal(TimeSpan.FromSeconds 300.0, o.NewGroupDelay)
     Assert.Equal(Some(TimeSpan.FromHours 2.0), o.Timeout)
@@ -124,10 +124,6 @@ let ``on_missing_data is read`` (rule: string) =
     Assert.Equal(Some expected, o.OnMissingData)
     Assert.Empty o.NotActedOn
 
-[<Fact>]
-let ``without on_missing_data, notify_no_data decides`` () =
-    Assert.Equal(None, (valid above90 """{"notify_no_data":true}""").Options.OnMissingData)
-
 [<Theory>]
 [<InlineData("""{"on_missing_data":"notify"}""", "on_missing_data must be one of default, show_no_data")>]
 [<InlineData("""{"on_missing_data":true}""", "on_missing_data must be one of")>]
@@ -169,20 +165,16 @@ let ``critical must equal the query's`` () =
     refused above90 """{"thresholds":{"critical":95}}""" "must equal the query's threshold (90)"
 
 [<Theory>]
-[<InlineData(80.0, true)>]
-[<InlineData(90.0, false)>]
-[<InlineData(95.0, false)>]
-let ``above: warning below critical`` (warning: float, ok: bool) =
-    let result = validateWith Plan.defaultRetention above90 $$$"""{"thresholds":{"warning":{{{warning}}}}}"""
-    if ok then Assert.True result.IsOk else problemsOf result |> mentions "less strict than critical"
-
-[<Theory>]
-[<InlineData(20.0, true)>]
-[<InlineData(10.0, false)>]
-[<InlineData(5.0, false)>]
-let ``below: warning above critical`` (warning: float, ok: bool) =
-    let result = validateWith Plan.defaultRetention below10 $$$"""{"thresholds":{"warning":{{{warning}}}}}"""
-    if ok then Assert.True result.IsOk else problemsOf result |> mentions "so above it"
+[<InlineData(">", 90.0, 80.0, true, "less strict than critical")>]
+[<InlineData(">", 90.0, 90.0, false, "less strict than critical")>]
+[<InlineData(">", 90.0, 95.0, false, "less strict than critical")>]
+[<InlineData("<", 10.0, 20.0, true, "so above it")>]
+[<InlineData("<", 10.0, 10.0, false, "so above it")>]
+[<InlineData("<", 10.0, 5.0, false, "so above it")>]
+let ``warning less strict than critical`` (comparator: string, critical: float, warning: float, ok: bool, fragment: string) =
+    let query = $"avg(last_5m):avg:x{{*}} by {{host}} {comparator} {critical}"
+    let result = validateWith Plan.defaultRetention query $$$"""{"thresholds":{"warning":{{{warning}}}}}"""
+    if ok then Assert.True result.IsOk else problemsOf result |> mentions fragment
 
 [<Theory>]
 [<InlineData(">", 89.0, true)>]
@@ -258,36 +250,28 @@ let ``the recovery window is not longer than the trigger window`` () =
     refused (anomaly "last_4h" "last_15m" 60 "1") (windows "last_15m" "last_30m" "\"critical\":1") "must not be longer than the trigger window"
 
 /// Datadog's documented case: T = 15 m, c = 0.8, no recovery threshold, so
-/// the recovery window must exceed 15 · (1 − 0.8) = 3 minutes.
+/// the recovery window must exceed 15 · (1 − 0.8) = 3 minutes. With a
+/// recovery threshold r = 0.5: 15 · (1 − 0.8) / (1 − 0.5) = 6 minutes.
 [<Theory>]
-[<InlineData("last_3m", false)>]
-[<InlineData("last_4m", true)>]
-let ``the recovery window's lower bound`` (recovery: string, ok: bool) =
-    let result =
-        validateWith Plan.defaultRetention (anomaly "last_4h" "last_15m" 60 "0.8") (windows "last_15m" recovery "\"critical\":0.8")
-
-    if ok then Assert.True result.IsOk else problemsOf result |> mentions "must be longer than 3 minutes"
-
-/// With a recovery threshold r: 15 · (1 − 0.8) / (1 − 0.5) = 6 minutes.
-[<Theory>]
-[<InlineData("last_6m", false)>]
-[<InlineData("last_7m", true)>]
-let ``the lower bound with a recovery threshold`` (recovery: string, ok: bool) =
+[<InlineData("last_3m", "", false, "3 minutes")>]
+[<InlineData("last_4m", "", true, "3 minutes")>]
+[<InlineData("last_6m", ",\"critical_recovery\":0.5", false, "6 minutes")>]
+[<InlineData("last_7m", ",\"critical_recovery\":0.5", true, "6 minutes")>]
+let ``the recovery window's lower bound`` (recovery: string, recoveryThreshold: string, ok: bool, bound: string) =
     let result =
         validateWith
             Plan.defaultRetention
             (anomaly "last_4h" "last_15m" 60 "0.8")
-            (windows "last_15m" recovery "\"critical\":0.8,\"critical_recovery\":0.5")
+            (windows "last_15m" recovery ("\"critical\":0.8" + recoveryThreshold))
 
-    if ok then Assert.True result.IsOk else problemsOf result |> mentions "must be longer than 6 minutes"
+    if ok then Assert.True result.IsOk else problemsOf result |> mentions $"must be longer than {bound}"
 
-[<Fact>]
-let ``an anomaly recovery threshold of 1 is a problem, not a crash`` () =
-    refused (anomaly "last_4h" "last_15m" 60 "0.5") (windows "last_15m" "last_15m" "\"critical\":0.5,\"critical_recovery\":1") "on the side the monitor recovers to"
-
-[<Fact>]
-let ``anomaly recovery below critical`` () =
-    refused (anomaly "last_4h" "last_15m" 60 "0.5") """{"thresholds":{"critical_recovery":0.5}}""" "on the side the monitor recovers to"
+/// A recovery threshold of 1 is a problem, not a crash.
+[<Theory>]
+[<InlineData("""{"thresholds":{"critical":0.5,"critical_recovery":1},"threshold_windows":{"trigger_window":"last_15m","recovery_window":"last_15m"}}""")>]
+[<InlineData("""{"thresholds":{"critical_recovery":0.5}}""")>]
+let ``anomaly recovery below critical`` (options: string) =
+    refused (anomaly "last_4h" "last_15m" 60 "0.5") options "on the side the monitor recovers to"
 
 // --- forecast -------------------------------------------------------------------------
 
@@ -302,59 +286,27 @@ let ``a forecast's threshold_windows are stored, not acted on`` () =
 
 // --- retention ------------------------------------------------------------------------
 
-let private shortRetention: Plan.Retention =
-    { Raw = TimeSpan.FromDays 2.0
-      Rollup = TimeSpan.FromDays 7.0 }
+[<Theory>]
+[<InlineData(7.0, "avg(last_2w):avg:x{*} > 1", "", "metrics are kept 7 days")>]
+[<InlineData(3.0, "change(avg(last_2d),2d_ago):avg:x{*} > 1", "", "reads 4 days back")>]
+[<InlineData(7.0, "max(next_1w):forecast(avg:x{*}, 'linear', 1, history='2w') >= 3", "", "reads 14 days back")>]
+[<InlineData(400.0, "max(next_1w):forecast(avg:x{*}, 'linear', 1, history='999999w') >= 3", "", "metrics are kept 400 days")>]
+[<InlineData(7.0, "max(next_1w):forecast(avg:x{*}, 'seasonal', 1) >= 3", "", "two seasons")>]
+[<InlineData(7.0, "avg(last_5m):avg:x{*} > 1", """{"no_data_timeframe":20160}""", "no_data_timeframe")>]
+let ``beyond the rollup's retention`` (rollupDays: float, query: string, options: string, fragment: string) =
+    let retention: Plan.Retention =
+        { Raw = TimeSpan.FromDays 2.0
+          Rollup = TimeSpan.FromDays rollupDays }
 
-[<Fact>]
-let ``a window beyond the rollup's retention`` () =
-    validateWith shortRetention "avg(last_2w):avg:x{*} > 1" "" |> problemsOf |> mentions "metrics are kept 7 days"
-
-[<Fact>]
-let ``a change reads its window and its shift`` () =
-    let retention = { shortRetention with Rollup = TimeSpan.FromDays 3.0 }
-
-    validateWith retention "change(avg(last_2d),2d_ago):avg:x{*} > 1" ""
-    |> problemsOf
-    |> mentions "reads 4 days back"
-
-[<Fact>]
-let ``a forecast's history beyond the rollup's retention`` () =
-    validateWith shortRetention "max(next_1w):forecast(avg:x{*}, 'linear', 1, history='2w') >= 3" ""
-    |> problemsOf
-    |> mentions "reads 14 days back"
-
-[<Fact>]
-let ``a history too long for any date is a problem, not a crash`` () =
-    validateWith Plan.defaultRetention "max(next_1w):forecast(avg:x{*}, 'linear', 1, history='999999w') >= 3" ""
-    |> problemsOf
-    |> mentions "metrics are kept 400 days"
-
-[<Fact>]
-let ``a weekly seasonal forecast needs two weeks`` () =
-    validateWith shortRetention "max(next_1w):forecast(avg:x{*}, 'seasonal', 1) >= 3" ""
-    |> problemsOf
-    |> mentions "two seasons"
-
-[<Fact>]
-let ``no_data_timeframe beyond the rollup's retention`` () =
-    validateWith shortRetention "avg(last_5m):avg:x{*} > 1" """{"no_data_timeframe":20160}"""
-    |> problemsOf
-    |> mentions "no_data_timeframe"
+    validateWith retention query options |> problemsOf |> mentions fragment
 
 // --- the engine plans the query -------------------------------------------------------
 
-[<Fact>]
-let ``a function the engine lacks`` () =
-    refused "avg(last_5m):nosuchfn(avg:x{*}) > 1" "" "'nosuchfn' is not supported yet"
-
-[<Fact>]
-let ``a bad rollup`` () =
-    refused "avg(last_5m):avg:x{*}.rollup() > 1" "" ".rollup() needs a method"
-
-[<Fact>]
-let ``formulas grouped differently`` () =
-    refused "avg(last_5m):avg:a{*} by {host} / avg:b{*} by {env} > 1" "" "grouped by the same tags"
+[<Theory>]
+[<InlineData("avg(last_5m):nosuchfn(avg:x{*}) > 1", "'nosuchfn' is not supported yet")>]
+[<InlineData("avg(last_5m):avg:x{*}.rollup() > 1", ".rollup() needs a method")>]
+[<InlineData("avg(last_5m):avg:a{*} by {host} / avg:b{*} by {env} > 1", "grouped by the same tags")>]
+let ``what the engine cannot plan`` (query: string, fragment: string) = refused query "" fragment
 
 [<Fact>]
 let ``every type plans`` () =

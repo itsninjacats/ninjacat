@@ -6,9 +6,8 @@
 ///   forecast   max(next_1w):forecast(<q>, 'linear', 1, history='1w') >= 90
 ///   outlier    avg(last_30m):outliers(<q> by {host}, 'dbscan', 7) > 0
 ///
-/// The syntax is read first; each detection method's rules are checked after,
-/// in plain code, so a refusal says what is wrong rather than where a parser
-/// stopped. `<expr>` is anything the engine's expression parser accepts.
+/// The syntax is read first and each method's rules after, so a refusal says
+/// what is wrong rather than where a parser stopped.
 module NinjaCat.Api.Engine.Monitor.Parse
 
 open System
@@ -21,7 +20,6 @@ open NinjaCat.Api.Engine.Monitor.Definition
 
 // --- syntax ----------------------------------------------------------------------------
 
-/// What comes before the colon: `avg(last_5m)`, `change(avg(last_5m),5m_ago)`.
 type private Head = { Name: string; Args: HeadArg list }
 
 and private HeadArg =
@@ -95,10 +93,7 @@ module private Grammar =
                   Threshold = value }
         }
 
-    let read (text: string) : Result<Syntax, string> =
-        match run syntax text with
-        | Success(s, _, _) -> Result.Ok s
-        | Failure(message, _, _) -> Result.Error message
+    let read (text: string) : Result<Syntax, string> = run syntax text |> Parser.toResult
 
 // --- windows ---------------------------------------------------------------------------
 
@@ -119,7 +114,6 @@ let private countOf (text: string) : int option =
     | true, n when n > 0 && n <= 100_000 -> Some n
     | _ -> None
 
-/// `last_5m` → ("last", 5 minutes).
 let private readWindow (text: string) : (string * Window) option =
     let m = windowPattern.Match text
 
@@ -150,13 +144,7 @@ let lastWindow (text: string) : Result<Window, string> =
 let private changeWindowError (text: string) =
     $"'{text}': a change monitor looks at most two days back (minutes up to 2880, hours up to 48, days up to 2)"
 
-let private withinTwoDays (w: Window) =
-    match w.Unit with
-    | Minutes -> w.Count <= 2880
-    | Hours -> w.Count <= 48
-    | Days -> w.Count <= 2
-    | Weeks
-    | Months -> false
+let private withinTwoDays (w: Window) = w.Length <= TimeSpan.FromDays 2.0
 
 let private changeWindow (text: string) : Result<Window, string> =
     match lastWindow text with
@@ -187,22 +175,7 @@ let private horizon (text: string) : Result<Window, string> =
 
 // --- the expression --------------------------------------------------------------------
 
-/// The metric queries an expression reads.
-let rec leaves (e: Expr<MetricQuery>) : MetricQuery list =
-    match e with
-    | Leaf q -> [ q ]
-    | Number _ -> []
-    | Neg inner -> leaves inner
-    | Binary(_, l, r) -> leaves l @ leaves r
-    | Call(_, args) ->
-        args
-        |> List.collect (fun arg ->
-            match arg with
-            | Value v -> leaves v
-            | Lit _
-            | Named _ -> [])
-
-/// The functions an expression calls, outermost first.
+/// Outermost first.
 let rec functionNames (e: Expr<MetricQuery>) : string list =
     match e with
     | Leaf _
@@ -218,8 +191,7 @@ let rec functionNames (e: Expr<MetricQuery>) : string list =
                 | Lit _
                 | Named _ -> []))
 
-/// The `by` keys of the groups the expression yields. A count across
-/// series is one series, whatever went in.
+/// A count across series is one series, whatever went in.
 let rec private groupKeys (e: Expr<MetricQuery>) : Set<string> =
     match e with
     | Leaf q -> set q.GroupBy
@@ -241,17 +213,12 @@ let private detectionFunctions = [ "anomalies"; "forecast"; "outliers" ]
 /// "Not allowed inside" anomalies() and forecast(), per Datadog's docs.
 let private refusedInModels = [ "cumsum"; "integral"; "outliers"; "piecewise_constant"; "robust_trend"; "trend_line" ]
 
-/// A result's problem, if it has one.
-let problemOf (result: Result<'T, string>) : string option =
+let private problemOf (result: Result<'T, string>) : string option =
     match result with
     | Error e -> Some e
     | Ok _ -> None
 
-// --- arguments the engine does not read ------------------------------------------------
-//
-// The algorithm, its bounds and the model come from the engine's own readers
-// (Plan.anomaliesArgs, forecastArgs, outlierArgs); what is read here is what
-// only a monitor acts on.
+// --- arguments only a monitor reads; the engine's readers take the rest ------------------
 
 let private duplicates (fn: string) (named: (string * Literal) list) : string list =
     [ for name, count in named |> List.countBy fst do
@@ -287,15 +254,6 @@ let private timezoneArg (fn: string) (named: (string * Literal) list) : Result<s
             Error $"{fn}() timezone '{zone}' is not a known IANA zone"
     | Some(Num _) -> Error $"{fn}() timezone is a zone name, e.g. timezone='Europe/Warsaw'"
 
-let private flagArg (fn: string) (name: string) (named: (string * Literal) list) : Result<bool, string> =
-    match Plan.namedArg name named with
-    | None -> Ok false
-    | Some value ->
-        match Plan.word value with
-        | Some "true" -> Ok true
-        | Some "false" -> Ok false
-        | _ -> Error $"{fn}() {name} is 'true' or 'false'"
-
 // --- detection methods -----------------------------------------------------------------
 
 let private anomaly (rest: Arg<string> list) : Result<AnomalySpec, string list> =
@@ -325,7 +283,14 @@ let private anomaly (rest: Arg<string> list) : Result<AnomalySpec, string list> 
         | Some None -> Error "anomalies() alert_window is a window, e.g. alert_window='last_15m'"
 
     let interval = intervalArg fn named
-    let countDefaultZero = flagArg fn "count_default_zero" named
+
+    let countDefaultZero =
+        match Plan.namedArg "count_default_zero" named |> Option.map Plan.word with
+        | None
+        | Some(Some "false") -> Ok false
+        | Some(Some "true") -> Ok true
+        | Some _ -> Error "anomalies() count_default_zero is 'true' or 'false'"
+
     let timezone = timezoneArg fn named
 
     match duplicates fn named, algorithm, direction, alertWindow, interval, countDefaultZero, timezone with
@@ -403,7 +368,6 @@ let private aggregator (name: string) : Result<TimeAggregator, string> =
     | "percentile" -> Error "the percentile time aggregation is not supported yet"
     | other -> Error $"unknown time aggregation '{other}'; use avg, sum, min or max"
 
-/// The time aggregation, its window text, and the change around it if any.
 let private readHead (h: Head) : Result<string * string * (ChangeMeasure * string) option, string> =
     let measureOf name = if name = "change" then Absolute else Percent
 
@@ -415,9 +379,7 @@ let private readHead (h: Head) : Result<string * string * (ChangeMeasure * strin
     | agg, [ Plain window ] -> Ok(agg, window, None)
     | agg, _ -> Error $"the query starts with a time aggregation and a window, e.g. avg(last_5m), not {agg}(…)"
 
-/// anomalies(), forecast() or outliers() as the outermost function: its name,
-/// the query inside, and the arguments after it as the engine's formula holds
-/// them, so the engine's own readers take them.
+/// The arguments come back as the engine's formula holds them, for the engine's own readers.
 let private outerFunction (e: Expr<MetricQuery>) : (string * Expr<MetricQuery> * Arg<string> list) option =
     match e, snd (Engine.split e) with
     | Call(name, Value inner :: _), Call(_, Value _ :: rest) when List.contains name detectionFunctions -> Some(name, inner, rest)
@@ -430,18 +392,9 @@ let private build (s: Syntax) (agg: TimeAggregator) (window: Window) (detection:
       Expression = s.Expression
       Measured = measured
       GroupBy = groupKeys measured |> Set.toList
-      AsCount = leaves measured |> List.exists (fun q -> q.Modifiers |> List.exists (fun m -> m.Name = "as_count"))
+      AsCount = fst (Engine.split measured) |> List.exists (fun p -> p.Query.Modifiers |> List.exists (fun m -> m.Name = "as_count"))
       Comparator = s.Comparator
       Threshold = s.Threshold }
-
-/// The window's problem, if any, then the method's.
-let private both (window: Result<Window, string>) (spec: Result<'Spec, string list>) : string list =
-    let specProblems =
-        match spec with
-        | Error problems -> problems
-        | Ok _ -> []
-
-    Option.toList (problemOf window) @ specProblems
 
 let private interpret (s: Syntax) (aggName: string) (windowText: string) (change: (ChangeMeasure * string) option) : Result<MonitorQuery, string list> =
     match aggregator aggName, change, outerFunction s.Expression with
@@ -455,20 +408,20 @@ let private interpret (s: Syntax) (aggName: string) (windowText: string) (change
         match lastWindow windowText with
         | Ok window -> Ok(build s agg window Threshold s.Expression)
         | Error e -> Error [ e ]
-    | Ok agg, None, Some("anomalies", inner, rest) ->
-        match lastWindow windowText, anomaly rest with
-        | Ok window, Ok spec -> Ok(build s agg window (Anomaly spec) inner)
-        | window, spec -> Error(both window spec)
-    | Ok agg, None, Some("forecast", inner, rest) ->
-        match horizon windowText, forecast rest with
-        | Ok window, Ok spec -> Ok(build s agg window (Forecast spec) inner)
-        | window, spec -> Error(both window spec)
-    | Ok agg, None, Some(_, inner, rest) ->
-        match lastWindow windowText, outlier rest with
-        | Ok window, Ok spec -> Ok(build s agg window (Outlier spec) inner)
-        | window, spec -> Error(both window spec)
+    | Ok agg, None, Some(name, inner, rest) ->
+        let window = if name = "forecast" then horizon windowText else lastWindow windowText
 
-/// The functions an anomaly or forecast model must not have inside it.
+        let detection =
+            match name with
+            | "anomalies" -> anomaly rest |> Result.map Anomaly
+            | "forecast" -> forecast rest |> Result.map Forecast
+            | _ -> outlier rest |> Result.map Outlier
+
+        match window, detection with
+        | Ok window, Ok detection -> Ok(build s agg window detection inner)
+        | Error e, Ok _ -> Error [ e ]
+        | window, Error problems -> Error(Option.toList (problemOf window) @ problems)
+
 let private modelProblems (model: string) (q: MonitorQuery) (inside: string list) : string list =
     [ for name in refusedInModels |> List.filter (fun n -> List.contains n inside) |> List.distinct do
           $"{name}() is not allowed inside {model}()"
@@ -476,7 +429,6 @@ let private modelProblems (model: string) (q: MonitorQuery) (inside: string list
       if q.AsCount then
           $"{model}() monitors do not take .as_count() queries" ]
 
-/// Rules that hold across the query, once each part has been read.
 let private queryProblems (q: MonitorQuery) : string list =
     let inside = functionNames q.Measured
 
@@ -497,17 +449,17 @@ let private queryProblems (q: MonitorQuery) : string list =
                   "with .as_count() the time aggregation must be sum; Datadog: avg, min and max cannot be used with as_count" ]
 
     // outliers() inside a model is already refused by name.
-    let reportedByModel (name: string) =
+    let refusedByModel =
         match q.Detection with
         | Anomaly _
-        | Forecast _ -> List.contains name refusedInModels
+        | Forecast _ -> refusedInModels
         | Threshold
         | Change _
-        | Outlier _ -> false
+        | Outlier _ -> []
 
     let nested =
         [ for name in detectionFunctions do
-              if List.contains name inside && not (reportedByModel name) then
+              if List.contains name inside && not (List.contains name refusedByModel) then
                   $"{name}() must be the outermost function of the monitor's query" ]
 
     let comparison =
@@ -526,7 +478,6 @@ let private queryProblems (q: MonitorQuery) : string list =
 
     nested @ byMethod @ comparison
 
-/// Reads a monitor's query and checks the rules of its detection method.
 /// Whether the inner query plans, and how the options fit it, is Validate's.
 let query (text: string) : Result<MonitorQuery, string list> =
     match Grammar.read text with

@@ -578,6 +578,8 @@ let ``the query hash follows the detection method and its arguments`` () =
     Assert.NotEqual<string>(threshold, change)
     Assert.NotEqual<string>(change, hash "change(avg(last_5m),10m_ago):avg:cpu{*} by {host} > 90")
     Assert.NotEqual<string>(change, hash "pct_change(avg(last_5m),5m_ago):avg:cpu{*} by {host} > 90")
+    let anomaly = "avg(last_4h):anomalies(avg:cpu{*} by {host}, 'agile', 2, alert_window='last_15m'"
+    Assert.NotEqual<string>(hash $"{anomaly}) >= 1", hash $"{anomaly}, timezone='Europe/Warsaw') >= 1")
 
 [<Fact>]
 let ``the query hash is stable`` () =

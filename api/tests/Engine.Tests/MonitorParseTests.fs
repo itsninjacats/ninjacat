@@ -91,14 +91,6 @@ let ``windows up to a month`` (window: string) =
 let ``windows refused`` (window: string, fragment: string) =
     refused $"avg({window}):avg:x{{*}} > 1" fragment
 
-[<Fact>]
-let ``percentile is refused`` () =
-    refused "percentile(last_5m):p99:request.latency{*} > 1" "percentile"
-
-[<Fact>]
-let ``an unknown time aggregation is refused`` () =
-    refused "last(last_5m):avg:x{*} > 1" "unknown time aggregation 'last'"
-
 [<Theory>]
 [<InlineData("avg")>]
 [<InlineData("min")>]
@@ -106,13 +98,13 @@ let ``an unknown time aggregation is refused`` () =
 let ``as_count takes only sum`` (agg: string) =
     refused $"{agg}(last_5m):sum:requests{{*}}.as_count() > 1" "must be sum"
 
-[<Fact>]
-let ``a missing comparator is a syntax error`` () =
-    refused "avg(last_5m):avg:x{*}" "comparator"
-
-[<Fact>]
-let ``outliers inside arithmetic is refused`` () =
-    refused "avg(last_5m):outliers(avg:x{*} by {host}, 'dbscan', 3) * 2 > 0" "outermost"
+[<Theory>]
+[<InlineData("percentile(last_5m):p99:request.latency{*} > 1", "percentile")>]
+[<InlineData("last(last_5m):avg:x{*} > 1", "unknown time aggregation 'last'")>]
+[<InlineData("avg(last_5m):avg:x{*}", "comparator")>]
+[<InlineData("avg(last_5m):outliers(avg:x{*} by {host}, 'dbscan', 3) * 2 > 0", "outermost")>]
+[<InlineData("change(avg(last_5m),5m_ago):anomalies(avg:x{*}, 'basic', 2, alert_window='last_5m') >= 1", "cannot be combined")>]
+let ``other refusals`` (text: string, fragment: string) = refused text fragment
 
 // --- change ---------------------------------------------------------------------------
 
@@ -150,10 +142,6 @@ let ``documented shifts`` (shift: string) =
 [<InlineData("pct_change(last_5m,5m_ago)", "takes a time aggregation and a timeshift")>]
 let ``change refusals`` (head: string, fragment: string) =
     refused $"{head}:avg:x{{*}} > 1" fragment
-
-[<Fact>]
-let ``change of an anomaly is refused`` () =
-    refused "change(avg(last_5m),5m_ago):anomalies(avg:x{*}, 'basic', 2, alert_window='last_5m') >= 1" "cannot be combined"
 
 // --- anomaly --------------------------------------------------------------------------
 
@@ -245,12 +233,6 @@ let ``linear forecast, Datadog's API example`` () =
               Timezone = None },
         q.Detection
     )
-
-[<Fact>]
-let ``interval in seconds, the plan's example`` () =
-    match (parsed "max(next_1w):forecast(avg:x{*}, 'linear', 1, interval=3600, history='1w', model='default') >= 90").Detection with
-    | Forecast f -> Assert.Equal(Some(TimeSpan.FromHours 1.0), f.Interval)
-    | other -> Assert.Fail $"expected a forecast, got {other}"
 
 [<Fact>]
 let ``seasonal forecast, falling below`` () =

@@ -1,10 +1,6 @@
-/// A monitor's options, from Datadog's options object as stored.
-///
-/// The options evaluation acts on are read and range-checked here. Every other
-/// option is accepted and named in NotActedOn, so a Datadog definition loads
-/// unchanged and the panel can say what is ignored; only the two that would
-/// change what is evaluated are refused. How the options fit the query is
-/// Validate's.
+/// A monitor's options, from Datadog's options object. Every option not acted
+/// on is accepted and named in NotActedOn, so a Datadog definition loads
+/// unchanged; only the two that would change what is evaluated are refused.
 module NinjaCat.Api.Engine.Monitor.Options
 
 open System
@@ -39,11 +35,6 @@ let private actedOn =
       "no_data_timeframe"
       "on_missing_data"
       "timeout_h" ]
-
-let private refused =
-    Map
-        [ "scheduling_options", "options.scheduling_options: custom schedules and cumulative windows are not supported yet"
-          "variables", "options.variables: formula and function monitors over other data sources are not supported yet" ]
 
 /// A property, with null the same as absent.
 let private property (name: string) (e: JsonElement) : JsonElement option =
@@ -92,168 +83,120 @@ let private window (path: string) (e: JsonElement) : Result<Window, string> =
     | JsonValueKind.String -> Parse.lastWindow (e.GetString()) |> Result.mapError (fun problem -> $"{path}: {problem}")
     | _ -> Error $"{path} must be a window like \"last_15m\""
 
-/// Reads `name` of `parent` with `reader`; absent is Ok None.
-let private optional
-    (parent: string)
-    (name: string)
-    (reader: string -> JsonElement -> Result<'T, string>)
-    (e: JsonElement)
-    : Result<'T option, string> =
-    match property name e with
-    | None -> Ok None
-    | Some value -> reader $"{parent}.{name}" value |> Result.map Some
-
-let private valueOf (result: Result<'T option, string>) : 'T option =
-    match result with
-    | Ok value -> value
-    | Error _ -> None
-
 let private unknownKeys (path: string) (known: string list) (e: JsonElement) : string list =
     [ for p in e.EnumerateObject() do
           if p.Value.ValueKind <> JsonValueKind.Null && not (List.contains p.Name known) then
               $"{path} has no '{p.Name}'" ]
 
-let private thresholds (path: string) (e: JsonElement) : Result<Thresholds, string list> =
-    if e.ValueKind <> JsonValueKind.Object then
-        Error [ $"{path} must be an object" ]
-    else
-        let critical = optional path "critical" number e
-        let warning = optional path "warning" number e
-        let criticalRecovery = optional path "critical_recovery" number e
-        let warningRecovery = optional path "warning_recovery" number e
-
-        let problems =
-            unknownKeys path [ "critical"; "warning"; "critical_recovery"; "warning_recovery" ] e
-            @ List.choose id
-                [ Parse.problemOf critical
-                  Parse.problemOf warning
-                  Parse.problemOf criticalRecovery
-                  Parse.problemOf warningRecovery ]
-
-        match problems with
-        | [] ->
-            Ok
-                { Critical = valueOf critical
-                  Warning = valueOf warning
-                  CriticalRecovery = valueOf criticalRecovery
-                  WarningRecovery = valueOf warningRecovery }
-        | problems -> Error problems
-
-let private thresholdWindows (path: string) (e: JsonElement) : Result<Window option * Window option, string list> =
-    if e.ValueKind <> JsonValueKind.Object then
-        Error [ $"{path} must be an object" ]
-    else
-        let trigger = optional path "trigger_window" window e
-        let recovery = optional path "recovery_window" window e
-
-        match unknownKeys path [ "trigger_window"; "recovery_window" ] e @ List.choose id [ Parse.problemOf trigger; Parse.problemOf recovery ] with
-        | [] -> Ok(valueOf trigger, valueOf recovery)
-        | problems -> Error problems
-
 let private seconds (n: int64) = TimeSpan.FromSeconds(float n)
 
 let private ofObject (root: JsonElement) : Result<Options, string list> =
-    let path = "options"
+    let problems = ResizeArray<string>()
+
     let present =
         [ for p in root.EnumerateObject() do
               if p.Value.ValueKind <> JsonValueKind.Null then
                   p.Name ]
 
-    let keyProblems = present |> List.choose refused.TryFind
+    for name in present do
+        match name with
+        | "scheduling_options" -> problems.Add "options.scheduling_options: custom schedules and cumulative windows are not supported yet"
+        | "variables" -> problems.Add "options.variables: formula and function monitors over other data sources are not supported yet"
+        | _ -> ()
+
+    // A value with a problem reads as absent; the problem is noted.
+    let read (parent: string) (name: string) (reader: string -> JsonElement -> Result<'T, string>) (e: JsonElement) : 'T option =
+        match property name e with
+        | None -> None
+        | Some value ->
+            match reader $"{parent}.{name}" value with
+            | Ok v -> Some v
+            | Error problem ->
+                problems.Add problem
+                None
+
+    let objectAt (name: string) (known: string list) : JsonElement option =
+        let path = $"options.{name}"
+
+        match property name root with
+        | None -> None
+        | Some e when e.ValueKind <> JsonValueKind.Object ->
+            problems.Add $"{path} must be an object"
+            None
+        | Some e ->
+            problems.AddRange(unknownKeys path known e)
+            Some e
 
     let thresholds =
-        match property "thresholds" root with
-        | None -> Ok defaults.Thresholds
-        | Some e -> thresholds $"{path}.thresholds" e
+        match objectAt "thresholds" [ "critical"; "warning"; "critical_recovery"; "warning_recovery" ] with
+        | None -> defaults.Thresholds
+        | Some e ->
+            { Critical = read "options.thresholds" "critical" number e
+              Warning = read "options.thresholds" "warning" number e
+              CriticalRecovery = read "options.thresholds" "critical_recovery" number e
+              WarningRecovery = read "options.thresholds" "warning_recovery" number e }
 
-    let windows =
-        match property "threshold_windows" root with
-        | None -> Ok(None, None)
-        | Some e -> thresholdWindows $"{path}.threshold_windows" e
+    let windows = objectAt "threshold_windows" [ "trigger_window"; "recovery_window" ]
+    let triggerWindow = windows |> Option.bind (read "options.threshold_windows" "trigger_window" window)
+    let recoveryWindow = windows |> Option.bind (read "options.threshold_windows" "recovery_window" window)
 
-    let evaluationDelay = optional path "evaluation_delay" (fun p -> wholeNumber p 0L 86400L) root
+    let evaluationDelay = read "options" "evaluation_delay" (fun p -> wholeNumber p 0L 86400L) root
     // WARNING(undocumented): Datadog documents no cap; ours is a day.
-    let newGroupDelay = optional path "new_group_delay" (fun p -> wholeNumber p 0L 86400L) root
-    let newHostDelay = optional path "new_host_delay" (fun p -> wholeNumber p 0L 86400L) root
-    let requireFullWindow = optional path "require_full_window" boolean root
-    let notifyNoData = optional path "notify_no_data" boolean root
+    let newGroupDelay = read "options" "new_group_delay" (fun p -> wholeNumber p 0L 86400L) root
+    let newHostDelay = read "options" "new_host_delay" (fun p -> wholeNumber p 0L 86400L) root
+    let requireFullWindow = read "options" "require_full_window" boolean root
+    let notifyNoData = read "options" "notify_no_data" boolean root
     // Minutes, as Datadog counts it. The longest is the retention's, which Validate checks.
-    let noDataTimeframe = optional path "no_data_timeframe" minutes root
-    let onMissingData = optional path "on_missing_data" missingData root
-    let timeoutH = optional path "timeout_h" (fun p -> wholeNumber p 0L 24L) root
+    let noDataTimeframe = read "options" "no_data_timeframe" minutes root
+    let onMissingData = read "options" "on_missing_data" missingData root
+    let timeoutH = read "options" "timeout_h" (fun p -> wholeNumber p 0L 24L) root
 
     // WARNING(undocumented): on_missing_data replaces the older two, so both
     // together are refused; an explicit notify_no_data false is accepted, as
     // a definition read back from Datadog may carry it.
-    let replaced =
-        match valueOf onMissingData, valueOf notifyNoData, valueOf noDataTimeframe with
-        | Some _, Some true, _
-        | Some _, _, Some _ -> [ "options.on_missing_data replaces notify_no_data and no_data_timeframe; set one or the other" ]
-        | _ -> []
+    match onMissingData, notifyNoData, noDataTimeframe with
+    | Some _, Some true, _
+    | Some _, _, Some _ -> problems.Add "options.on_missing_data replaces notify_no_data and no_data_timeframe; set one or the other"
+    | _ -> ()
 
-    let nested (result: Result<'T, string list>) =
-        match result with
-        | Error problems -> problems
-        | Ok _ -> []
-
-    let problems =
-        keyProblems
-        @ nested thresholds
-        @ nested windows
-        @ List.choose
-            id
-            [ Parse.problemOf evaluationDelay
-              Parse.problemOf newGroupDelay
-              Parse.problemOf newHostDelay
-              Parse.problemOf requireFullWindow
-              Parse.problemOf notifyNoData
-              Parse.problemOf noDataTimeframe
-              Parse.problemOf onMissingData
-              Parse.problemOf timeoutH ]
-        @ replaced
-
-    match problems, thresholds, windows with
-    | [], Ok thresholds, Ok(trigger, recovery) ->
+    if problems.Count > 0 then
+        Error(List.ofSeq problems)
+    else
         // new_host_delay is the deprecated name; new_group_delay wins.
         let newGroupDelay =
-            match valueOf newGroupDelay, valueOf newHostDelay with
+            match newGroupDelay, newHostDelay with
             | Some s, _
             | None, Some s -> seconds s
             | None, None -> defaults.NewGroupDelay
 
         Ok
             { Thresholds = thresholds
-              TriggerWindow = trigger
-              RecoveryWindow = recovery
-              EvaluationDelay = valueOf evaluationDelay |> Option.map seconds |> Option.defaultValue TimeSpan.Zero
+              TriggerWindow = triggerWindow
+              RecoveryWindow = recoveryWindow
+              EvaluationDelay = evaluationDelay |> Option.map seconds |> Option.defaultValue TimeSpan.Zero
               NewGroupDelay = newGroupDelay
-              RequireFullWindow = valueOf requireFullWindow |> Option.defaultValue false
-              NotifyNoData = valueOf notifyNoData |> Option.defaultValue false
-              NoDataTimeframe = valueOf noDataTimeframe |> Option.map (fun m -> TimeSpan.FromMinutes(float m))
-              OnMissingData = valueOf onMissingData
+              RequireFullWindow = requireFullWindow |> Option.defaultValue false
+              NotifyNoData = notifyNoData |> Option.defaultValue false
+              NoDataTimeframe = noDataTimeframe |> Option.map (fun m -> TimeSpan.FromMinutes(float m))
+              OnMissingData = onMissingData
               Timeout =
-                match valueOf timeoutH with
+                match timeoutH with
                 | None
                 | Some 0L -> None
                 | Some h -> Some(TimeSpan.FromHours(float h))
               NotActedOn = present |> List.filter (fun name -> not (List.contains name actedOn)) }
-    | problems, _, _ -> Error problems
 
-/// Datadog's options object. Absent or null is every default.
-let ofElement (root: JsonElement) : Result<Options, string list> =
-    match root.ValueKind with
-    | JsonValueKind.Undefined
-    | JsonValueKind.Null -> Ok defaults
-    | JsonValueKind.Object -> ofObject root
-    | _ -> Error [ "options must be an object" ]
-
-/// The options as JSON text, as Postgres and the panel hold them.
+/// The options as JSON text, as Postgres and the panel hold them. Absent or null is every default.
 let parse (json: string) : Result<Options, string list> =
     if String.IsNullOrWhiteSpace json then
         Ok defaults
     else
         try
             use document = JsonDocument.Parse json
-            ofElement document.RootElement
+
+            match document.RootElement.ValueKind with
+            | JsonValueKind.Null -> Ok defaults
+            | JsonValueKind.Object -> ofObject document.RootElement
+            | _ -> Error [ "options must be an object" ]
         with :? JsonException as e ->
             Error [ $"options are not valid JSON: {e.Message}" ]

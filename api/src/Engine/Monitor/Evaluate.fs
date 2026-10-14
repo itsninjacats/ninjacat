@@ -108,7 +108,7 @@ let nextTick (monitor: string) (frequency: TimeSpan) (previous: DateTimeOffset o
 // --- the window and its step -----------------------------------------------------------
 
 let private rollupInterval (q: MonitorQuery) : TimeSpan option =
-    match Parse.leaves q.Measured |> List.choose Plan.rollupInterval with
+    match fst (Engine.split q.Measured) |> List.choose (fun p -> Plan.rollupInterval p.Query) with
     | [] -> None
     | intervals -> Some(List.max intervals)
 

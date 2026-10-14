@@ -20,7 +20,7 @@ type private P<'T> = Parser<'T, unit>
 
 let private ws: P<unit> = spaces
 
-let private toResult (result: ParserResult<'T, unit>) : Result<'T, string> =
+let toResult (result: ParserResult<'T, unit>) : Result<'T, string> =
     match result with
     | Success(value, _, _) -> Result.Ok value
     | Failure(message, _, _) -> Result.Error message

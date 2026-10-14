@@ -1,5 +1,4 @@
-/// A metric monitor as Datadog defines one: its query, read into what each
-/// detection method needs, and the options the evaluation acts on.
+/// A metric monitor as Datadog defines one, read into what the evaluation needs.
 module NinjaCat.Api.Engine.Monitor.Definition
 
 open System
@@ -58,14 +57,12 @@ type Comparator =
         | Eq -> "=="
         | Ne -> "!="
 
-/// What reduces the window to one value per group.
 type TimeAggregator =
     | Avg
     | Sum
     | Min
     | Max
 
-/// `change(…)` or `pct_change(…)`.
 type ChangeMeasure =
     | Absolute
     | Percent
@@ -97,7 +94,6 @@ type ForecastSpec =
       Deviations: float
       Interval: TimeSpan option
       History: TimeSpan option
-      /// Accepted and not acted on, as for anomalies.
       Timezone: string option }
 
 type OutlierSpec =
@@ -144,8 +140,6 @@ type MissingData =
     | ShowAndNotifyNoData
     | Resolve
 
-/// The options evaluation acts on. Options Datadog has that are stored but
-/// not acted on yet are only named, in NotActedOn.
 type Options =
     { Thresholds: Thresholds
       TriggerWindow: Window option
