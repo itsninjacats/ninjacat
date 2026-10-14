@@ -1,0 +1,208 @@
+{{- if lt (int .Values.monitors.replicas) 2 }}
+{{- fail "monitors.replicas must be at least 2: the cluster bootstrap waits for two pods" }}
+{{- end }}
+{{- $fullname := include "ninjacat.fullname" . -}}
+{{- $secret := include "ninjacat.secretName" . -}}
+# `ninjacat-monitors`: evaluates the monitors. Its pods are one Akka cluster
+# and find each other by listing pods through the Kubernetes API, which is
+# what this ServiceAccount is for.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $fullname }}-monitors
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "monitors") | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $fullname }}-monitors
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "monitors") | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $fullname }}-monitors
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "monitors") | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $fullname }}-monitors
+subjects:
+  - kind: ServiceAccount
+    name: {{ $fullname }}-monitors
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-monitors
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "monitors") | nindent 4 }}
+spec:
+  replicas: {{ .Values.monitors.replicas }}
+  # One pod down at a time and no extra one: with one pod per node on as
+  # many nodes as replicas, a surge pod would have nowhere to go, and the
+  # rollout would wait for it forever.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "monitors") | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if not .Values.secrets.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.monitors.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "monitors") | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ $fullname }}-monitors
+      # The process gives its shutdown 45 s: shards handed off, the last
+      # evaluations written.
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 1654
+        runAsGroup: 1654
+      containers:
+        - name: monitors
+          image: {{ include "ninjacat.monitorsImage" . | quote }}
+          imagePullPolicy: {{ .Values.monitors.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: remoting
+              containerPort: 2552
+            # The bootstrap finds the other pods' management port by this
+            # name (api/src/Monitors/Cluster.fs).
+            - name: management
+              containerPort: 8558
+            - name: health
+              containerPort: 8559
+          envFrom:
+            - configMapRef:
+                name: {{ $fullname }}-monitors
+          env:
+            # What the other nodes dial, and what discovery lists.
+            - name: NINJACAT_MONITOR_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: {{ ternary "MONITORS_DATABASE_URL" "DATABASE_URL" .Values.monitors.ownDatabaseUrl }}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: {{ ternary "CLICKHOUSE_MONITORS_PASSWORD" "CLICKHOUSE_PASSWORD" (ne .Values.clickhouse.monitorsUser "") }}
+          # Ready once the node is a member of the cluster. Discovery lists
+          # running pods, ready or not, so this does not hold up the
+          # cluster's first formation.
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: health
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: health
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          {{- with .Values.monitors.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.monitors.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+        {{- with .Values.monitors.affinity }}
+        {{- toYaml . | nindent 8 }}
+        {{- else }}
+        # One pod per node: two on one node would lose the majority with it.
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "monitors") | nindent 18 }}
+        {{- end }}
+      {{- with .Values.monitors.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+# A drain takes one pod at a time, so the cluster keeps its majority.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $fullname }}-monitors
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "monitors") | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "monitors") | nindent 6 }}
+{{- if .Values.networkPolicy.enabled }}
+---
+# Akka remoting and the bootstrap's HTTP are plain text and trust whoever
+# connects: only the other monitor pods may.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-monitors
+  labels:
+    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "monitors") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "monitors") | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "monitors") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: remoting
+        - protocol: TCP
+          port: management
+{{- end }}

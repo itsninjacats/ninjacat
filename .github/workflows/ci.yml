@@ -6,6 +6,7 @@
 #
 # Images land at:
 #   ghcr.io/itsninjacats/ninjacat/api
+#   ghcr.io/itsninjacats/ninjacat/monitors
 #   ghcr.io/itsninjacats/ninjacat/frontend
 #
 # Built from ${{ github.repository }} rather than hardcoded, so a fork
@@ -60,6 +61,24 @@ jobs:
           --health-timeout 5s
           --health-retries 20
 
+      # The monitor service's tests read the `monitor` table from the schema
+      # Drizzle migrates, so a change there that breaks the reader fails here.
+      # Without it those tests are skipped. The address is the dev stack's,
+      # which is what the tests default to.
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: mysecretpassword
+          POSTGRES_DB: local
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U root -d local"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -83,6 +102,22 @@ jobs:
 
       - name: Query tests
         working-directory: api/tests/Query.Tests
+        run: dotnet test --no-build
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      # The production migrator, the one the image runs, so the tests see the
+      # schema a deployment has.
+      - name: Postgres schema
+        working-directory: frontend
+        env:
+          DATABASE_URL: postgres://root:mysecretpassword@localhost:5433/local
+        run: |
+          bun install --frozen-lockfile
+          bun scripts/migrate.ts
+
+      - name: Monitors tests
+        working-directory: api/tests/Monitors.Tests
         run: dotnet test --no-build
 
   frontend:
@@ -139,6 +174,10 @@ jobs:
           helm template ci helm/ninjacat "$@" > /dev/null
           # With Traefik's CRDs in the cluster the chart adds the redirect.
           helm template ci helm/ninjacat "$@" --api-versions traefik.io/v1alpha1 > /dev/null
+          # The monitor service with database users of its own.
+          helm template ci helm/ninjacat "$@" \
+            --set clickhouse.monitorsUser=monitors --set secrets.clickhouseMonitorsPassword=y \
+            --set monitors.ownDatabaseUrl=true --set secrets.monitorsDatabaseUrl=postgres://m:p@h/d > /dev/null
 
       # A release's images are what the chart installs by default
       # (appVersion), so the two have to say the same version.
@@ -152,12 +191,14 @@ jobs:
           fi
 
   images:
-    # Both images or neither, and only from a tree whose tests pass.
+    # All three images or none, and only from a tree whose tests pass.
     needs: [api, frontend, chart]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    env:
+      VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '0.0.0' }}
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -190,6 +231,17 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=long
 
+      - id: meta-monitors
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/monitors
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=long
+
       - id: meta-frontend
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
@@ -201,7 +253,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=long
 
-      # Both are built before either is pushed.
+      # All are built before any is pushed.
       # amd64 only, deliberately: an arm64 image built under QEMU emulation
       # turns a two-minute build into twenty. Add linux/arm64 when something
       # needs it.
@@ -209,10 +261,23 @@ jobs:
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: ./api
+          target: api
+          build-args: VERSION=${{ env.VERSION }}
           push: false
           platforms: linux/amd64
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
+
+      - name: Build monitors
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./api
+          target: monitors
+          build-args: VERSION=${{ env.VERSION }}
+          push: false
+          platforms: linux/amd64
+          cache-from: type=gha,scope=monitors
+          cache-to: type=gha,mode=max,scope=monitors
 
       - name: Build frontend
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
@@ -228,6 +293,8 @@ jobs:
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: ./api
+          target: api
+          build-args: VERSION=${{ env.VERSION }}
           push: true
           tags: ${{ steps.meta-api.outputs.tags }}
           labels: ${{ steps.meta-api.outputs.labels }}
@@ -235,6 +302,21 @@ jobs:
           provenance: mode=max
           sbom: true
           cache-from: type=gha,scope=api
+
+      - name: Push monitors
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./api
+          target: monitors
+          build-args: VERSION=${{ env.VERSION }}
+          push: true
+          tags: ${{ steps.meta-monitors.outputs.tags }}
+          labels: ${{ steps.meta-monitors.outputs.labels }}
+          platforms: linux/amd64
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=monitors
 
       - name: Push frontend
         if: github.event_name != 'pull_request'

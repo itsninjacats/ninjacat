@@ -37,18 +37,48 @@ clickhouse:
   # (GRANT SELECT ON <database>.*). Its password is the secret key
   # CLICKHOUSE_QUERY_PASSWORD. Empty means the user above.
   queryUser: ""
+  # Optional: a user for the monitor service alone. Its password is the
+  # secret key CLICKHOUSE_MONITORS_PASSWORD. Empty means the user above.
+  # Create it outside the chart, with no DDL and a cap on the queries it may
+  # run at once, so monitors cannot starve the panel or ingestion:
+  #
+  #   CREATE SETTINGS PROFILE monitors SETTINGS max_concurrent_queries_for_user = 64;
+  #   CREATE USER monitors IDENTIFIED BY '<password>' SETTINGS PROFILE monitors;
+  #   GRANT SELECT ON <database>.metrics_1m TO monitors;
+  #   -- SELECT to evaluate, INSERT for its own ninjacat.monitor.* metrics
+  #   GRANT SELECT, INSERT ON <database>.metrics TO monitors;
+  #   GRANT SELECT, INSERT ON <database>.monitor_transitions TO monitors;
+  #   GRANT SELECT, INSERT ON <database>.monitor_evaluations TO monitors;
+  #   GRANT SELECT, INSERT ON <database>.monitor_notifications TO monitors;
+  #
+  # A pod runs at most NINJACAT_MONITOR_CONCURRENCY (8) evaluations, reads and
+  # transition inserts, 4 flushes each of monitor_evaluations and metrics, and
+  # the notifier's one: 3 x 17 = 51 by default. Raise the cap with either.
+  monitorsUser: ""
+
+# Days ClickHouse keeps metrics: raw points and the one-minute rollup. Every
+# process gets the same values, since the query process and the monitors read
+# the raw table only within its retention. Empty keeps the server's defaults,
+# 30 and 400.
+metrics:
+  retentionDays: ""
+  rollupRetentionDays: ""
 
 # Secret values. Either let the chart create the Secret from these, or set
 # existingSecret to a Secret you manage yourself with the same keys:
 # DATABASE_URL, CLICKHOUSE_PASSWORD, BETTER_AUTH_SECRET,
-# NINJACAT_QUERY_TOKEN_SECRET, and CLICKHOUSE_QUERY_PASSWORD when
-# clickhouse.queryUser is set.
+# NINJACAT_QUERY_TOKEN_SECRET, CLICKHOUSE_QUERY_PASSWORD when
+# clickhouse.queryUser is set, CLICKHOUSE_MONITORS_PASSWORD when
+# clickhouse.monitorsUser is set, and MONITORS_DATABASE_URL when
+# monitors.ownDatabaseUrl is set.
 secrets:
   existingSecret: ""
   # postgres://user:password@host:5432/db
   databaseUrl: ""
   clickhousePassword: ""
   clickhouseQueryPassword: ""
+  clickhouseMonitorsPassword: ""
+  monitorsDatabaseUrl: ""
   # At least 32 characters, high entropy: openssl rand -hex 32
   betterAuthSecret: ""
   # The key the panel signs its calls to the query process with; both pods
@@ -111,6 +141,45 @@ query:
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { memory: 512Mi }
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# -----------------------------------------------------------------------------
+# `ninjacat-monitors`: evaluates the monitors; its pods form one Akka cluster.
+# -----------------------------------------------------------------------------
+
+monitors:
+  image:
+    repository: ghcr.io/itsninjacats/ninjacat/monitors
+    pullPolicy: IfNotPresent
+    # Defaults to the chart appVersion.
+    tag: ""
+
+  # Three, so that losing one pod leaves a majority: the cluster's split-brain
+  # resolver keeps the side with more nodes and stops the other. At least
+  # two, which the cluster's first formation waits for. One pod per node
+  # unless `affinity` below says otherwise.
+  replicas: 3
+
+  # The monitors need only SELECT on Postgres's `monitor` table. Set this and
+  # they read their own URL from the secret key MONITORS_DATABASE_URL
+  # (secrets.monitorsDatabaseUrl), for a role made with:
+  #
+  #   CREATE ROLE ninjacat_monitors LOGIN PASSWORD '<password>';
+  #   GRANT SELECT ON monitor TO ninjacat_monitors;
+  #
+  # Off, they use DATABASE_URL.
+  ownDatabaseUrl: false
+
+  # Extra non-secret environment (NINJACAT_MONITOR_CONCURRENCY,
+  # NINJACAT_MONITOR_MAX_GROUPS, ...). See api/README.md.
+  env: {}
+
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 768Mi }
   podAnnotations: {}
   nodeSelector: {}
   tolerations: []

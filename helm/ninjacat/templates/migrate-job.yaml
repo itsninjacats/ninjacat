@@ -146,6 +146,10 @@ spec:
                 secretKeyRef:
                   name: {{ $hookSecret }}
                   key: DATABASE_URL
+            {{- range $k, $v := include "ninjacat.retentionEnv" . | fromYaml }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
           volumeMounts:
             - name: data
               mountPath: /data

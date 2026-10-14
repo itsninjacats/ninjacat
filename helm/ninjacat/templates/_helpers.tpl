@@ -49,6 +49,19 @@ app.kubernetes.io/component: {{ .component }}
 {{- printf "%s:%s" .Values.api.image.repository (.Values.api.image.tag | default .Chart.AppVersion) }}
 {{- end }}
 
+{{- define "ninjacat.monitorsImage" -}}
+{{- printf "%s:%s" .Values.monitors.image.repository (.Values.monitors.image.tag | default .Chart.AppVersion) }}
+{{- end }}
+
+{{- define "ninjacat.retentionEnv" -}}
+{{- with .Values.metrics.retentionDays }}
+NINJACAT_METRICS_RETENTION_DAYS: {{ . | quote }}
+{{- end }}
+{{- with .Values.metrics.rollupRetentionDays }}
+NINJACAT_METRICS_ROLLUP_RETENTION_DAYS: {{ . | quote }}
+{{- end }}
+{{- end }}
+
 {{- define "ninjacat.frontendImage" -}}
 {{- printf "%s:%s" .Values.frontend.image.repository (.Values.frontend.image.tag | default .Chart.AppVersion) }}
 {{- end }}

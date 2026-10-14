@@ -286,7 +286,7 @@ Package versions live in `Directory.Packages.props` only.
 | `NINJACAT_QUERY_TOKEN_SECRET` | required by `query` — at least 32 bytes, the key the panel signs its tokens with (below) |
 | `NINJACAT_AUTO_MIGRATE` | `true`; with several replicas set `false` and run `migrate` as a job |
 | `NINJACAT_METRICS_RETENTION_DAYS` | `30` — days `metrics` keeps raw points; a value that is not 1–36500 stops the start |
-| `NINJACAT_METRICS_ROLLUP_RETENTION_DAYS` | `400` — days `metrics_1m`, the one-minute rollup, keeps its rows; likewise, and it may not be shorter than the raw retention. Set both identically on `intake`, `migrate` and `query` |
+| `NINJACAT_METRICS_ROLLUP_RETENTION_DAYS` | `400` — days `metrics_1m`, the one-minute rollup, keeps its rows; likewise, and it may not be shorter than the raw retention. Set both identically on `intake`, `migrate`, `query` and the monitor service (the chart's `metrics.*` does) |
 | `NINJACAT_TRUSTED_PROXIES` | none — reverse proxies in front of the intake, as addresses or networks (`10.0.0.0/8`), comma-separated. Only their `X-Forwarded-For` is believed; the loopback is always trusted |
 | `NINJACAT_MAX_BODY_BYTES` | the largest request body the intake reads, 64 MiB by default; a larger one is answered 413. A body may inflate to 64 MiB |
 | `NINJACAT_ACK_UNKNOWN` | `true` answers 202 instead of 404 on unknown intake paths |

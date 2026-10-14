@@ -6,9 +6,10 @@
 
 domainRoot: ninjacat.lab
 
-# The Deployments and Services become ninjacat-intake, ninjacat-query and
-# ninjacat-frontend. The names are load-bearing: up.sh waits on all three and
-# creates the TLS Secrets the chart looks for under these names.
+# The Deployments and Services become ninjacat-intake, ninjacat-query,
+# ninjacat-monitors and ninjacat-frontend. The names are load-bearing: up.sh
+# waits on all four and creates the TLS Secrets the chart looks for under
+# these names.
 fullnameOverride: ninjacat
 
 # Credentials match compose.yaml and the two data-store manifests.
@@ -29,6 +30,22 @@ api:
 # Traefik's pods are somewhere in kind's pod network.
 trustedProxies:
   - 10.244.0.0/16
+
+# Three pods on the lab's one node, where the chart's default (one per node)
+# would leave two of them pending.
+monitors:
+  image:
+    repository: ninjacat/monitors
+    tag: lab
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: monitors
 
 intake:
   env:

@@ -3,7 +3,7 @@
 #   docker compose -f compose.prod.yaml up -d --build
 #
 # Differences from compose.yaml that matter: images are built rather than
-# bind-mounted, no toolchain ships in either runtime image, nothing reloads,
+# bind-mounted, no toolchain ships in any runtime image, nothing reloads,
 # and every secret comes from the environment instead of a literal.
 #
 # Copy .env.example to .env and fill it in before starting.
@@ -77,6 +77,7 @@ services:
     image: ninjacat-api:local
     build:
       context: ./api
+      target: api
     command: ["intake"]
     restart: unless-stopped
     ports:
@@ -113,6 +114,28 @@ services:
       clickhouse: { condition: service_healthy }
       postgres: { condition: service_healthy }
       # Built there, and it creates the tables this one reads.
+      intake: { condition: service_started }
+
+  # One Akka node that seeds itself; nothing outside reaches its ports.
+  monitors:
+    image: ninjacat-monitors:local
+    build:
+      context: ./api
+      target: monitors
+    restart: unless-stopped
+    # Docker's 10 s would cut the shutdown short; the process gives it 45 s.
+    stop_grace_period: 60s
+    environment:
+      DATABASE_URL: ${MONITORS_DATABASE_URL:-postgres://${POSTGRES_USER:-ninjacat}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ninjacat}}
+      CLICKHOUSE_HTTP_ADDR: clickhouse:8123
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ninjacat}
+      CLICKHOUSE_USER: ${CLICKHOUSE_MONITORS_USER:-${CLICKHOUSE_USER:-ninjacat}}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_MONITORS_PASSWORD:-${CLICKHOUSE_PASSWORD}}
+    depends_on:
+      clickhouse: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+      # It creates the tables this one reads and writes.
       intake: { condition: service_started }
 
   frontend:

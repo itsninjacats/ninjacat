@@ -25,6 +25,7 @@ Quick check from inside the cluster:
 The server runs as two Deployments: {{ include "ninjacat.fullname" . }}-intake (what agents reach)
 and {{ include "ninjacat.fullname" . }}-query (what the panel reads from, never exposed{{ if .Values.networkPolicy.enabled }}; a
 NetworkPolicy admits the panel's pods only{{ end }}).
+The monitors are evaluated by {{ include "ninjacat.fullname" . }}-monitors, {{ .Values.monitors.replicas }} pods forming one cluster.
 {{- if .Values.migrations.enabled }}
 
 Schemas: both were brought up to date by hook Jobs before the pods started.

@@ -1,4 +1,10 @@
-# Production image for the server, built in two stages.
+# Production images for the server's two programs, from one build context:
+#
+#   docker build --target api .        ninjacat-api: intake, query, migrate
+#   docker build --target monitors .   ninjacat-monitors
+#
+# Name the target. Without one Docker builds the last stage, which is the api
+# image, so a monitors build that forgets it silently yields the wrong program.
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS builder
 
 # The SDK reports its use to Microsoft unless told not to.
@@ -14,14 +20,27 @@ COPY src/Storage/Storage.fsproj src/Storage/
 COPY src/Intake/Intake.fsproj src/Intake/
 COPY src/Platform/Platform.fsproj src/Platform/
 COPY src/Server/Server.fsproj src/Server/
-RUN dotnet restore src/Server/Server.fsproj
+COPY src/Monitors/Monitors.fsproj src/Monitors/
+RUN dotnet restore src/Server/Server.fsproj \
+    && dotnet restore src/Monitors/Monitors.fsproj
 
 COPY . .
-RUN dotnet publish src/Server/Server.fsproj -c Release --no-restore -o /out
 
-# aspnet, not runtime-deps: the service is framework-dependent, which keeps
+# VERSION is the release's (1.2.3 or v1.2.3), stamped on the assemblies. The
+# monitor service's Akka cluster compares it between nodes, so that during a
+# rollout shards move to the newer pods. Any other build is 0.0.0, older than
+# every release; the SDK's own default, 1.0.0, would be newer.
+FROM builder AS publish-api
+ARG VERSION=0.0.0
+RUN dotnet publish src/Server/Server.fsproj -c Release --no-restore -o /out -p:Version=${VERSION#v}
+
+FROM builder AS publish-monitors
+ARG VERSION=0.0.0
+RUN dotnet publish src/Monitors/Monitors.fsproj -c Release --no-restore -o /out -p:Version=${VERSION#v}
+
+# aspnet, not runtime-deps: both programs are framework-dependent, which keeps
 # the image layer shared with every other ASP.NET image on the host.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
 # Npgsql asks for GSS encryption before anything else and loads this library
 # to do it. Without it every start prints "Cannot load library
@@ -30,16 +49,27 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /out /app
-
 # Capture dumps (DEBUG=true) land in the working directory by default.
 RUN mkdir /data && chown app:app /data
 WORKDIR /data
 USER app
 
-# The base image presets port 8080 for ASP.NET. The server names its own
-# ports, and would warn at every start that it overrides the preset.
+# The base image presets port 8080 for ASP.NET. Both programs name their own
+# ports, and would warn at every start that they override the preset.
 ENV ASPNETCORE_HTTP_PORTS=
+
+FROM runtime AS monitors
+
+COPY --from=publish-monitors /out /app
+
+# 2552 Akka remoting, 8558 Akka.Management, 8559 health.
+EXPOSE 2552 8558 8559
+
+ENTRYPOINT ["/app/ninjacat-monitors"]
+
+FROM runtime AS api
+
+COPY --from=publish-api /out /app
 
 # `intake` listens on 8080 (and 10516, logs over TCP), `query` on 8081.
 EXPOSE 8080 8081 10516

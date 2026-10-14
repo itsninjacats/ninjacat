@@ -56,9 +56,11 @@ let private formation (node: Node) (akka: AkkaConfigurationBuilder) : AkkaConfig
     | Kubernetes selector ->
         // Two, not the replica count: with three, a first formation while
         // only two pods can be scheduled would never complete.
+        // The chart names the management container port "management";
+        // discovery takes the contact point's port from it.
         akka
             .WithAkkaManagement(hostName = node.Host, port = Nullable node.ManagementPort)
-            .WithClusterBootstrap(requiredContactPoints = Nullable 2)
+            .WithClusterBootstrap(portName = "management", requiredContactPoints = Nullable 2)
             .WithKubernetesDiscovery(fun (options: KubernetesDiscoveryOptions) ->
                 match selector with
                 | Some s -> options.PodLabelSelector <- s
@@ -81,9 +83,8 @@ let configure
             // and the other two carry on.
             SplitBrainResolver = SplitBrainResolverOption.Default
         )
-    // AppVersion stays Akka's default, the entry assembly's version, so a
-    // rollout prefers new nodes only once the image build stamps it
-    // (`dotnet publish -p:Version=...`).
+    // AppVersion is the entry assembly's version, stamped by the image build
+    // (api/Dockerfile).
 
     match node.Formation with
     | Seeds seeds -> clustering.SeedNodes <- Array.ofList seeds

@@ -11,12 +11,12 @@
 # What reports, and how:
 #   panel    Datadog's browser SDKs (RUM, logs)          → the intake, directly
 #   intake,  Datadog's .NET tracer: traces, runtime
-#   query    metrics, profiles, its own telemetry        → the agent → the intake
-#            their log lines                             → the intake, directly
+#   query,   metrics, profiles, its own telemetry        → the agent → the intake
+#   monitors their log lines                             → the intake, directly
 #   agent    its own host and container metrics          → the intake
 #
 # Nothing goes to Datadog. The agent sits on a network with no route out; the
-# tracer inside the two server processes does have one, so DD_SITE below names
+# tracer inside the server's processes does have one, so DD_SITE below names
 # a site that only resolves on that network — a URL the tracer builds on its
 # own leads nowhere.
 #
@@ -25,13 +25,13 @@
 # per flush), not a loop that grows, but an idle installation is never silent.
 
 x-tracer-environment: &tracer-environment
-  # Attaches the tracer to the runtime — of the server alone, not of the
-  # `dotnet` build tools the development containers also run.
+  # Attaches the tracer to the runtime — of the server's programs alone, not
+  # of the `dotnet` build tools the development containers also run.
   CORECLR_ENABLE_PROFILING: "1"
   CORECLR_PROFILER: "{846F5F1C-F9AE-4B07-969E-05C26BC060D8}"
   CORECLR_PROFILER_PATH: /opt/datadog/Datadog.Trace.ClrProfiler.Native.so
   DD_DOTNET_TRACER_HOME: /opt/datadog
-  DD_PROFILER_PROCESSES: ninjacat-api
+  DD_PROFILER_PROCESSES: ninjacat-api;ninjacat-monitors
   # The continuous profiler needs its wrapper loaded before libc.
   LD_PRELOAD: /opt/datadog/continuousprofiler/Datadog.Linux.ApiWrapper.x64.so
 
@@ -54,7 +54,7 @@ x-tracer-environment: &tracer-environment
 
 services:
   # One-shot: copies the tracer out of Datadog's image into a volume the
-  # server's two processes mount. Neither NinjaCat image carries the tracer.
+  # server's processes mount. No NinjaCat image carries the tracer.
   tracer:
     image: datadog/dd-lib-dotnet-init:v3.54.0
     user: "0:0"
@@ -94,6 +94,16 @@ services:
     environment:
       <<: *tracer-environment
       DD_SERVICE: ninjacat-query
+
+  monitors:
+    depends_on:
+      tracer: { condition: service_completed_successfully }
+    volumes:
+      - dd-tracer:/opt/datadog:ro
+    networks: [default, self]
+    environment:
+      <<: *tracer-environment
+      DD_SERVICE: ninjacat-monitors
 
   frontend:
     environment:

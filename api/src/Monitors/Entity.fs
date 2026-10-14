@@ -36,7 +36,7 @@ type Services =
       Insert: MonitorTransitionRow[] -> CancellationToken -> Task
       /// Hands evaluations to the sink; losing one is acceptable.
       Record: MonitorEvaluationRow[] -> unit
-      /// The node's slots for loads and evaluations.
+      /// The node's slots for loads, evaluations and transition inserts.
       Gate: SemaphoreSlim
       /// How long an evaluation waits for a slot, given its interval; the
       /// host waits the whole interval.
@@ -200,13 +200,19 @@ type MonitorEntity(key: MonitorKey, services: Services) =
         | None -> ()
         | Some p ->
             busy <- true
+            let gate = services.Gate
 
             Detached.run cancel.Token this.Self (fun e -> CommitFailed e.Message) (fun ct ->
                 task {
-                    use timeout = CancellationTokenSource.CreateLinkedTokenSource ct
-                    timeout.CancelAfter insertTimeout
-                    do! services.Insert p.Rows timeout.Token
-                    return Committed
+                    do! gate.WaitAsync ct
+
+                    try
+                        use timeout = CancellationTokenSource.CreateLinkedTokenSource ct
+                        timeout.CancelAfter insertTimeout
+                        do! services.Insert p.Rows timeout.Token
+                        return Committed
+                    finally
+                        gate.Release() |> ignore
                 })
 
     /// Stores the transitions and adopts `next` once they are stored; with

@@ -36,11 +36,12 @@ say "lab CA and wildcard certificate"
 # Built on the host and side-loaded. The manifests use imagePullPolicy
 # IfNotPresent so the node never tries a registry that has never heard of us.
 say "building images"
-docker build -q -t ninjacat/api:lab      "$ROOT/api"      | sed 's/^/  api:      /'
+docker build -q --target api      -t ninjacat/api:lab      "$ROOT/api" | sed 's/^/  api:      /'
+docker build -q --target monitors -t ninjacat/monitors:lab "$ROOT/api" | sed 's/^/  monitors: /'
 docker build -q -t ninjacat/frontend:lab "$ROOT/frontend" | sed 's/^/  frontend: /'
 
 say "loading images into the cluster"
-kind load docker-image --name "$CLUSTER" ninjacat/api:lab ninjacat/frontend:lab
+kind load docker-image --name "$CLUSTER" ninjacat/api:lab ninjacat/monitors:lab ninjacat/frontend:lab
 
 # --- 4. namespace, secrets -------------------------------------------------
 say "namespace and secrets"
@@ -77,7 +78,7 @@ helm --kube-context "$CTX" upgrade --install traefik traefik/traefik \
 # The chart's hook Jobs migrate both schemas before the pods start, which is
 # why the data stores have to be up first. A lab run is therefore also a test
 # of the chart: hooks, Ingress, NetworkPolicy and all.
-say "ninjacat (helm/ninjacat): migrations, intake, query, panel"
+say "ninjacat (helm/ninjacat): migrations, intake, query, monitors, panel"
 helm --kube-context "$CTX" upgrade --install ninjacat "$ROOT/helm/ninjacat" \
   --namespace "$NS" \
   -f "$HERE/ninjacat-values.yaml" \
@@ -86,6 +87,7 @@ helm --kube-context "$CTX" upgrade --install ninjacat "$ROOT/helm/ninjacat" \
   --wait --timeout 6m
 k -n "$NS" rollout status deployment/ninjacat-intake   --timeout=240s
 k -n "$NS" rollout status deployment/ninjacat-query    --timeout=240s
+k -n "$NS" rollout status deployment/ninjacat-monitors --timeout=240s
 k -n "$NS" rollout status deployment/ninjacat-frontend --timeout=240s
 
 # --- 7. the API key -----------------------------------------------------------

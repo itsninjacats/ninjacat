@@ -106,6 +106,17 @@ Open, most urgent first:
       at once. Any other clone has to be made again, not pulled.
 - [ ] The panel does not link to its source (AGPL section 13); `bun run lint` fails on 431
       files, so CI does not run it.
+- [ ] **Akka remoting between the monitor pods is plain TCP** (2552, and the bootstrap's
+      HTTP on 8558), trusted by whoever connects. The chart's NetworkPolicy admits only
+      monitor pods to those ports, which holds only with a network plugin that enforces
+      policies. TLS for remoting (`akka.remote.dot-netty.tcp.enable-ssl`) before relying on
+      anything else.
+- [ ] **The monitor service has not run at its capacity target** (1 000 monitors × 20
+      groups, windows under 24 h, 3 pods; `api/docs/zadania/monitors.md`, "Capacity"). On
+      a real cluster: load 1 000 monitors over 20 000 series; measure read latency
+      (`system.query_log`, the monitors user), `ninjacat.monitor.evaluation.lag`, the gate's
+      skip rate (with a monitor on it) and `monitor_evaluations` rows a day, into
+      `api/README.md`; check the default one-pod-per-node anti-affinity on three nodes.
 
 ## 1. Finish the move to one server
 
