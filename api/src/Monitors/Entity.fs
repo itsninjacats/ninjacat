@@ -391,6 +391,7 @@ type MonitorEntity(key: MonitorKey, services: Services) =
 
             if not evaluation.Groups.IsEmpty && causes.Length = evaluation.Groups.Length then
                 if List.contains Learning causes then counts.SkippedLearning.Add 1L
+                elif List.contains FewGroups causes then counts.SkippedFewGroups.Add 1L
                 else counts.SkippedWindow.Add 1L
             else
                 counts.Evaluated.Add 1L

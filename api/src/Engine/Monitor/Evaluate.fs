@@ -28,6 +28,8 @@ type SkipCause =
     | Incomplete
     /// A seasonal model, or a forecast, has too little history yet.
     | Learning
+    /// An outlier monitor with fewer than 3 groups to compare.
+    | FewGroups
 
 type Reading =
     /// The value the thresholds are compared with.
@@ -172,9 +174,14 @@ let private request (q: MonitorQuery) (p: Period) (step: TimeSpan) : ParsedTimes
             match formula with
             | Call(fn, args) -> [ Call(fn, args @ [ Named("horizon", Quoted $"{int64 q.Window.Length.TotalSeconds}s") ]) ]
             | other -> [ other ]
+        // Outliers and the query they are picked from, in one request: one
+        // read serves both.
+        | Outlier _ ->
+            match formula with
+            | Call(_, Value inner :: _) -> [ formula; inner ]
+            | other -> [ other ]
         | Threshold
-        | Anomaly _
-        | Outlier _ -> [ formula ]
+        | Anomaly _ -> [ formula ]
 
     { From = p.From
       To = p.To
@@ -468,13 +475,13 @@ let evaluate
             match q.Detection with
             | Threshold
             | Anomaly _
-            | Forecast _ -> Ok()
+            | Forecast _
+            | Outlier _ -> Ok()
             | Change _ when q.AsCount -> Ok()
             | Change c when c.Shift.Length.Ticks % step.Ticks = 0L -> Ok()
             | Change c ->
                 Error
                     $"change over {c.Shift.Text}: the step is {step.TotalSeconds} s, which does not divide the shift, so no bucket has one to compare with"
-            | Outlier _ -> Error "outlier monitors are not evaluated yet"
 
         match detection with
         | Error e -> return Error e
@@ -493,7 +500,14 @@ let evaluate
                 let byGroup (lines: Line list) =
                     lines |> List.choose (fun line -> groupOf q line.Tags |> Option.map (fun (key, tags) -> key, (tags, line)))
 
-                let current = byGroup outputs.Head |> List.distinctBy fst
+                // An outlier monitor's groups are the query's; the first
+                // output holds only the outliers among them.
+                let judged, outliers =
+                    match q.Detection, outputs with
+                    | Outlier _, [ picked; all ] -> all, byGroup picked |> List.map fst |> set
+                    | _ -> outputs.Head, Set.empty
+
+                let current = byGroup judged |> List.distinctBy fst
 
                 if current.Length > maxGroups then
                     return Error $"too_many_groups: the query yields {current.Length} groups, at most {maxGroups} are evaluated"
@@ -505,13 +519,19 @@ let evaluate
                             fun key (line: Line) -> changeOf c.Measure line (previous.TryFind key)
                         | _ -> fun _ (line: Line) -> line.Points
 
+                    let compared = current |> List.filter (fun (_, (_, line)) -> not (finite line.Points).IsEmpty) |> List.length
+
                     let reading key (line: Line) : Reading * float option =
                         match q.Detection with
                         | Threshold
-                        | Change _
-                        | Outlier _ -> readingOf d p step (points key line), None
+                        | Change _ -> readingOf d p step (points key line), None
                         | Anomaly a -> anomalyReading d a p step line
                         | Forecast _ -> forecastReading q line, None
+                        | Outlier _ when (finite line.Points).IsEmpty -> Skipped(Incomplete, "no bucket in the window has a value"), None
+                        | Outlier _ when compared < 3 -> Skipped(FewGroups, "an outlier needs at least 3 groups with data to compare"), None
+                        // WARNING(undocumented): an outlier is 1 and the rest
+                        // 0, so `> 0` alerts on the outliers.
+                        | Outlier _ -> Judged(if outliers.Contains key then 1.0 else 0.0), None
 
                     // WARNING(undocumented): on the as_count path the one
                     // point stands for a window whose empty buckets read 0, so

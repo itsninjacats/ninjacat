@@ -550,12 +550,28 @@ let ``a forecast without the history to fit is learning`` () =
     let g = group (evaluated (line 0.0 1.0 |> List.truncate 1) d)
     Assert.Contains("learning", string g.Reading)
 
-// --- not yet ------------------------------------------------------------------------------
+// --- outlier ----------------------------------------------------------------------------
+
+let private hosts (levels: (string * float) list) =
+    levels |> List.collect (fun (host, level) -> constant "cpu" [ Some host ] level)
+
+let private outlierMonitor = definition "avg(last_5m):outliers(avg:cpu{*} by {host}, 'dbscan', 3) > 0" ""
 
 [<Fact>]
-let ``outlier monitors are refused until they are evaluated`` () =
-    let d = definition "avg(last_5m):outliers(avg:cpu{*} by {host}, 'dbscan', 3) > 0" ""
+let ``an outlier group is 1, the others 0`` () =
+    let e = evaluated (hosts [ "a", 10.0; "b", 10.5; "c", 11.0; "d", 50.0 ]) outlierMonitor
+    Assert.Equal<(string * Reading) list>(
+        [ "host:a", Judged 0.0; "host:b", Judged 0.0; "host:c", Judged 0.0; "host:d", Judged 1.0 ],
+        readings e |> List.sortBy fst
+    )
 
-    match evaluateWith 1000 [] d with
-    | Error e -> Assert.Contains("not evaluated yet", e)
-    | Ok e -> Assert.Fail $"expected an error, got {e}"
+[<Fact>]
+let ``fewer than 3 groups with data have nothing to be an outlier from`` () =
+    let e = evaluated (hosts [ "a", 10.0; "c", nan; "d", 50.0 ]) outlierMonitor
+    Assert.Equal(3, e.Groups.Length)
+    Assert.Equal<Reading list>(
+        [ Skipped(FewGroups, "an outlier needs at least 3 groups with data to compare")
+          Skipped(Incomplete, "no bucket in the window has a value")
+          Skipped(FewGroups, "an outlier needs at least 3 groups with data to compare") ],
+        e.Groups |> List.sortBy _.Key |> List.map _.Reading
+    )
