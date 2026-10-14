@@ -64,7 +64,7 @@ type private Outcome =
     | Reloaded of MonitorRow option
     | ReloadFailed of string
     | RetryReload
-    | Evaluated of at: DateTimeOffset * Result<Evaluation, string>
+    | Evaluated of at: DateTimeOffset * Result<Evaluation, string> * Fit option
     | GateRefused of at: DateTimeOffset
     | Committed
     | CommitFailed of string
@@ -93,6 +93,7 @@ type MonitorEntity(key: MonitorKey, services: Services) =
     /// The hash the groups were judged under.
     let mutable queryHash: string option = None
     let mutable lastAt: DateTimeOffset option = None
+    let mutable models: Fit option = None
     /// Evaluating, storing or reading the definition.
     let mutable busy = false
     let mutable pending: Pending option = None
@@ -298,8 +299,9 @@ type MonitorEntity(key: MonitorKey, services: Services) =
         busy <- true
         let gate = services.Gate
         let wait = services.GateWait(frequency d.Query)
+        let previous = models
 
-        Detached.run cancel.Token this.Self (fun e -> Evaluated(at, Error e.Message)) (fun ct ->
+        Detached.run cancel.Token this.Self (fun e -> Evaluated(at, Error e.Message, previous)) (fun ct ->
             task {
                 let! granted = gate.WaitAsync(wait, ct)
 
@@ -307,12 +309,18 @@ type MonitorEntity(key: MonitorKey, services: Services) =
                     return GateRefused at
                 else
                     let started = Stopwatch.GetTimestamp()
+                    let execute = services.Execute ct
+                    let tenant = TenantId key.Tenant
 
                     try
-                        let! result =
-                            evaluate (services.Execute ct) (TenantId key.Tenant) services.Retention services.MaxGroups d at
-
-                        return Evaluated(at, result)
+                        match! fit execute tenant services.Retention d previous at with
+                        | Error e -> return Evaluated(at, Error e, previous)
+                        | Ok current ->
+                            try
+                                let! result = evaluate execute tenant services.Retention services.MaxGroups current d at
+                                return Evaluated(at, result, current)
+                            with e ->
+                                return Evaluated(at, Error e.Message, current)
                     finally
                         counts.EvaluationTicks.Add(Stopwatch.GetTimestamp() - started)
                         gate.Release() |> ignore
@@ -368,13 +376,22 @@ type MonitorEntity(key: MonitorKey, services: Services) =
             reloadFailing <- true
             this.timers.StartSingleTimer("reload", RetryReload, services.Retry)
         | RetryReload -> this.Settle()
-        | Evaluated(at, Ok evaluation) ->
+        | Evaluated(at, Ok evaluation, fitted) ->
             busy <- false
+            models <- fitted
 
             // Groups found but none judged is a skip, as the evaluation's rows
             // say; no group found at all is an evaluation (No Data).
-            if not evaluation.Groups.IsEmpty && evaluation.Groups |> List.forall (fun r -> r.Reading.IsSkipped) then
-                counts.SkippedWindow.Add 1L
+            let causes =
+                evaluation.Groups
+                |> List.choose (fun r ->
+                    match r.Reading with
+                    | Skipped(cause, _) -> Some cause
+                    | Judged _ -> None)
+
+            if not evaluation.Groups.IsEmpty && causes.Length = evaluation.Groups.Length then
+                if List.contains Learning causes then counts.SkippedLearning.Add 1L
+                else counts.SkippedWindow.Add 1L
             else
                 counts.Evaluated.Add 1L
 
@@ -389,8 +406,9 @@ type MonitorEntity(key: MonitorKey, services: Services) =
             | None -> ()
 
             this.Settle()
-        | Evaluated(at, Error error) ->
+        | Evaluated(at, Error error, fitted) ->
             busy <- false
+            models <- fitted
             failed at error
             this.Settle()
         | GateRefused at ->

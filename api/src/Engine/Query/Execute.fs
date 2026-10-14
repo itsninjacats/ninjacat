@@ -104,31 +104,142 @@ let private modelInput (s: Seasonality) (seasons: int) (fromMs: int64) (toMs: in
                     | None, None -> 0.0)
             |> Some
 
+/// A seasonal anomaly model, fitted on one group's history before a window.
+type AnomalyModel =
+    /// The trend's last level and the season's latest cycle, by phase: the
+    /// expectation does not move with what comes after the fit.
+    | RobustModel of level: float * profile: float[] * sigma: float
+    /// The airline model, run one step ahead over the latest data.
+    | AgileModel of Models.Airline
+
+/// One output's models, by the group's tags.
+type AnomalyModels = Map<string list, AnomalyModel>
+
+/// Where in its season a time falls: a bucket's index from the epoch, so a
+/// profile fitted once still lines up with any later window.
+let private phase (s: Seasonality) (t: int64) =
+    let step = int64 s.Step.TotalMilliseconds
+    int ((t / step) % int64 s.Period)
+
+/// The newest bucket of a grid at `step` ending at `toMs`, a partial one when
+/// `toMs` is not on the step.
+let private lastBucket (step: int64) (toMs: int64) = (toMs - 1L) / step * step
+
+/// The node's series over `length` back from the plan's end, at a seasonal
+/// model's step: the same queries and functions, a longer window, a coarser
+/// step.
+let private seasonalRead execute tenant (plan: Plan) (s: Seasonality) (length: TimeSpan) (node: Node) =
+    task {
+        let window =
+            { plan with
+                From = plan.To - length
+                Step = s.Step
+                Queries = plan.Queries |> List.map (fun q -> { q with Step = s.Step }) }
+
+        let! h = fetchAll execute tenant window [ node ]
+        let from = window.From.ToUnixTimeMilliseconds()
+
+        let series =
+            match node with
+            // Zeros only from a series' first point: before it the series did
+            // not exist, and a model fitted on zeros there would skip learning.
+            | DefaultZero inner ->
+                Evaluate.evalFrom h from inner
+                |> List.map (fun series ->
+                    match Seq.tryHead series.Points with
+                    | Some first -> Series.zeroFill (Series.grid (int64 s.Step.TotalMilliseconds) first.Key h.ToMs) series
+                    | None -> series)
+            | _ -> Evaluate.evalFrom h from node
+
+        return from, series |> List.map (fun s -> s.GroupTags, s.Points) |> Map.ofList
+    }
+
+/// A group's model, from its history at the model's step, for a window from
+/// `fromMs` to `toMs`. None while there is too little history to fit.
+let private fitModel (algorithm: AnomalyAlgorithm) (season: Seasonality) (historyFrom: int64) (fromMs: int64) (toMs: int64) (h: Map<int64, float>) =
+    let modelStep = int64 season.Step.TotalMilliseconds
+    let firstInWindow = fromMs / modelStep * modelStep
+
+    match algorithm with
+    | Robust _ ->
+        modelInput season 3 historyFrom firstInWindow h
+        |> Option.map (fun y ->
+            let d = Models.stl season.Period y
+            let start = firstInWindow - int64 y.Length * modelStep
+            let profile = Array.zeroCreate season.Period
+
+            for i in y.Length - season.Period .. y.Length - 1 do
+                profile[phase season (start + int64 i * modelStep)] <- d.Seasonal[i]
+
+            let sd =
+                let m = Array.average d.Remainder
+                sqrt (d.Remainder |> Array.averageBy (fun r -> (r - m) * (r - m)))
+
+            RobustModel(Array.last d.Trend, profile, sd))
+    | Agile _ ->
+        modelInput season 3 historyFrom toMs h
+        |> Option.bind (fun y ->
+            let start = lastBucket modelStep toMs - int64 (y.Length - 1) * modelStep
+            let fitLength = int ((firstInWindow - start) / modelStep)
+
+            if fitLength < 3 * season.Period then
+                None
+            else
+                Some(AgileModel(Models.fitAirline season.Period y[.. fitLength - 1])))
+    | Basic -> None
+
+/// The expected value by time, and the model's own spread. Agile expects
+/// each bucket from those before it, the window's own included, so it runs
+/// over `recent`: the group's data at the model's step up to `toMs`.
+let private expectation (season: Seasonality) (toMs: int64) (recent: (int64 * Map<int64, float>) option) (model: AnomalyModel) =
+    let modelStep = int64 season.Step.TotalMilliseconds
+
+    match model with
+    | RobustModel(level, profile, sigma) -> Some((fun t -> Some(level + profile[phase season t])), sigma)
+    | AgileModel m ->
+        recent
+        |> Option.bind (fun (from, h) -> modelInput season 2 from toMs h)
+        |> Option.map (fun y ->
+            let start = lastBucket modelStep toMs - int64 (y.Length - 1) * modelStep
+            let p = Models.predictions m y
+            let at t = let i = int ((t / modelStep * modelStep - start) / modelStep) in if i >= 0 && i < p.Length then p[i] else None
+            at, sqrt m.Sigma2)
+
+/// Each group's model, fitted on the node's seasonal history, and that
+/// history, which starts at the first value returned.
+let private fitGroups execute tenant (plan: Plan) (algorithm: AnomalyAlgorithm) (season: Seasonality) (node: Node) =
+    task {
+        let! historyFrom, histories = seasonalRead execute tenant plan season (seasonalHistory plan.Retention season) node
+        let fromMs = plan.From.ToUnixTimeMilliseconds()
+        let toMs = plan.To.ToUnixTimeMilliseconds()
+
+        let models: AnomalyModels =
+            histories
+            |> Map.toSeq
+            |> Seq.choose (fun (tags, h) -> fitModel algorithm season historyFrom fromMs toMs h |> Option.map (fun m -> tags, m))
+            |> Map.ofSeq
+
+        return historyFrom, histories, models
+    }
+
 /// Runs a timeseries plan: for each output, in plan order, its query_index
 /// and its series with their extras.
-let evaluate (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<Series.OutputResult list> =
+///
+/// `models` are seasonal anomaly models from `fit`, by query_index, perhaps
+/// fitted for an earlier window; with them no whole history is read, and a
+/// group without one has no band. None fits them here.
+let evaluateWith
+    (execute: Sql -> Task<Row list>)
+    (tenant: TenantId)
+    (plan: Plan)
+    (models: Map<int, AnomalyModels> option)
+    : Task<Series.OutputResult list> =
     task {
         let! fetched = fetchAll execute tenant plan (plan.Outputs |> List.map _.Node)
 
         let fromMs = plan.From.ToUnixTimeMilliseconds()
         let toMs = plan.To.ToUnixTimeMilliseconds()
         let windowMs = toMs - fromMs
-
-        /// The node's series over a seasonal model's history, at its step:
-        /// the same queries and functions, a longer window, a coarser step.
-        let history (s: Seasonality) (node: Node) =
-            task {
-                let step = s.Step
-                let window =
-                    { plan with
-                        From = plan.To - seasonalHistory plan.Retention s
-                        Step = step
-                        Queries = plan.Queries |> List.map (fun q -> { q with Step = step }) }
-
-                let! h = fetchAll execute tenant window [ node ]
-                let series = Evaluate.evalFrom h (window.From.ToUnixTimeMilliseconds()) node
-                return window.From.ToUnixTimeMilliseconds(), series |> List.map (fun s -> s.GroupTags, s.Points) |> Map.ofList
-            }
 
         // An output's series, with what its outermost function adds beside
         // them. The extras read history before the window, so the node is
@@ -204,66 +315,34 @@ let evaluate (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : 
                                     |> Some })
 
                 | Anomalies((Robust season | Agile season) as algorithm, bounds) ->
-                    let! historyFrom, histories = history season o.Node
                     let modelStep = int64 season.Step.TotalMilliseconds
                     let bucket t = t / modelStep * modelStep
+                    let given = models |> Option.map (fun m -> defaultArg (m.TryFind o.QueryIndex) Map.empty)
+
+                    let! modelOf, recentOf =
+                        task {
+                            match given with
+                            | None ->
+                                let! historyFrom, histories, fitted = fitGroups execute tenant plan algorithm season o.Node
+                                return fitted.TryFind, (fun tags -> histories.TryFind tags |> Option.map (fun h -> historyFrom, h))
+                            | Some given when algorithm.IsAgile && not given.IsEmpty ->
+                                // Two seasons for agile's errors to settle
+                                // before the window, and one to spare for gaps.
+                                let! from, recent = seasonalRead execute tenant plan season (season.Length * 3.0 + (plan.To - plan.From)) o.Node
+                                return given.TryFind, (fun tags -> recent.TryFind tags |> Option.map (fun h -> from, h))
+                            | Some given -> return given.TryFind, (fun _ -> None)
+                        }
 
                     return
                         withExtras (fromMs - int64 anomalyWindow * stepMs) (fun s ->
                             let pts = s.Points |> Map.toArray
 
-                            // Expected value per model bucket, and the model's
-                            // own spread, from history before the window.
-                            let model =
-                                histories.TryFind s.GroupTags
-                                |> Option.bind (fun h ->
-                                    let firstInWindow = bucket fromMs
-
-                                    match algorithm with
-                                    | Robust _ ->
-                                        // STL on the history before the
-                                        // window; the window is expected at
-                                        // the last trend level plus the
-                                        // season's profile — so nothing inside
-                                        // the window moves the expectation.
-                                        modelInput season 3 historyFrom firstInWindow h
-                                        |> Option.map (fun y ->
-                                            let d = Models.stl season.Period y
-                                            let start = firstInWindow - int64 y.Length * modelStep
-                                            let level = Array.last d.Trend
-                                            // The season's latest cycle is its profile.
-                                            let lastCycle = d.Seasonal.Length - season.Period
-                                            let phase t = int (((t - start) / modelStep) % int64 season.Period)
-
-                                            let sd =
-                                                let m = Array.average d.Remainder
-                                                sqrt (d.Remainder |> Array.averageBy (fun r -> (r - m) * (r - m)))
-
-                                            (fun t -> Some(level + d.Seasonal[lastCycle + phase (bucket t)])), sd)
-                                    | _ ->
-                                        // The airline model fitted before the
-                                        // window, then one step ahead through
-                                        // it: each bucket expected from those
-                                        // before it, the window's own included.
-                                        modelInput season 3 historyFrom toMs h
-                                        |> Option.bind (fun y ->
-                                            let start = toMs - int64 y.Length * modelStep |> bucket
-                                            let fitLength = int ((firstInWindow - start) / modelStep)
-
-                                            if fitLength < 3 * season.Period then
-                                                None
-                                            else
-                                                let m = Models.fitAirline season.Period y[.. fitLength - 1]
-                                                let p = Models.predictions m y
-                                                let at t = let i = int ((bucket t - start) / modelStep) in if i >= 0 && i < p.Length then p[i] else None
-                                                Some(at, sqrt m.Sigma2)))
-
-                            match model with
+                            match modelOf s.GroupTags |> Option.bind (expectation season toMs (recentOf s.GroupTags)) with
                             | None -> Series.noExtra
                             | Some(expected, sigma) -> { Series.noExtra with Band = Some(bandFrom bounds sigma bucket pts expected) })
 
                 | Forecast(deviations, SeasonalForecast season, _, horizon) ->
-                    let! historyFrom, histories = history season o.Node
+                    let! historyFrom, histories = seasonalRead execute tenant plan season (seasonalHistory plan.Retention season) o.Node
                     let modelStep = int64 season.Step.TotalMilliseconds
                     let horizonMs = horizon |> Option.map (fun h -> int64 h.TotalMilliseconds) |> Option.defaultValue windowMs
                     let future = Series.grid stepMs toMs (toMs + horizonMs) |> Array.ofSeq
@@ -274,15 +353,15 @@ let evaluate (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : 
                             match histories.TryFind s.GroupTags |> Option.bind (modelInput season 2 historyFrom toMs) with
                             | None -> Series.noExtra
                             | Some y ->
-                                let lastBucket = (toMs - 1L) / modelStep * modelStep
-                                let steps = int ((toMs + horizonMs - lastBucket) / modelStep) + 1
+                                let last = lastBucket modelStep toMs
+                                let steps = int ((toMs + horizonMs - last) / modelStep) + 1
                                 let m = Models.fitAirline season.Period y
                                 let predicted = Models.forecastAirline m y steps
 
                                 let points =
                                     future
                                     |> Array.choose (fun t ->
-                                        let k = int ((t / modelStep * modelStep - lastBucket) / modelStep) - 1
+                                        let k = int ((t / modelStep * modelStep - last) / modelStep) - 1
 
                                         if k >= 0 && k < predicted.Length then
                                             let v, se = predicted[k]
@@ -342,6 +421,34 @@ let evaluate (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : 
             |> Task.WhenAll
 
         return List.ofArray outputs
+    }
+
+/// Runs a timeseries plan, fitting any seasonal anomaly model it needs.
+let evaluate (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<Series.OutputResult list> =
+    evaluateWith execute tenant plan None
+
+/// Reads each seasonal anomaly output's history and fits a model per group,
+/// by the output's query_index: the costly half of `evaluate`, which a monitor
+/// repeats only now and then.
+let fit (execute: Sql -> Task<Row list>) (tenant: TenantId) (plan: Plan) : Task<Map<int, AnomalyModels>> =
+    task {
+        let! fitted =
+            plan.Outputs
+            |> List.choose (fun o ->
+                match o.Extra with
+                | Anomalies((Robust season | Agile season) as algorithm, _) ->
+                    Some(
+                        task {
+                            let! _, _, models = fitGroups execute tenant plan algorithm season o.Node
+                            return o.QueryIndex, models
+                        }
+                    )
+                | Anomalies(Basic, _)
+                | NoExtra
+                | Forecast _ -> None)
+            |> Task.WhenAll
+
+        return Map.ofArray fitted
     }
 
 /// Runs a timeseries plan into Datadog's response shape.

@@ -154,9 +154,17 @@ let private resumed (g: Group) = Option.orElse g.State g.Interrupted
 
 /// The state a value puts a group in, from the state it was in, and the
 /// threshold that decided it.
-let private judge (q: MonitorQuery) (t: Thresholds) (current: Status option) (value: float) : Status * Crossed option =
+///
+/// WARNING(undocumented): Datadog shows 0 as the usual recovery threshold of
+/// an anomaly monitor; its default is not documented.
+let private judge (q: MonitorQuery) (t: Thresholds) (current: Status option) (value: float) (recovery: float option) : Status * Crossed option =
     let c = q.Comparator
     let alerting = current = Some Alert
+
+    let isRecovered (threshold: float) (recoveryThreshold: float option) =
+        match recovery with
+        | Some fraction -> fraction <= defaultArg recoveryThreshold 0.0
+        | None -> recovered c value threshold recoveryThreshold
 
     let leaving =
         match current with
@@ -166,14 +174,14 @@ let private judge (q: MonitorQuery) (t: Thresholds) (current: Status option) (va
 
     if holds c value q.Threshold then
         Alert, Some Critical
-    elif alerting && not (recovered c value q.Threshold t.CriticalRecovery) then
+    elif alerting && not (isRecovered q.Threshold t.CriticalRecovery) then
         Alert, Some Critical
     else
         match t.Warning with
         | Some w when holds c value w -> Warn, Some Warning
         // WARNING(undocumented): a group leaving Alert passes through Warn, so
         // it recovers from there by warning_recovery.
-        | Some w when triggered current && not (recovered c value w t.WarningRecovery) -> Warn, leaving
+        | Some w when triggered current && not (isRecovered w t.WarningRecovery) -> Warn, leaving
         | _ -> OK, leaving
 
 // --- moving a group --------------------------------------------------------------------
@@ -213,8 +221,8 @@ let private newGroupDelay (d: Definition) =
     if d.Query.GroupBy.IsEmpty then TimeSpan.Zero else d.Options.NewGroupDelay
 
 /// The transition a value makes from the group's state.
-let private judged (d: Definition) (g: Group) (value: float) (p: Period) (at: DateTimeOffset) : Group * Transition option =
-    let next, crossed = judge d.Query d.Options.Thresholds (resumed g) value
+let private judged (d: Definition) (g: Group) (value: float) (recovery: float option) (p: Period) (at: DateTimeOffset) : Group * Transition option =
+    let next, crossed = judge d.Query d.Options.Thresholds (resumed g) value recovery
 
     let reason =
         match g.State, next with
@@ -269,7 +277,7 @@ let private silent (d: Definition) (g: Group) (p: Period) (at: DateTimeOffset) :
     match g.State, d.Options.Timeout with
     | None, _ -> g, None
     // Judged as 0, it is not without data, so timeout_h does not end it.
-    | Some _, _ when zeroWhenMissing d -> judged d g 0.0 p at
+    | Some _, _ when zeroWhenMissing d -> judged d g 0.0 None p at
     | Some _, Some timeout when triggered (resumed g) && silence >= timeout -> into g OK Reason.Timeout p at
     | Some state, _ ->
         // WARNING(undocumented): Datadog documents on_missing_data for
@@ -296,7 +304,7 @@ let private seen (d: Definition) (g: Group) (r: GroupResult) (p: Period) (at: Da
     | Skipped _, _ when r.LastPoint.IsNone -> silent d g p at
     | Skipped _, _ -> g, None
     | Judged _, None when at - g.FirstSeen < newGroupDelay d -> g, None
-    | Judged value, _ -> judged d g value p at
+    | Judged value, _ -> judged d g value r.Recovery p at
 
 /// A known group missing from the result: silent, and forgotten after 24 h
 /// unseen.

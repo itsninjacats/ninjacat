@@ -111,7 +111,7 @@ let private labels (queries: string list) (formulas: string list) =
     if formulas.IsEmpty then queries else formulas
 
 /// The engine's own results, as records.
-let private results (names: string list) (outputs: Series.OutputResult list) : FormulaResult list =
+let results (names: string list) (outputs: Series.OutputResult list) : FormulaResult list =
     [ for output in outputs ->
           { Formula = names[output.QueryIndex]
             Series =

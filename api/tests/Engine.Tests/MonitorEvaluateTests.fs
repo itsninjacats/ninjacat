@@ -73,7 +73,7 @@ let private constant (metric: string) (groups: string option list) (value: float
     series metric groups windowTo (List.replicate 20 value)
 
 let private evaluateWith (maxGroups: int) (points: Point list) (d: Definition) =
-    (evaluate (executeOver points) (TenantId "t") Plan.defaultRetention maxGroups d at).Result
+    (evaluate (executeOver points) (TenantId "t") Plan.defaultRetention maxGroups None d at).Result
 
 let private evaluated (points: Point list) (d: Definition) : Evaluation =
     match evaluateWith 1000 points d with
@@ -85,7 +85,7 @@ let private readings (e: Evaluation) = e.Groups |> List.map (fun g -> g.Key, g.R
 let private value (e: Evaluation) (key: string) : float =
     match (e.Groups |> List.find (fun g -> g.Key = key)).Reading with
     | Judged v -> v
-    | Skipped reason -> failwith $"{key} skipped: {reason}"
+    | Skipped(_, reason) -> failwith $"{key} skipped: {reason}"
 
 let private skipped (e: Evaluation) (key: string) : bool =
     match (e.Groups |> List.find (fun g -> g.Key = key)).Reading with
@@ -391,11 +391,149 @@ let ``change with as_count: the two windows reduced, then the change`` () =
     let percent = evaluated points (definition "pct_change(sum(last_5m),last_5m):sum:hits{*}.as_count() > 1" "")
     Assert.Equal(50.0, value percent "*", 9)
 
+// --- anomaly ----------------------------------------------------------------------------
+
+let private calm i = if i % 2 = 0 then 10.0 else 12.0
+
+/// An hour of 10s and 12s, then the 15 minutes of the alert window: one
+/// point a minute, None leaving that minute empty.
+let private anomalyPoints (window: float option list) : Point list =
+    let values = List.init 60 (calm >> Some) @ window
+    let until = DateTimeOffset.FromUnixTimeMilliseconds(windowTo.ToUnixTimeMilliseconds() / 60000L * 60000L)
+    let start = until.AddMinutes(-float values.Length)
+
+    values
+    |> List.indexed
+    |> List.choose (fun (i, v) -> v |> Option.map (fun v -> { Metric = "cpu"; Groups = []; Time = start.AddMinutes(float i); Value = v }))
+
+let private calmThen (spikes: int list) =
+    anomalyPoints [ for i in 0..14 -> Some(if List.contains i spikes then 100.0 else calm i) ]
+
+let private basic (args: string) (options: string) =
+    definition $"avg(last_4h):anomalies(avg:cpu{{*}}, 'basic', 2, alert_window='last_15m', interval=60{args}) >= 1" options
+
+let private group (e: Evaluation) = Assert.Single e.Groups
+
+[<Theory>]
+[<InlineData("", 5.0)>]
+[<InlineData(", direction='both'", 5.0)>]
+[<InlineData(", direction='above'", 5.0)>]
+[<InlineData(", direction='below'", 0.0)>]
+let ``an anomaly is the fraction of the alert window outside the band`` (direction: string, outside: float) =
+    let e = evaluated (calmThen [ 10..14 ]) (basic direction "")
+    Assert.Equal(TimeSpan.FromMinutes 15.0, e.Period.To - e.Period.From)
+    Assert.Equal(outside / 15.0, value e "*", 9)
+
+[<Fact>]
+let ``an anomaly recovers by the fraction over recovery_window`` () =
+    let options = """{"threshold_windows":{"trigger_window":"last_15m","recovery_window":"last_5m"}}"""
+    let late = group (evaluated (calmThen [ 10..14 ]) (basic "" options))
+    Assert.Equal(Some 1.0, late.Recovery)
+    let early = group (evaluated (calmThen [ 0..4 ]) (basic "" options))
+    Assert.Equal(Judged(5.0 / 15.0), early.Reading)
+    Assert.Equal(Some 0.0, early.Recovery)
+
+[<Fact>]
+let ``count_default_zero counts an empty bucket as 0`` () =
+    let points = anomalyPoints [ for i in 0..14 -> if i >= 10 then None else Some(calm i) ]
+    Assert.Equal(0.0, value (evaluated points (basic "" "")) "*", 9)
+    Assert.Equal(5.0 / 15.0, value (evaluated points (basic ", count_default_zero='true'" "")) "*", 9)
+
+[<Fact>]
+let ``a seasonal model without enough history is learning, not OK`` () =
+    let d = definition "avg(last_4h):anomalies(avg:cpu{*}, 'agile', 2, alert_window='last_15m', interval=60, seasonality='hourly') >= 1" ""
+    let g = group (evaluated (calmThen []) d)
+    Assert.True(g.Reading.IsSkipped)
+    Assert.Contains("learning", string g.Reading)
+
+[<Fact>]
+let ``count_default_zero fills no history from before a group's first point`` () =
+    let d =
+        definition
+            "avg(last_4h):anomalies(avg:cpu{*}, 'robust', 2, alert_window='last_15m', interval=60, seasonality='hourly', count_default_zero='true') >= 1"
+            ""
+
+    let g = group (evaluated (calmThen []) d)
+    Assert.Equal(Skipped(Learning, "learning: the model has too little history yet"), g.Reading)
+
+/// Hourly-seasonal points every minute, from `hours` back to `until`, with a
+/// little noise so the models have a spread.
+let private seasonalPoints (hours: int) (until: DateTimeOffset) =
+    [ for m in 1 .. hours * 60 ->
+          let t = until.AddMinutes(-float m)
+          { Metric = "cpu"
+            Groups = []
+            Time = t
+            Value = 50.0 + 10.0 * sin (2.0 * Math.PI * float t.Minute / 60.0) + 0.5 * sin (1.7 * float m) } ]
+
+[<Theory>]
+[<InlineData("robust")>]
+[<InlineData("agile")>]
+let ``a seasonal anomaly judges with the models it was given`` (algorithm: string) =
+    let d =
+        definition
+            $"avg(last_4h):anomalies(avg:cpu{{*}}, '{algorithm}', 3, alert_window='last_15m', interval=60, seasonality='hourly') >= 1"
+            ""
+
+    let calm = seasonalPoints 8 at
+    let shifted = calm |> List.map (fun p -> if p.Time >= windowTo.AddMinutes -5.0 then { p with Value = p.Value + 30.0 } else p)
+    let tenant = TenantId "t"
+
+    let fit =
+        match (fit (executeOver calm) tenant Plan.defaultRetention d None at).Result with
+        | Ok(Some f) -> f
+        | other -> failwith $"%A{other}"
+
+    Assert.False(fit.Models[0].IsEmpty)
+
+    let judged points =
+        match (evaluate (executeOver points) tenant Plan.defaultRetention 1000 (Some fit) d at).Result with
+        | Ok e -> value e "*"
+        | Error e -> failwith e
+
+    let quiet = judged calm
+    Assert.InRange(quiet, 0.0, 0.1)
+    Assert.True(judged shifted > quiet)
+
+[<Fact>]
+let ``models are fitted again once they are stale or the query changed`` () =
+    let reads = ref 0
+
+    let execute sql =
+        lock reads (fun () -> reads.Value <- reads.Value + 1)
+        executeOver [] sql
+
+    let tenant = TenantId "t"
+    let hourly = "avg(last_4h):anomalies(avg:cpu{*}, 'robust', 3, alert_window='last_15m', interval=60, seasonality='hourly') >= 1"
+    let d = definition hourly ""
+
+    let fitAt (previous: Fit option) (tick: DateTimeOffset) (d: Definition) =
+        match (fit execute tenant Plan.defaultRetention d previous tick).Result with
+        | Ok(Some f) -> f
+        | other -> failwith $"%A{other}"
+
+    let first = fitAt None at d
+    let read = reads.Value
+    Assert.Same(first, fitAt (Some first) (at.AddMinutes 9.0) d)
+    Assert.Equal(read, reads.Value)
+    Assert.Equal(at.AddMinutes 10.0, (fitAt (Some first) (at.AddMinutes 10.0) d).At)
+    let other = definition (hourly.Replace("cpu", "mem")) ""
+    Assert.Equal(at.AddMinutes 1.0, (fitAt (Some first) (at.AddMinutes 1.0) other).At)
+    Assert.Equal(Ok None, (fit execute tenant Plan.defaultRetention (basic "" "") None at).Result)
+
 // --- not yet ------------------------------------------------------------------------------
 
 [<Fact>]
-let ``anomaly monitors are refused until they are evaluated`` () =
-    let d = definition "avg(last_4h):anomalies(avg:cpu{*}, 'basic', 2, alert_window='last_15m') >= 1" ""
+let ``forecast monitors are refused until they are evaluated`` () =
+    let d = definition "max(next_1d):forecast(avg:cpu{*}, 'linear', 1, history='1h') >= 2000" ""
+
+    match evaluateWith 1000 [] d with
+    | Error e -> Assert.Contains("not evaluated yet", e)
+    | Ok e -> Assert.Fail $"expected an error, got {e}"
+
+[<Fact>]
+let ``outlier monitors are refused until they are evaluated`` () =
+    let d = definition "avg(last_5m):outliers(avg:cpu{*} by {host}, 'dbscan', 3) > 0" ""
 
     match evaluateWith 1000 [] d with
     | Error e -> Assert.Contains("not evaluated yet", e)

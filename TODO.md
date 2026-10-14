@@ -500,6 +500,11 @@ data is here; the product is not.
 - [ ] **An unaligned `to` older than the raw retention** loses its last part minute: the
       rollup stops at the minute holding `to`, and the raw points that would finish it
       are gone.
+- [ ] **Anomaly monitors keep their models in the entity's memory**
+      (`Monitor/Evaluate.fit`, `Monitors/Entity.fs`). So: a group that appears between
+      refits is learning until the next refit (up to an hour); a hand-off or a restart
+      refits every model; and refits are not counted in `ninjacat.monitor.*`, so their
+      cost is visible only in `evaluation.time`.
 
 ## 7. Panel
 

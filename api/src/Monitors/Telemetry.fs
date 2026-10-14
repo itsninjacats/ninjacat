@@ -45,6 +45,8 @@ type Counters() =
     member val SkippedPending = Counter()
     /// The engine judged no group: the window was not full, or had no value.
     member val SkippedWindow = Counter()
+    /// No group judged while a seasonal model has too little history.
+    member val SkippedLearning = Counter()
     /// Stopwatch ticks spent evaluating, the wait for the gate left out.
     member val EvaluationTicks = Counter()
     /// Seconds from the end of the window to the evaluation's result.
@@ -75,6 +77,7 @@ let readings (counts: Counters) : Reading list =
       evaluations [ "outcome", "skipped"; "cause", "gate" ] counts.SkippedGate
       evaluations [ "outcome", "skipped"; "cause", "pending" ] counts.SkippedPending
       evaluations [ "outcome", "skipped"; "cause", "window" ] counts.SkippedWindow
+      evaluations [ "outcome", "skipped"; "cause", "learning" ] counts.SkippedLearning
       reading "evaluation.time" "second" Count [] (fun () -> counts.EvaluationTicks.Value / float Stopwatch.Frequency)
       reading "evaluation.lag" "second" Gauge [] counts.EvaluationLag.Take
       reading "entities" "" Gauge [] (fun () -> counts.Entities.Value)

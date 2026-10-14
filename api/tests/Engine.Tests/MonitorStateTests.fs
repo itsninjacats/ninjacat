@@ -90,7 +90,7 @@ let private cases: Map<string, Case> =
           case (simple "") [] [ "*", Judged 95.0 ] [ "*", Some Alert ] [ "*", None, Alert, Reason.New ]
 
           "a new group with nothing to judge waits",
-          case (above90 """{"new_group_delay":0}""") [] [ a, Skipped "not full" ] [ a, None ] []
+          case (above90 """{"new_group_delay":0}""") [] [ a, Skipped(Incomplete, "not full") ] [ a, None ] []
 
           // --- thresholds
           "OK to Alert",
@@ -158,7 +158,7 @@ let private cases: Map<string, Case> =
 
           // --- nothing to judge
           "a skipped group keeps its state",
-          case (above90 "") [ group a (Some Alert) ] [ a, Skipped "not full" ] [ a, Some Alert ] []
+          case (above90 "") [ group a (Some Alert) ] [ a, Skipped(Incomplete, "not full") ] [ a, Some Alert ] []
 
           // --- no data
           "no data within no_data_timeframe keeps the state",
@@ -323,7 +323,7 @@ let private cases: Map<string, Case> =
               [ a, Some NoData, OK, Reason.Timeout ]
 
           "show_no_data: a skipped group with points is not missing",
-          case (above90 (missing "show_no_data")) [ group a (Some OK) ] [ a, Skipped "not full" ] [ a, Some OK ] []
+          case (above90 (missing "show_no_data")) [ group a (Some OK) ] [ a, Skipped(Incomplete, "not full") ] [ a, Some OK ] []
 
           "show_and_notify_no_data: a missing group is No Data at once, notified",
           case (above90 (missing "show_and_notify_no_data")) [ group a (Some Warn) ] [] [ a, Some NoData ] [ a, Some Warn, NoData, Reason.NoData ]
@@ -421,7 +421,7 @@ let ``the state machine`` (name: string) =
 
     let evaluation =
         { Period = period
-          Groups = c.Results |> List.map (fun (key, r) -> { Key = key; Tags = [ key ]; Reading = r; LastPoint = Some(period.To.AddSeconds -15.0) }) }
+          Groups = c.Results |> List.map (fun (key, r) -> { Key = key; Tags = [ key ]; Reading = r; Recovery = None; LastPoint = Some(period.To.AddSeconds -15.0) }) }
 
     let after, transitions = step c.Definition before evaluation at
 
@@ -433,7 +433,7 @@ let ``the state machine`` (name: string) =
 // --- what transitions carry --------------------------------------------------------------
 
 let private once (d: Definition) (groups: Map<string, Group>) (results: (string * Reading) list) (tick: DateTimeOffset) =
-    step d groups { Period = period; Groups = results |> List.map (fun (key, r) -> { Key = key; Tags = [ key ]; Reading = r; LastPoint = Some period.To }) } tick
+    step d groups { Period = period; Groups = results |> List.map (fun (key, r) -> { Key = key; Tags = [ key ]; Reading = r; Recovery = None; LastPoint = Some period.To }) } tick
 
 [<Fact>]
 let ``a trigger keeps its start through Alert and Warn; the recovery carries it, the group drops it`` () =
@@ -469,14 +469,14 @@ let ``recovery past a recovery threshold names it`` () =
 
 [<Fact>]
 let ``seeing a group moves its last seen and last point`` () =
-    let groups, _ = once (above90 "") (Map [ a, group a (Some OK) ]) [ a, Skipped "not full" ] at
+    let groups, _ = once (above90 "") (Map [ a, group a (Some OK) ]) [ a, Skipped(Incomplete, "not full") ] at
     Assert.Equal(at, groups[a].LastSeen)
     Assert.Equal(period.To, groups[a].LastPoint)
 
 /// A group in the result with no point in the window: the engine kept its
 /// series for a function's lookback, or every bucket had no number.
 let private pointless (d: Definition) (g: Group) =
-    step d (Map [ g.Key, g ]) { Period = period; Groups = [ { Key = g.Key; Tags = g.Tags; Reading = Skipped "no value"; LastPoint = None } ] } at
+    step d (Map [ g.Key, g ]) { Period = period; Groups = [ { Key = g.Key; Tags = g.Tags; Reading = Skipped(Incomplete, "no value"); Recovery = None; LastPoint = None } ] } at
 
 [<Fact>]
 let ``a group with no point in the window goes to No Data like an absent one`` () =
@@ -625,3 +625,30 @@ let ``the monitor is in its most severe judged group's state`` (states: string, 
         |> Map.ofArray
 
     Assert.Equal(parse expected, overall groups)
+
+// --- anomaly ----------------------------------------------------------------------------
+
+let private anomaly options =
+    definition "avg(last_4h):anomalies(avg:cpu{*} by {host}, 'basic', 2, alert_window='last_15m') >= 0.5" options
+
+/// An anomaly's trigger fraction and its fraction over recovery_window.
+let private fractions (d: Definition) (state: Status) (trigger: float) (recovery: float) =
+    let result = { Key = a; Tags = [ a ]; Reading = Judged trigger; Recovery = Some recovery; LastPoint = Some period.To }
+    let after, _ = step d (Map [ a, group a (Some state) ]) { Period = period; Groups = [ result ] } at
+    after[a].State
+
+[<Fact>]
+let ``an anomaly recovers only when nothing in recovery_window is anomalous`` () =
+    let d = anomaly ""
+    Assert.Equal(Some Alert, fractions d OK 0.6 0.6)
+    // Below the threshold, but anomalous points remain: still Alert.
+    Assert.Equal(Some Alert, fractions d Alert 0.2 0.1)
+    Assert.Equal(Some OK, fractions d Alert 0.2 0.0)
+    // Nothing judged yet stays OK however the recovery window looks.
+    Assert.Equal(Some OK, fractions d OK 0.2 0.1)
+
+[<Fact>]
+let ``an anomaly recovers at or below its recovery threshold`` () =
+    let d = anomaly """{"thresholds":{"critical":0.5,"critical_recovery":0.1}}"""
+    Assert.Equal(Some OK, fractions d Alert 0.3 0.1)
+    Assert.Equal(Some Alert, fractions d Alert 0.3 0.15)

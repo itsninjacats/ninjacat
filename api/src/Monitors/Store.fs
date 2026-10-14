@@ -84,7 +84,7 @@ let evaluationRows (key: MonitorKey) (at: DateTimeOffset) (groups: Map<string, G
            let value, outcome, detail =
                match r.Reading with
                | Judged v -> Some v, "evaluated", ""
-               | Skipped reason -> None, "skipped", reason
+               | Skipped(_, reason) -> None, "skipped", reason
 
            { TenantID = key.Tenant
              MonitorID = uint64 key.Id

@@ -253,6 +253,25 @@ type EntityTests() =
         Assert.Equal((0.0, 1.0), (fakes.Counts.Evaluated.Value, fakes.Counts.SkippedWindow.Value))
 
     [<Fact>]
+    member this.``an anomaly monitor keeps its models until they are due for a refit``() =
+        let robust =
+            "avg(last_4h):anomalies(avg:system.cpu.user{*}, 'robust', 2, alert_window='last_15m', interval=60, seasonality='hourly') >= 1"
+
+        fakes.Row <- Some(monitorRow 1 robust "")
+        let entity, _, records = this.Start()
+
+        let executionsAfter (tick: DateTimeOffset) =
+            entity.Tell(Tick tick)
+            records.FishForMessage<MonitorEvaluationRow[]>(fun rows -> rows |> Array.exists (fun r -> r.At = tick.UtcDateTime)) |> ignore
+            lock fakes (fun () -> fakes.Executions)
+
+        // The history read to fit and the window read; then the window alone
+        // until the hourly season's ten minutes are up.
+        Assert.Equal(2, executionsAfter t0)
+        Assert.Equal(3, executionsAfter (t0 + minute))
+        Assert.Equal(5, executionsAfter (t0 + minute * 10.0))
+
+    [<Fact>]
     member this.``a tick while the evaluation runs is skipped``() =
         let release = TaskCompletionSource()
         fakes.ExecuteGate <- release.Task
