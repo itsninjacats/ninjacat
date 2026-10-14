@@ -2,9 +2,6 @@
 #
 #   docker build --target api .        ninjacat-api: intake, query, migrate
 #   docker build --target monitors .   ninjacat-monitors
-#
-# Name the target. Without one Docker builds the last stage, which is the api
-# image, so a monitors build that forgets it silently yields the wrong program.
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS builder
 
 # The SDK reports its use to Microsoft unless told not to.
@@ -26,10 +23,9 @@ RUN dotnet restore src/Server/Server.fsproj \
 
 COPY . .
 
-# VERSION is the release's (1.2.3 or v1.2.3), stamped on the assemblies. The
-# monitor service's Akka cluster compares it between nodes, so that during a
-# rollout shards move to the newer pods. Any other build is 0.0.0, older than
-# every release; the SDK's own default, 1.0.0, would be newer.
+# VERSION (1.2.3 or v1.2.3) stamps the assemblies: the monitors' Akka cluster
+# compares it so a rollout moves shards to newer pods. 0.0.0 is older than any
+# release; the SDK default 1.0.0 would not be.
 FROM builder AS publish-api
 ARG VERSION=0.0.0
 RUN dotnet publish src/Server/Server.fsproj -c Release --no-restore -o /out -p:Version=${VERSION#v}

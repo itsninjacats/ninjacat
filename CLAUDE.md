@@ -31,8 +31,7 @@ Polish and should be converted to English when touched, not extended:
   written into the markup rather than `messages/`, Polish identifiers (`etykieta`, `opis`,
   `tytul`) and comments.
 
-Renaming a route changes a URL — batch those deliberately, as the keys page was
-(`/app/ustawienia/klucze` became `/app/settings/keys`).
+Renaming a route changes a URL — batch those deliberately.
 
 The F# server under `api/src/` is already English — match that register: comments explain
 *why* a decision was made, not what the line does, and there are few of them.
@@ -75,9 +74,7 @@ production goes through `frontend/scripts/migrate.ts`, which uses only drizzle-o
 migrator and is bundled into the runtime image as `migrate.js`. So the shipping image
 has two entrypoints: `node build` serves, `node migrate.js` migrates and exits. That
 is what lets Kubernetes run migrations as a pre-upgrade hook Job without shipping
-drizzle-kit anywhere near production. The Drizzle history was squashed once, into one
-`0000` (2026-10-13), before anyone ran NinjaCat; a Postgres from before that must be
-dropped.
+drizzle-kit anywhere near production.
 
 **The ClickHouse schema follows the same shape, owned by the server.** Migrations
 live embedded in the binary (`api/schema/migrations/*.sql`, tracked in a
@@ -90,9 +87,9 @@ the frontend's.
 **An applied migration is immutable.** Its checksum is in the ledger; an edit makes the
 server refuse to start. In the dev stack the migrations are embedded resources that
 `dotnet watch` rebuilds on, so treat a saved migration as already applied. Fix a mistake with the next
-migration, never by editing the file or the ledger. The history was squashed once, into
-`0001_initial.sql` (2026-10-13), before anyone ran NinjaCat; a database from before that
-must be dropped.
+migration, never by editing the file or the ledger. Both histories were squashed on
+2026-10-13 (Drizzle into `0000`, ClickHouse into `0001_initial.sql`) before anyone ran
+NinjaCat; a database from before must be dropped.
 
 Ports: 8080 agent intake, 8081 panel and query API (internal; the dev stack publishes it
 on 127.0.0.1 only), 10516 logs over TCP, 5173 panel (dev), 5433 Postgres, 8123/9000 ClickHouse.
@@ -172,14 +169,12 @@ argument; there is no mode that serves both ports):
   and every write of what agents send: the table writers, the key keeper, logs over TCP.
 - **`ninjacat-api query`, :8081** (`NINJACAT_INTERNAL_ADDR`, `QueryHost.fs`) — `/internal/*`
   for the panel and Datadog's query API (`/api/v1/metrics`, `/api/v2/query/*`). It only
-  reads. Every route but the probes asks for a short-lived HS256 JWT the panel signs
-  (`Server/QueryToken.fs`, ASP.NET's JwtBearer); its `tenant` claim is the only source of
-  the tenant. It still belongs on a network only the panel reaches. `/internal/monitors/*`
-  validates monitor definitions and reads what the monitor service stored.
+  reads. Every route but the probes asks for the panel's JWT (`Server/QueryToken.fs`); its
+  `tenant` claim is the only source of the tenant. `/internal/monitors/*` validates monitor
+  definitions and reads what the monitor service stored.
 - **`ninjacat-monitors`** (`src/Monitors`) — an Akka.NET cluster, reached only by its own
   nodes and the health probes (:8559). Reads the panel's `monitor` table, evaluates through
-  `Engine/Monitor`, writes the `monitor_*` tables (transitions as an awaited insert, retried
-  while the entity lives); the intake creates them.
+  `Engine/Monitor`, writes the `monitor_*` tables; the intake creates them.
 
 All three share ClickHouse and Postgres and nothing else. The panel tells the
 intake that a key changed through Postgres (`NOTIFY ninjacat_api_keys`), and the monitor
@@ -294,13 +289,10 @@ process cannot sign panel sessions. `api/README.md` shows how to mint a token fo
 Migrations: `NINJACAT_AUTO_MIGRATE=false` stops the server from applying the ClickHouse
 migrations at startup (use `ninjacat-api migrate` instead).
 
-Retention: `NINJACAT_METRICS_RETENTION_DAYS` (30, raw `metrics`) and
-`NINJACAT_METRICS_ROLLUP_RETENTION_DAYS` (400, `metrics_1m`). The migrating process applies
-them as TTLs after the migrations (a migration cannot read configuration), and the engine
-reads a whole-minute step from the rollup and anything older than the raw retention there.
-Give `intake`, `migrate`, `query` and `ninjacat-monitors` the same values: the readers plan
-by them, and a raw retention they believe longer than the TTL reads days that are gone. The
-rollup may not be kept shorter than the raw points; the start stops if it is.
+Retention: `NINJACAT_METRICS_RETENTION_DAYS` (30, `metrics`) and
+`NINJACAT_METRICS_ROLLUP_RETENTION_DAYS` (400, `metrics_1m`), applied as TTLs by the
+migrating process; give `intake`, `migrate`, `query` and `ninjacat-monitors` the same values
+(`api/README.md`, "Metrics come from two tables").
 
 Limits: `NINJACAT_MAX_BODY_BYTES` (64 MiB) is the largest body the intake reads; a body may
 inflate to 64 MiB (`Body.maxInflatedBytes`).
@@ -321,7 +313,9 @@ read in `Monitors/Settings.fs` and listed in `api/README.md`.
 SvelteKit 5 (runes forced on for project files), Tailwind 4, shadcn-svelte in
 `src/lib/components/ui/`, node adapter. SvelteKit is configured in `vite.config.ts`
 (`sveltekit()` options; there is no `svelte.config.js`). Remote functions are not enabled;
-the panel uses loads, form actions and `+server.ts` endpoints.
+the panel uses loads, form actions and `+server.ts` endpoints. If they come back, the guard
+covers them, but a remote call has no route id, so an admin-only one checks `isInstanceAdmin`
+itself.
 
 Two data sources, and the split matters:
 
@@ -337,37 +331,21 @@ Two data sources, and the split matters:
   same port; its view lives in the URL (`?view=<json>`, see `src/lib/metrics/query.ts`).
 
 Auth is Better Auth with its `admin` and `organization` plugins, configured in
-`src/lib/server/auth-options.ts` (shared by the panel's `auth.ts` and `scripts/create-user.ts`)
-and wired in `src/hooks.server.ts` after the Paraglide handle. The hook populates
-`locals.user`/`locals.session`, then `locals.tenants` (every membership) and `locals.tenant`
-(`{ id, name, role }` or `null`) through `resolveTenant` in `src/lib/server/tenant.ts`.
-Membership is read on every request, because removing a member does not clear the active
-organization of their other sessions; when the request falls back to another tenant, the
-session is moved there too. Better Auth's own routes (`/api/auth/*`) are answered there,
-ahead of the guard.
-
-Every route is private unless it is listed in `src/lib/server/guard.ts` (only `/login` is),
-and the guard runs in `handle`, in front of pages, data requests, endpoints and form actions
-alike. A layout's load is not a guard: the client chooses which loads a data request runs.
-A signed-in user with no tenant reaches only `/no-tenant`; `/app/admin/**` is for the
-instance admin (`user.role` includes `admin`, `isInstanceAdmin`), who reaches it without a
-tenant. Tenant roles are the organization plugin's own (owner, admin, member); only Better
-Auth's own organization routes check them. The panel's pages and the query port (which gets
-the role in its token) do not yet: RBAC is open work in `TODO.md`.
-
-Accounts are made by `scripts/create-user.ts` or the admin pages; sign-up is closed. When
-no account exists yet, the script makes the tenant `default` and the first account its owner
-and the instance admin. Members are added directly by the admin pages, not invited: the
-invitation routes are in `disabledPaths`, since an on-prem install may have no e-mail.
+`src/lib/server/auth-options.ts` (shared with `scripts/create-user.ts`) and wired in
+`src/hooks.server.ts` after Paraglide; it sets `locals.user`/`session`/`tenants`/`tenant`
+(`resolveTenant`, `src/lib/server/tenant.ts`). Every route is private unless it is listed in
+`src/lib/server/guard.ts` (only `/login` is); the guard runs in `handle`, in front of pages,
+data requests, endpoints and form actions alike. A layout's load is not a guard: the client
+chooses which loads a data request runs. Tenant resolution, who reaches what, roles and
+accounts: `frontend/docs/auth-and-route-guard.md`.
 
 API keys are Datadog-shaped (32 hex chars) so they drop into existing agent configs. Postgres
 stores **SHA-256 only**, never the key — deterministic on purpose, because the intake looks up
 *by hash* on every agent request (bcrypt's salt would make that impossible; 128 bits of
 entropy makes it safe). After creating or deleting a key the panel calls `refreshApiKeys()`,
 which never throws — the keeper re-reads every 30s anyway. A key belongs to one tenant
-(`api_key.tenant_id`, no default); `/app/settings/keys` lists, creates and deletes only the
-current tenant's, and its forms carry the tenant they were shown for, so a switch in another
-tab is a 409 rather than a key made for the wrong tenant.
+(`api_key.tenant_id`); the keys page's forms carry the tenant they were shown for, so a
+tenant switch in another tab is a 409.
 
 `src/lib/vitest-examples/**` are scaffolding/learning examples, not product surface.
 

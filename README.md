@@ -57,9 +57,9 @@ server (via `dotnet watch`), saving a Svelte file hot-reloads the browser.
 | Panel and query API (internal, loopback only) | http://localhost:8081 |
 
 To work on the host instead, run just the databases with
-`docker compose up -d postgres clickhouse`, then `dotnet run --project src/Server -- intake`
-`dotnet run --project src/Server -- query` and `dotnet run --project src/Monitors` in `api/`, and `bun run dev` in `frontend/`. Development needs the .NET 10 SDK and
-[Bun](https://bun.sh).
+`docker compose up -d postgres clickhouse`, then `dotnet run --project src/Server -- intake`,
+`dotnet run --project src/Server -- query` and `dotnet run --project src/Monitors` in `api/`,
+and `bun run dev` in `frontend/`. Development needs the .NET 10 SDK and [Bun](https://bun.sh).
 
 Nobody can register: accounts are made on the server. Create the first one, then sign in:
 
@@ -71,14 +71,9 @@ docker compose exec frontend bun run user:create -- you@example.com --name 'Your
 It asks for the password, as Django's `createsuperuser` does. Where nobody is there to type
 (a Job, a script), it takes it from `NINJACAT_USER_PASSWORD`.
 
-The first account on an empty database is the instance admin and the owner of the tenant
-`default`, which it creates. Later accounts take `--admin` (an instance admin, who creates
-tenants and accounts), `--tenant <id|slug>` (repeatable) and `--role owner|admin|member`
-(`member` by default):
-
-```bash
-docker compose exec frontend bun run user:create -- them@example.com --tenant default --role admin
-```
+The first account on an empty database is the instance admin and owner of the tenant
+`default`; later ones take `--admin` (an instance admin, who creates tenants and accounts),
+`--tenant <id|slug>` (repeatable) and `--role owner|admin|member` (default `member`).
 
 Create an API key in the panel under Settings, then send an agent at it. The intake
 routes on the hostname, as Datadog does, so each product needs its Datadog-shaped name

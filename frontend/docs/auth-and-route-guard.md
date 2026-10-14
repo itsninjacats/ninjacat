@@ -1,8 +1,7 @@
 # Sessions, tenants and the route guard
 
 How a request to the panel learns who sent it and which tenant it is for, and what stands
-in front of each route. Every statement here is checked against the code it names; the
-tests that pin the behaviour down are listed at the end.
+in front of each route.
 
 ## Who is asking
 
@@ -44,7 +43,8 @@ why the membership is read each time. When the request lands on a different tena
 session names (2 or 3), the session is moved there with `auth.api.setActiveOrganization`, so
 Better Auth's own calls that default to the active organization act on the tenant the panel
 shows. A new session starts in the first membership (`databaseHooks.session.create.before`
-in `src/lib/server/auth-options.ts`).
+in `src/lib/server/auth-options.ts`, shared by the panel's `auth.ts` and
+`scripts/create-user.ts`).
 
 The tenant switcher in the sidebar calls `organization.setActive` and then `invalidateAll()`,
 so every load runs again for the new tenant.
@@ -70,10 +70,9 @@ HTML), a data request, an enhanced form action (`x-sveltekit-action: true`, answ
 redirect result) — and otherwise an error: 401 without a session, 403 without a tenant. A
 `+server.ts` endpoint or a plain form post without JavaScript gets the error.
 
-### Why not the layout
+### A layout's load is not a guard
 
-`src/routes/app/+layout.server.ts` used to be the guard, and a layout's load protects
-nothing:
+It protects nothing:
 
 - a data request (`__data.json?x-sveltekit-invalidated=…`) names the loads it wants run,
   so the client can skip the layout's;
@@ -86,10 +85,6 @@ data also checks the tenant itself: the keys page's forms carry the tenant they 
 for, and an action answers 409 if the session has moved to another tenant in the meantime,
 because a key made for the wrong tenant sends an agent's data there.
 
-Remote functions are not enabled. If they come back, the guard covers them, but a remote
-call has no route id, so an admin-only remote function has to check `isInstanceAdmin`
-itself.
-
 ## Signing in and out
 
 The login form posts to Better Auth's endpoint (`/api/auth/sign-in/email`) through
@@ -100,28 +95,8 @@ closed (`disableSignUp`); accounts come from `scripts/create-user.ts` and the ad
 
 ## The query port
 
-The panel reads telemetry from the server's query port (`src/lib/server/ninjacat.ts`).
-Each call carries an HS256 JWT signed with `NINJACAT_QUERY_TOKEN_SECRET`, minted for that
-call from `locals.user` and `locals.tenant` and valid for 60 seconds. Without a tenant
-nothing is sent; the query process takes the tenant from the token's `tenant` claim and
-from nowhere else.
-
-## Where it lives
-
-```
-src/hooks.server.ts                    session, tenant, then the guard
-src/lib/server/auth-options.ts         Better Auth's options, shared with create-user.ts
-src/lib/server/auth.ts                 the panel's instance (+ sveltekitCookies)
-src/lib/server/tenant.ts               memberships, resolveTenant
-src/lib/server/guard.ts                the guard
-src/lib/server/db/auth.schema.ts       Better Auth's tables (generated: bun run auth:schema)
-src/lib/auth-client.ts                 the browser's client; signOut
-src/routes/login/                      the sign-in page (no action)
-src/routes/no-tenant/                  the page for a member of no tenant
-src/routes/app/admin/                  tenants, their members, accounts (instance admin)
-src/routes/app/settings/keys/          the tenant's API keys
-src/lib/server/ninjacat.ts             the query port, with the token
-```
+Each call to the query port (`src/lib/server/ninjacat.ts`) carries a 60-second token minted
+from `locals.user` and `locals.tenant`; without a tenant nothing is sent.
 
 Tests: `src/lib/server/guard.spec.ts`, `tenant.spec.ts`, `ninjacat.spec.ts`,
 `src/routes/app/settings/keys/keys.spec.ts`, `src/routes/app/admin/admin.spec.ts`.

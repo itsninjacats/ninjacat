@@ -122,9 +122,8 @@ spec:
                 secretKeyRef:
                   name: {{ $secret }}
                   key: {{ ternary "CLICKHOUSE_MONITORS_PASSWORD" "CLICKHOUSE_PASSWORD" (ne .Values.clickhouse.monitorsUser "") }}
-          # Ready once the node is a member of the cluster. Discovery lists
-          # running pods, ready or not, so this does not hold up the
-          # cluster's first formation.
+          # Ready once in the cluster; discovery lists unready pods too, so the
+          # cluster's first formation is not held up.
           readinessProbe:
             httpGet:
               path: /health/ready

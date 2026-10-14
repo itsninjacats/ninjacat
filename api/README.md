@@ -1,12 +1,9 @@
 # ninjacat-api
 
-The NinjaCat server, in F#. Two programs, run as three long-lived processes
-that share ClickHouse and Postgres and nothing else. `ninjacat-api` is two of
-them: `intake` takes what Datadog Agents send and stores it, `query` answers
-questions about it. There is no mode that does both, so what agents can reach
-and what the panel reads from never share a port or a container.
-`ninjacat-monitors` is the third: it evaluates the metric monitors, as a
-cluster of its own (see "The monitor service").
+The NinjaCat server, in F#. Two programs, three processes, sharing only
+ClickHouse and Postgres: `ninjacat-api intake` takes what agents send,
+`ninjacat-api query` answers the panel (never the same port or container), and
+`ninjacat-monitors` evaluates monitors as a cluster of its own.
 
 | Process | Port | Who reaches it | What it serves |
 | --- | --- | --- | --- |
@@ -58,9 +55,7 @@ Grafana's Datadog plugin can all point at it unchanged.
 
 Postgres (users, tenants, API keys, monitors) is reached through plain
 Npgsql, no ORM. Its schema belongs to Drizzle in `frontend/`: this
-service never migrates it, and a table it needs is added there first. Its
-history was squashed into one `0000` on 2026-10-13, like ClickHouse's: a
-Postgres built before that must be dropped.
+service never migrates it, and a table it needs is added there first.
 
 ## The intake
 
@@ -82,8 +77,6 @@ before anything reaches ClickHouse.
 from delaying metrics; several writers for one table would shrink the batches
 and bring back ClickHouse's "Too many parts". A slow insert is handled by
 flushing in the background, up to `MaxInFlight` at once, not by adding writers.
-The rule holds per process: each monitor node has its own writers for
-`monitor_evaluations` and its self-monitoring `metrics`.
 
 **A payload that cannot be stored as rows is kept whole** in `raw_payloads`,
 with the reason, so nothing an agent sent is lost to a decoder we have not
@@ -194,19 +187,11 @@ the usual `ninjacat.node.*` and `ninjacat.storage.*`.
 
 ### Running it
 
-```bash
-export DATABASE_URL=postgres://root:mysecretpassword@localhost:5433/local
-dotnet run --project src/Monitors          # one node, health on :8559
-curl localhost:8559/health/ready
-```
-
-The dev stack runs it as the compose service `monitors` (`dotnet watch`, one
-node, no published port): `docker compose logs -f monitors`, and
-`docker exec ninjacat-monitors curl -s localhost:8559/health/ready`. Stop
-that service before running a second node by hand against the same
-databases: two clusters would both evaluate every monitor. The image is the
-`monitors` target of `api/Dockerfile`; `compose.prod.yaml` runs one node of
-it, and the chart (`helm/ninjacat/templates/monitors.yaml`) three.
+In the dev stack it is the compose service `monitors` (one node, no published
+port; `docker exec ninjacat-monitors curl -s localhost:8559/health/ready`).
+Stop it before running a node by hand (`dotnet run --project src/Monitors`)
+against the same databases: two clusters would both evaluate every monitor.
+The image is the `monitors` target of `api/Dockerfile`.
 
 Its own settings:
 
@@ -419,7 +404,7 @@ Package versions live in `Directory.Packages.props` only.
 | `NINJACAT_QUERY_TOKEN_SECRET` | required by `query` — at least 32 bytes, the key the panel signs its tokens with (below) |
 | `NINJACAT_AUTO_MIGRATE` | `true`; with several replicas set `false` and run `migrate` as a job |
 | `NINJACAT_METRICS_RETENTION_DAYS` | `30` — days `metrics` keeps raw points; a value that is not 1–36500 stops the start |
-| `NINJACAT_METRICS_ROLLUP_RETENTION_DAYS` | `400` — days `metrics_1m`, the one-minute rollup, keeps its rows; likewise, and it may not be shorter than the raw retention. Set both identically on `intake`, `migrate`, `query` and the monitor service (the chart's `metrics.*` does) |
+| `NINJACAT_METRICS_ROLLUP_RETENTION_DAYS` | `400` — days `metrics_1m`, the one-minute rollup, keeps its rows; likewise, and not shorter than the raw retention |
 | `NINJACAT_TRUSTED_PROXIES` | none — reverse proxies in front of the intake, as addresses or networks (`10.0.0.0/8`), comma-separated. Only their `X-Forwarded-For` is believed; the loopback is always trusted |
 | `NINJACAT_MAX_BODY_BYTES` | the largest request body the intake reads, 64 MiB by default; a larger one is answered 413. A body may inflate to 64 MiB |
 | `NINJACAT_ACK_UNKNOWN` | `true` answers 202 instead of 404 on unknown intake paths |
@@ -454,20 +439,13 @@ query whose step is a whole number of minutes reads the rollup and merges its
 states, which gives the raw table's answer from about a quarter of the rows
 (`Plan.tableFor`); a finer step reads the raw points. A window that reaches
 back past the raw retention gets whole-minute steps, since only the rollup
-still holds it. The two retentions are set by the process that migrates, after
-the migrations, as `ALTER TABLE … MODIFY TTL` with
-`materialize_ttl_after_modify = 0`: the TTL changes in the table's metadata
-only, and parts already written take it as they merge. The query process and
-the monitor service plan by the same two settings and do not read the TTLs
-back, so they must be given the same values: one that believes the raw table keeps more than it does reads
-fine steps from days that are gone, and gets empty charts. A step of whole
-minutes reads the rollup at any age, so the rollup is never kept shorter than
-the raw points (the start stops if it would be). When `to` falls inside a
-minute, that minute's points before it come from the raw table, so the rollup
-never reads past `to`. `metrics` is
-partitioned by day, so a raw retention of months makes hundreds of partitions;
-keep it short and let the rollup hold the long range. The other tables' TTLs
-are fixed in their migrations.
+still holds it. The process that migrates sets the two retentions as TTLs;
+the query process and the monitor service plan by the same two settings and
+do not read the TTLs back, so give every process the same values (the chart's
+`metrics.*` does). The rollup is never kept shorter than the raw points (the
+start stops if it would be). `metrics` is partitioned by day, so keep the raw
+retention short and let the rollup hold the long range. The other tables'
+TTLs are fixed in their migrations.
 
 Every route but `/ping` and `/health` asks for `Authorization: Bearer <token>`:
 an HS256 JWT the panel signs with `NINJACAT_QUERY_TOKEN_SECRET` for each call

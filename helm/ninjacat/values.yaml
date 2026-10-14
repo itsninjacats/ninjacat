@@ -51,9 +51,8 @@ clickhouse:
   #   GRANT SELECT, INSERT ON <database>.monitor_evaluations TO monitors;
   #   GRANT SELECT, INSERT ON <database>.monitor_notifications TO monitors;
   #
-  # A pod runs at most NINJACAT_MONITOR_CONCURRENCY (8) evaluations, reads and
-  # transition inserts, 4 flushes each of monitor_evaluations and metrics, and
-  # the notifier's one: 3 x 17 = 51 by default. Raise the cap with either.
+  # The 64 is shared by every pod: three run up to 51 at once by default (17
+  # each), so raise it with replicas or NINJACAT_MONITOR_CONCURRENCY.
   monitorsUser: ""
 
 # Days ClickHouse keeps metrics: raw points and the one-minute rollup. Every

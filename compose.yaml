@@ -5,8 +5,8 @@
 #
 # The application services rebuild themselves on save: the server's two
 # processes and the monitor service through `dotnet watch`, the panel through
-# Vite's dev server. Source is bind-mounted,
-# so an edit on the host is an edit in the container.
+# Vite's dev server. Source is bind-mounted, so an edit on the host is an edit
+# in the container.
 #
 # Databases and the query process publish on 127.0.0.1 only. The databases
 # have passwords, the query process asks for a token the panel signs (see
@@ -157,10 +157,8 @@ services:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
 
-  # Evaluates the monitors: a program of its own, one Akka node seeding
-  # itself. The intake applies the ClickHouse migrations and has no
-  # healthcheck to wait on, so a table that is not there yet is read again
-  # later rather than awaited.
+  # One Akka node seeding itself. The intake creates the tables and has no
+  # healthcheck to wait on, so a table not there yet is read again later.
   monitors:
     image: mcr.microsoft.com/dotnet/sdk:10.0
     container_name: ninjacat-monitors

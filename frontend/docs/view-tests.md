@@ -44,11 +44,8 @@ desktop width only. Dark mode is not tested, since nothing in the panel turns it
 
 ## What counts as overflow
 
-`tests/e2e/overflow.ts` measures the page in the browser. Its rules are at the top of the
-file: the page scrolling sideways, content spilling out of its box or cut off by it, text cut
-with an ellipsis that cannot be read whole, a table that hides columns behind a sideways
-scroll, text squeezed to a word a line, text touching a border, and an item off the centre of
-its row. What is allowed to stick out is listed there too, each with its reason.
+`tests/e2e/overflow.ts` measures the page in the browser; its rules, and what may stick out
+and why, are at the top of that file.
 
 ## Adding a page
 

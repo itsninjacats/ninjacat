@@ -430,13 +430,8 @@ data is here; the product is not.
 
 ## 6. Known rough edges
 
-- [x] **The query process (:8081) asked for nothing.** No key, no session, and `?tenant=`
-      let the caller name any tenant. Done 2026-10-13 (tenants.md): every route but `/ping`
-      and `/health` asks for an HS256 JWT the panel signs per call
-      (`NINJACAT_QUERY_TOKEN_SECRET`, checked by ASP.NET's JwtBearer in
-      `api/src/Server/QueryToken.fs`), and its `tenant` claim is the only source of the
-      tenant; `?tenant=` and the fallback to `default` are gone. Covered by
-      `api/tests/Query.Tests`. The port still belongs on a network only the panel reaches.
+- [x] The query port asks for the panel's HS256 token (`Server/QueryToken.fs`,
+      2026-10-13); its `tenant` claim is the only source of the tenant.
 - [ ] **Datadog's query API on the query port takes only the panel's token.**
       `/api/v1/metrics` and `/api/v2/query/timeseries|scalar` answer the panel alone, so no
       Datadog client can call them. Datadog's clients send an API key and an application
@@ -502,11 +497,8 @@ data is here; the product is not.
       the migration client's hour or out of memory, and the next start would redo it. Batch
       it by day if such a database ever has to take it.
 - [ ] **The query process and the monitor service do not read the metrics TTLs back.**
-      They plan by `NINJACAT_METRICS_RETENTION_DAYS`/`_ROLLUP_RETENTION_DAYS` from their own
-      environment, so every process must be handed the same values as `intake` and the
-      migrate job. The chart does (`metrics.*`); the compose files pass none and rely on
-      every process having the same defaults. Reading `system.tables` at start would
-      remove the duplication.
+      They plan by the retention env vars; the chart passes `metrics.*` to all, the compose
+      files rely on defaults. Reading `system.tables` at start would end the duplication.
 - [ ] **The intake's API-key keeper does not notice a LISTEN link that died silently.**
       `api/src/Server/ApiKeysKeeper.fs` waits on its connection with no keepalive, so a
       half-open link stops notifications until the process restarts; the 30 s re-read
@@ -530,11 +522,8 @@ data is here; the product is not.
 - [ ] Remove the unused `app/metrics/data` route and `fetchMetricSeries`.
 - [ ] Prettier: ignore shadcn and generated files.
 - [ ] Log search.
-- [x] Tenants (`api/docs/zadania/tenants.md`, 2026-10-13): a tenant is a Better Auth
-      organization, every request knows its tenant (`locals.tenant`), the instance admin
-      creates tenants and adds members under `/app/admin`, API keys belong to a tenant at
-      `/app/settings/keys`, and the query port takes the tenant from the panel's token. Both
-      migration histories were squashed; a database from before 2026-10-13 must be dropped.
+- [x] Tenants (2026-10-13; planned in `api/docs/zadania/tenants.md`):
+      `frontend/docs/auth-and-route-guard.md`.
 - [x] Monitors (2026-10-14; planned in `api/docs/zadania/monitors.md`): `api/README.md`,
       "The monitor service"; what is left is section 7a.
 - [ ] **RBAC.** The tenant roles are the organization plugin's (owner, admin, member), and
@@ -609,10 +598,4 @@ at the capacity target are in section 0; the anomaly model cache in section 6.
 
 English is canonical; what is still Polish is listed in `CLAUDE.md` ("Language policy"):
 `api/docs/**`, `experiments/goja-sandbox/README.md` and the copy of the two home pages
-(`/`, `/app`). Translate when touched; rename routes in one deliberate batch, as the keys
-page was (`/app/settings/keys`).
-
-- [x] `frontend/docs/auth-i-ochrona-tras.md` was out of date as well as Polish: it called the
-      layout's load the guard and named routes and actions that are gone. Rewritten in
-      English from the code as `frontend/docs/auth-and-route-guard.md` (2026-10-13), with
-      tenants.
+(`/`, `/app`). Translate when touched; rename routes in one deliberate batch.

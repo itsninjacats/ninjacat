@@ -2,9 +2,9 @@
 #
 # One node, not three: memory is what limits the lab, and this cluster has to
 # hold ClickHouse, Postgres, the panel, the server's two processes, the three
-# monitor pods (up to 768 MiB each), Traefik and a full Datadog agent stack;
-# 3 GB free was not enough for all of it. A DaemonSet still schedules here, so
-# node-level collection is exercised exactly as it would be on a real cluster.
+# monitor pods, Traefik and a full Datadog agent stack. A DaemonSet still
+# schedules here, so node-level collection is exercised exactly as it would be
+# on a real cluster.
 #
 # kind removes the control-plane taint itself on a single-node cluster, so
 # workloads schedule without help. Do NOT add a kubeadm patch setting

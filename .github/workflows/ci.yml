@@ -61,10 +61,8 @@ jobs:
           --health-timeout 5s
           --health-retries 20
 
-      # The monitor service's tests read the `monitor` table from the schema
-      # Drizzle migrates, so a change there that breaks the reader fails here.
-      # Without it those tests are skipped. The address is the dev stack's,
-      # which is what the tests default to.
+      # For Monitors.Tests, which read `monitor` from the schema Drizzle migrates
+      # (skipped without it); the dev stack's address, the tests' default.
       postgres:
         image: postgres:18-alpine
         env:

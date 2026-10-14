@@ -23,9 +23,7 @@ data:
   {{- with .Values.trustedProxies }}
   NINJACAT_TRUSTED_PROXIES: {{ join "," . | quote }}
   {{- end }}
-  {{- with include "ninjacat.retentionEnv" . | trim }}
-  {{- . | nindent 2 }}
-  {{- end }}
+  {{- include "ninjacat.retentionEnv" . | nindent 2 }}
   {{- range $k, $v := .Values.intake.env }}
   {{ $k }}: {{ $v | quote }}
   {{- end }}
@@ -42,9 +40,7 @@ data:
   CLICKHOUSE_USER: {{ .Values.clickhouse.queryUser | default .Values.clickhouse.user | quote }}
   NINJACAT_INTERNAL_ADDR: {{ printf ":%v" .Values.query.service.port | quote }}
   Logging__Console__FormatterName: json
-  {{- with include "ninjacat.retentionEnv" . | trim }}
-  {{- . | nindent 2 }}
-  {{- end }}
+  {{- include "ninjacat.retentionEnv" . | nindent 2 }}
   {{- range $k, $v := .Values.query.env }}
   {{ $k }}: {{ $v | quote }}
   {{- end }}
@@ -62,9 +58,7 @@ data:
   Logging__Console__FormatterName: json
   NINJACAT_MONITOR_DISCOVERY: kubernetes
   NINJACAT_MONITOR_POD_SELECTOR: {{ printf "app.kubernetes.io/name=%s,app.kubernetes.io/instance=%s,app.kubernetes.io/component=monitors" (include "ninjacat.name" .) .Release.Name | quote }}
-  {{- with include "ninjacat.retentionEnv" . | trim }}
-  {{- . | nindent 2 }}
-  {{- end }}
+  {{- include "ninjacat.retentionEnv" . | nindent 2 }}
   {{- range $k, $v := .Values.monitors.env }}
   {{ $k }}: {{ $v | quote }}
   {{- end }}
