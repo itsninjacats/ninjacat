@@ -40,8 +40,21 @@ docker build -q --target api      -t ninjacat/api:lab      "$ROOT/api" | sed 's/
 docker build -q --target monitors -t ninjacat/monitors:lab "$ROOT/api" | sed 's/^/  monitors: /'
 docker build -q -t ninjacat/frontend:lab "$ROOT/frontend" | sed 's/^/  frontend: /'
 
+# The databases' images (the chart's defaults) too, so the first install's
+# hook Jobs do not wait for the node to pull them.
+DB_IMAGES=(clickhouse/clickhouse-server:26.8.6.5 ghcr.io/cloudnative-pg/postgresql:18.6-minimal-trixie)
+for image in "${DB_IMAGES[@]}"; do
+  docker image inspect "$image" >/dev/null 2>&1 || docker pull -q "$image"
+done
+
 say "loading images into the cluster"
 kind load docker-image --name "$CLUSTER" ninjacat/api:lab ninjacat/monitors:lab ninjacat/frontend:lab
+# A pulled image is multi-platform with only this host's layers present, which
+# `kind load docker-image` fails on; an archive of the one platform loads.
+PLATFORM="$(docker version --format '{{.Server.Os}}/{{.Server.Arch}}')"
+for image in "${DB_IMAGES[@]}"; do
+  docker save --platform "$PLATFORM" "$image" | kind load image-archive /dev/stdin --name "$CLUSTER"
+done
 
 # --- 4. namespace, secrets -------------------------------------------------
 say "namespace and secrets"
@@ -56,11 +69,15 @@ k -n "$NS" create secret tls ninjacat-frontend-tls --cert="$CERTS/tls.crt" --key
 k -n "$NS" create secret generic ninjacat-lab-ca \
     --from-file=ca.crt="$CERTS/ca.crt" >/dev/null
 
-# --- 5. data stores --------------------------------------------------------
-say "data stores"
-k apply -f "$HERE/manifests/10-clickhouse.yaml" -f "$HERE/manifests/11-postgres.yaml"
-k -n "$NS" rollout status deployment/clickhouse --timeout=300s
-k -n "$NS" rollout status deployment/postgres   --timeout=180s
+# --- 5. the database operators ---------------------------------------------
+# A release of their own, before NinjaCat's: its chart makes the databases
+# through them. --wait, so CloudNativePG's webhook answers before the Cluster
+# reaches it. Altinity's metrics exporter would be scraped by nothing here.
+say "operators (helm/ninjacat-operators): CloudNativePG, Altinity ClickHouse"
+helm --kube-context "$CTX" upgrade --install ninjacat-operators "$ROOT/helm/ninjacat-operators" \
+  --namespace ninjacat-operators --create-namespace \
+  --set clickhouse-operator.metrics.enabled=false \
+  --wait --timeout 5m
 
 # --- 6. Traefik, then NinjaCat from its chart --------------------------------
 # Traefik first: the chart looks for its CRDs to decide whether the redirect
@@ -75,35 +92,46 @@ helm --kube-context "$CTX" upgrade --install traefik traefik/traefik \
   --set service.type=ClusterIP \
   --wait --timeout 4m
 
-# The chart's hook Jobs migrate both schemas before the pods start, which is
-# why the data stores have to be up first. A lab run is therefore also a test
-# of the chart: hooks, Ingress, NetworkPolicy and all.
-say "ninjacat (helm/ninjacat): migrations, intake, query, monitors, panel"
+# The chart makes both databases, and its hook Jobs migrate them once they
+# exist. A lab run is therefore also a test of the chart: databases, hooks,
+# Ingress, NetworkPolicy and all.
+say "ninjacat (helm/ninjacat): databases, migrations, intake, query, monitors, panel"
 helm --kube-context "$CTX" upgrade --install ninjacat "$ROOT/helm/ninjacat" \
   --namespace "$NS" \
   -f "$HERE/ninjacat-values.yaml" \
   --set-string secrets.betterAuthSecret="$(openssl rand -hex 32)" \
   --set-string secrets.queryTokenSecret="$(openssl rand -hex 32)" \
-  --wait --timeout 6m
+  --wait --timeout 15m
 k -n "$NS" rollout status deployment/ninjacat-intake   --timeout=240s
 k -n "$NS" rollout status deployment/ninjacat-query    --timeout=240s
 k -n "$NS" rollout status deployment/ninjacat-monitors --timeout=240s
 k -n "$NS" rollout status deployment/ninjacat-frontend --timeout=240s
 
-# --- 7. the API key -----------------------------------------------------------
+# --- 7. the first account and the API key -----------------------------------
+# As the database's superuser, through the pod's socket. CloudNativePG names
+# the first instance <cluster>-1.
+pg() { k -n "$NS" exec ninjacat-postgres-1 -c postgres -- psql -d ninjacat -qtA "$@"; }
+
+# The first account also makes the tenant `default`, which the key belongs to.
+say "first account (lab@ninjacat.lab / ninjacat)"
+if [[ "$(pg -c 'SELECT count(*) FROM "user"')" == 0 ]]; then
+  k -n "$NS" exec deploy/ninjacat-frontend -- env NINJACAT_USER_PASSWORD=ninjacat \
+    node create-user.js lab@ninjacat.lab --name Lab
+fi
+
 # The panel would do the same: store the hash, then NOTIFY, so the running
 # intake re-reads its keys now instead of at its next 30-second refresh.
 say "API key for the agent"
 API_KEY="$(openssl rand -hex 16)"
 HASH="$(printf '%s' "$API_KEY" | sha256sum | cut -d' ' -f1)"
-k -n "$NS" exec deploy/postgres -- psql -U root -d local -q -c \
+pg -c \
   "INSERT INTO api_key (name, tenant_id, key_hash, prefix)
    VALUES ('datadog-lab','default','$HASH','${API_KEY:0:8}')
    ON CONFLICT (key_hash) DO NOTHING;
    NOTIFY ninjacat_api_keys;" >/dev/null
 echo "  key created (prefix ${API_KEY:0:8})"
 
-say "host port for the panel"
+say "host ports for the panel and ClickHouse"
 k apply -f "$HERE/manifests/20-nodeports.yaml"
 
 # --- 8. DNS ----------------------------------------------------------------
@@ -125,7 +153,7 @@ cat <<INFO
 
   kubectl --context $CTX -n $NS get pods
 
-  panel        http://localhost:8888
+  panel        http://localhost:8888  (lab@ninjacat.lab / ninjacat)
   query API    kubectl --context $CTX -n $NS port-forward deploy/ninjacat-query 18081:8081
                (asks for a token: lab/k8s/README.md)
   ClickHouse   curl 'http://localhost:18123/?user=ninjacat&password=ninjacat' -d 'SELECT 1'

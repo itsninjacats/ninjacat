@@ -12,12 +12,21 @@ domainRoot: ninjacat.lab
 # these names.
 fullnameOverride: ninjacat
 
-# Credentials match compose.yaml and the two data-store manifests.
+# Both databases made by the chart, with the query and monitors users exercised too.
+postgres:
+  create: true
 clickhouse:
-  httpAddr: clickhouse:8123
+  create: true
+  queryUser: query
+  monitorsUser: monitors
+  # ClickHouse grabs memory eagerly; 1.5Gi is the ceiling that still leaves
+  # room for the rest of the lab on a ~5 GB host.
+  resources:
+    limits: { memory: 1536Mi }
 secrets:
-  databaseUrl: postgres://root:mysecretpassword@postgres:5432/local
   clickhousePassword: ninjacat
+  clickhouseQueryPassword: ninjacat-query
+  clickhouseMonitorsPassword: ninjacat-monitors
 
 # Built on the host and side-loaded with `kind load docker-image`; the images
 # exist in no registry, and IfNotPresent (the chart's default) is what keeps

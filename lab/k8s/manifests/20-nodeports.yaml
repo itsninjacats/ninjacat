@@ -1,6 +1,6 @@
-# The door from the host into the panel. The chart's own Services are
-# ClusterIP, as they should be in a real deployment; this one selects the
-# panel's pods by the chart's labels.
+# The doors from the host into the panel and ClickHouse. The chart's own
+# Services are ClusterIP, as they should be in a real deployment; these
+# select the pods by their labels.
 #
 # There is none for the query process: the chart's NetworkPolicy admits the
 # panel's pods only. To poke it from the host:
@@ -20,3 +20,16 @@ spec:
     app.kubernetes.io/component: frontend
   ports:
     - { name: http, port: 3000, targetPort: http, nodePort: 30000 }
+---
+# ClickHouse's HTTP interface: kind maps NodePort 30123 to host port 18123.
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse-http
+  namespace: ninjacat-lab
+spec:
+  type: NodePort
+  selector:
+    clickhouse.altinity.com/chi: ninjacat
+  ports:
+    - { name: http, port: 8123, targetPort: 8123, nodePort: 30123 }

@@ -460,9 +460,8 @@ data is here; the product is not.
       upgraded.
 - [ ] **The lab scripts write keys for tenants that may not exist.** `api_key.tenant_id`
       references `organization.id` since 2026-10-13, but `lab/server.sh` inserts a key for
-      the tenant `lab`, which nothing creates, and `lab/k8s/scripts/up.sh` one for
-      `default`, which exists only once `create-user` has run. Both inserts fail on the
-      foreign key; each script has to make its tenant first.
+      the tenant `lab`, which nothing creates, so the insert fails on the foreign key; the
+      script has to make its tenant first, as `lab/k8s/scripts/up.sh` now does.
 - [ ] `lab/` scripts for MySQL, MariaDB, SQL Server, Oracle, MongoDB, ClickHouse, SNMP and
       system-probe ran before the key and network were renamed; only Postgres and the data
       security run were repeated afterwards.

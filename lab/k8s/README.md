@@ -1,8 +1,8 @@
 # NinjaCat end-to-end lab
 
 A single-node [kind](https://kind.sigs.k8s.io/) cluster that runs the whole
-NinjaCat stack (ClickHouse, Postgres, the server's two processes, the monitor
-service, the panel, Traefik) plus a real Datadog agent pointed at it. The agent collects genuine cluster
+NinjaCat stack (ClickHouse and Postgres through their operators, the server's
+two processes, the monitor service, the panel, Traefik) plus a real Datadog agent pointed at it. The agent collects genuine cluster
 telemetry and ships it into NinjaCat, so the full intake path is exercised
 exactly as in production.
 
@@ -29,16 +29,20 @@ export KUBECONFIG=$PWD/.kubeconfig
 ./scripts/up.sh
 ```
 
-NinjaCat itself is installed from the chart in `helm/ninjacat`, with
-`ninjacat-values.yaml`: the chart's hook Jobs migrate both schemas, then the
-`intake`, `query`, `monitors` and panel Deployments start, and the agent
-reaches the intake through the chart's own Ingress, served by Traefik with the
-lab's certificate. So a lab run is the chart's end-to-end test: hooks, Ingress,
+The databases' operators come first, as a release of their own from
+`helm/ninjacat-operators` (CloudNativePG and Altinity's ClickHouse operator),
+installed with `--wait`. NinjaCat itself is installed after them from the
+chart in `helm/ninjacat`, with `ninjacat-values.yaml`: the chart makes a
+Postgres `Cluster` and a `ClickHouseInstallation` through the operators, its
+hook Jobs migrate both schemas once they are up, the `intake`, `query`,
+`monitors` and panel Deployments start, and the agent reaches the intake
+through the chart's own Ingress, served by Traefik with the lab's certificate.
+So a lab run is the chart's end-to-end test: the databases, hooks, Ingress,
 the redirect from HTTP, the NetworkPolicies around the query process and the
 monitor pods, and the monitor pods forming one cluster through the Kubernetes
-API. The data
-stores and the panel's NodePort are plain manifests in `manifests/`, because
-the chart does not own them.
+API. `up.sh` then makes the first account (`lab@ninjacat.lab`, password
+`ninjacat`) and the agent's API key. The host ports are NodePorts in
+`manifests/`, which the chart does not own.
 
 ## Host ports
 
@@ -113,5 +117,5 @@ agent DaemonSet entirely while `helm template` locally still rendered it.
 kind delete cluster --name ninjacat-lab
 ```
 
-Everything is in-memory (`emptyDir`), so deleting the cluster removes all
-state. Nothing persists between runs.
+The databases keep their data on kind's local-path volumes, inside the node,
+so deleting the cluster removes all state. Nothing persists between runs.
