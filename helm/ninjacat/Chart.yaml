@@ -7,4 +7,4 @@ description: >-
   made through CloudNativePG and Altinity's operator (helm/ninjacat-operators).
 type: application
 version: 0.4.0
-appVersion: "0.1.0"
+appVersion: "0.2.0"

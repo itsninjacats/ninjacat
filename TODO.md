@@ -71,9 +71,7 @@ Fixed that day, each checked against the shipping image:
 
 Open, most urgent first:
 
-- [ ] **Merge and tag.** The chart on `main` is still the Go one. Merge pull request #1,
-      tag from `main`. The publishing half of `ci.yml` (push to `main`, a tag) has not run
-      yet. (The owner does this.)
+- [x] **Merge and tag.** Pull request #1 merged, `v0.2.0` tagged from `main` (2026-10-15).
 - [ ] **A key has no kind** (decided 2026-10-02: do it, later). A RUM client token is a
       full API key: copied from a page it writes metrics, logs and traces for its tenant.
       A `kind` column on `api_key` (the panel's schema), carried as a claim by the keeper;
