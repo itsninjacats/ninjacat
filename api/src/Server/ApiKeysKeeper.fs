@@ -62,9 +62,14 @@ type ApiKeysKeeper(db: NpgsqlDataSource, store: ApiKeys.Store, log: ILogger<ApiK
 
     /// Reads the keys once, now. Called before the intake accepts anything:
     /// with no keys every agent would be answered 403, which tells it to stop.
+    /// A Postgres the panel has not migrated yet has no keys to read: the
+    /// intake starts with none rather than wait for an order of installation.
     member _.FetchNow() : unit =
-        (fetch CancellationToken.None).GetAwaiter().GetResult()
-        log.LogInformation("keeper started, {Keys} keys, refreshing every {Interval}", store.Current.ByHash.Count, refreshInterval)
+        try
+            (fetch CancellationToken.None).GetAwaiter().GetResult()
+            log.LogInformation("keeper started, {Keys} keys, refreshing every {Interval}", store.Current.ByHash.Count, refreshInterval)
+        with :? PostgresException as e when e.SqlState = PostgresErrorCodes.UndefinedTable ->
+            log.LogWarning("keeper started with no keys, the api_key table does not exist yet; refreshing every {Interval}", refreshInterval)
 
     override _.ExecuteAsync(ct: CancellationToken) : Task =
         task {

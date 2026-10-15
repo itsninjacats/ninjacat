@@ -38,6 +38,7 @@
     <Compile Include="UsmTests.fs" />
     <Compile Include="RumTests.fs" />
     <Compile Include="RealPayloadTests.fs" />
+    <Compile Include="ApiKeysKeeperTests.fs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Fixtures/go/**/*.json" CopyToOutputDirectory="PreserveNewest" />
@@ -58,6 +59,7 @@
     <ProjectReference Include="../../src/Intake/Intake.fsproj" />
     <ProjectReference Include="../../src/Storage/Storage.fsproj" />
     <ProjectReference Include="../../src/Platform/Platform.fsproj" />
+    <ProjectReference Include="../../src/Server/Server.fsproj" />
     <ProjectReference Include="../../src/Proto/NinjaCat.Api.Proto.csproj" />
   </ItemGroup>
 </Project>
