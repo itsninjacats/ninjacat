@@ -3,8 +3,8 @@ name: ninjacat
 description: >-
   NinjaCat — a drop-in Datadog replacement. Deploys the server as its two
   processes (the agents' intake and the panel's query API), the monitor
-  service and the SvelteKit panel. Postgres and ClickHouse are expected to
-  exist already.
+  service and the SvelteKit panel. Postgres and ClickHouse are yours, or
+  made through CloudNativePG and Altinity's operator (helm/ninjacat-operators).
 type: application
-version: 0.3.0
+version: 0.4.0
 appVersion: "0.1.0"

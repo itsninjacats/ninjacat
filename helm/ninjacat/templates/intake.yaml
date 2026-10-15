@@ -59,8 +59,7 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ $secret }}
-                  key: DATABASE_URL
+                  {{- include "ninjacat.databaseUrlRef" . | nindent 18 }}
             - name: CLICKHOUSE_PASSWORD
               valueFrom:
                 secretKeyRef:

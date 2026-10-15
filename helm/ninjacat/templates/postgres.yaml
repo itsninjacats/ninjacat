@@ -1,0 +1,29 @@
+{{- if .Values.postgres.create }}
+# The panel's Postgres, run by CloudNativePG. Its operator writes the Secret
+# <name>-app, whose `uri` every pod is given as DATABASE_URL.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "ninjacat.fullname" . }}-postgres
+  labels:
+    {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "postgres") | nindent 4 }}
+  annotations:
+    # Deleting the Cluster deletes its volumes; an uninstall must not.
+    helm.sh/resource-policy: keep
+spec:
+  instances: {{ .Values.postgres.instances }}
+  imageName: {{ .Values.postgres.image }}
+  bootstrap:
+    initdb:
+      database: ninjacat
+      owner: ninjacat
+  storage:
+    size: {{ .Values.postgres.storage }}
+    {{- with .Values.postgres.storageClass }}
+    storageClass: {{ . }}
+    {{- end }}
+  {{- with .Values.postgres.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

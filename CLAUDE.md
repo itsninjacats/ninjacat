@@ -47,6 +47,8 @@ Independent units, no shared build:
   `api/docs/` holds the protocol notes. They were written beside the Go server this one
   replaced (removed on 2026-10-02), so the Go files they name no longer exist.
 - `frontend/` — SvelteKit 5 panel + Postgres (Better Auth, Drizzle). Bun.
+- `helm/ninjacat` — the chart; `helm/ninjacat-operators` — CloudNativePG and Altinity's
+  ClickHouse operator, its own release installed first when the chart makes its databases.
 - `experiments/goja-sandbox/` — a standalone spike on sandboxed user JS. Own module, not wired in.
 
 ## Commands

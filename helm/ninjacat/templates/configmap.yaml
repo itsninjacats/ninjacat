@@ -5,7 +5,7 @@ metadata:
   labels:
     {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "intake") | nindent 4 }}
 data:
-  CLICKHOUSE_HTTP_ADDR: {{ .Values.clickhouse.httpAddr | quote }}
+  CLICKHOUSE_HTTP_ADDR: {{ include "ninjacat.clickhouseAddr" . | quote }}
   CLICKHOUSE_DB: {{ .Values.clickhouse.database | quote }}
   CLICKHOUSE_USER: {{ .Values.clickhouse.user | quote }}
   NINJACAT_ADDR: {{ printf ":%v" .Values.intake.service.port | quote }}
@@ -35,7 +35,7 @@ metadata:
   labels:
     {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "query") | nindent 4 }}
 data:
-  CLICKHOUSE_HTTP_ADDR: {{ .Values.clickhouse.httpAddr | quote }}
+  CLICKHOUSE_HTTP_ADDR: {{ include "ninjacat.clickhouseAddr" . | quote }}
   CLICKHOUSE_DB: {{ .Values.clickhouse.database | quote }}
   CLICKHOUSE_USER: {{ .Values.clickhouse.queryUser | default .Values.clickhouse.user | quote }}
   NINJACAT_INTERNAL_ADDR: {{ printf ":%v" .Values.query.service.port | quote }}
@@ -52,7 +52,7 @@ metadata:
   labels:
     {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "monitors") | nindent 4 }}
 data:
-  CLICKHOUSE_HTTP_ADDR: {{ .Values.clickhouse.httpAddr | quote }}
+  CLICKHOUSE_HTTP_ADDR: {{ include "ninjacat.clickhouseAddr" . | quote }}
   CLICKHOUSE_DB: {{ .Values.clickhouse.database | quote }}
   CLICKHOUSE_USER: {{ .Values.clickhouse.monitorsUser | default .Values.clickhouse.user | quote }}
   Logging__Console__FormatterName: json

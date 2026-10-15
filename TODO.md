@@ -504,6 +504,18 @@ data is here; the product is not.
       half-open link stops notifications until the process restarts; the 30 s re-read
       keeps keys current meanwhile. The monitor manager opens its LISTEN connection from
       a data source with Npgsql's `KeepAlive`; the keeper should do the same.
+- [ ] **The databases the chart makes (`postgres.create`, `clickhouse.create`) have no
+      NetworkPolicy.** It must admit their operators from another namespace, or
+      reconciliation stops silently.
+- [ ] **Nothing backs those databases up.** CloudNativePG's Barman Cloud plugin or volume
+      snapshots to an on-prem object store; ClickHouse's `BACKUP` or clickhouse-backup.
+- [ ] **The ClickHouse the chart makes is one replica.** More need `Replicated*MergeTree`
+      engines in the migrations and a Keeper (Altinity's `ClickHouseKeeperInstallation`).
+- [ ] **With `postgres.create` the monitors use the application's role.** A SELECT-only
+      one needs a Drizzle migration for the GRANT and a role CloudNativePG manages.
+- [ ] **Nothing checks CloudNativePG's certificate.** The F# processes use its TLS without
+      verifying it, the panel connects in plain text; verifying means its `<cluster>-ca`
+      Secret.
 - [ ] **An unaligned `to` older than the raw retention** loses its last part minute: the
       rollup stops at the minute holding `to`, and the raw points that would finish it
       are gone.

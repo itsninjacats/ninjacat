@@ -118,3 +118,25 @@ Every intake hostname, one per line.
 {{ . }}
 {{- end }}
 {{- end }}
+
+{{/*
+Where DATABASE_URL is read from: the Secret CloudNativePG writes for the
+Postgres this chart creates, or the chart's own.
+*/}}
+{{- define "ninjacat.databaseUrlRef" -}}
+{{- if .Values.postgres.create -}}
+name: {{ include "ninjacat.fullname" . }}-postgres-app
+key: uri
+{{- else -}}
+name: {{ include "ninjacat.secretName" . }}
+key: DATABASE_URL
+{{- end }}
+{{- end }}
+
+{{- define "ninjacat.clickhouseAddr" -}}
+{{- if .Values.clickhouse.create -}}
+clickhouse-{{ include "ninjacat.fullname" . }}:8123
+{{- else -}}
+{{ .Values.clickhouse.httpAddr }}
+{{- end }}
+{{- end }}

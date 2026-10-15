@@ -176,6 +176,14 @@ jobs:
           helm template ci helm/ninjacat "$@" \
             --set clickhouse.monitorsUser=monitors --set secrets.clickhouseMonitorsPassword=y \
             --set monitors.ownDatabaseUrl=true --set secrets.monitorsDatabaseUrl=postgres://m:p@h/d > /dev/null
+          # The databases made through the operators, with every ClickHouse user.
+          helm template ci helm/ninjacat "$@" \
+            --set postgres.create=true --set clickhouse.create=true \
+            --set clickhouse.queryUser=query --set secrets.clickhouseQueryPassword=y \
+            --set clickhouse.monitorsUser=monitors --set secrets.clickhouseMonitorsPassword=z > /dev/null
+          # The operators, from the charts committed under charts/.
+          helm lint helm/ninjacat-operators
+          helm template ops helm/ninjacat-operators > /dev/null
 
       # A release's images are what the chart installs by default
       # (appVersion), so the two have to say the same version.

@@ -1,6 +1,8 @@
 {{- if .Values.migrations.enabled }}
 {{- $fullname := include "ninjacat.fullname" . -}}
 {{- $hookSecret := .Values.secrets.existingSecret | default (printf "%s-migrate" $fullname) -}}
+{{- /* A database the chart creates exists only once the install's resources do. */ -}}
+{{- $hook := ternary "post-install,pre-upgrade" "pre-install,pre-upgrade" (or .Values.postgres.create .Values.clickhouse.create) -}}
 {{- /*
 A pre-install hook runs before any ordinary release resource exists, the
 chart's Secret and ConfigMaps included. So when the chart owns the
@@ -17,17 +19,18 @@ metadata:
   labels:
     {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "migrate") | nindent 4 }}
   annotations:
-    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook: {{ $hook }}
     helm.sh/hook-weight: "-10"
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 type: Opaque
 stringData:
+  {{- if not .Values.postgres.create }}
   DATABASE_URL: {{ required "secrets.databaseUrl is required (or set secrets.existingSecret)" .Values.secrets.databaseUrl | quote }}
+  {{- end }}
   CLICKHOUSE_PASSWORD: {{ required "secrets.clickhousePassword is required (or set secrets.existingSecret)" .Values.secrets.clickhousePassword | quote }}
 ---
 {{- end }}
-# Postgres: users, sessions, API keys. Before the new pods start, because the
-# intake reads the api_key table as soon as it is up.
+# Postgres: users, sessions, API keys.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -35,12 +38,12 @@ metadata:
   labels:
     {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "migrate") | nindent 4 }}
   annotations:
-    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook: {{ $hook }}
     helm.sh/hook-weight: "0"
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 spec:
-  backoffLimit: 3
-  activeDeadlineSeconds: 300
+  backoffLimit: 6
+  activeDeadlineSeconds: 600
   template:
     metadata:
       labels:
@@ -72,8 +75,12 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
+                  {{- if .Values.postgres.create }}
+                  {{- include "ninjacat.databaseUrlRef" . | nindent 18 }}
+                  {{- else }}
                   name: {{ $hookSecret }}
                   key: DATABASE_URL
+                  {{- end }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp
@@ -95,11 +102,11 @@ metadata:
   labels:
     {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "migrate") | nindent 4 }}
   annotations:
-    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook: {{ $hook }}
     helm.sh/hook-weight: "1"
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 spec:
-  backoffLimit: 3
+  backoffLimit: 6
   activeDeadlineSeconds: 600
   template:
     metadata:
@@ -130,7 +137,7 @@ spec:
               drop: ["ALL"]
           env:
             - name: CLICKHOUSE_HTTP_ADDR
-              value: {{ .Values.clickhouse.httpAddr | quote }}
+              value: {{ include "ninjacat.clickhouseAddr" . | quote }}
             - name: CLICKHOUSE_DB
               value: {{ .Values.clickhouse.database | quote }}
             - name: CLICKHOUSE_USER
@@ -144,8 +151,12 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
+                  {{- if .Values.postgres.create }}
+                  {{- include "ninjacat.databaseUrlRef" . | nindent 18 }}
+                  {{- else }}
                   name: {{ $hookSecret }}
                   key: DATABASE_URL
+                  {{- end }}
             {{- range $k, $v := include "ninjacat.retentionEnv" . | fromYaml }}
             - name: {{ $k }}
               value: {{ $v | quote }}

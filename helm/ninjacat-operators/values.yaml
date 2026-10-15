@@ -1,0 +1,22 @@
+# The operators the ninjacat chart's postgres.create and clickhouse.create
+# need. Install this release first, once per cluster, and with --wait, so
+# CloudNativePG's webhook serves before ninjacat's Cluster reaches it:
+#
+#   helm install ninjacat-operators helm/ninjacat-operators \
+#     -n ninjacat-operators --create-namespace --wait
+#
+# Leave off any operator the cluster already runs. Check before installing:
+#
+#   kubectl get crd clusters.postgresql.cnpg.io clickhouseinstallations.clickhouse.altinity.com
+#
+# A second CloudNativePG is refused by Helm; a second Altinity operator is not,
+# and fights the first over every installation.
+
+cloudnative-pg:
+  enabled: true
+
+clickhouse-operator:
+  enabled: true
+  # Every namespace, as CloudNativePG does by default; on its own it watches
+  # only the namespace it runs in.
+  watchNamespaces: [".*"]

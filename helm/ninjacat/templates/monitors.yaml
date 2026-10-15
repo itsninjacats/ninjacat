@@ -115,8 +115,12 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
+                  {{- if .Values.monitors.ownDatabaseUrl }}
                   name: {{ $secret }}
-                  key: {{ ternary "MONITORS_DATABASE_URL" "DATABASE_URL" .Values.monitors.ownDatabaseUrl }}
+                  key: MONITORS_DATABASE_URL
+                  {{- else }}
+                  {{- include "ninjacat.databaseUrlRef" . | nindent 18 }}
+                  {{- end }}
             - name: CLICKHOUSE_PASSWORD
               valueFrom:
                 secretKeyRef:
