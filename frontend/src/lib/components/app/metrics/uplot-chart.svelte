@@ -1,16 +1,29 @@
 <script lang="ts" module>
-	import type * as LayerChart from './metrics-chart.svelte';
+	export type ChartLine = {
+		key: string;
+		label: string;
+		color: string;
+		points: { t: number; v: number }[];
+		band: { t: number; lower: number; upper: number }[];
+		forecast: { t: number; v: number; lower: number; upper: number }[];
+	};
 
-	// The same props as metrics-chart, so either can be imported.
-	export type ChartLine = LayerChart.ChartLine;
-	export type ChartRule = LayerChart.ChartRule;
-	export type ChartZone = LayerChart.ChartZone;
+	/** A horizontal line across the chart, such as a monitor's threshold. */
+	export type ChartRule = { value: number; label: string; color: string; dashed?: boolean };
+
+	/** The values a monitor alerts on, drawn in its alert colour; null runs to the chart's edge. */
+	export type ChartZone = { from: number | null; to: number | null };
+
+	/** A series keeps its colour by its place in the query's answer, not in a sorted list. */
+	export const seriesColor = (i: number) => `var(--chart-${(i % 8) + 1})`;
 </script>
 
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import uPlot from 'uplot';
 	import 'uplot/dist/uPlot.min.css';
+	import { formatValue } from '$lib/metrics/format';
+	import { m } from '$lib/paraglide/messages';
 
 	let {
 		lines,
@@ -29,22 +42,37 @@
 	} = $props();
 
 	const HEIGHT = 320;
+	const LEGEND_ROWS = 10;
+	const TOOLTIP_ROWS = 8;
+	// d3's 1, 2, 5 steps: uPlot's own 2.5 steps round to wrong labels.
+	const INCRS = Array.from({ length: 40 }, (_, e) =>
+		[1, 2, 5].map((m) => m * 10 ** (e - 20))
+	).flat();
 
 	let el: HTMLDivElement;
 	let probe: HTMLSpanElement;
 	let plot: uPlot | null = null;
 	let plotShape = '';
+	/** For each uPlot series, the line it draws; null for the helpers behind bands and forecasts. */
+	let owner: (number | null)[] = [];
 	let hover = $state<{ idx: number; left: number; top: number } | null>(null);
+	/** The line under the cursor or the legend's pointer. */
+	let focused = $state<number | null>(null);
+	let tooltipWidth = $state(0);
 
-	// The bucket width, read off the data: the API does not send it.
+	// The bucket width, read off the data: the API does not send it. The median,
+	// not the least: a monitor whose frequency changed has two, and the smaller
+	// would break the line at every interval of the larger.
 	const stepMs = $derived.by(() => {
-		let step = Infinity;
+		const ds: number[] = [];
 		for (const l of lines) {
 			for (let i = 1; i < l.points.length; i++) {
-				step = Math.min(step, l.points[i].t - l.points[i - 1].t);
+				// Not every caller sorts its points.
+				const d = Math.abs(l.points[i].t - l.points[i - 1].t);
+				if (d > 0) ds.push(d);
 			}
 		}
-		return Number.isFinite(step) && step > 0 ? step : undefined;
+		return ds.length > 0 ? Float64Array.from(ds).sort()[ds.length >> 1] : undefined;
 	});
 
 	// uPlot wants one x array shared by every series. A line with no point at
@@ -63,7 +91,15 @@
 			for (const f of l.forecast) times.push(f.t);
 		}
 		times.sort((a, b) => a - b);
-		const xs = times.filter((t, i) => t !== times[i - 1]);
+		const xs: number[] = [];
+		for (const t of times) {
+			const last = xs[xs.length - 1];
+			if (t === last) continue;
+			// A stretch where no line has a point gets one x with nothing at it, so
+			// the lines break there instead of joining across.
+			if (stepMs && t - last > 1.5 * stepMs) xs.push((t + last) / 2);
+			xs.push(t);
+		}
 		const at = new Map(xs.map((t, i) => [t, i]));
 		const column = <T extends { t: number }>(items: T[], value: (item: T) => number) => {
 			const c: (number | null)[] = new Array(xs.length).fill(null);
@@ -132,8 +168,17 @@
 			for (const r of rules) [min, max] = [Math.min(min, r.value), Math.max(max, r.value)];
 		}
 		if (!Number.isFinite(min)) return [0, 1];
+		// From zero, so a small wobble does not read as a cliff.
+		min = Math.min(min, 0);
+		max = Math.max(max, 0);
 		if (min === max) return [min - 1, max + 1];
-		return [min, max];
+		// Out to the next round number, so a peak clears the top edge and the top
+		// gets a label.
+		const step = INCRS.find((s) => s >= (max - min) / 5)!;
+		return [
+			min < 0 ? Math.floor(min / step - 0.05) * step : 0,
+			Math.ceil(max / step + 0.05) * step
+		];
 	});
 
 	// What the plot is built from; anything else is new data on the same plot.
@@ -160,13 +205,6 @@
 			second: '2-digit'
 		});
 
-	// 11 771 153 846 does not fit beside the chart; 11.8B does. English on
-	// purpose: other locales spell the suffix out ("11,8 mld") and get clipped.
-	const compact = new Intl.NumberFormat('en', {
-		notation: 'compact',
-		maximumFractionDigits: 1
-	});
-
 	// A canvas cannot read CSS variables, so a colour is resolved through an element.
 	function resolve(color: string) {
 		probe.style.color = color;
@@ -177,63 +215,87 @@
 		resolve(`color-mix(in oklch, ${color} ${percent}%, transparent)`);
 
 	function options(): uPlot.Options {
-		const font = `12px ${getComputedStyle(el).fontFamily}`;
+		const font = `11px ${getComputedStyle(el).fontFamily}`;
 		const muted = resolve('var(--muted-foreground)');
 		const axis = { stroke: muted, font, ticks: { show: false } };
 
 		const series: uPlot.Series[] = [{}];
 		const hidden = { stroke: 'transparent', width: 0, points: { show: false } };
 		const bands: uPlot.Band[] = [];
+		owner = [null];
+		const add = (line: number | null, ...s: uPlot.Series[]) => {
+			series.push(...s);
+			owner.push(...s.map(() => line));
+		};
 
 		if (display === 'bars') {
 			const bars = uPlot.paths.bars!({ size: [0.6, Infinity] });
-			for (const l of lines.toReversed()) {
-				const c = resolve(l.color);
-				series.push({ stroke: c, fill: c, width: 0, paths: bars, points: { show: false } });
+			for (let i = lines.length - 1; i >= 0; i--) {
+				const c = resolve(lines[i].color);
+				add(i, { stroke: c, fill: c, width: 0, paths: bars, points: { show: false } });
 			}
 		} else if (display === 'area') {
-			for (const l of lines) {
-				series.push({
+			lines.forEach((l, i) =>
+				add(i, {
 					stroke: resolve(l.color),
-					fill: faded(l.color, 25),
-					width: 2,
+					fill: faded(l.color, 18),
+					width: 1.5,
 					points: { show: false }
-				});
-			}
+				})
+			);
 		} else {
-			for (const l of lines) {
-				series.push({ stroke: resolve(l.color), width: 2, points: { show: false } });
+			lines.forEach((l, i) => {
+				add(i, { stroke: resolve(l.color), width: 1.5, points: { show: false } });
 				if (l.band.length > 0) {
-					series.push(hidden, hidden);
-					bands.push({ series: [series.length - 1, series.length - 2], fill: faded(l.color, 15) });
+					add(null, hidden, hidden);
+					bands.push({ series: [series.length - 1, series.length - 2], fill: faded(l.color, 12) });
 				}
 				if (l.forecast.length > 0) {
-					series.push(
-						{ stroke: resolve(l.color), width: 2, dash: [4, 4], points: { show: false } },
+					add(
+						null,
+						{ stroke: resolve(l.color), width: 1.5, dash: [4, 3], points: { show: false } },
 						hidden,
 						hidden
 					);
-					bands.push({ series: [series.length - 1, series.length - 2], fill: faded(l.color, 12) });
+					bands.push({ series: [series.length - 1, series.length - 2], fill: faded(l.color, 10) });
 				}
-			}
+			});
 		}
+
+		const surface = resolve('var(--background)');
+		// A hand-stacked bar has no line nearest the cursor, and a lone line has
+		// nothing to stand out from but its own band.
+		const prox = display === 'bars' || lines.length < 2 ? -1 : 16;
 
 		return {
 			width: el.clientWidth,
 			height: HEIGHT,
 			ms: 1,
 			legend: { show: false },
+			// Dimming redraws every line on each change of focus, which past a hundred
+			// lines lags the cursor; the tooltip still names the focused one.
+			focus: { alpha: lines.length > 100 ? 1 : 0.25 },
 			cursor: {
-				x: false,
+				x: true,
 				y: false,
 				drag: { x: false, y: false, setScale: false },
+				// The line stands on the time the tooltip shows, not between two.
+				move: (u, l, t) =>
+					l < 0 || u.data[0].length === 0 ? [l, t] : [u.valToPos(u.data[0][u.posToIdx(l)], 'x'), t],
+				focus: {
+					prox,
+					dist: (u, i, idx, valPos, curPos) => (owner[i] === null ? Infinity : valPos - curPos)
+				},
 				// uPlot takes a hover dot's colour from the drawn points, and none are drawn.
 				points:
 					display === 'bars'
 						? { show: false }
 						: {
+								one: true,
+								size: 7,
+								width: 2,
 								fill: (u, i) => series[i].stroke as string,
-								stroke: (u, i) => series[i].stroke as string
+								stroke: (u, i) => (owner[i] === null ? 'transparent' : surface)
 							}
 			},
 			// Room for the last time label, which uPlot would cut at the canvas edge.
@@ -255,15 +317,20 @@
 				{
 					...axis,
 					grid: { stroke: resolve('var(--border)'), width: 1 },
-					// d3's 1, 2, 5 steps: uPlot's own 2.5 steps round to wrong labels.
-					incrs: Array.from({ length: 40 }, (_, e) =>
-						[1, 2, 5].map((m) => m * 10 ** (e - 20))
-					).flat(),
-					values: (u, splits) => splits.map((v) => compact.format(v))
+					space: 48,
+					incrs: INCRS,
+					values: (u, splits) => splits.map(formatValue)
 				}
 			],
 			hooks: {
 				drawAxes: [drawMarks],
+				setSeries: [
+					(u, i) => {
+						focused = i === null ? null : owner[i];
+						// A line's band and forecast follow it, so they stay as bright as it does.
+						if (i !== null) for (let j = i + 1; owner[j] === null; j++) u.series[j].alpha = 1;
+					}
+				],
 				setCursor: [
 					(u) => {
 						const { idx, left, top } = u.cursor;
@@ -281,7 +348,7 @@
 		};
 	}
 
-	// Beneath the series, as LayerChart draws them: the alert zone and the rules.
+	// Beneath the series: the alert zone and the rules.
 	function drawMarks(u: uPlot) {
 		if (display !== 'line' || (!zone && rules.length === 0)) return;
 		const { ctx } = u;
@@ -294,23 +361,32 @@
 		if (zone) {
 			const y1 = zone.to === null ? top : u.valToPos(zone.to, 'y', true);
 			const y0 = zone.from === null ? top + height : u.valToPos(zone.from, 'y', true);
-			ctx.fillStyle = faded('var(--state-alert)', 10);
+			ctx.fillStyle = faded('var(--state-alert)', 8);
 			ctx.fillRect(left, Math.min(y0, y1), width, Math.abs(y0 - y1));
 		}
-		ctx.font = `${10 * px}px ${getComputedStyle(el).fontFamily}`;
-		ctx.textBaseline = 'bottom';
+		ctx.font = `500 ${10 * px}px ${getComputedStyle(el).fontFamily}`;
+		// uPlot leaves the y axis's right alignment behind.
+		ctx.textAlign = 'left';
+		// A label too close to one already drawn would print over it: the first rules matter most.
+		const labelled: number[] = [];
 		for (const r of rules) {
 			const y = u.valToPos(r.value, 'y', true);
 			const color = resolve(r.color);
 			ctx.strokeStyle = color;
 			ctx.fillStyle = color;
-			ctx.lineWidth = 1.5 * px;
-			ctx.setLineDash(r.dashed ? [6 * px, 4 * px] : []);
+			ctx.lineWidth = px;
+			// A recovery is dotted, its threshold dashed.
+			ctx.setLineDash(r.dashed ? [2 * px, 3 * px] : [6 * px, 4 * px]);
 			ctx.beginPath();
 			ctx.moveTo(left, y);
 			ctx.lineTo(left + width, y);
 			ctx.stroke();
-			ctx.fillText(r.label, left + 4 * px, y - 2 * px);
+			// A rule at the top edge would lose its label above the line; it goes below.
+			const below = y - top < 14 * px;
+			if (labelled.some((l) => Math.abs(l - y) < 12 * px)) continue;
+			labelled.push(y);
+			ctx.textBaseline = below ? 'top' : 'bottom';
+			ctx.fillText(r.label, left + 4 * px, below ? y + 3 * px : y - 3 * px);
 		}
 		ctx.restore();
 	}
@@ -332,6 +408,7 @@
 		}
 		plot?.destroy();
 		hover = null;
+		focused = null;
 		plot = new uPlot(options(), data, el);
 		plotShape = shape;
 	});
@@ -353,50 +430,117 @@
 	const hovered = $derived.by(() => {
 		if (!hover || table.xs[hover.idx] === undefined) return null;
 		const { idx, left, top } = hover;
-		const rows = lines
-			.map((l, i) => ({ label: l.label, color: l.color, value: values[i][idx] }))
-			.filter((r) => r.value !== null);
-		if (rows.length === 0) return null;
-		const flip = left > el.clientWidth / 2;
-		return { time: tooltipTime(table.xs[idx]), rows, left, top, flip };
+		const all: { i: number; value: number }[] = [];
+		values.forEach((vs, i) => {
+			if (vs[idx] !== null) all.push({ i, value: vs[idx] });
+		});
+		if (all.length === 0) return null;
+		// Largest first, and only a few: the line being looked at always among them.
+		all.sort((a, b) => b.value - a.value);
+		const rows = all.slice(0, TOOLTIP_ROWS);
+		const f = all.findIndex((r) => r.i === focused);
+		if (f >= TOOLTIP_ROWS) rows[TOOLTIP_ROWS - 1] = all[f];
+		// Kept inside the chart, which clips whatever sticks out.
+		const x =
+			left > el.clientWidth / 2
+				? Math.max(0, left - tooltipWidth - 12)
+				: Math.min(left + 12, el.clientWidth - tooltipWidth);
+		const more = all.length - rows.length;
+		return { time: tooltipTime(table.xs[idx]), rows, more, left: x, top: top + 12 };
 	});
+
+	function emphasise(line: number | null) {
+		plot?.setSeries(line === null ? null : owner.indexOf(line), { focus: true });
+	}
+
+	// Largest mean first, and only the first rows drawn until asked: a group-by
+	// can return a thousand series, and their DOM costs more than the chart.
+	const legend = $derived(
+		lines
+			.map((l, i) => ({
+				l,
+				i,
+				mean:
+					l.points.length === 0
+						? -Infinity
+						: l.points.reduce((s, p) => s + p.v, 0) / l.points.length
+			}))
+			.toSorted((a, b) => b.mean - a.mean)
+	);
+	let legendOpen = $state(false);
 </script>
 
 <div class="relative w-full text-xs">
-	<div bind:this={el} class="h-[320px] w-full"></div>
+	<div bind:this={el} class="chart h-[320px] w-full"></div>
 	<span bind:this={probe} class="hidden"></span>
 	{#if hovered}
 		<div
-			class="pointer-events-none absolute z-10 grid min-w-32 items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl"
+			bind:clientWidth={tooltipWidth}
+			class="pointer-events-none absolute z-10 max-w-[min(20rem,100%)] min-w-40 rounded-md border bg-popover px-2 py-1.5 text-[11px] text-popover-foreground shadow-sm"
 			style:left="{hovered.left}px"
 			style:top="{hovered.top}px"
-			style:transform="translate({hovered.flip ? 'calc(-100% - 12px)' : '12px'}, 12px)"
 		>
-			<div class="font-medium">{hovered.time}</div>
-			<div class="grid gap-1.5">
-				{#each hovered.rows as r, i (i)}
-					<div class="flex w-full items-center gap-2">
-						<div class="size-2.5 shrink-0 rounded-[2px]" style="background: {r.color}"></div>
-						<div class="flex flex-1 shrink-0 items-center justify-between gap-4 leading-none">
-							<span class="text-muted-foreground">{r.label}</span>
-							<span class="font-mono font-medium text-foreground tabular-nums">
-								{r.value!.toLocaleString()}
-							</span>
-						</div>
-					</div>
-				{/each}
-			</div>
+			<div class="mb-1 text-muted-foreground">{hovered.time}</div>
+			{#each hovered.rows as r (r.i)}
+				<div
+					class="flex items-center gap-2 {r.i === focused
+						? 'font-medium text-foreground'
+						: 'text-muted-foreground'}"
+				>
+					<span class="h-0.5 w-2.5 shrink-0" style:background={lines[r.i].color}></span>
+					<span class="min-w-0 flex-1 truncate">{lines[r.i].label}</span>
+					<span class="font-mono text-foreground tabular-nums">{formatValue(r.value)}</span>
+				</div>
+			{/each}
+			{#if hovered.more > 0}
+				<div class="text-muted-foreground">{m.chart_more_series({ count: hovered.more })}</div>
+			{/if}
 		</div>
 	{/if}
 </div>
 
-<div class="flex flex-wrap gap-x-4 gap-y-1.5 border-t pt-3">
-	{#each lines as l (l.key)}
-		<span class="flex items-center gap-1.5 font-mono text-xs">
-			<span class="inline-block size-2 shrink-0 rounded-full" style="background: {l.color}"></span>
-			{l.label}
-			{#if l.band.length > 0}<span class="text-muted-foreground">· expected range</span>{/if}
-			{#if l.forecast.length > 0}<span class="text-muted-foreground">· forecast (dashed)</span>{/if}
-		</span>
+{#snippet entry({ l, i }: { l: ChartLine; i: number })}
+	<span
+		role="presentation"
+		class="flex items-center gap-1.5"
+		onmouseenter={() => emphasise(i)}
+		onmouseleave={() => emphasise(null)}
+	>
+		<span class="h-0.5 w-2.5 shrink-0" style:background={l.color}></span>
+		{l.label}
+		{#if l.band.length > 0}
+			<span class="text-muted-foreground">· {m.chart_expected_range()}</span>
+		{/if}
+		{#if l.forecast.length > 0}
+			<span class="text-muted-foreground">· {m.chart_forecast()}</span>
+		{/if}
+	</span>
+{/snippet}
+
+<div class="flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 font-mono text-[11px]">
+	{#each legend.slice(0, LEGEND_ROWS) as e (e.l.key)}
+		{@render entry(e)}
 	{/each}
+	{#if legend.length > LEGEND_ROWS && !legendOpen}
+		<button
+			type="button"
+			class="text-muted-foreground hover:text-foreground"
+			onclick={() => (legendOpen = true)}
+		>
+			{m.chart_more_series({ count: legend.length - LEGEND_ROWS })}
+		</button>
+	{/if}
+	{#if legendOpen}
+		<div class="flex max-h-40 basis-full flex-wrap gap-x-4 gap-y-1 overflow-y-auto">
+			{#each legend.slice(LEGEND_ROWS) as e (e.l.key)}
+				{@render entry(e)}
+			{/each}
+		</div>
+	{/if}
 </div>
+
+<style>
+	.chart :global(.u-cursor-x) {
+		border-right: 1px solid color-mix(in oklch, var(--muted-foreground) 60%, transparent);
+	}
+</style>

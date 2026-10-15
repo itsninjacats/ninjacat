@@ -1,7 +1,7 @@
 // How a monitor's states, reasons and methods are shown.
 
 import { m } from '$lib/paraglide/messages';
-import type { ChartRule } from '$lib/components/app/metrics/metrics-chart.svelte';
+import type { ChartRule } from '$lib/components/app/metrics/uplot-chart.svelte';
 import type { Method } from './definition';
 
 /** Datadog's group states, most severe first: a monitor shows its worst group's. */

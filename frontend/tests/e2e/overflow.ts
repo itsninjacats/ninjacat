@@ -35,10 +35,6 @@ function scan({ pane, touch }: { pane: string; touch: boolean }): Overflow[] {
 	// What may stick out of its parent, and why: the sidebar's rail is a hit
 	// area that straddles the sidebar's edge by design.
 	const allowedToStickOut = '[data-sidebar="rail"]';
-	// LayerChart pads its plot area off the axes and draws the chart's SVG from
-	// inside it, so the SVG overhangs these boxes by design. They alone may be
-	// exceeded: the SVG is still measured against the chart and the card around it.
-	const chartPlotArea = '.lc-tooltip-context, .lc-tooltip-context-container';
 	const tolerance = 1;
 	const viewport = document.documentElement.clientWidth;
 	const problems: Overflow[] = [];
@@ -245,7 +241,6 @@ function scan({ pane, touch }: { pane: string; touch: boolean }): Overflow[] {
 		const tall = el.scrollHeight > el.clientHeight + tolerance;
 		if (!wide && !tall) continue;
 		if (style.display === 'inline' || style.display === 'contents') continue;
-		if (el.matches(chartPlotArea)) continue;
 
 		const isPane = el.matches(pane);
 		if (isPane && wide) {

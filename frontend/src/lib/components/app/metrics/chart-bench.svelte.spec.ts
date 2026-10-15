@@ -1,5 +1,5 @@
-// A benchmark of the two chart renderers, not a test of them: it runs only with
-// VITE_CHART_BENCH=1 and prints one `CHART_BENCH {...}` line per renderer.
+// A benchmark of the chart, not a test of it: it runs only with VITE_CHART_BENCH=1
+// and prints one `CHART_BENCH {...}` line.
 //   VITE_CHART_BENCH=1 bunx vitest run --project client --silent=false --reporter=verbose chart-bench
 // Times are whole frames: anything at frameMs (hover) or two of them (paint) is
 // the floor, not a measured speed.
@@ -7,8 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../../../routes/layout.css';
-import MetricsChart, { type ChartLine } from './metrics-chart.svelte';
-import UplotChart from './uplot-chart.svelte';
+import Chart, { seriesColor, type ChartLine } from './uplot-chart.svelte';
 
 const POINTS = 300;
 const STEP = 60_000;
@@ -19,7 +18,7 @@ function lines(count: number, shift = 0): ChartLine[] {
 	return Array.from({ length: count }, (_, s) => ({
 		key: `s${s}`,
 		label: `host:bench-${s}`,
-		color: `var(--chart-${(s % 5) + 1})`,
+		color: seriesColor(s),
 		points: Array.from({ length: POINTS }, (_, i) => ({
 			t: window.from + (i + 1) * STEP,
 			v: 100 + s + 20 * Math.sin((i + shift + s) / 10)
@@ -53,24 +52,16 @@ async function idleFrame() {
 	return median(gaps);
 }
 
-// 60 moves across the middle of the plot, one per frame. uPlot listens to
-// mousemove, LayerChart to pointermove; each gets only its own.
+// 60 moves across the middle of the plot, one per frame.
 async function hover(chart: HTMLElement) {
-	const uplot = chart.querySelector<HTMLElement>('.u-over');
-	const area = uplot ?? chart.querySelector<HTMLElement>('[data-slot="chart"] svg')!;
+	const area = chart.querySelector<HTMLElement>('.u-over')!;
 	const box = area.getBoundingClientRect();
 	const y = box.top + box.height / 2;
 	const frames: number[] = [];
 	let last = await frame();
 	for (let i = 0; i < 60; i++) {
 		const x = box.left + box.width * (0.1 + (0.8 * i) / 59);
-		const target = document.elementFromPoint(x, y) ?? area;
-		const init = { clientX: x, clientY: y, bubbles: true };
-		target.dispatchEvent(
-			uplot
-				? new MouseEvent('mousemove', init)
-				: new PointerEvent('pointermove', { ...init, pointerType: 'mouse' })
-		);
+		area.dispatchEvent(new MouseEvent('mousemove', { clientX: x, clientY: y, bubbles: true }));
 		const now = await frame();
 		frames.push(now - last);
 		last = now;
@@ -80,23 +71,20 @@ async function hover(chart: HTMLElement) {
 
 // A series, not just axes: the series are coloured, the axes and grid grey.
 function drewSeries(chart: HTMLElement) {
-	const canvas = chart.querySelector('canvas');
-	if (canvas) {
-		const px = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
-		for (let i = 0; i < px.length; i += 4) {
-			if (
-				px[i + 3] > 0 &&
-				Math.max(px[i], px[i + 1], px[i + 2]) - Math.min(px[i], px[i + 1], px[i + 2]) > 60
-			) {
-				return true;
-			}
+	const canvas = chart.querySelector('canvas')!;
+	const px = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
+	for (let i = 0; i < px.length; i += 4) {
+		if (
+			px[i + 3] > 0 &&
+			Math.max(px[i], px[i + 1], px[i + 2]) - Math.min(px[i], px[i + 1], px[i + 2]) > 60
+		) {
+			return true;
 		}
-		return false;
 	}
-	return [...chart.querySelectorAll('path')].some((p) => (p.getAttribute('d') ?? '').length > 10);
+	return false;
 }
 
-async function scenario(chart: typeof MetricsChart, charts: number, series: number) {
+async function scenario(charts: number, series: number) {
 	const grid = document.createElement('div');
 	grid.style.width = '1000px';
 	document.body.append(grid);
@@ -106,7 +94,7 @@ async function scenario(chart: typeof MetricsChart, charts: number, series: numb
 	for (let i = 0; i < charts; i++) {
 		const target = grid.appendChild(document.createElement('div'));
 		mounted.push(
-			render(chart, { target, props: { lines: lines(series), display: 'line', window } })
+			render(Chart, { target, props: { lines: lines(series), display: 'line', window } })
 		);
 	}
 	await painted();
@@ -130,12 +118,10 @@ async function scenario(chart: typeof MetricsChart, charts: number, series: numb
 	return result;
 }
 
-const renderers = { layerchart: MetricsChart, uplot: UplotChart };
-
 // The median of three runs, each figure on its own.
-async function measure(chart: typeof MetricsChart, charts: number, series: number) {
+async function measure(charts: number, series: number) {
 	const runs = [];
-	for (let i = 0; i < 3; i++) runs.push(await scenario(chart, charts, series));
+	for (let i = 0; i < 3; i++) runs.push(await scenario(charts, series));
 	return {
 		charts,
 		series,
@@ -150,17 +136,15 @@ async function measure(chart: typeof MetricsChart, charts: number, series: numbe
 }
 
 describe.skipIf(!import.meta.env.VITE_CHART_BENCH)('chart bench', () => {
-	for (const [name, chart] of Object.entries(renderers)) {
-		it(name, { timeout: 1_800_000 }, async () => {
-			await page.viewport(1280, 900);
-			// Untimed, so neither renderer pays for loading the page's CSS and fonts.
-			await scenario(chart, 1, 10);
-			const frameMs = round(await idleFrame());
-			const results = [];
-			for (const series of [10, 100, 300, 1000]) results.push(await measure(chart, 1, series));
-			results.push(await measure(chart, 20, 20));
-			console.log(`CHART_BENCH ${JSON.stringify({ renderer: name, frameMs, results })}`);
-			for (const r of results) expect(r.drew, `${name} drew ${r.charts}×${r.series}`).toBe(true);
-		});
-	}
+	it('uplot', { timeout: 1_800_000 }, async () => {
+		await page.viewport(1280, 900);
+		// Untimed, so the measured runs do not pay for loading the page's CSS and fonts.
+		await scenario(1, 10);
+		const frameMs = round(await idleFrame());
+		const results = [];
+		for (const series of [10, 100, 300, 1000]) results.push(await measure(1, series));
+		results.push(await measure(20, 20));
+		console.log(`CHART_BENCH ${JSON.stringify({ frameMs, results })}`);
+		for (const r of results) expect(r.drew, `drew ${r.charts}×${r.series}`).toBe(true);
+	});
 });

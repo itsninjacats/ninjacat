@@ -20,7 +20,10 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import FunctionChips from '$lib/components/app/metrics/function-chips.svelte';
-	import MetricsChart, { type ChartLine } from '$lib/components/app/metrics/uplot-chart.svelte';
+	import MetricsChart, {
+		seriesColor,
+		type ChartLine
+	} from '$lib/components/app/metrics/uplot-chart.svelte';
 	import QueryRow from '$lib/components/app/metrics/query-row.svelte';
 	import ScalarView, { type ScalarTable } from '$lib/components/app/metrics/scalar-view.svelte';
 	import {
@@ -54,8 +57,6 @@
 		{ value: 'toplist', label: 'Top list', icon: ListIcon },
 		{ value: 'value', label: 'Query value', icon: HashIcon }
 	];
-
-	const color = (i: number) => `var(--chart-${(i % 5) + 1})`;
 
 	// ---- the view, seeded from the URL so a pasted address reproduces it ----
 
@@ -198,7 +199,7 @@
 				: oneOutput
 					? group
 					: `${labels[s.output]} · ${group}`;
-			return { key: `s${i}`, label, color: color(i), ...s };
+			return { key: `s${i}`, label, color: seriesColor(i), ...s };
 		});
 	}
 
@@ -337,7 +338,7 @@
 							<ScalarView
 								{table}
 								labels={request.outputs.map((o) => o.label)}
-								colors={request.outputs.map((_, i) => color(i))}
+								colors={request.outputs.map((_, i) => seriesColor(i))}
 								display={view.display as 'toplist' | 'value'}
 							/>
 						{:else if loading}
@@ -369,7 +370,7 @@
 					{#each view.queries as query, i (query.name)}
 						<QueryRow
 							bind:query={view.queries[i]}
-							color={color(i)}
+							color={seriesColor(i)}
 							metrics={data.metrics}
 							onremove={view.queries.length > 1 ? () => view.queries.splice(i, 1) : undefined}
 						/>

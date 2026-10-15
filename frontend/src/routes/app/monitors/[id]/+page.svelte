@@ -9,7 +9,10 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
 	import LocalTime from '$lib/components/app/local-time.svelte';
-	import MetricsChart, { type ChartLine } from '$lib/components/app/metrics/metrics-chart.svelte';
+	import MetricsChart, {
+		seriesColor,
+		type ChartLine
+	} from '$lib/components/app/metrics/uplot-chart.svelte';
 	import StateBadge from '$lib/components/app/monitors/state-badge.svelte';
 	import { alertZone } from '$lib/monitors/definition';
 	import {
@@ -66,7 +69,7 @@
 		return keys.slice(0, data.maxLines).map((group, i) => ({
 			key: `g${i}`,
 			label: group,
-			color: `var(--chart-${(i % 5) + 1})`,
+			color: seriesColor(i),
 			points: evaluated[group],
 			band: [],
 			forecast: []

@@ -13,7 +13,10 @@
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import FunctionChips from '$lib/components/app/metrics/function-chips.svelte';
-	import MetricsChart, { type ChartLine } from '$lib/components/app/metrics/metrics-chart.svelte';
+	import MetricsChart, {
+		seriesColor,
+		type ChartLine
+	} from '$lib/components/app/metrics/uplot-chart.svelte';
 	import QueryRow from '$lib/components/app/metrics/query-row.svelte';
 	import MonitorConditions from './monitor-conditions.svelte';
 	import NumberInput from './number-input.svelte';
@@ -62,8 +65,6 @@
 	};
 	// Evaluation of these lands later; they are saved and checked now.
 	const notEvaluatedYet: Method[] = ['anomaly', 'outlier', 'forecast'];
-
-	const color = (i: number) => `var(--chart-${(i % 5) + 1})`;
 
 	const groupKeys = $derived(groupKeysOf(view));
 
@@ -140,7 +141,7 @@
 								? s.output === 1
 									? 'var(--state-alert)'
 									: 'var(--muted-foreground)'
-								: color(i)
+								: seriesColor(i)
 						})
 					);
 				})
@@ -322,7 +323,7 @@
 				{#each view.queries as query, i (query.name)}
 					<QueryRow
 						bind:query={view.queries[i]}
-						color={color(i)}
+						color={seriesColor(i)}
 						{metrics}
 						onremove={view.queries.length > 1 ? () => view.queries.splice(i, 1) : undefined}
 						chartControls={false}
