@@ -285,5 +285,6 @@
 	"monitor_options": "Opciones",
 	"chart_more_series": "+{count} más",
 	"chart_expected_range": "rango esperado",
-	"chart_forecast": "previsión (discontinua)"
+	"chart_forecast": "previsión (discontinua)",
+	"chart_tooltip_forecast": "previsión"
 }

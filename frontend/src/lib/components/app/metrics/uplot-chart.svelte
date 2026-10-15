@@ -30,7 +30,8 @@
 		display,
 		window,
 		rules = [],
-		zone = null
+		zone = null,
+		onzoom
 	}: {
 		lines: ChartLine[];
 		display: 'line' | 'area' | 'bars';
@@ -39,6 +40,8 @@
 		/** Drawn on line charts only. */
 		rules?: ChartRule[];
 		zone?: ChartZone | null;
+		/** Called with the range dragged across, in ms; without it the chart cannot be dragged. */
+		onzoom?: (from: number, to: number) => void;
 	} = $props();
 
 	const HEIGHT = 320;
@@ -278,7 +281,7 @@
 			cursor: {
 				x: true,
 				y: false,
-				drag: { x: false, y: false, setScale: false },
+				drag: { x: !!onzoom, y: false, setScale: false, dist: 5 },
 				// The line stands on the time the tooltip shows, not between two.
 				move: (u, l, t) =>
 					l < 0 || u.data[0].length === 0 ? [l, t] : [u.valToPos(u.data[0][u.posToIdx(l)], 'x'), t],
@@ -300,7 +303,8 @@
 			},
 			// Room for the last time label, which uPlot would cut at the canvas edge.
 			padding: [8, 32, 0, 0],
-			scales: { x: { time: true, range: xDomain }, y: { range: yDomain } },
+			// A function, not the array: uPlot reads an array once and keeps it.
+			scales: { x: { time: true, range: () => xDomain }, y: { range: yDomain } },
 			series,
 			bands,
 			axes: [
@@ -324,6 +328,19 @@
 			],
 			hooks: {
 				drawAxes: [drawMarks],
+				setSelect: [
+					(u) => {
+						// Only the requested window can be asked for again: not the forecast
+						// past it, nor the half bucket the bars are padded with.
+						const from = Math.max(window.from, Math.round(u.posToVal(u.select.left, 'x')));
+						const to = Math.min(
+							window.to,
+							Math.round(u.posToVal(u.select.left + u.select.width, 'x'))
+						);
+						u.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
+						if (to > from) onzoom?.(from, to);
+					}
+				],
 				setSeries: [
 					(u, i) => {
 						focused = i === null ? null : owner[i];
@@ -430,9 +447,17 @@
 	const hovered = $derived.by(() => {
 		if (!hover || table.xs[hover.idx] === undefined) return null;
 		const { idx, left, top } = hover;
-		const all: { i: number; value: number }[] = [];
+		const t = table.xs[idx];
+		// Bands and forecasts are drawn on line charts only.
+		const line = display === 'line';
+		const all: { i: number; value: number; forecast: boolean }[] = [];
 		values.forEach((vs, i) => {
-			if (vs[idx] !== null) all.push({ i, value: vs[idx] });
+			const v = vs[idx];
+			if (v !== null) all.push({ i, value: v, forecast: false });
+			else if (line && lines[i].forecast.length > 0) {
+				const f = lines[i].forecast.find((p) => p.t === t);
+				if (f) all.push({ i, value: f.v, forecast: true });
+			}
 		});
 		if (all.length === 0) return null;
 		// Largest first, and only a few: the line being looked at always among them.
@@ -446,7 +471,18 @@
 				? Math.max(0, left - tooltipWidth - 12)
 				: Math.min(left + 12, el.clientWidth - tooltipWidth);
 		const more = all.length - rows.length;
-		return { time: tooltipTime(table.xs[idx]), rows, more, left: x, top: top + 12 };
+		// Searched for the shown rows alone: a grouped anomaly query can bring a thousand bands.
+		const bounds = (r: (typeof all)[number]) => {
+			const p = line && (r.forecast ? lines[r.i].forecast : lines[r.i].band).find((x) => x.t === t);
+			return p ? [p.lower, p.upper] : null;
+		};
+		return {
+			time: tooltipTime(table.xs[idx]),
+			rows: rows.map((r) => ({ ...r, range: bounds(r) })),
+			more,
+			left: x,
+			top: top + 12
+		};
 	});
 
 	function emphasise(line: number | null) {
@@ -488,8 +524,17 @@
 						: 'text-muted-foreground'}"
 				>
 					<span class="h-0.5 w-2.5 shrink-0" style:background={lines[r.i].color}></span>
-					<span class="min-w-0 flex-1 truncate">{lines[r.i].label}</span>
+					<span class="min-w-0 flex-1 truncate">
+						{lines[r.i].label}
+						{#if r.forecast}<span class="text-muted-foreground">· {m.chart_tooltip_forecast()}</span
+							>{/if}
+					</span>
 					<span class="font-mono text-foreground tabular-nums">{formatValue(r.value)}</span>
+					{#if r.range}
+						<span class="font-mono text-muted-foreground tabular-nums">
+							{formatValue(r.range[0])}–{formatValue(r.range[1])}
+						</span>
+					{/if}
 				</div>
 			{/each}
 			{#if hovered.more > 0}
@@ -540,6 +585,9 @@
 </div>
 
 <style>
+	.chart :global(.u-select) {
+		background: color-mix(in oklch, var(--muted-foreground) 15%, transparent);
+	}
 	.chart :global(.u-cursor-x) {
 		border-right: 1px solid color-mix(in oklch, var(--muted-foreground) 60%, transparent);
 	}

@@ -285,5 +285,6 @@
 	"monitor_options": "Options",
 	"chart_more_series": "+{count} more",
 	"chart_expected_range": "expected range",
-	"chart_forecast": "forecast (dashed)"
+	"chart_forecast": "forecast (dashed)",
+	"chart_tooltip_forecast": "forecast"
 }

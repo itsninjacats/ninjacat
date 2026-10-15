@@ -114,6 +114,11 @@ let ``from must be before to`` () =
     Assert.Contains("data.attributes.from must be earlier than data.attributes.to", es)
 
 [<Fact>]
+let ``a time past what a date can hold is a 400, not an exception`` () =
+    let es = errorsOf (body """ "from":900000000000000,"to":900000000000001,"queries":[{"data_source":"metrics","query":"x{*}"}] """)
+    Assert.Contains("data.attributes.from and data.attributes.to must be unix milliseconds between years 1 and 9999", es)
+
+[<Fact>]
 let ``wrong JSON types are reported in the deserializer's own words`` () =
     let notAList = Assert.Single(errorsOf (body """ "from":1,"to":2,"queries":{} """))
     Assert.StartsWith("invalid request body: ", notAList)

@@ -285,5 +285,6 @@
 	"monitor_options": "Opcje",
 	"chart_more_series": "+{count} więcej",
 	"chart_expected_range": "oczekiwany zakres",
-	"chart_forecast": "prognoza (przerywana)"
+	"chart_forecast": "prognoza (przerywana)",
+	"chart_tooltip_forecast": "prognoza"
 }

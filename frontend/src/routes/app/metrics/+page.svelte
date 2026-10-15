@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { afterNavigate, replaceState } from '$app/navigation';
+	import { afterNavigate, goto, replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import BellPlusIcon from '@lucide/svelte/icons/bell-plus';
 	import { page } from '$app/state';
@@ -19,6 +19,7 @@
 	import * as NativeSelect from '$lib/components/ui/native-select';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Skeleton } from '$lib/components/ui/skeleton';
+	import RangeLabel from '$lib/components/app/metrics/range-label.svelte';
 	import FunctionChips from '$lib/components/app/metrics/function-chips.svelte';
 	import MetricsChart, {
 		seriesColor,
@@ -30,12 +31,15 @@
 		SCALAR_AGGREGATORS,
 		emptyFormula,
 		emptyQuery,
+		fixedRangeParams,
 		nextQueryName,
 		rangeMs,
+		readFixedRange,
 		readView,
 		requestOf,
 		writeView,
-		type Display
+		type Display,
+		type FixedRange
 	} from '$lib/metrics/query';
 	import { m } from '$lib/paraglide/messages';
 	import type { PageProps } from './$types';
@@ -61,6 +65,8 @@
 	// ---- the view, seeded from the URL so a pasted address reproduces it ----
 
 	const view = $state(readView(page.url.searchParams));
+	/** A zoomed range: while set, view.range is not live. */
+	const fixed = $derived(readFixedRange(page.url.searchParams));
 
 	// Start with a metric on screen, unless the URL asked for something.
 	$effect(() => {
@@ -80,8 +86,11 @@
 	let routerReady = $state(false);
 	afterNavigate(() => (routerReady = true));
 
+	const address = (range: FixedRange | null) =>
+		`?${writeView(view)}${range ? `&${fixedRangeParams(range)}` : ''}`;
+
 	$effect(() => {
-		const target = `?${writeView(view)}`;
+		const target = address(fixed);
 		if (!routerReady) return;
 		// replaceState rather than goto: the address follows the controls
 		// without piling an entry onto history for every keystroke.
@@ -89,6 +98,12 @@
 		// eslint-disable-next-line svelte/no-navigation-without-resolve
 		if (page.url.search !== target) replaceState(target, {});
 	});
+
+	// goto rather than replaceState: page.url follows it, and Back undoes a zoom.
+	function setRange(range: FixedRange | null, replace: boolean) {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve
+		goto(address(range), { replaceState: replace, noScroll: true, keepFocus: true });
+	}
 
 	const request = $derived(requestOf(view));
 	const scalar = $derived(view.display === 'toplist' || view.display === 'value');
@@ -109,6 +124,7 @@
 		JSON.stringify({
 			request,
 			range: view.range,
+			fixed,
 			scalar,
 			aggregator: scalar ? view.aggregator : null,
 			refreshes
@@ -129,8 +145,8 @@
 
 		const controller = new AbortController();
 		const timer = setTimeout(() => {
-			const to = Date.now();
-			const from = to - rangeMs(view.range);
+			const to = fixed?.to ?? Date.now();
+			const from = fixed?.from ?? to - rangeMs(view.range);
 			loading = true;
 
 			fetch('/app/metrics/query', {
@@ -296,11 +312,17 @@
 								</NativeSelect.Root>
 								<Separator orientation="vertical" class="mx-1 h-5" />
 							{/if}
+							{#if fixed}
+								<RangeLabel range={fixed} />
+							{/if}
 							{#each RANGES as r (r.value)}
 								<Button
 									size="sm"
-									variant={view.range === r.value ? 'default' : 'ghost'}
-									onclick={() => (view.range = r.value)}
+									variant={!fixed && view.range === r.value ? 'default' : 'ghost'}
+									onclick={() => {
+										view.range = r.value;
+										setRange(null, true);
+									}}
 								>
 									{r.label}
 								</Button>
@@ -359,6 +381,7 @@
 							{lines}
 							window={shownWindow}
 							display={view.display as 'line' | 'area' | 'bars'}
+							onzoom={(from, to) => setRange({ from, to }, false)}
 						/>
 					{/if}
 				</Card.Content>

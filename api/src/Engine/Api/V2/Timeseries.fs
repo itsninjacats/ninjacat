@@ -102,7 +102,13 @@ let parse (raw: TimeseriesFormulaRequestAttributes) : Result<ParsedTimeseriesReq
     let from, to' = raw.From.Value, raw.To.Value
     let sentQueries = defaultArg raw.Queries []
 
-    if from >= to' then
+    let representable (ms: int64) =
+        ms >= DateTimeOffset.MinValue.ToUnixTimeMilliseconds()
+        && ms <= DateTimeOffset.MaxValue.ToUnixTimeMilliseconds()
+
+    if not (representable from && representable to') then
+        errors.Add "data.attributes.from and data.attributes.to must be unix milliseconds between years 1 and 9999"
+    elif from >= to' then
         errors.Add "data.attributes.from must be earlier than data.attributes.to"
 
     if sentQueries.IsEmpty then

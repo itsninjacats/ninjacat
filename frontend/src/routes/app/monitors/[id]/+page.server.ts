@@ -1,5 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { asObject } from '$lib/metrics/query';
+import { asObject, readFixedRange } from '$lib/metrics/query';
 import { editorMethod, effectiveComparator, viewOf } from '$lib/monitors/definition';
 import { severity } from '$lib/monitors/states';
 import { db } from '$lib/server/db';
@@ -59,11 +59,12 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		error(404, m.monitor_not_found());
 	}
 
+	const fixed = readFixedRange(url.searchParams);
 	const asked = url.searchParams.get('range');
 	const range = RANGES.find((r) => r === asked) ?? '-1d';
-	const to = new Date();
-	const from = new Date(to.getTime() - RANGE_MS[range]);
-	const window = { from: from.toISOString(), to: to.toISOString() };
+	const now = Date.now();
+	const { from, to } = fixed ?? { from: now - RANGE_MS[range], to: now };
+	const window = { from: new Date(from).toISOString(), to: new Date(to).toISOString() };
 
 	// Each part is shown on its own, so one that fails leaves the others.
 	const [groups, transitions] = await Promise.allSettled([
@@ -100,7 +101,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 			warningRecovery: numberOrNull(thresholds.warning_recovery)
 		},
 		maxLines: MAX_LINES,
-		range,
+		range: fixed ? null : range,
 		window,
 		groups: groups.status === 'fulfilled' ? groups.value : null,
 		transitions: transitions.status === 'fulfilled' ? transitions.value : null,

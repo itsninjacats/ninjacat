@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
@@ -9,11 +10,13 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
 	import LocalTime from '$lib/components/app/local-time.svelte';
+	import RangeLabel from '$lib/components/app/metrics/range-label.svelte';
 	import MetricsChart, {
 		seriesColor,
 		type ChartLine
 	} from '$lib/components/app/metrics/uplot-chart.svelte';
 	import StateBadge from '$lib/components/app/monitors/state-badge.svelte';
+	import { fixedRangeParams } from '$lib/metrics/query';
 	import { alertZone } from '$lib/monitors/definition';
 	import {
 		STATES,
@@ -102,6 +105,12 @@
 	onMount(() => (zoneName = Intl.DateTimeFormat().resolvedOptions().timeZone));
 
 	const groupLabel = (group: string) => (group === '*' ? m.monitor_group_all() : group);
+
+	function zoom(from: number, to: number) {
+		// Only the query string changes, on this same route, so there is no path to resolve.
+		// eslint-disable-next-line svelte/no-navigation-without-resolve
+		goto(`?${fixedRangeParams({ from, to })}`, { noScroll: true, keepFocus: true });
+	}
 </script>
 
 <svelte:head><title>{data.monitor.name} — ninjacat</title></svelte:head>
@@ -180,7 +189,10 @@
 		<p class="text-xs text-muted-foreground">
 			{zoneName ? m.monitor_times_local({ zone: zoneName }) : m.monitor_times_utc()}
 		</p>
-		<div class="flex flex-wrap gap-1">
+		<div class="flex flex-wrap items-center gap-1">
+			{#if data.range === null}
+				<RangeLabel range={{ from, to }} />
+			{/if}
 			{#each ['-1h', '-4h', '-1d', '-1w'] as r (r)}
 				<Button
 					size="sm"
@@ -217,7 +229,7 @@
 					{m.monitor_no_evaluations()}
 				</div>
 			{:else}
-				<MetricsChart {lines} window={{ from, to }} display="line" {rules} {zone} />
+				<MetricsChart {lines} window={{ from, to }} display="line" {rules} {zone} onzoom={zoom} />
 			{/if}
 		</Card.Content>
 	</Card.Root>

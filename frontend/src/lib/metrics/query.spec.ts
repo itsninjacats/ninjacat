@@ -5,8 +5,10 @@ import {
 	emptyFormula,
 	emptyQuery,
 	filterText,
+	fixedRangeParams,
 	nextQueryName,
 	rangeMs,
+	readFixedRange,
 	readView,
 	requestOf,
 	writeView
@@ -149,5 +151,28 @@ describe('rangeMs', () => {
 		expect(rangeMs('-15m')).toBe(900_000);
 		expect(rangeMs('-6h')).toBe(21_600_000);
 		expect(rangeMs('-7d')).toBe(604_800_000);
+	});
+});
+
+describe('fixed ranges', () => {
+	const read = (q: string) => readFixedRange(new URLSearchParams(q));
+
+	it("reads Datadog's from_ts and to_ts", () => {
+		expect(read('from_ts=1000&to_ts=2000&live=false')).toEqual({ from: 1000, to: 2000 });
+	});
+
+	it('are live without both timestamps, on garbage, or with live=true', () => {
+		expect(read('')).toBeNull();
+		expect(read('from_ts=1.5&to_ts=2000')).toBeNull();
+		expect(read('from_ts=0&to_ts=900000000000000')).toBeNull();
+		expect(read('from_ts=2000&to_ts=2000')).toBeNull();
+		expect(read('from_ts=1000&to_ts=2000&live=true')).toBeNull();
+	});
+
+	it('round-trip beside the view, which ignores them', () => {
+		const range = { from: 1_760_000_000_000, to: 1_760_000_600_000 };
+		const params = new URLSearchParams(`${writeView(defaultView())}&${fixedRangeParams(range)}`);
+		expect(readFixedRange(params)).toEqual(range);
+		expect(readView(params)).toEqual(defaultView());
 	});
 });

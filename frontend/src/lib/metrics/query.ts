@@ -278,3 +278,17 @@ export function rangeMs(range: string): number {
 	const n = Number(m[1]);
 	return n * { m: 60_000, h: 3_600_000, d: 86_400_000 }[m[2] as 'm' | 'h' | 'd'];
 }
+
+export type FixedRange = { from: number; to: number };
+
+/** Datadog's `from_ts`/`to_ts` (unix ms, UTC); without both, or with `live=true`, the range is live. */
+export function readFixedRange(params: URLSearchParams): FixedRange | null {
+	const from = Number(params.get('from_ts') || NaN);
+	const to = Number(params.get('to_ts') || NaN);
+	// The query process's dates end with the year 9999.
+	const valid = (t: number) => Number.isInteger(t) && t >= 0 && t <= 253_402_300_799_999;
+	if (params.get('live') === 'true' || !valid(from) || !valid(to)) return null;
+	return from < to ? { from, to } : null;
+}
+
+export const fixedRangeParams = (r: FixedRange) => `from_ts=${r.from}&to_ts=${r.to}&live=false`;

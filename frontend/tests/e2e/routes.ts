@@ -1,3 +1,4 @@
+import { fixedRangeParams } from '../../src/lib/metrics/query';
 import { monitors } from './monitors';
 import { tenants, type PersonKey, type TenantKey } from './people';
 
@@ -38,6 +39,10 @@ const metricsView = {
 	formulas: [{ text: 'a / 1024 / 1024 * 100', hidden: false, functions: [], alias: '' }]
 };
 
+// The four hours before the seeded history ends (seed.setup.ts), so a zoomed chart has points.
+const seedEnd = Math.floor(Date.now() / (6 * 3_600_000)) * 6 * 3_600_000;
+const zoomed = fixedRangeParams({ from: seedEnd - 4 * 3_600_000, to: seedEnd });
+
 export const routes: ViewRoute[] = [
 	{ name: 'login', path: '/login', as: null },
 	{ name: 'home', path: '/', as: 'memberA' },
@@ -47,6 +52,11 @@ export const routes: ViewRoute[] = [
 	{
 		name: 'metrics-long-query',
 		path: `/app/metrics?${new URLSearchParams({ view: JSON.stringify(metricsView) })}`,
+		as: 'longEmail'
+	},
+	{
+		name: 'metrics-fixed',
+		path: `/app/metrics?${new URLSearchParams({ view: JSON.stringify(metricsView) })}&${zoomed}`,
 		as: 'longEmail'
 	},
 	{ name: 'logs', path: '/app/logs', as: 'longEmail' },
@@ -90,6 +100,12 @@ export const routes: ViewRoute[] = [
 	{
 		name: 'monitor-threshold-week',
 		path: `/app/monitors/${monitors.threshold.id}?range=-1w`,
+		as: 'longEmail',
+		owner: 'a'
+	},
+	{
+		name: 'monitor-threshold-fixed',
+		path: `/app/monitors/${monitors.threshold.id}?${zoomed}`,
 		as: 'longEmail',
 		owner: 'a'
 	},

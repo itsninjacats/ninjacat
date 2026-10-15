@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { expectNoOverflow } from './overflow';
 import { switchMethod, type Method, type MonitorView } from '../../src/lib/monitors/definition';
 import { monitors } from './monitors';
+import { routes } from './routes';
 import { password, people, stateFile, tenants } from './people';
 import { shoot } from './shots';
 import { expect, open, test } from './test';
@@ -171,6 +172,45 @@ test.describe('monitor definitions', () => {
 		await expect(
 			page.getByText(`Groups (${monitors.threshold.groups})`, { exact: true })
 		).toBeVisible();
+	});
+});
+
+test.describe('chart zoom', () => {
+	test.use({ storageState: stateFile('memberA') });
+	test.skip(({ viewport }) => viewport?.width !== 1280, 'runs at desktop width only');
+
+	async function drag(page: Page) {
+		const box = (await page.locator('.u-over').boundingBox())!;
+		const y = box.y + box.height / 2;
+		await page.mouse.move(box.x + box.width * 0.3, y);
+		await page.mouse.down();
+		await page.mouse.move(box.x + box.width * 0.6, y, { steps: 5 });
+		await page.mouse.up();
+	}
+
+	test("puts Datadog's fixed range in the URL, and a preset takes it out", async ({ page }) => {
+		await open(page, `/app/monitors/${monitors.threshold.id}`);
+		await drag(page);
+		await expect(page).toHaveURL(/\?from_ts=\d+&to_ts=\d+&live=false$/);
+
+		await page.getByRole('link', { name: '1h', exact: true }).click();
+		await expect(page).toHaveURL(/\?range=-1h$/);
+	});
+
+	test('in the explorer, Back undoes a zoom', async ({ page }) => {
+		await page.route('**/app/metrics/query', async (route) => {
+			const { from, to } = route.request().postDataJSON();
+			const points = [0, 1, 2, 3, 4].map((i) => ({ t: from + ((to - from) / 4) * i, v: i }));
+			await route.fulfill({
+				json: { series: [{ output: 0, tags: [], points, band: [], forecast: [] }] }
+			});
+		});
+		await open(page, routes.find((r) => r.name === 'metrics-long-query')!.path);
+		await drag(page);
+		await expect(page).toHaveURL(/&from_ts=\d+&to_ts=\d+&live=false$/);
+
+		await page.goBack();
+		await expect(page).toHaveURL(/\/app\/metrics\?view=[^&]+$/);
 	});
 });
 

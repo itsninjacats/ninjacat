@@ -18,6 +18,7 @@
 		type ChartLine
 	} from '$lib/components/app/metrics/uplot-chart.svelte';
 	import QueryRow from '$lib/components/app/metrics/query-row.svelte';
+	import RangeLabel from '$lib/components/app/metrics/range-label.svelte';
 	import MonitorConditions from './monitor-conditions.svelte';
 	import NumberInput from './number-input.svelte';
 	import {
@@ -33,7 +34,7 @@
 		type MonitorView
 	} from '$lib/monitors/definition';
 	import { methodLabel, thresholdRules } from '$lib/monitors/states';
-	import { emptyFormula, emptyQuery, nextQueryName } from '$lib/metrics/query';
+	import { emptyFormula, emptyQuery, nextQueryName, type FixedRange } from '$lib/metrics/query';
 	import { m } from '$lib/paraglide/messages';
 
 	let {
@@ -84,6 +85,8 @@
 	];
 	let chosenRange = $state<number | null>(null);
 	const rangeSeconds = $derived(chosenRange ?? chartRangeSeconds(view));
+	// Not in the URL: the queries it would redraw live in the form, not there.
+	let zoom = $state<FixedRange | null>(null);
 
 	const request = $derived(chartRequest(view));
 	let lines = $state<ChartLine[]>([]);
@@ -92,7 +95,7 @@
 	let chartProblems = $state<string[]>([]);
 	let refreshes = $state(0);
 
-	const requestKey = $derived(JSON.stringify({ request, rangeSeconds, refreshes }));
+	const requestKey = $derived(JSON.stringify({ request, rangeSeconds, zoom, refreshes }));
 
 	$effect(() => {
 		const { request: asked, rangeSeconds: seconds } = JSON.parse(requestKey) as {
@@ -107,8 +110,8 @@
 		}
 		const controller = new AbortController();
 		const timer = setTimeout(() => {
-			const to = Date.now();
-			const from = to - seconds * 1000;
+			const to = zoom?.to ?? Date.now();
+			const from = zoom?.from ?? to - seconds * 1000;
 			loading = true;
 			fetch('/app/metrics/query', {
 				method: 'POST',
@@ -277,11 +280,17 @@
 		</Card.Header>
 		<Card.Content class="space-y-4">
 			<div class="flex flex-wrap items-center justify-end gap-1">
+				{#if zoom}
+					<RangeLabel range={zoom} />
+				{/if}
 				{#each RANGES as r (r.seconds)}
 					<Button
 						size="sm"
-						variant={rangeSeconds === r.seconds ? 'default' : 'ghost'}
-						onclick={() => (chosenRange = r.seconds)}
+						variant={!zoom && rangeSeconds === r.seconds ? 'default' : 'ghost'}
+						onclick={() => {
+							chosenRange = r.seconds;
+							zoom = null;
+						}}
 					>
 						{r.label}
 					</Button>
@@ -316,7 +325,14 @@
 					{request.formulas.length === 0 ? m.monitor_chart_pick_metric() : m.monitor_chart_empty()}
 				</div>
 			{:else}
-				<MetricsChart {lines} window={shownWindow} display="line" {rules} {zone} />
+				<MetricsChart
+					{lines}
+					window={shownWindow}
+					display="line"
+					{rules}
+					{zone}
+					onzoom={(from, to) => (zoom = { from, to })}
+				/>
 			{/if}
 
 			<div class="space-y-2">
