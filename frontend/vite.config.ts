@@ -15,6 +15,24 @@ export default defineConfig({
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 			adapter: adapter(),
+			csp: {
+				mode: 'auto',
+				directives: {
+					'default-src': ['self'],
+					'script-src': ['self'],
+					'style-src': ['self'],
+					// Components render style="" attributes (sidebar widths, chart colours).
+					'style-src-attr': ['unsafe-inline'],
+					'img-src': ['self', 'data:', 'blob:'],
+					'font-src': ['self', 'data:'],
+					// hooks.server.ts adds the RUM intake when one is configured.
+					'connect-src': ['self'],
+					'object-src': ['none'],
+					'base-uri': ['self'],
+					'form-action': ['self'],
+					'frame-ancestors': ['none']
+				}
+			},
 			typescript: {
 				config: (config) => {
 					config.include.push('../drizzle.config.ts', '../playwright.config.ts');

@@ -85,7 +85,7 @@ Open, most urgent first:
 - [ ] Logs over TCP (:10516): on by default in the image (the chart turns it off), plain
       text unless given a certificate, no limit on connections, no timeout, the key checked
       only when a whole frame has arrived.
-- [ ] The panel sends no security headers (CSP, `frame-ancestors`, HSTS, nosniff).
+- [x] The panel sends security headers: a CSP with nonces (`kit.csp`), `frame-ancestors`, HSTS, nosniff (2026-10-15).
 - [ ] The server falls back to the ClickHouse password `ninjacat` when none is set
       (`Config.fs`); the chart and `compose.prod.yaml` always set one. Fail instead.
 - [ ] `compose.prod.yaml`: the panel on every interface as plain HTTP, no health checks on

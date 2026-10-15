@@ -45,7 +45,6 @@ const zoomed = fixedRangeParams({ from: seedEnd - 4 * 3_600_000, to: seedEnd });
 
 export const routes: ViewRoute[] = [
 	{ name: 'login', path: '/login', as: null },
-	{ name: 'home', path: '/', as: 'memberA' },
 	{ name: 'no-tenant', path: '/no-tenant', as: 'noTenant' },
 	{ name: 'overview', path: '/app', as: 'longEmail' },
 	{ name: 'metrics', path: '/app/metrics', as: 'longEmail' },
