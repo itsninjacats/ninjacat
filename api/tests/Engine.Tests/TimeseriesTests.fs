@@ -113,10 +113,16 @@ let ``from must be before to`` () =
     let es = errorsOf (body """ "from":2000,"to":1000,"queries":[{"data_source":"metrics","query":"x{*}"}] """)
     Assert.Contains("data.attributes.from must be earlier than data.attributes.to", es)
 
-[<Fact>]
-let ``a time past what a date can hold is a 400, not an exception`` () =
-    let es = errorsOf (body """ "from":900000000000000,"to":900000000000001,"queries":[{"data_source":"metrics","query":"x{*}"}] """)
-    Assert.Contains("data.attributes.from and data.attributes.to must be unix milliseconds between years 1 and 9999", es)
+[<Theory>]
+[<InlineData(253402300800000L, 253402300800001L)>] // year 10000
+[<InlineData(-62135596800001L, -62135596800000L)>] // before year 1
+[<InlineData(-9223372036854775808L, 9223372036854775807L)>]
+let ``a time past what is stored is kept at the limit, not refused`` (from: int64, to': int64) =
+    match readJson (body $""" "from":{from},"to":{to'},"queries":[{{"data_source":"metrics","query":"x{{*}}"}}] """) with
+    | Error es -> Assert.Fail(String.Join("\n", es))
+    | Ok r ->
+        for t in [ r.From; r.To ] do
+            Assert.InRange(t, DateTimeOffset.UnixEpoch, DateTimeOffset(2106, 1, 1, 0, 0, 0, TimeSpan.Zero))
 
 [<Fact>]
 let ``wrong JSON types are reported in the deserializer's own words`` () =

@@ -15,6 +15,7 @@ module NinjaCat.Api.Engine.Api.V2.Timeseries
 
 open System
 open System.Text.Json
+open NinjaCat.Api.Engine
 open NinjaCat.Api.Engine.MetricQuery
 open NinjaCat.Api.Engine.Api.V2.Wire
 
@@ -102,13 +103,7 @@ let parse (raw: TimeseriesFormulaRequestAttributes) : Result<ParsedTimeseriesReq
     let from, to' = raw.From.Value, raw.To.Value
     let sentQueries = defaultArg raw.Queries []
 
-    let representable (ms: int64) =
-        ms >= DateTimeOffset.MinValue.ToUnixTimeMilliseconds()
-        && ms <= DateTimeOffset.MaxValue.ToUnixTimeMilliseconds()
-
-    if not (representable from && representable to') then
-        errors.Add "data.attributes.from and data.attributes.to must be unix milliseconds between years 1 and 9999"
-    elif from >= to' then
+    if from >= to' then
         errors.Add "data.attributes.from must be earlier than data.attributes.to"
 
     if sentQueries.IsEmpty then
@@ -164,9 +159,9 @@ let parse (raw: TimeseriesFormulaRequestAttributes) : Result<ParsedTimeseriesReq
         Error(List.ofSeq errors)
     else
         Ok
-            { From = DateTimeOffset.FromUnixTimeMilliseconds from
-              To = DateTimeOffset.FromUnixTimeMilliseconds to'
-              Interval = raw.Interval |> Option.map (float >> TimeSpan.FromMilliseconds)
+            { From = UnixTime.ofMillis from
+              To = UnixTime.ofMillis to'
+              Interval = raw.Interval |> Option.map (float >> UnixTime.spanOfMillis)
               Queries = queries
               Formulas = formulas }
 

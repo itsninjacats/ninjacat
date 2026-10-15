@@ -348,7 +348,7 @@ let private readRollup (sofar: Modifiers) (args: Literal list) : Result<Modifier
         | None, _ -> Error ".rollup() method must be one of avg, sum, min, max, count"
         | Some method, [] -> Ok { sofar with Method = Some method }
         | Some method, [ Num seconds ] when seconds >= 1.0 ->
-            Ok { sofar with Method = Some method; Interval = Some(TimeSpan.FromSeconds seconds) }
+            Ok { sofar with Method = Some method; Interval = Some(UnixTime.spanOfMillis (seconds * 1000.0)) }
         | Some _, [ Num _ ] -> Error ".rollup() interval must be at least 1 second"
         | Some _, _ -> Error "calendar .rollup() (daily, weekly, monthly, alignment, timezone) is not supported yet"
 
@@ -607,7 +607,7 @@ let outlierArgs (args: Literal list) : Result<OutlierAlgorithm * float, string> 
 /// The same wall-clock time n units back in that zone, so "-1d" across a DST
 /// change is 23 or 25 hours.
 let private calendarShift (spec: string) (timezone: string) (from: DateTimeOffset) : Result<int64, string> =
-    let m = Regex.Match(spec, "^-(\\d+)(d|w|mo)$")
+    let m = Regex.Match(spec, "^-(\\d{1,4})(d|w|mo)$")
 
     let zone =
         try
@@ -638,7 +638,8 @@ let private calendarShift (spec: string) (timezone: string) (from: DateTimeOffse
 /// exact calendar counterparts.
 let private shiftOffset (from: DateTimeOffset) (name: string) (args: Literal list) : Result<int64, string> =
     match name, args with
-    | "timeshift", [ Num seconds ] when seconds <> 0.0 && seconds = Math.Floor seconds -> Ok(int64 seconds * 1000L)
+    | "timeshift", [ Num seconds ] when seconds <> 0.0 && seconds = Math.Floor seconds ->
+        Ok(int64 (UnixTime.spanOfMillis (seconds * 1000.0)).TotalMilliseconds)
     | "timeshift", _ -> Error "timeshift() takes a query and a whole, non-zero number of seconds: timeshift(query, -3600)"
     | "hour_before", [] -> Ok -3_600_000L
     | "day_before", [] -> Ok -86_400_000L
@@ -1087,7 +1088,7 @@ let private readsBefore (cutoff: DateTimeOffset) (from: DateTimeOffset) (queries
     |> List.indexed
     |> List.exists (fun (i, q) ->
         let furthestBack = reads |> List.filter (fun (source, _) -> source = i) |> List.fold (fun back (_, offset) -> min back offset) 0L
-        from.AddMilliseconds(float (furthestBack - earliestOffsetMs q)) < cutoff)
+        from.ToUnixTimeMilliseconds() + furthestBack - earliestOffsetMs q < cutoff.ToUnixTimeMilliseconds())
 
 /// Plans a request at `now`: the engine never reads the clock.
 let plan (retention: Retention) (now: DateTimeOffset) (req: ParsedTimeseriesRequest) : Result<Plan, string list> =

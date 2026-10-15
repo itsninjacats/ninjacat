@@ -43,7 +43,7 @@ let activeMetrics: EndpointHandler =
             task {
                 let req: Metrics.ActiveMetricsRequest =
                     { Tenant = QueryToken.tenant ctx
-                      From = DateTimeOffset.FromUnixTimeSeconds from
+                      From = UnixTime.ofSeconds from
                       Host = ctx.TryGetQueryValue "host" |> Option.filter (String.IsNullOrEmpty >> not) }
 
                 let client = ctx.GetService<ClickHouseClient>()

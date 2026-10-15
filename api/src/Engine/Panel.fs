@@ -43,18 +43,20 @@ let parseTagFilters (raw: string list) : Result<TagFilter, string> =
         | [ key ] -> Ok(ofKey key)
         | keys -> Ok(And(List.map ofKey keys))
 
-/// A point in time from a query parameter: empty (the fallback), "now", an
-/// offset from now ("-6h"), or RFC 3339. A dashboard wants "the last six
-/// hours", not six hours before the day it was saved.
-let parseTime (raw: string) (fallback: DateTimeOffset) (now: DateTimeOffset) : Result<DateTimeOffset, string> =
+/// A point in time from a query parameter, in unix milliseconds: empty (the
+/// fallback), "now", an offset from now ("-6h"), or RFC 3339. A dashboard
+/// wants "the last six hours", not six hours before the day it was saved.
+/// Milliseconds, so that a range is ordered before it is clamped to a date.
+let parseTime (raw: string) (fallback: DateTimeOffset) (now: DateTimeOffset) : Result<int64, string> =
     let raw = raw.Trim()
 
     if raw = "" then
-        Ok fallback
+        Ok(fallback.ToUnixTimeMilliseconds())
     elif raw = "now" then
-        Ok now
+        Ok(now.ToUnixTimeMilliseconds())
     elif raw.StartsWith "-" || raw.StartsWith "+" then
-        Duration.parse raw |> Result.map (fun offset -> now + offset)
+        Duration.parse raw
+        |> Result.map (fun offset -> now.ToUnixTimeMilliseconds() + int64 offset.TotalMilliseconds)
     else
         match
             DateTimeOffset.TryParseExact(
@@ -64,7 +66,7 @@ let parseTime (raw: string) (fallback: DateTimeOffset) (now: DateTimeOffset) : R
                 DateTimeStyles.AssumeUniversal
             )
         with
-        | true, parsed -> Ok(parsed.ToUniversalTime())
+        | true, parsed -> Ok(parsed.ToUnixTimeMilliseconds())
         | false, _ -> Error $"cannot parse \"{raw}\" as a time: want RFC 3339, \"now\" or an offset like -1h"
 
 /// The words of a search text as ClickHouse's hasToken wants them: runs of

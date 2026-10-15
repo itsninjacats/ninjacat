@@ -13,6 +13,7 @@
     <Compile Include="Serialization.fs" />
     <Compile Include="Sql.fs" />
     <Compile Include="Duration.fs" />
+    <Compile Include="UnixTime.fs" />
     <Compile Include="Metrics.fs" />
     <Compile Include="MetricQuery/Ast.fs" />
     <Compile Include="MetricQuery/Filter.fs" />

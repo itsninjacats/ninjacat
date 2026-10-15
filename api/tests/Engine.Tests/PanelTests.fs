@@ -44,7 +44,7 @@ let ``a tag without key or value is refused`` (tag: string) =
 [<Fact>]
 let ``times are relative, absolute, or the fallback`` () =
     let fallback = noon.AddHours -1.0
-    let parse raw = ok (parseTime raw fallback noon)
+    let parse raw = DateTimeOffset.FromUnixTimeMilliseconds(ok (parseTime raw fallback noon))
     Assert.Equal(fallback, parse "")
     Assert.Equal(noon, parse "now")
     Assert.Equal(noon.AddHours -6.0, parse "-6h")
@@ -54,6 +54,12 @@ let ``times are relative, absolute, or the fallback`` () =
     Assert.Equal(noon.AddHours -36.0, parse "-1.5d")
     Assert.Equal(DateTimeOffset(2026, 9, 21, 9, 30, 0, TimeSpan.Zero), parse "2026-09-21T09:30:00Z")
     Assert.Equal(noon.AddMinutes -90.0, parse "-1h30m")
+
+[<Fact>]
+let ``an offset past what a date can hold is still a time`` () =
+    let day = 86_400_000L
+    Assert.Equal(Ok(noon.ToUnixTimeMilliseconds() - 5_000_000L * day), parseTime "-5000000d" noon noon)
+    Assert.Equal(Ok(noon.ToUnixTimeMilliseconds() + 5_000_000L * day), parseTime "+5000000d" noon noon)
 
 [<Theory>]
 [<InlineData("yesterday")>]

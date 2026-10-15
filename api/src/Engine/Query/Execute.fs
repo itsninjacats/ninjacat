@@ -27,7 +27,8 @@ let private fetchAll (execute: Sql -> Task<Row list>) (tenant: TenantId) (window
                     // A shifted read is the same query over a shifted window;
                     // its times are moved back onto the present one.
                     let query = window.Queries[i]
-                    let shifted = { window with From = window.From.AddMilliseconds(float offset); To = window.To.AddMilliseconds(float offset) }
+                    let shift (t: DateTimeOffset) = UnixTime.ofMillis (t.ToUnixTimeMilliseconds() + offset)
+                    let shifted = { window with From = shift window.From; To = shift window.To }
                     let! rows = execute (compile tenant shifted query)
                     let keepFrom = keepFromMs shifted query
 

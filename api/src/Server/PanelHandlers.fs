@@ -74,7 +74,7 @@ let timeRange (ctx: HttpContext) : Result<DateTimeOffset * DateTimeOffset, strin
     | Error e, _ -> Error("bad from: " + e)
     | _, Error e -> Error("bad to: " + e)
     | Ok from, Ok until when until <= from -> Error "to must be after from"
-    | Ok from, Ok until -> Ok(from, until)
+    | Ok from, Ok until -> Ok(UnixTime.ofMillis from, UnixTime.ofMillis until)
 
 /// One metric over a time range, one series per host or per combination of
 /// the `by` keys. The query engine runs it, as it runs every other query.

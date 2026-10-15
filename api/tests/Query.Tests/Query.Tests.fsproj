@@ -7,6 +7,7 @@
     <Compile Include="TestServer.fs" />
     <Compile Include="TokenTests.fs" />
     <Compile Include="MonitorTests.fs" />
+    <Compile Include="TimeRangeTests.fs" />
   </ItemGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
