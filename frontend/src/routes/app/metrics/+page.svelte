@@ -20,7 +20,7 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import FunctionChips from '$lib/components/app/metrics/function-chips.svelte';
-	import MetricsChart, { type ChartLine } from '$lib/components/app/metrics/metrics-chart.svelte';
+	import MetricsChart, { type ChartLine } from '$lib/components/app/metrics/uplot-chart.svelte';
 	import QueryRow from '$lib/components/app/metrics/query-row.svelte';
 	import ScalarView, { type ScalarTable } from '$lib/components/app/metrics/scalar-view.svelte';
 	import {
