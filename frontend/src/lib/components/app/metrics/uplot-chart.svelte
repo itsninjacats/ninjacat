@@ -526,7 +526,8 @@
 					<span class="h-0.5 w-2.5 shrink-0" style:background={lines[r.i].color}></span>
 					<span class="min-w-0 flex-1 truncate">
 						{lines[r.i].label}
-						{#if r.forecast}<span class="text-muted-foreground">· {m.chart_tooltip_forecast()}</span
+						{#if r.forecast}<span class="ml-1 text-muted-foreground"
+								>· {m.chart_tooltip_forecast()}</span
 							>{/if}
 					</span>
 					<span class="font-mono text-foreground tabular-nums">{formatValue(r.value)}</span>
