@@ -1,7 +1,7 @@
 @import 'tailwindcss';
-@import "tw-animate-css";
-@import "shadcn-svelte/tailwind.css";
-@import "@fontsource-variable/instrument-sans";
+@import 'tw-animate-css';
+@import 'shadcn-svelte/tailwind.css';
+@import '@fontsource-variable/instrument-sans';
 
 @custom-variant dark (&:is(.dark *));
 @plugin '@tailwindcss/forms';
@@ -26,11 +26,20 @@
 	--border: oklch(0.922 0 0);
 	--input: oklch(0.922 0 0);
 	--ring: oklch(0.708 0 0);
-	--chart-1: oklch(0.837 0.128 66.29);
-	--chart-2: oklch(0.705 0.213 47.604);
-	--chart-3: oklch(0.646 0.222 41.116);
-	--chart-4: oklch(0.553 0.195 38.402);
-	--chart-5: oklch(0.47 0.157 37.304);
+	/* Ordered so that neighbours, and any four of the first, stay apart for colour-blind eyes too. */
+	--chart-1: oklch(0.553 0.164 258.8);
+	--chart-2: oklch(0.653 0.107 182.1);
+	--chart-3: oklch(0.691 0.129 289.3);
+	--chart-4: oklch(0.716 0.106 76.3);
+	--chart-5: oklch(0.555 0.103 224.8);
+	--chart-6: oklch(0.74 0.111 234.3);
+	--chart-7: oklch(0.43 0.118 256.5);
+	--chart-8: oklch(0.623 0.164 356.1);
+	/* A monitor group's states, Datadog's colours. */
+	--state-ok: oklch(0.627 0.17 149.214);
+	--state-warn: oklch(0.705 0.17 70);
+	--state-alert: oklch(0.577 0.245 27.325);
+	--state-no-data: oklch(0.556 0 0);
 	--radius: 0.625rem;
 	--sidebar: oklch(0.985 0 0);
 	--sidebar-foreground: oklch(0.145 0 0);
@@ -61,11 +70,10 @@
 	--border: oklch(1 0 0 / 10%);
 	--input: oklch(1 0 0 / 15%);
 	--ring: oklch(0.556 0 0);
-	--chart-1: oklch(0.837 0.128 66.29);
-	--chart-2: oklch(0.705 0.213 47.604);
-	--chart-3: oklch(0.646 0.222 41.116);
-	--chart-4: oklch(0.553 0.195 38.402);
-	--chart-5: oklch(0.47 0.157 37.304);
+	--state-ok: oklch(0.723 0.192 149.579);
+	--state-warn: oklch(0.795 0.162 70);
+	--state-alert: oklch(0.704 0.191 22.216);
+	--state-no-data: oklch(0.708 0 0);
 	--sidebar: oklch(0.205 0 0);
 	--sidebar-foreground: oklch(0.985 0 0);
 	--sidebar-primary: oklch(0.705 0.213 47.604);
@@ -92,6 +100,10 @@
 	--color-chart-3: var(--chart-3);
 	--color-chart-2: var(--chart-2);
 	--color-chart-1: var(--chart-1);
+	--color-state-ok: var(--state-ok);
+	--color-state-warn: var(--state-warn);
+	--color-state-alert: var(--state-alert);
+	--color-state-no-data: var(--state-no-data);
 	--color-ring: var(--ring);
 	--color-input: var(--input);
 	--color-border: var(--border);

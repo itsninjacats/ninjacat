@@ -50,7 +50,7 @@ RUN bun build scripts/migrate.ts --target=node --outfile=migrate.js
 
 # The account-creation entrypoint, bundled the same way.
 #
-# Registration is closed (src/lib/server/auth.ts), so without this a fresh
+# Registration is closed (src/lib/server/auth-options.ts), so without this a fresh
 # deployment has no way to make its first account: the runtime image carries
 # node and nothing else — no bun, no TypeScript, no scripts directory. That
 # was a real gap, found by trying to log into a freshly deployed lab.

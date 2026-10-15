@@ -1,0 +1,98 @@
+{
+ "recorded_at": "2026-10-01T15:21:35.290899219Z",
+ "request": {
+  "body_b64": "eyJub3QiOiJhbiBhcnJheSJ9",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/data_streams_messages"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeTrace"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:35.290896384Z",
+     "trace",
+     "unexpected_shape",
+     "POST",
+     "example.com",
+     "/api/v2/data_streams_messages",
+     {},
+     "application/json",
+     "",
+     {},
+     "{\"not\":\"an array\"}",
+     18,
+     "body is not the JSON array the forwarder sends: expected a list, got object"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "{\"not\":\"an array\"}",
+     "BodyBytes": 18,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "trace",
+     "Method": "POST",
+     "Note": "body is not the JSON array the forwarder sends: expected a list, got object",
+     "Path": "/api/v2/data_streams_messages",
+     "Query": {},
+     "Reason": "unexpected_shape",
+     "ReceivedAt": "2026-10-01T15:21:35.290896384Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 2,
+ "test": "TestHandleDataStreamsMessages",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ],
+ "edited": "A body that is not a list is refused in one wording for every intake (\"expected a list, got …\"); the note no longer quotes Go's encoding/json."
+}

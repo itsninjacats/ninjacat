@@ -1,0 +1,31 @@
+{
+ "recorded_at": "2026-10-01T15:21:19.001566183Z",
+ "request": {
+  "body_b64": "",
+  "headers": {},
+  "host": "example.com",
+  "method": "GET",
+  "url": "/api/unstable/synthetics/agents/tests"
+ },
+ "response": {
+  "body_b64": "eyJlcnJvcnMiOlsiaW52YWxpZCBBUEkga2V5Il19",
+  "body_json": {
+   "errors": [
+    "invalid API key"
+   ]
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 403
+ },
+ "routes": [
+  "routeSyntheticsAgent"
+ ],
+ "sends": [],
+ "seq": 1,
+ "test": "TestSyntheticsAgentPollerNeedsAKey",
+ "volatile": []
+}

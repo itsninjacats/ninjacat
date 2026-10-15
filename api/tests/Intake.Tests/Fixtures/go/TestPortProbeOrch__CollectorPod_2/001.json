@@ -1,0 +1,930 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.428814541Z",
+ "request": {
+  "body_b64": "AgApCZIQAAAKAnMyEgxzNCA8Jj4gIsOpIgoaAnM2IPj//////////wEoCjLKAwqHARIDczE1IJLiz6oGMgdrMjE6djIxMhVrMjE6b3RoZXI6d2l0aDpjb2xvbnMyBmJhcmUyMTIIejIxOmxhc3RCCgoDczI1EgNzMjdCCgoDczMwGgNzMzNSB2szNjp2MzZSFWszNjpvdGhlcjp3aXRoOmNvbG9uc1IGYmFyZTM2Ugh6MzY6bGFzdBIDczM5IgNzNDIwLUoDczc1WgdrNzg6djc4WhVrNzg6b3RoZXI6d2l0aDpjb2xvbnNaBmJhcmU3OFoIejc4Omxhc3RqSAoSCgVrZXk4NBCr//////////8BCg0KBWtleTgyENPiz6oGEhIKBWtleTg5EKb//////////wESDQoFa2V5ODcQ2OLPqgYgAmogEg0KBWtleTk4EOPiz6oGEg0KBWtleTk2EOHiz6oGIAFyIAoDczQ5EgNzNTEgNjIDczU3Qg1zNjAgPCY+ICLDqSIKchsSA3M2MyBCMgNzNjlCDXM3MiA8Jj4gIsOpIgqCAQRzMTA1kAHs4s+qBqIBLAoOczExMiA8Jj4gIsOpIgoSBHMxMTQg9eLPqgYyDnMxMjAgPCY+ICLDqSIKogESEgRzMTIzIP6umaQPMgRzMTI5MvcDCpwBCgRzMTMzEgRzMTM1IIrjz6oGMglrMTQxOnYxNDEyFmsxNDE6b3RoZXI6d2l0aDpjb2xvbnMyB2JhcmUxNDEyCXoxNDE6bGFzdEIMCgRzMTQ1EgRzMTQ3QgwKBHMxNTAaBHMxNTNSCWsxNTY6djE1NlIWazE1NjpvdGhlcjp3aXRoOmNvbG9uc1IHYmFyZTE1NlIJejE1NjpsYXN0EgRzMTU5IgRzMTYyMKUBSgRzMTk1WglrMTk4OnYxOThaFmsxOTg6b3RoZXI6d2l0aDpjb2xvbnNaB2JhcmUxOThaCXoxOTg6bGFzdGpMChMKBmtleTIwNBCz/v////////8BCg4KBmtleTIwMhDL48+qBhITCgZrZXkyMDkQrv7/////////ARIOCgZrZXkyMDcQ0OPPqgYgAmoiEg4KBmtleTIxOBDb48+qBhIOCgZrZXkyMTYQ2ePPqgYgAXIlCgRzMTY5EgRzMTcxIK4BMgRzMTc3Qg5zMTgwIDwmPiAiw6kiCnIfEgRzMTgzILoBMgRzMTg5Qg5zMTkyIDwmPiAiw6kiCoIBBHMyMjWQAeTjz6oGogEsCg5zMjMyIDwmPiAiw6kiChIEczIzNCDt48+qBjIOczI0MCA8Jj4gIsOpIgqiARISBHMyNDMg9q+ZpA8yBHMyNDk6Ugj+gYCAgICAEBD/ATIJazI1ODp2MjU4MhZrMjU4Om90aGVyOndpdGg6Y29sb25zMgdiYXJlMjU4Mgl6MjU4Omxhc3RAhoKAgICAgBBQiOTPqgZCCWsyNjY6djI2NkIWazI2NjpvdGhlcjp3aXRoOmNvbG9uc0IHYmFyZTI2NkIJejI2NjpsYXN0Sm4SHAoEczI3MRIEczI3MyIOczI3NiA8Jj4gIsOpIgoaLQjo/f////////8BEgRzMjgyIgRzMjg1Mg5zMjg4IDwmPiAiw6kiCkCjsJmkDxofCKYCGgRzMjk3Kg5zMzAwIDwmPiAiw6kiCjivAkiyAlABWhIQuOTPqgYiBHMzMTUyBHMzMTg=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.428134256Z",
+     "s6",
+     "s4 <&> \"é\"\n",
+     "Pod",
+     "s15",
+     "",
+     "",
+     "",
+     "",
+     "s25",
+     "s42",
+     "",
+     "s75",
+     0,
+     0,
+     0,
+     {
+      "init_restarts": 120,
+      "pod_restart_count": 45,
+      "ready_containers": 0,
+      "ready_init_containers": 0,
+      "restarts": 0,
+      "total_containers": 0,
+      "total_init_containers": 2
+     },
+     {
+      "bare21": "",
+      "k21": "other:with:colons",
+      "z21": "last"
+     },
+     {},
+     {
+      "bare266": [
+       ""
+      ],
+      "bare78": [
+       ""
+      ],
+      "k266": [
+       "v266",
+       "other:with:colons"
+      ],
+      "k78": [
+       "v78",
+       "other:with:colons"
+      ],
+      "z266": [
+       "last"
+      ],
+      "z78": [
+       "last"
+      ]
+     },
+     "0.1700000312.0-s315",
+     -8,
+     10,
+     4242,
+     9,
+     null,
+     "protobuf",
+     "2023-11-14T22:13:38Z",
+     null,
+     null,
+     [
+      "k36:v36",
+      "k36:other:with:colons",
+      "bare36",
+      "z36:last"
+     ],
+     [
+      "",
+      "s33"
+     ],
+     [
+      "s25",
+      "s30"
+     ],
+     [
+      "s27",
+      ""
+     ],
+     [
+      "s112 <&> \"é\"\n",
+      ""
+     ],
+     [
+      "s114",
+      "s123"
+     ],
+     [
+      "",
+      ""
+     ],
+     [
+      "s120 <&> \"é\"\n",
+      "s129"
+     ],
+     [
+      "2023-11-14T22:15:17Z",
+      "2100-01-01T00:02:06Z"
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ],
+     "",
+     "[{ \"limits\": { \"key84\": \"-85\", \"key82\": \"1700000083\" }, \"requests\": { \"key89\": \"-90\", \"key87\": \"1700000088\" }, \"type\": \"initContainer\" },{ \"requests\": { \"key98\": \"1700000099\", \"key96\": \"1700000097\" }, \"type\": \"container\" }]",
+     {},
+     "{ \"metadata\": { \"namespace\": \"s15\", \"creationTimestamp\": \"1700000018\", \"labels\": [ \"k21:v21\", \"k21:other:with:colons\", \"bare21\", \"z21:last\" ], \"ownerReferences\": [ { \"name\": \"s25\", \"uid\": \"s27\" }, { \"name\": \"s30\", \"kind\": \"s33\" } ], \"finalizers\": [ \"k36:v36\", \"k36:other:with:colons\", \"bare36\", \"z36:last\" ] }, \"IP\": \"s39\", \"nodeName\": \"s42\", \"restartCount\": 45, \"status\": \"s75\", \"tags\": [ \"k78:v78\", \"k78:other:with:colons\", \"bare78\", \"z78:last\" ], \"resourceRequirements\": [ { \"limits\": { \"key84\": \"-85\", \"key82\": \"1700000083\" }, \"requests\": { \"key89\": \"-90\", \"key87\": \"1700000088\" }, \"type\": \"initContainer\" }, { \"requests\": { \"key98\": \"1700000099\", \"key96\": \"1700000097\" }, \"type\": \"container\" } ], \"initContainerStatuses\": [ { \"name\": \"s49\", \"containerID\": \"s51\", \"restartCount\": 54, \"message\": \"s57\", \"imageID\": \"s60 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"containerID\": \"s63\", \"restartCount\": 66, \"message\": \"s69\", \"imageID\": \"s72 \\u003c&\\u003e \\\"é\\\"\\n\" } ], \"priorityClass\": \"s105\", \"startTime\": \"1700000108\", \"conditions\": [ { \"type\": \"s112 \\u003c&\\u003e \\\"é\\\"\\n\", \"status\": \"s114\", \"lastTransitionTime\": \"1700000117\", \"message\": \"s120 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"status\": \"s123\", \"lastTransitionTime\": \"4102444926\", \"message\": \"s129\" } ] }",
+     "s39",
+     "",
+     "",
+     "s105",
+     "2023-11-14T22:15:08Z",
+     null,
+     "s2",
+     [
+      "s49",
+      ""
+     ],
+     [
+      "s51",
+      "s63"
+     ],
+     "\u0000\u0000",
+     [
+      54,
+      66
+     ],
+     [
+      "",
+      ""
+     ],
+     [
+      "s57",
+      "s69"
+     ],
+     [
+      "",
+      ""
+     ],
+     [
+      "s60 <&> \"é\"\n",
+      "s72 <&> \"é\"\n"
+     ],
+     "\u0001\u0001",
+     "",
+     [],
+     0,
+     "",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "{ \"hostName\": \"s2\", \"clusterName\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"clusterId\": \"s6\", \"groupId\": -8, \"groupSize\": 10, \"host\": { \"id\": \"9007199254741246\", \"orgId\": 255, \"allTags\": [ \"k258:v258\", \"k258:other:with:colons\", \"bare258\", \"z258:last\" ], \"totalMemory\": \"9007199254741254\", \"tagsModified\": \"1700000264\" }, \"tags\": [ \"k266:v266\", \"k266:other:with:colons\", \"bare266\", \"z266:last\" ], \"info\": { \"os\": { \"name\": \"s271\", \"platform\": \"s273\", \"version\": \"s276 \\u003c&\\u003e \\\"é\\\"\\n\" }, \"cpus\": [ { \"number\": -280, \"vendor\": \"s282\", \"model\": \"s285\", \"coreId\": \"s288 \\u003c&\\u003e \\\"é\\\"\\n\", \"mhz\": \"4102445091\" }, { \"number\": 294, \"family\": \"s297\", \"physicalId\": \"s300 \\u003c&\\u003e \\\"é\\\"\\n\", \"cores\": 303, \"cacheSize\": 306 } ] }, \"isTerminated\": true, \"agentVersion\": { \"Minor\": \"1700000312\", \"Pre\": \"s315\", \"Commit\": \"s318\" } }"
+    ],
+    [
+     "test",
+     "2026-10-01T16:08:42.428134256Z",
+     "s6",
+     "s4 <&> \"é\"\n",
+     "Pod",
+     "s135",
+     "s133",
+     "",
+     "",
+     "",
+     "s145",
+     "s162",
+     "",
+     "s195",
+     0,
+     0,
+     0,
+     {
+      "init_restarts": 360,
+      "pod_restart_count": 165,
+      "ready_containers": 0,
+      "ready_init_containers": 0,
+      "restarts": 0,
+      "total_containers": 0,
+      "total_init_containers": 2
+     },
+     {
+      "bare141": "",
+      "k141": "other:with:colons",
+      "z141": "last"
+     },
+     {},
+     {
+      "bare198": [
+       ""
+      ],
+      "bare266": [
+       ""
+      ],
+      "k198": [
+       "v198",
+       "other:with:colons"
+      ],
+      "k266": [
+       "v266",
+       "other:with:colons"
+      ],
+      "z198": [
+       "last"
+      ],
+      "z266": [
+       "last"
+      ]
+     },
+     "0.1700000312.0-s315",
+     -8,
+     10,
+     4242,
+     9,
+     null,
+     "protobuf",
+     "2023-11-14T22:15:38Z",
+     null,
+     null,
+     [
+      "k156:v156",
+      "k156:other:with:colons",
+      "bare156",
+      "z156:last"
+     ],
+     [
+      "",
+      "s153"
+     ],
+     [
+      "s145",
+      "s150"
+     ],
+     [
+      "s147",
+      ""
+     ],
+     [
+      "s232 <&> \"é\"\n",
+      ""
+     ],
+     [
+      "s234",
+      "s243"
+     ],
+     [
+      "",
+      ""
+     ],
+     [
+      "s240 <&> \"é\"\n",
+      "s249"
+     ],
+     [
+      "2023-11-14T22:17:17Z",
+      "2100-01-01T00:04:06Z"
+     ],
+     [
+      null,
+      null
+     ],
+     [
+      null,
+      null
+     ],
+     "",
+     "[{ \"limits\": { \"key204\": \"-205\", \"key202\": \"1700000203\" }, \"requests\": { \"key209\": \"-210\", \"key207\": \"1700000208\" }, \"type\": \"initContainer\" },{ \"requests\": { \"key218\": \"1700000219\", \"key216\": \"1700000217\" }, \"type\": \"container\" }]",
+     {},
+     "{ \"metadata\": { \"name\": \"s133\", \"namespace\": \"s135\", \"creationTimestamp\": \"1700000138\", \"labels\": [ \"k141:v141\", \"k141:other:with:colons\", \"bare141\", \"z141:last\" ], \"ownerReferences\": [ { \"name\": \"s145\", \"uid\": \"s147\" }, { \"name\": \"s150\", \"kind\": \"s153\" } ], \"finalizers\": [ \"k156:v156\", \"k156:other:with:colons\", \"bare156\", \"z156:last\" ] }, \"IP\": \"s159\", \"nodeName\": \"s162\", \"restartCount\": 165, \"status\": \"s195\", \"tags\": [ \"k198:v198\", \"k198:other:with:colons\", \"bare198\", \"z198:last\" ], \"resourceRequirements\": [ { \"limits\": { \"key204\": \"-205\", \"key202\": \"1700000203\" }, \"requests\": { \"key209\": \"-210\", \"key207\": \"1700000208\" }, \"type\": \"initContainer\" }, { \"requests\": { \"key218\": \"1700000219\", \"key216\": \"1700000217\" }, \"type\": \"container\" } ], \"initContainerStatuses\": [ { \"name\": \"s169\", \"containerID\": \"s171\", \"restartCount\": 174, \"message\": \"s177\", \"imageID\": \"s180 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"containerID\": \"s183\", \"restartCount\": 186, \"message\": \"s189\", \"imageID\": \"s192 \\u003c&\\u003e \\\"é\\\"\\n\" } ], \"priorityClass\": \"s225\", \"startTime\": \"1700000228\", \"conditions\": [ { \"type\": \"s232 \\u003c&\\u003e \\\"é\\\"\\n\", \"status\": \"s234\", \"lastTransitionTime\": \"1700000237\", \"message\": \"s240 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"status\": \"s243\", \"lastTransitionTime\": \"4102445046\", \"message\": \"s249\" } ] }",
+     "s159",
+     "",
+     "",
+     "s225",
+     "2023-11-14T22:17:08Z",
+     null,
+     "s2",
+     [
+      "s169",
+      ""
+     ],
+     [
+      "s171",
+      "s183"
+     ],
+     "\u0000\u0000",
+     [
+      174,
+      186
+     ],
+     [
+      "",
+      ""
+     ],
+     [
+      "s177",
+      "s189"
+     ],
+     [
+      "",
+      ""
+     ],
+     [
+      "s180 <&> \"é\"\n",
+      "s192 <&> \"é\"\n"
+     ],
+     "\u0001\u0001",
+     "",
+     [],
+     0,
+     "",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "{ \"hostName\": \"s2\", \"clusterName\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"clusterId\": \"s6\", \"groupId\": -8, \"groupSize\": 10, \"host\": { \"id\": \"9007199254741246\", \"orgId\": 255, \"allTags\": [ \"k258:v258\", \"k258:other:with:colons\", \"bare258\", \"z258:last\" ], \"totalMemory\": \"9007199254741254\", \"tagsModified\": \"1700000264\" }, \"tags\": [ \"k266:v266\", \"k266:other:with:colons\", \"bare266\", \"z266:last\" ], \"info\": { \"os\": { \"name\": \"s271\", \"platform\": \"s273\", \"version\": \"s276 \\u003c&\\u003e \\\"é\\\"\\n\" }, \"cpus\": [ { \"number\": -280, \"vendor\": \"s282\", \"model\": \"s285\", \"coreId\": \"s288 \\u003c&\\u003e \\\"é\\\"\\n\", \"mhz\": \"4102445091\" }, { \"number\": 294, \"family\": \"s297\", \"physicalId\": \"s300 \\u003c&\\u003e \\\"é\\\"\\n\", \"cores\": 303, \"cacheSize\": 306 } ] }, \"isTerminated\": true, \"agentVersion\": { \"Minor\": \"1700000312\", \"Pre\": \"s315\", \"Commit\": \"s318\" } }"
+    ]
+   ],
+   "insert": "INSERT INTO k8s_resources\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,\n\t\t\t uid, resource_version, owner_kind, owner_name, node_name, phase, status,\n\t\t\t ready, desired, available, counts, labels, annotations, tags,\n\t\t\t agent_version, group_id, group_size,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t creation_timestamp, deletion_timestamp, deletion_grace_period_seconds,\n\t\t\t finalizers, owner_kinds, owner_names, owner_uids,\n\t\t\t condition_types, condition_statuses, condition_reasons, condition_messages,\n\t\t\t condition_last_transition, condition_last_update, condition_last_probe,\n\t\t\t condition_message, resource_requirements, metrics, object,\n\t\t\t pod_ip, nominated_node_name, qos_class, priority_class,\n\t\t\t start_time, scheduled_time, host_name,\n\t\t\t container_names, container_ids, container_ready, container_restarts,\n\t\t\t container_states, container_messages, container_images,\n\t\t\t container_image_ids, container_is_init,\n\t\t\t pod_cidr, pod_cidrs, unschedulable, taints, provider_id, node_roles,\n\t\t\t capacity, allocatable, node_addresses,\n\t\t\t kubelet_version, kube_proxy_version, operating_system, architecture,\n\t\t\t kernel_version, os_image, container_runtime_version,\n\t\t\t service_type, cluster_ip, service_ports,\n\t\t\t rbac_rules, rbac_subjects, rbac_role_ref, envelope)",
+   "rows": [
+    {
+     "AgentVersion": "0.1700000312.0-s315",
+     "Allocatable": {},
+     "Annotations": {},
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s6",
+     "ClusterIP": "",
+     "ClusterName": "s4 <&> \"é\"\n",
+     "CollectedAt": "2026-10-01T16:08:42.428134256Z",
+     "ConditionLastProbe": [
+      null,
+      null
+     ],
+     "ConditionLastTransition": [
+      "2023-11-14T22:15:17Z",
+      "2100-01-01T00:02:06Z"
+     ],
+     "ConditionLastUpdate": [
+      null,
+      null
+     ],
+     "ConditionMessage": "",
+     "ConditionMessages": [
+      "s120 <&> \"é\"\n",
+      "s129"
+     ],
+     "ConditionReasons": [
+      "",
+      ""
+     ],
+     "ConditionStatuses": [
+      "s114",
+      "s123"
+     ],
+     "ConditionTypes": [
+      "s112 <&> \"é\"\n",
+      ""
+     ],
+     "ContainerIDs": [
+      "s51",
+      "s63"
+     ],
+     "ContainerImageIDs": [
+      "s60 <&> \"é\"\n",
+      "s72 <&> \"é\"\n"
+     ],
+     "ContainerImages": [
+      "",
+      ""
+     ],
+     "ContainerIsInit": "\u0001\u0001",
+     "ContainerMessages": [
+      "s57",
+      "s69"
+     ],
+     "ContainerNames": [
+      "s49",
+      ""
+     ],
+     "ContainerReady": "\u0000\u0000",
+     "ContainerRestarts": [
+      54,
+      66
+     ],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [
+      "",
+      ""
+     ],
+     "Counts": {
+      "init_restarts": 120,
+      "pod_restart_count": 45,
+      "ready_containers": 0,
+      "ready_init_containers": 0,
+      "restarts": 0,
+      "total_containers": 0,
+      "total_init_containers": 2
+     },
+     "CreationTimestamp": "2023-11-14T22:13:38Z",
+     "DeletionGracePeriodSeconds": null,
+     "DeletionTimestamp": null,
+     "Desired": 0,
+     "Encoding": "protobuf",
+     "Envelope": "{ \"hostName\": \"s2\", \"clusterName\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"clusterId\": \"s6\", \"groupId\": -8, \"groupSize\": 10, \"host\": { \"id\": \"9007199254741246\", \"orgId\": 255, \"allTags\": [ \"k258:v258\", \"k258:other:with:colons\", \"bare258\", \"z258:last\" ], \"totalMemory\": \"9007199254741254\", \"tagsModified\": \"1700000264\" }, \"tags\": [ \"k266:v266\", \"k266:other:with:colons\", \"bare266\", \"z266:last\" ], \"info\": { \"os\": { \"name\": \"s271\", \"platform\": \"s273\", \"version\": \"s276 \\u003c&\\u003e \\\"é\\\"\\n\" }, \"cpus\": [ { \"number\": -280, \"vendor\": \"s282\", \"model\": \"s285\", \"coreId\": \"s288 \\u003c&\\u003e \\\"é\\\"\\n\", \"mhz\": \"4102445091\" }, { \"number\": 294, \"family\": \"s297\", \"physicalId\": \"s300 \\u003c&\\u003e \\\"é\\\"\\n\", \"cores\": 303, \"cacheSize\": 306 } ] }, \"isTerminated\": true, \"agentVersion\": { \"Minor\": \"1700000312\", \"Pre\": \"s315\", \"Commit\": \"s318\" } }",
+     "Finalizers": [
+      "k36:v36",
+      "k36:other:with:colons",
+      "bare36",
+      "z36:last"
+     ],
+     "GroupID": -8,
+     "GroupSize": 10,
+     "HeaderTimestamp": null,
+     "HostName": "s2",
+     "KernelVersion": "",
+     "Kind": "Pod",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare21": "",
+      "k21": "other:with:colons",
+      "z21": "last"
+     },
+     "Metrics": {},
+     "Name": "",
+     "Namespace": "s15",
+     "NodeAddresses": "",
+     "NodeName": "s42",
+     "NodeRoles": [],
+     "NominatedNodeName": "",
+     "OSImage": "",
+     "Object": "{ \"metadata\": { \"namespace\": \"s15\", \"creationTimestamp\": \"1700000018\", \"labels\": [ \"k21:v21\", \"k21:other:with:colons\", \"bare21\", \"z21:last\" ], \"ownerReferences\": [ { \"name\": \"s25\", \"uid\": \"s27\" }, { \"name\": \"s30\", \"kind\": \"s33\" } ], \"finalizers\": [ \"k36:v36\", \"k36:other:with:colons\", \"bare36\", \"z36:last\" ] }, \"IP\": \"s39\", \"nodeName\": \"s42\", \"restartCount\": 45, \"status\": \"s75\", \"tags\": [ \"k78:v78\", \"k78:other:with:colons\", \"bare78\", \"z78:last\" ], \"resourceRequirements\": [ { \"limits\": { \"key84\": \"-85\", \"key82\": \"1700000083\" }, \"requests\": { \"key89\": \"-90\", \"key87\": \"1700000088\" }, \"type\": \"initContainer\" }, { \"requests\": { \"key98\": \"1700000099\", \"key96\": \"1700000097\" }, \"type\": \"container\" } ], \"initContainerStatuses\": [ { \"name\": \"s49\", \"containerID\": \"s51\", \"restartCount\": 54, \"message\": \"s57\", \"imageID\": \"s60 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"containerID\": \"s63\", \"restartCount\": 66, \"message\": \"s69\", \"imageID\": \"s72 \\u003c&\\u003e \\\"é\\\"\\n\" } ], \"priorityClass\": \"s105\", \"startTime\": \"1700000108\", \"conditions\": [ { \"type\": \"s112 \\u003c&\\u003e \\\"é\\\"\\n\", \"status\": \"s114\", \"lastTransitionTime\": \"1700000117\", \"message\": \"s120 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"status\": \"s123\", \"lastTransitionTime\": \"4102444926\", \"message\": \"s129\" } ] }",
+     "OperatingSystem": "",
+     "OrgID": 4242,
+     "OwnerKind": "",
+     "OwnerKinds": [
+      "",
+      "s33"
+     ],
+     "OwnerName": "s25",
+     "OwnerNames": [
+      "s25",
+      "s30"
+     ],
+     "OwnerUIDs": [
+      "s27",
+      ""
+     ],
+     "Phase": "",
+     "PodCIDR": "",
+     "PodCIDRs": [],
+     "PodIP": "s39",
+     "PriorityClass": "s105",
+     "ProviderID": "",
+     "QOSClass": "",
+     "RBACRoleRef": "",
+     "RBACRules": "",
+     "RBACSubjects": "",
+     "Ready": 0,
+     "ResourceRequirements": "[{ \"limits\": { \"key84\": \"-85\", \"key82\": \"1700000083\" }, \"requests\": { \"key89\": \"-90\", \"key87\": \"1700000088\" }, \"type\": \"initContainer\" },{ \"requests\": { \"key98\": \"1700000099\", \"key96\": \"1700000097\" }, \"type\": \"container\" }]",
+     "ResourceVersion": "",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": "2023-11-14T22:15:08Z",
+     "Status": "s75",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare266": [
+       ""
+      ],
+      "bare78": [
+       ""
+      ],
+      "k266": [
+       "v266",
+       "other:with:colons"
+      ],
+      "k78": [
+       "v78",
+       "other:with:colons"
+      ],
+      "z266": [
+       "last"
+      ],
+      "z78": [
+       "last"
+      ]
+     },
+     "Taints": "",
+     "TenantID": "test",
+     "UID": "",
+     "Unschedulable": 0
+    },
+    {
+     "AgentVersion": "0.1700000312.0-s315",
+     "Allocatable": {},
+     "Annotations": {},
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s6",
+     "ClusterIP": "",
+     "ClusterName": "s4 <&> \"é\"\n",
+     "CollectedAt": "2026-10-01T16:08:42.428134256Z",
+     "ConditionLastProbe": [
+      null,
+      null
+     ],
+     "ConditionLastTransition": [
+      "2023-11-14T22:17:17Z",
+      "2100-01-01T00:04:06Z"
+     ],
+     "ConditionLastUpdate": [
+      null,
+      null
+     ],
+     "ConditionMessage": "",
+     "ConditionMessages": [
+      "s240 <&> \"é\"\n",
+      "s249"
+     ],
+     "ConditionReasons": [
+      "",
+      ""
+     ],
+     "ConditionStatuses": [
+      "s234",
+      "s243"
+     ],
+     "ConditionTypes": [
+      "s232 <&> \"é\"\n",
+      ""
+     ],
+     "ContainerIDs": [
+      "s171",
+      "s183"
+     ],
+     "ContainerImageIDs": [
+      "s180 <&> \"é\"\n",
+      "s192 <&> \"é\"\n"
+     ],
+     "ContainerImages": [
+      "",
+      ""
+     ],
+     "ContainerIsInit": "\u0001\u0001",
+     "ContainerMessages": [
+      "s177",
+      "s189"
+     ],
+     "ContainerNames": [
+      "s169",
+      ""
+     ],
+     "ContainerReady": "\u0000\u0000",
+     "ContainerRestarts": [
+      174,
+      186
+     ],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [
+      "",
+      ""
+     ],
+     "Counts": {
+      "init_restarts": 360,
+      "pod_restart_count": 165,
+      "ready_containers": 0,
+      "ready_init_containers": 0,
+      "restarts": 0,
+      "total_containers": 0,
+      "total_init_containers": 2
+     },
+     "CreationTimestamp": "2023-11-14T22:15:38Z",
+     "DeletionGracePeriodSeconds": null,
+     "DeletionTimestamp": null,
+     "Desired": 0,
+     "Encoding": "protobuf",
+     "Envelope": "{ \"hostName\": \"s2\", \"clusterName\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"clusterId\": \"s6\", \"groupId\": -8, \"groupSize\": 10, \"host\": { \"id\": \"9007199254741246\", \"orgId\": 255, \"allTags\": [ \"k258:v258\", \"k258:other:with:colons\", \"bare258\", \"z258:last\" ], \"totalMemory\": \"9007199254741254\", \"tagsModified\": \"1700000264\" }, \"tags\": [ \"k266:v266\", \"k266:other:with:colons\", \"bare266\", \"z266:last\" ], \"info\": { \"os\": { \"name\": \"s271\", \"platform\": \"s273\", \"version\": \"s276 \\u003c&\\u003e \\\"é\\\"\\n\" }, \"cpus\": [ { \"number\": -280, \"vendor\": \"s282\", \"model\": \"s285\", \"coreId\": \"s288 \\u003c&\\u003e \\\"é\\\"\\n\", \"mhz\": \"4102445091\" }, { \"number\": 294, \"family\": \"s297\", \"physicalId\": \"s300 \\u003c&\\u003e \\\"é\\\"\\n\", \"cores\": 303, \"cacheSize\": 306 } ] }, \"isTerminated\": true, \"agentVersion\": { \"Minor\": \"1700000312\", \"Pre\": \"s315\", \"Commit\": \"s318\" } }",
+     "Finalizers": [
+      "k156:v156",
+      "k156:other:with:colons",
+      "bare156",
+      "z156:last"
+     ],
+     "GroupID": -8,
+     "GroupSize": 10,
+     "HeaderTimestamp": null,
+     "HostName": "s2",
+     "KernelVersion": "",
+     "Kind": "Pod",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare141": "",
+      "k141": "other:with:colons",
+      "z141": "last"
+     },
+     "Metrics": {},
+     "Name": "s133",
+     "Namespace": "s135",
+     "NodeAddresses": "",
+     "NodeName": "s162",
+     "NodeRoles": [],
+     "NominatedNodeName": "",
+     "OSImage": "",
+     "Object": "{ \"metadata\": { \"name\": \"s133\", \"namespace\": \"s135\", \"creationTimestamp\": \"1700000138\", \"labels\": [ \"k141:v141\", \"k141:other:with:colons\", \"bare141\", \"z141:last\" ], \"ownerReferences\": [ { \"name\": \"s145\", \"uid\": \"s147\" }, { \"name\": \"s150\", \"kind\": \"s153\" } ], \"finalizers\": [ \"k156:v156\", \"k156:other:with:colons\", \"bare156\", \"z156:last\" ] }, \"IP\": \"s159\", \"nodeName\": \"s162\", \"restartCount\": 165, \"status\": \"s195\", \"tags\": [ \"k198:v198\", \"k198:other:with:colons\", \"bare198\", \"z198:last\" ], \"resourceRequirements\": [ { \"limits\": { \"key204\": \"-205\", \"key202\": \"1700000203\" }, \"requests\": { \"key209\": \"-210\", \"key207\": \"1700000208\" }, \"type\": \"initContainer\" }, { \"requests\": { \"key218\": \"1700000219\", \"key216\": \"1700000217\" }, \"type\": \"container\" } ], \"initContainerStatuses\": [ { \"name\": \"s169\", \"containerID\": \"s171\", \"restartCount\": 174, \"message\": \"s177\", \"imageID\": \"s180 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"containerID\": \"s183\", \"restartCount\": 186, \"message\": \"s189\", \"imageID\": \"s192 \\u003c&\\u003e \\\"é\\\"\\n\" } ], \"priorityClass\": \"s225\", \"startTime\": \"1700000228\", \"conditions\": [ { \"type\": \"s232 \\u003c&\\u003e \\\"é\\\"\\n\", \"status\": \"s234\", \"lastTransitionTime\": \"1700000237\", \"message\": \"s240 \\u003c&\\u003e \\\"é\\\"\\n\" }, { \"status\": \"s243\", \"lastTransitionTime\": \"4102445046\", \"message\": \"s249\" } ] }",
+     "OperatingSystem": "",
+     "OrgID": 4242,
+     "OwnerKind": "",
+     "OwnerKinds": [
+      "",
+      "s153"
+     ],
+     "OwnerName": "s145",
+     "OwnerNames": [
+      "s145",
+      "s150"
+     ],
+     "OwnerUIDs": [
+      "s147",
+      ""
+     ],
+     "Phase": "",
+     "PodCIDR": "",
+     "PodCIDRs": [],
+     "PodIP": "s159",
+     "PriorityClass": "s225",
+     "ProviderID": "",
+     "QOSClass": "",
+     "RBACRoleRef": "",
+     "RBACRules": "",
+     "RBACSubjects": "",
+     "Ready": 0,
+     "ResourceRequirements": "[{ \"limits\": { \"key204\": \"-205\", \"key202\": \"1700000203\" }, \"requests\": { \"key209\": \"-210\", \"key207\": \"1700000208\" }, \"type\": \"initContainer\" },{ \"requests\": { \"key218\": \"1700000219\", \"key216\": \"1700000217\" }, \"type\": \"container\" }]",
+     "ResourceVersion": "",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": "2023-11-14T22:17:08Z",
+     "Status": "s195",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare198": [
+       ""
+      ],
+      "bare266": [
+       ""
+      ],
+      "k198": [
+       "v198",
+       "other:with:colons"
+      ],
+      "k266": [
+       "v266",
+       "other:with:colons"
+      ],
+      "z198": [
+       "last"
+      ],
+      "z266": [
+       "last"
+      ]
+     },
+     "Taints": "",
+     "TenantID": "test",
+     "UID": "",
+     "Unschedulable": 0
+    }
+   ],
+   "to": "storage_k8s_resources",
+   "type": "storage.WriteK8sResources"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorPod_2",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/CollectedAt",
+  "/sends/0/rows/1/CollectedAt"
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
+}

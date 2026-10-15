@@ -1,0 +1,424 @@
+{
+ "recorded_at": "2026-10-01T15:21:35.286843723Z",
+ "request": {
+  "body_b64": "LS00ZDJiMWEzOWUwNWFlZDE1YTQ5NjlkMDUwMDI4YjVkN2Q1NzhmZjg0MDgyMGE5ZTViMzliNjIyNjJiODENCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZXZlbnQiDQoNCnsiZGRzb3VyY2UiOiJzZWN1cml0eS1hZ2VudCIsImRkdGFncyI6WyJlbnY6cHJvZCJdLCJob3N0IjoiaDEiLCJzZXJ2aWNlIjoiY3dzLWFnZW50In0NCi0tNGQyYjFhMzllMDVhZWQxNWE0OTY5ZDA1MDAyOGI1ZDdkNTc4ZmY4NDA4MjBhOWU1YjM5YjYyMjYyYjgxDQpDb250ZW50LURpc3Bvc2l0aW9uOiBmb3JtLWRhdGE7IG5hbWU9ImR1bXAiOyBmaWxlbmFtZT0iZHVtcCINCkNvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vb2N0ZXQtc3RyZWFtDQoNCgoCaDESCWN3cy1hZ2VudCIICgY3LjU4LjIyUAoICAFaBGluaXQaRAoaCAIYAVoEYmFzaIIBAi1jggEIY2F0IGZpbGUaFwoVCAMYAjIKWggvYmluL2NhdFoDY2F0Sg0KAnIxGgdkZWZhdWx0DQotLTRkMmIxYTM5ZTA1YWVkMTVhNDk2OWQwNTAwMjhiNWQ3ZDU3OGZmODQwODIwYTllNWIzOWI2MjI2MmI4MS0tDQo=",
+  "headers": {
+   "Content-Type": [
+    "multipart/form-data; boundary=4d2b1a39e05aed15a4969d050028b5d7d578ff840820a9e5b39b62262b81"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/secdump"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeCWS"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "uuid.UUID",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "map[string]string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint8",
+     "string",
+     "string",
+     "*uint64",
+     "*uint64",
+     "*uint64",
+     "string",
+     "string",
+     "string",
+     "uint32",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:35.28681521Z",
+     "5f2527e2-e9b4-4047-94c3-dc1d3a7ac819",
+     "h1",
+     "cws-agent",
+     "security-agent",
+     {
+      "env": [
+       "prod"
+      ]
+     },
+     "",
+     {},
+     "{\"ddsource\":\"security-agent\",\"ddtags\":[\"env:prod\"],\"host\":\"h1\",\"service\":\"cws-agent\"}",
+     "h1",
+     "cws-agent",
+     "",
+     {},
+     "7.58.2",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     0,
+     "",
+     "",
+     0,
+     0,
+     0,
+     "",
+     "",
+     "",
+     3,
+     {
+      "$b64": "CgJoMRIJY3dzLWFnZW50IggKBjcuNTguMjJQCggIAVoEaW5pdBpEChoIAhgBWgRiYXNoggECLWOCAQhjYXQgZmlsZRoXChUIAxgCMgpaCC9iaW4vY2F0WgNjYXRKDQoCcjEaB2RlZmF1bHQ="
+     }
+    ]
+   ],
+   "insert": "INSERT INTO cws_activity_dumps\n\t\t\t(tenant_id, received_at, dump_id,\n\t\t\t header_host, header_service, header_source, header_tags, dns_names, header_extra, header_raw,\n\t\t\t dump_host, dump_service, dump_source, dump_tags,\n\t\t\t agent_version, agent_commit, kernel_version, linux_distribution,\n\t\t\t arch, metadata_name, protobuf_version, differentiate_args,\n\t\t\t comm, container_id, start_raw, end_raw, size_raw,\n\t\t\t serialization, cgroup_id, cgroup_manager,\n\t\t\t tree_node_count, dump)",
+   "rows": [
+    {
+     "AgentCommit": "",
+     "AgentVersion": "7.58.2",
+     "Arch": "",
+     "CgroupID": "",
+     "CgroupManager": "",
+     "Comm": "",
+     "ContainerID": "",
+     "DNSNames": "",
+     "DifferentiateArgs": 0,
+     "Dump": {
+      "$b64": "CgJoMRIJY3dzLWFnZW50IggKBjcuNTguMjJQCggIAVoEaW5pdBpEChoIAhgBWgRiYXNoggECLWOCAQhjYXQgZmlsZRoXChUIAxgCMgpaCC9iaW4vY2F0WgNjYXRKDQoCcjEaB2RlZmF1bHQ="
+     },
+     "DumpHost": "h1",
+     "DumpID": "5f2527e2-e9b4-4047-94c3-dc1d3a7ac819",
+     "DumpService": "cws-agent",
+     "DumpSource": "",
+     "DumpTags": {},
+     "End": 0,
+     "HeaderExtra": {},
+     "HeaderHost": "h1",
+     "HeaderRaw": "{\"ddsource\":\"security-agent\",\"ddtags\":[\"env:prod\"],\"host\":\"h1\",\"service\":\"cws-agent\"}",
+     "HeaderService": "cws-agent",
+     "HeaderSource": "security-agent",
+     "HeaderTags": {
+      "env": [
+       "prod"
+      ]
+     },
+     "KernelVersion": "",
+     "LinuxDistribution": "",
+     "MetadataName": "",
+     "ProtobufVersion": "",
+     "ReceivedAt": "2026-10-01T15:21:35.28681521Z",
+     "Serialization": "",
+     "Size": 0,
+     "Start": 0,
+     "TenantID": "test",
+     "TreeNodeCount": 3
+    }
+   ],
+   "to": "storage_cws_activity_dumps",
+   "type": "storage.WriteCWSActivityDumps"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "uuid.UUID",
+     "[]uint32",
+     "uint16",
+     "[]uint32",
+     "string",
+     "uint32",
+     "uint32",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "string",
+     "uint32",
+     "uint32",
+     "uint32",
+     "uint32"
+    ],
+    [
+     "string",
+     "time.Time",
+     "uuid.UUID",
+     "[]uint32",
+     "uint16",
+     "[]uint32",
+     "string",
+     "uint32",
+     "uint32",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "string",
+     "uint32",
+     "uint32",
+     "uint32",
+     "uint32"
+    ],
+    [
+     "string",
+     "time.Time",
+     "uuid.UUID",
+     "[]uint32",
+     "uint16",
+     "[]uint32",
+     "string",
+     "uint32",
+     "uint32",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "string",
+     "uint32",
+     "uint32",
+     "uint32",
+     "uint32"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:35.28681521Z",
+     "5f2527e2-e9b4-4047-94c3-dc1d3a7ac819",
+     [
+      0
+     ],
+     1,
+     [],
+     "{\"process\":{\"pid\":1, \"comm\":\"init\"}}",
+     1,
+     0,
+     "init",
+     "",
+     "",
+     [],
+     [],
+     [],
+     "UNKNOWN",
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     "test",
+     "2026-10-01T15:21:35.28681521Z",
+     "5f2527e2-e9b4-4047-94c3-dc1d3a7ac819",
+     [
+      0,
+      0
+     ],
+     2,
+     [
+      0
+     ],
+     "{\"process\":{\"pid\":2, \"ppid\":1, \"comm\":\"bash\", \"args\":[\"-c\", \"cat file\"]}, \"matchedRules\":[{\"ruleId\":\"r1\", \"policyName\":\"default\"}]}",
+     2,
+     1,
+     "bash",
+     "",
+     "",
+     [
+      "-c",
+      "cat file"
+     ],
+     [],
+     [
+      "r1"
+     ],
+     "UNKNOWN",
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     "test",
+     "2026-10-01T15:21:35.28681521Z",
+     "5f2527e2-e9b4-4047-94c3-dc1d3a7ac819",
+     [
+      0,
+      0,
+      0
+     ],
+     3,
+     [
+      0,
+      0
+     ],
+     "{\"process\":{\"pid\":3, \"ppid\":2, \"file\":{\"path\":\"/bin/cat\"}, \"comm\":\"cat\"}}",
+     3,
+     2,
+     "cat",
+     "",
+     "/bin/cat",
+     [],
+     [],
+     [],
+     "UNKNOWN",
+     0,
+     0,
+     0,
+     0
+    ]
+   ],
+   "insert": "INSERT INTO cws_dump_nodes\n\t\t\t(tenant_id, received_at, dump_id, node_path, depth, parent_path, node,\n\t\t\t pid, ppid, comm, container_id, file_path, args, image_tags,\n\t\t\t matched_rule_ids, generation_type,\n\t\t\t files_count, dns_count, sockets_count, syscalls_count)",
+   "rows": [
+    {
+     "Args": [],
+     "Comm": "init",
+     "ContainerID": "",
+     "DNSCount": 0,
+     "Depth": 1,
+     "DumpID": "5f2527e2-e9b4-4047-94c3-dc1d3a7ac819",
+     "FilePath": "",
+     "FilesCount": 0,
+     "GenerationType": "UNKNOWN",
+     "ImageTags": [],
+     "MatchedRuleIDs": [],
+     "Node": "{\"process\":{\"pid\":1, \"comm\":\"init\"}}",
+     "NodePath": [
+      0
+     ],
+     "PID": 1,
+     "PPID": 0,
+     "ParentPath": [],
+     "ReceivedAt": "2026-10-01T15:21:35.28681521Z",
+     "SocketsCount": 0,
+     "SyscallsCount": 0,
+     "TenantID": "test"
+    },
+    {
+     "Args": [
+      "-c",
+      "cat file"
+     ],
+     "Comm": "bash",
+     "ContainerID": "",
+     "DNSCount": 0,
+     "Depth": 2,
+     "DumpID": "5f2527e2-e9b4-4047-94c3-dc1d3a7ac819",
+     "FilePath": "",
+     "FilesCount": 0,
+     "GenerationType": "UNKNOWN",
+     "ImageTags": [],
+     "MatchedRuleIDs": [
+      "r1"
+     ],
+     "Node": "{\"process\":{\"pid\":2, \"ppid\":1, \"comm\":\"bash\", \"args\":[\"-c\", \"cat file\"]}, \"matchedRules\":[{\"ruleId\":\"r1\", \"policyName\":\"default\"}]}",
+     "NodePath": [
+      0,
+      0
+     ],
+     "PID": 2,
+     "PPID": 1,
+     "ParentPath": [
+      0
+     ],
+     "ReceivedAt": "2026-10-01T15:21:35.28681521Z",
+     "SocketsCount": 0,
+     "SyscallsCount": 0,
+     "TenantID": "test"
+    },
+    {
+     "Args": [],
+     "Comm": "cat",
+     "ContainerID": "",
+     "DNSCount": 0,
+     "Depth": 3,
+     "DumpID": "5f2527e2-e9b4-4047-94c3-dc1d3a7ac819",
+     "FilePath": "/bin/cat",
+     "FilesCount": 0,
+     "GenerationType": "UNKNOWN",
+     "ImageTags": [],
+     "MatchedRuleIDs": [],
+     "Node": "{\"process\":{\"pid\":3, \"ppid\":2, \"file\":{\"path\":\"/bin/cat\"}, \"comm\":\"cat\"}}",
+     "NodePath": [
+      0,
+      0,
+      0
+     ],
+     "PID": 3,
+     "PPID": 2,
+     "ParentPath": [
+      0,
+      0
+     ],
+     "ReceivedAt": "2026-10-01T15:21:35.28681521Z",
+     "SocketsCount": 0,
+     "SyscallsCount": 0,
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_cws_dump_nodes",
+   "type": "storage.WriteCWSDumpNodes"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleSecDumpStoresRows",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/0/2",
+  "/sends/0/rows/0/DumpID",
+  "/sends/0/rows/0/ReceivedAt",
+  "/sends/1/args/0/1",
+  "/sends/1/args/0/2",
+  "/sends/1/args/1/1",
+  "/sends/1/args/1/2",
+  "/sends/1/args/2/1",
+  "/sends/1/args/2/2",
+  "/sends/1/rows/0/DumpID",
+  "/sends/1/rows/0/ReceivedAt",
+  "/sends/1/rows/1/DumpID",
+  "/sends/1/rows/1/ReceivedAt",
+  "/sends/1/rows/2/DumpID",
+  "/sends/1/rows/2/ReceivedAt"
+ ]
+}

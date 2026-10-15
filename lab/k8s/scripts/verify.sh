@@ -15,7 +15,7 @@ NS=ninjacat-lab
 
 # Find the ClickHouse pod. No pod means the stack is not up (or the wrong
 # context was passed) — fail loudly rather than exec into nothing.
-POD=$(kubectl --context "$CTX" -n "$NS" get pod -l app=clickhouse \
+POD=$(kubectl --context "$CTX" -n "$NS" get pod -l clickhouse.altinity.com/chi=ninjacat \
         -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
 if [[ -z "$POD" ]]; then
     echo "ERROR: no clickhouse pod found in namespace $NS (context $CTX)." >&2

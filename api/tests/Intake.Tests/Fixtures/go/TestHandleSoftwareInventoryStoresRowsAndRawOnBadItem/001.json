@@ -1,0 +1,161 @@
+{
+ "recorded_at": "2026-10-01T15:21:19.008343036Z",
+ "request": {
+  "body_b64": "WwoJCXsiaG9zdG5hbWUiOiAid2ViLTEiLCAiaG9zdF9zb2Z0d2FyZSI6IHsic29mdHdhcmUiOiBbCgkJCXsic29mdHdhcmVfdHlwZSI6ICJwYWNrYWdlIiwgIm5hbWUiOiAiY3VybCIsICJ2ZXJzaW9uIjogIjcuODguMSJ9CgkJXX19LAoJCSJub3QtYW4tb2JqZWN0IgoJXQ==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/softinv"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeSoftwareInventory"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:19.008340291Z",
+     "softinv",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/api/v2/softinv",
+     {},
+     "application/json",
+     "",
+     {},
+     "\"not-an-object\"",
+     15,
+     "item is not a JSON object"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "\"not-an-object\"",
+     "BodyBytes": 15,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "softinv",
+     "Method": "POST",
+     "Note": "item is not a JSON object",
+     "Path": "/api/v2/softinv",
+     "Query": {},
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T15:21:19.008340291Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "string",
+     "*uint8",
+     "[]string",
+     "map[string]string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:19.008306188Z",
+     "web-1",
+     "package",
+     "curl",
+     "7.88.1",
+     "",
+     "",
+     "",
+     null,
+     "",
+     null,
+     [],
+     {},
+     {}
+    ]
+   ],
+   "insert": "INSERT INTO host_software\n\t\t\t(tenant_id, received_at, hostname, software_type, name, version,\n\t\t\t publisher, deployment_status, deployment_time,\n\t\t\t deployment_time_parsed, product_code, is_64_bit, install_paths,\n\t\t\t extra, payload_extra)",
+   "rows": [
+    {
+     "DeploymentStatus": "",
+     "DeploymentTime": "",
+     "DeploymentTimeParsed": null,
+     "Extra": {},
+     "Hostname": "web-1",
+     "InstallPaths": [],
+     "Is64Bit": null,
+     "Name": "curl",
+     "PayloadExtra": {},
+     "ProductCode": "",
+     "Publisher": "",
+     "ReceivedAt": "2026-10-01T15:21:19.008306188Z",
+     "SoftwareType": "package",
+     "TenantID": "test",
+     "Version": "7.88.1"
+    }
+   ],
+   "to": "storage_host_software",
+   "type": "storage.WriteHostSoftware"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleSoftwareInventoryStoresRowsAndRawOnBadItem",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt",
+  "/sends/1/args/0/1",
+  "/sends/1/rows/0/ReceivedAt"
+ ]
+}

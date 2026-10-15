@@ -1,0 +1,102 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.498497472Z",
+ "request": {
+  "body_b64": "AQAnCQoCczISVxIOCgJzORIDczExIgNzMTQaIQgSEg1zMjAgPCY+ICLDqSIKIgNzMjMyA3MyNkCd4s+qBhoiCOD//////////wEaA3MzNSoDczM4OClI1P//////////ARrsAQoNczQ4IDwmPiAiw6kiChIDczUwIgNzNTMwx///////////AUgCXWZmeEJowdCs8w59MzOIQo0BMzOOQp0BMzOUQqgBsv//////////AboBTAjSgICAgICAEBBTMgdrODY6djg2MhVrODY6b3RoZXI6d2l0aDpjb2xvbnMyBmJhcmU4NjIIejg2Omxhc3RA2oCAgICAgBBQ3OLPqgbKAQ5raW5kOiBUaGluZzk1CtoBBwoDczk5EGXaARIKDnMxMDQgPCY+ICLDqSIKGALoAZH//////////wH9ATMz4kKNAjMz6EKaAgRzMTE5GugBEgRzMTIyIgRzMTI1MP/+/////////wFIAl2aGQZDaInRrPMOfZoZDEONAZoZD0OdAZoZEkOoAer+/////////wG6AVIImoGAgICAgBAQmwEyCWsxNTg6djE1ODIWazE1ODpvdGhlcjp3aXRoOmNvbG9uczIHYmFyZTE1ODIJejE1ODpsYXN0QKKBgICAgIAQUKTjz6oGygEPa2luZDogVGhpbmcxNjcK2gEJCgRzMTcxEK0B2gESCg5zMTc2IDwmPiAiw6kiChgC6AHJ/v////////8B/QGaGTlDjQKaGTxDmgIEczE5MSDBASjDAUJaCMeBgICAgIAQELj+/////////wEyCWsyMDM6djIwMzIWazIwMzpvdGhlcjp3aXRoOmNvbG9uczIHYmFyZTIwMzIJejIwMzpsYXN0QM+BgICAgIAQUNHjz6oGSAJaDHM0IDwmPiAiw6kiCg==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.498493625Z",
+     "orchestrator",
+     "unexpected_shape",
+     "POST",
+     "example.com",
+     "/api/v2/orch",
+     {},
+     "application/json",
+     "",
+     {},
+     {
+      "$b64": "AQAnCQoCczISVxIOCgJzORIDczExIgNzMTQaIQgSEg1zMjAgPCY+ICLDqSIKIgNzMjMyA3MyNkCd4s+qBhoiCOD//////////wEaA3MzNSoDczM4OClI1P//////////ARrsAQoNczQ4IDwmPiAiw6kiChIDczUwIgNzNTMwx///////////AUgCXWZmeEJowdCs8w59MzOIQo0BMzOOQp0BMzOUQqgBsv//////////AboBTAjSgICAgICAEBBTMgdrODY6djg2MhVrODY6b3RoZXI6d2l0aDpjb2xvbnMyBmJhcmU4NjIIejg2Omxhc3RA2oCAgICAgBBQ3OLPqgbKAQ5raW5kOiBUaGluZzk1CtoBBwoDczk5EGXaARIKDnMxMDQgPCY+ICLDqSIKGALoAZH//////////wH9ATMz4kKNAjMz6EKaAgRzMTE5GugBEgRzMTIyIgRzMTI1MP/+/////////wFIAl2aGQZDaInRrPMOfZoZDEONAZoZD0OdAZoZEkOoAer+/////////wG6AVIImoGAgICAgBAQmwEyCWsxNTg6djE1ODIWazE1ODpvdGhlcjp3aXRoOmNvbG9uczIHYmFyZTE1ODIJejE1ODpsYXN0QKKBgICAgIAQUKTjz6oGygEPa2luZDogVGhpbmcxNjcK2gEJCgRzMTcxEK0B2gESCg5zMTc2IDwmPiAiw6kiChgC6AHJ/v////////8B/QGaGTlDjQKaGTxDmgIEczE5MSDBASjDAUJaCMeBgICAgIAQELj+/////////wEyCWsyMDM6djIwMzIWazIwMzpvdGhlcjp3aXRoOmNvbG9uczIHYmFyZTIwMzIJejIwMzpsYXN0QM+BgICAgIAQUNHjz6oGSAJaDHM0IDwmPiAiw6kiCg=="
+     },
+     685,
+     "orch: CollectorContainer on an orchestrator intake"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": {
+      "$b64": "AQAnCQoCczISVxIOCgJzORIDczExIgNzMTQaIQgSEg1zMjAgPCY+ICLDqSIKIgNzMjMyA3MyNkCd4s+qBhoiCOD//////////wEaA3MzNSoDczM4OClI1P//////////ARrsAQoNczQ4IDwmPiAiw6kiChIDczUwIgNzNTMwx///////////AUgCXWZmeEJowdCs8w59MzOIQo0BMzOOQp0BMzOUQqgBsv//////////AboBTAjSgICAgICAEBBTMgdrODY6djg2MhVrODY6b3RoZXI6d2l0aDpjb2xvbnMyBmJhcmU4NjIIejg2Omxhc3RA2oCAgICAgBBQ3OLPqgbKAQ5raW5kOiBUaGluZzk1CtoBBwoDczk5EGXaARIKDnMxMDQgPCY+ICLDqSIKGALoAZH//////////wH9ATMz4kKNAjMz6EKaAgRzMTE5GugBEgRzMTIyIgRzMTI1MP/+/////////wFIAl2aGQZDaInRrPMOfZoZDEONAZoZD0OdAZoZEkOoAer+/////////wG6AVIImoGAgICAgBAQmwEyCWsxNTg6djE1ODIWazE1ODpvdGhlcjp3aXRoOmNvbG9uczIHYmFyZTE1ODIJejE1ODpsYXN0QKKBgICAgIAQUKTjz6oGygEPa2luZDogVGhpbmcxNjcK2gEJCgRzMTcxEK0B2gESCg5zMTc2IDwmPiAiw6kiChgC6AHJ/v////////8B/QGaGTlDjQKaGTxDmgIEczE5MSDBASjDAUJaCMeBgICAgIAQELj+/////////wEyCWsyMDM6djIwMzIWazIwMzpvdGhlcjp3aXRoOmNvbG9uczIHYmFyZTIwMzIJejIwMzpsYXN0QM+BgICAgIAQUNHjz6oGSAJaDHM0IDwmPiAiw6kiCg=="
+     },
+     "BodyBytes": 685,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "orchestrator",
+     "Method": "POST",
+     "Note": "orch: CollectorContainer on an orchestrator intake",
+     "Path": "/api/v2/orch",
+     "Query": {},
+     "Reason": "unexpected_shape",
+     "ReceivedAt": "2026-10-01T16:08:42.498493625Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorContainer_3",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ],
+ "edited": "The note names the protobuf message that arrived by its own name; it no longer spells it as a Go type (*process.…)."
+}

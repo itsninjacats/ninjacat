@@ -1,0 +1,109 @@
+{
+ "recorded_at": "2026-10-01T15:21:28.466632039Z",
+ "request": {
+  "body_b64": "LS05YjMxMzIxYTEzMTQxZTU5NTA3Mzc5ODBiZWNjMzZlNGUzNmE2YjhmN2I4ZTU5N2ZjOTE1YmFmYWI5ODANCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZWxmX3N5bWJvbF9maWxlIg0KDQp/RUxGAgEAAAAAAAAAAAAADQotLTliMzEzMjFhMTMxNDFlNTk1MDczNzk4MGJlY2MzNmU0ZTM2YTZiOGY3YjhlNTk3ZmM5MTViYWZhYjk4MA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJldmVudCINCg0KeyJ0eXBlIjoiZWxmX3N5bWJvbF9maWxlIiwiYXJjaCI6ImFtZDY0IiwiZ251X2J1aWxkX2lkIjoiYWJjIn0NCi0tOWIzMTMyMWExMzE0MWU1OTUwNzM3OTgwYmVjYzM2ZTRlMzZhNmI4ZjdiOGU1OTdmYzkxNWJhZmFiOTgwLS0NCg==",
+  "headers": {
+   "Content-Type": [
+    "multipart/form-data; boundary=9b31321a13141e5950737980becc36e4e36a6b8f7b8e597fc915bafab980"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/srcmap"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeSourcemap"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint8",
+     "string",
+     "string",
+     "string",
+     "uint64",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:28.466628873Z",
+     "elf_symbol_file",
+     "amd64",
+     "abc",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "{\"type\":\"elf_symbol_file\",\"arch\":\"amd64\",\"gnu_build_id\":\"abc\"}",
+     1,
+     "ELF64",
+     "LE",
+     "ELF\u0002\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+     16,
+     {}
+    ]
+   ],
+   "insert": "INSERT INTO symbol_uploads\n\t\t\t(tenant_id, received_at, type, arch, gnu_build_id, go_build_id, file_hash,\n\t\t\t symbol_source, origin, origin_version, filename, meta,\n\t\t\t has_elf, elf_class, elf_endianness, elf, elf_size, other_parts)",
+   "rows": [
+    {
+     "Arch": "amd64",
+     "ELF": "ELF\u0002\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+     "ELFClass": "ELF64",
+     "ELFEndianness": "LE",
+     "ELFSize": 16,
+     "FileHash": "",
+     "Filename": "",
+     "GNUBuildID": "abc",
+     "GoBuildID": "",
+     "HasELF": 1,
+     "Meta": "{\"type\":\"elf_symbol_file\",\"arch\":\"amd64\",\"gnu_build_id\":\"abc\"}",
+     "Origin": "",
+     "OriginVersion": "",
+     "OtherParts": {},
+     "ReceivedAt": "2026-10-01T15:21:28.466628873Z",
+     "SymbolSource": "",
+     "TenantID": "test",
+     "Type": "elf_symbol_file"
+    }
+   ],
+   "to": "storage_symbol_uploads",
+   "type": "storage.WriteSymbolUploads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleSourcemapStoresRow",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

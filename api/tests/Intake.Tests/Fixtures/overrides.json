@@ -1,0 +1,443 @@
+{
+  "TestHandleLogsKeepsAnUndecodableBodyRaw/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestHandleAppV3KeepsUndecodableBodies__not_protobuf_at_all/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the protobuf parser's error, and Google.Protobuf words it differently from Go's proto package."
+  },
+  "TestHandleRUMSpansEnvelope/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestHandleDBMStoresRawOnDecodeError__body_is_not_JSON/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestHandleNDMMetadataStoresRawOnDecodeFailure/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note is the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestHandleTelemetryNonObjectBodyGoesToRawPayloads/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note is the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestHandleContainerPayloadsStoreRawWhenUndecodable__image_garbage/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the protobuf parser's error, and Google.Protobuf words it differently from Go's protobuf library."
+  },
+  "TestHandleContainerPayloadsStoreRawWhenUndecodable__lifecycle_garbage/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the protobuf parser's error, and Google.Protobuf words it differently from Go's protobuf library."
+  },
+  "TestPortProbeKubeActions__body_4/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the decoder's error message, and the .NET JSON and protobuf libraries word theirs differently from Go's."
+  },
+  "TestPortProbeKubeActions__body_8/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the decoder's error message, and the .NET JSON and protobuf libraries word theirs differently from Go's."
+  },
+  "TestPortProbeOrch__bad_frames/005": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the decoder's error message, and the .NET JSON and protobuf libraries word theirs differently from Go's."
+  },
+  "TestPortProbeContainers__lifecycle_on_images/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the decoder's error message, and the .NET JSON and protobuf libraries word theirs differently from Go's."
+  },
+  "TestCITestCycleStoresUndecodableBodiesRaw__not_json/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestCIConfigEndpointsKeepUndecodableRequests/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestCIPipelineEventsStoreUndecodableBodiesRaw/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestCIWebhookStoresUndecodableBatchesRaw/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestCITestCovStoresUndecodablePayloadsRaw__coverage_part_is_garbage/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the msgpack reader's error, and MsgpackReader words it differently from Go's msgp."
+  },
+  "TestCIVisibilityRefusesForgedArrayHeaders__citestcov/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the msgpack reader's error. msgp fails on the first missing entry (coverages[0]); MsgpackReader refuses the forged array header itself, one step earlier."
+  },
+  "TestCIVisibilityRefusesForgedArrayHeaders__citestcycle/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the msgpack reader's error, and MsgpackReader words it differently from Go's msgp."
+  },
+  "TestHandleTracesStoresUndecodableBodyRaw/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the protobuf parser's error, and Google.Protobuf words it differently from Go's vtprotobuf."
+  },
+  "TestPortTraces/005": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the protobuf parser's error for a truncated body, and Google.Protobuf words it differently from Go's vtprotobuf."
+  },
+  "TestPortTraces/008": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the protobuf parser's error for trailing bytes, and Google.Protobuf words it differently from Go's vtprotobuf."
+  },
+  "TestPortDataStreams/008": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestPortDataStreams/009": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the JSON parser's error, and .NET's parser words it differently from Go's."
+  },
+  "TestPortStats/006": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortPipelineStats/003": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortPipelineStats/004": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/012": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/005": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/020": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortPipelineStats/018": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortPipelineStats/014": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/017": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/003": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortPipelineStats/005": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/015": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortPipelineStats/011": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/013": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortPipelineStats/015": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/022": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortPipelineStats/006": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortPipelineStats/007": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortPipelineStats/013": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortPipelineStats/009": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortPipelineStats/019": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortPipelineStats/008": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortPipelineStats/012": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortPipelineStats/017": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/016": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/019": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/010": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/002": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/021": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/014": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortPipelineStats/020": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/008": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/018": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/023": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortPipelineStats/022": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/009": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestPortStats/004": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestHandleAPMStatsStoresUndecodableBodyRaw/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestHandlePipelineStatsStoresUndecodableBodyRaw/001": {
+    "ignore": [
+      "/sends/0/rows/0/Note",
+      "/sends/0/args/0/13"
+    ],
+    "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  }
+}

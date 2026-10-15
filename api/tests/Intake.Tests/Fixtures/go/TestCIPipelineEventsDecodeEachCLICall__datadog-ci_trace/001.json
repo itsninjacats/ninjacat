@@ -1,0 +1,112 @@
+{
+ "recorded_at": "2026-10-01T15:21:18.999264357Z",
+ "request": {
+  "body_b64": "eyJkYXRhIjp7InR5cGUiOiJjaV9hcHBfY3VzdG9tX3NwYW4iLCJhdHRyaWJ1dGVzIjp7Im5hbWUiOiJidWlsZCIsCgkJCQkic3RhcnRfdGltZSI6IjIwMjYtMDktMjNUMTA6MDA6MDBaIiwiZW5kX3RpbWUiOiIyMDI2LTA5LTIzVDEwOjA1OjAwWiIsCgkJCQkidGFncyI6eyJzdGVwIjoiY29tcGlsZSJ9LCJtZWFzdXJlcyI6eyJ3YXJuaW5ncyI6N30sCgkJCQkic29tZXRoaW5nX25ldyI6eyJuZXN0ZWQiOnRydWV9fX19",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/intake/ci/custom_spans"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeCIVisibilityAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "*int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:18.999261962Z",
+     "custom_span",
+     "ci_app_custom_span",
+     "",
+     null,
+     {},
+     {
+      "step": "compile"
+     },
+     {
+      "warnings": 7
+     },
+     "build",
+     "2026-09-23T10:00:00Z",
+     "2026-09-23T10:05:00Z",
+     "{\"name\":\"build\",\n\t\t\t\t\"start_time\":\"2026-09-23T10:00:00Z\",\"end_time\":\"2026-09-23T10:05:00Z\",\n\t\t\t\t\"tags\":{\"step\":\"compile\"},\"measures\":{\"warnings\":7},\n\t\t\t\t\"something_new\":{\"nested\":true}}",
+     "{\"data\":{\"type\":\"ci_app_custom_span\",\"attributes\":{\"name\":\"build\",\n\t\t\t\t\"start_time\":\"2026-09-23T10:00:00Z\",\"end_time\":\"2026-09-23T10:05:00Z\",\n\t\t\t\t\"tags\":{\"step\":\"compile\"},\"measures\":{\"warnings\":7},\n\t\t\t\t\"something_new\":{\"nested\":true}}}}",
+     {
+      "something_new": "{\"nested\":true}"
+     }
+    ]
+   ],
+   "insert": "INSERT INTO ci_pipeline_events\n\t\t\t(tenant_id, received_at, kind, data_type, provider, ci_level, ci_env,\n\t\t\t tags, metrics, span_name, span_start_raw, span_end_raw,\n\t\t\t attributes, body, extra)",
+   "rows": [
+    {
+     "Attributes": "{\"name\":\"build\",\n\t\t\t\t\"start_time\":\"2026-09-23T10:00:00Z\",\"end_time\":\"2026-09-23T10:05:00Z\",\n\t\t\t\t\"tags\":{\"step\":\"compile\"},\"measures\":{\"warnings\":7},\n\t\t\t\t\"something_new\":{\"nested\":true}}",
+     "Body": "{\"data\":{\"type\":\"ci_app_custom_span\",\"attributes\":{\"name\":\"build\",\n\t\t\t\t\"start_time\":\"2026-09-23T10:00:00Z\",\"end_time\":\"2026-09-23T10:05:00Z\",\n\t\t\t\t\"tags\":{\"step\":\"compile\"},\"measures\":{\"warnings\":7},\n\t\t\t\t\"something_new\":{\"nested\":true}}}}",
+     "CIEnv": {},
+     "CILevel": null,
+     "DataType": "ci_app_custom_span",
+     "Extra": {
+      "something_new": "{\"nested\":true}"
+     },
+     "Kind": "custom_span",
+     "Metrics": {
+      "warnings": 7
+     },
+     "Provider": "",
+     "ReceivedAt": "2026-10-01T15:21:18.999261962Z",
+     "SpanEndRaw": "2026-09-23T10:05:00Z",
+     "SpanName": "build",
+     "SpanStartRaw": "2026-09-23T10:00:00Z",
+     "Tags": {
+      "step": "compile"
+     },
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_ci_pipeline_events",
+   "type": "storage.WriteCIPipelineEvents"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCIPipelineEventsDecodeEachCLICall/datadog-ci_trace",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

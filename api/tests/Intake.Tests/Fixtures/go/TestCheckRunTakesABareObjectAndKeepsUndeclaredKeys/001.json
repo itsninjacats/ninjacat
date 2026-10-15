@@ -1,0 +1,90 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.03177037Z",
+ "request": {
+  "body_b64": "eyJjaGVjayI6ImFwcC5vayIsImhvc3RfbmFtZSI6ImgxIiwidGltZXN0YW1wIjoxNzkwMTUxMzMwLAoJCSJzdGF0dXMiOjEsIm1lc3NhZ2UiOiJzbG93IiwidGFncyI6WyJlbnY6cHJvZCJdLCJteV9vd25fZmllbGQiOiJoZWxsbyJ9",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v1/check_run"
+ },
+ "response": {
+  "body_b64": "eyJlcnJvcnMiOltdfQ==",
+  "body_json": {
+   "errors": []
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-09-23T08:15:30Z",
+     "app.ok",
+     "h1",
+     "WARNING",
+     "slow",
+     {
+      "env": [
+       "prod"
+      ]
+     },
+     {
+      "my_own_field": "\"hello\""
+     }
+    ]
+   ],
+   "insert": "INSERT INTO check_runs\n\t\t\t(tenant_id, timestamp, check_name, host, status, message, tags, extra)",
+   "rows": [
+    {
+     "CheckName": "app.ok",
+     "Extra": {
+      "my_own_field": "\"hello\""
+     },
+     "Host": "h1",
+     "Message": "slow",
+     "Status": "WARNING",
+     "Tags": {
+      "env": [
+       "prod"
+      ]
+     },
+     "TenantID": "test",
+     "Timestamp": "2026-09-23T08:15:30Z"
+    }
+   ],
+   "to": "storage_checks",
+   "type": "storage.WriteCheckRuns"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCheckRunTakesABareObjectAndKeepsUndeclaredKeys",
+ "volatile": []
+}

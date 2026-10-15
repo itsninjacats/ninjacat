@@ -1,0 +1,101 @@
+{
+ "recorded_at": "2026-10-01T16:19:49.951622958Z",
+ "request": {
+  "body_b64": "gq1BZ2VudEhvc3RuYW1loWilU3RhdHOSgadTZXJ2aWNlomMwgaVTdGF0c5GBpVN0YXRzk4GkTmFtZaJnMMCBpUJyYW5kkcE=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v0.2/stats"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeTrace"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:19:49.951620945Z",
+     "trace",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/api/v0.2/stats",
+     {},
+     "application/json",
+     "",
+     {},
+     {
+      "$b64": "gq1BZ2VudEhvc3RuYW1loWilU3RhdHOSgadTZXJ2aWNlomMwgaVTdGF0c5GBpVN0YXRzk4GkTmFtZaJnMMCBpUJyYW5kkcE="
+     },
+     71,
+     "msgpack StatsPayload: msgp: unrecognized type prefix 0xc1 at Stats/2 at Stats/0 at Stats/1"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": {
+      "$b64": "gq1BZ2VudEhvc3RuYW1loWilU3RhdHOSgadTZXJ2aWNlomMwgaVTdGF0c5GBpVN0YXRzk4GkTmFtZaJnMMCBpUJyYW5kkcE="
+     },
+     "BodyBytes": 71,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "trace",
+     "Method": "POST",
+     "Note": "msgpack StatsPayload: msgp: unrecognized type prefix 0xc1 at Stats/2 at Stats/0 at Stats/1",
+     "Path": "/api/v0.2/stats",
+     "Query": {},
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T16:19:49.951620945Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 8,
+ "test": "TestPortStats",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

@@ -1,0 +1,101 @@
+{
+ "recorded_at": "2026-10-01T15:21:28.466470092Z",
+ "request": {
+  "body_b64": "LS0zNjE3MTQyZDhhMWQxOGU1MTRiOTkxYTRkZWY5OTgzZjY0ZGEyOGViM2ViMjI0NWE0ZDhlMGIxYmQxOGINCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0ibXlzdGVyeSINCg0KPz8/DQotLTM2MTcxNDJkOGExZDE4ZTUxNGI5OTFhNGRlZjk5ODNmNjRkYTI4ZWIzZWIyMjQ1YTRkOGUwYjFiZDE4Yi0tDQo=",
+  "headers": {
+   "Content-Type": [
+    "multipart/form-data; boundary=3617142d8a1d18e514b991a4def9983f64da28eb3eb2245a4d8e0b1bd18b"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/debugger"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeDebugger"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:28.466449654Z",
+     "debugger",
+     "unexpected_shape",
+     "POST",
+     "example.com",
+     "/api/v2/debugger",
+     {},
+     "multipart/form-data; boundary=3617142d8a1d18e514b991a4def9983f64da28eb3eb2245a4d8e0b1bd18b",
+     "",
+     {},
+     "--3617142d8a1d18e514b991a4def9983f64da28eb3eb2245a4d8e0b1bd18b\r\nContent-Disposition: form-data; name=\"mystery\"\r\n\r\n???\r\n--3617142d8a1d18e514b991a4def9983f64da28eb3eb2245a4d8e0b1bd18b--\r\n",
+     185,
+     "multipart with neither file nor event parts: mystery"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "--3617142d8a1d18e514b991a4def9983f64da28eb3eb2245a4d8e0b1bd18b\r\nContent-Disposition: form-data; name=\"mystery\"\r\n\r\n???\r\n--3617142d8a1d18e514b991a4def9983f64da28eb3eb2245a4d8e0b1bd18b--\r\n",
+     "BodyBytes": 185,
+     "ContentEncoding": "",
+     "ContentType": "multipart/form-data; boundary=3617142d8a1d18e514b991a4def9983f64da28eb3eb2245a4d8e0b1bd18b",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "debugger",
+     "Method": "POST",
+     "Note": "multipart with neither file nor event parts: mystery",
+     "Path": "/api/v2/debugger",
+     "Query": {},
+     "Reason": "unexpected_shape",
+     "ReceivedAt": "2026-10-01T15:21:28.466449654Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleDebuggerUnknownVariantStoresRaw",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/0/8",
+  "/sends/0/args/0/11",
+  "/sends/0/rows/0/Body",
+  "/sends/0/rows/0/ContentType",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

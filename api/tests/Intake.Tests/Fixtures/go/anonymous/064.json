@@ -1,0 +1,30 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.668131557Z",
+ "request": {
+  "body_b64": "",
+  "headers": {},
+  "host": "api.example.test",
+  "method": "GET",
+  "url": "/_health"
+ },
+ "response": {
+  "body_b64": "eyJzdGF0dXMiOiJvayJ9",
+  "body_json": {
+   "status": "ok"
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeAPI",
+  "routeCIVisibilityAPI"
+ ],
+ "sends": null,
+ "seq": 64,
+ "test": "anonymous",
+ "volatile": []
+}

@@ -1,1 +1,0 @@
-ALTER TABLE "api_key" ADD COLUMN "tenant_id" text DEFAULT 'default' NOT NULL;

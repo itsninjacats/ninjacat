@@ -1,0 +1,40 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.037089326Z",
+ "request": {
+  "body_b64": "",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/validate"
+ },
+ "response": {
+  "body_b64": "eyJkYXRhIjp7ImlkIjoiM2U3OWFkMjktZGQwMS00MmE3LWE5YzctNmVkNGM0MjM2MTY2In19",
+  "body_json": {
+   "data": {
+    "id": "3e79ad29-dd01-42a7-a9c7-6ed4c4236166"
+   }
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [],
+ "seq": 1,
+ "test": "TestOPMValidateAnswersNonEmptyID",
+ "volatile": [
+  "/response/body_json/data/id"
+ ]
+}

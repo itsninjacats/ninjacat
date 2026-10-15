@@ -1,0 +1,34 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.500679858Z",
+ "request": {
+  "body_b64": "AgAzCZIQAAA=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v1/orchestrator"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [],
+ "seq": 11,
+ "test": "TestPortProbeOrch/empty_messages",
+ "volatile": []
+}

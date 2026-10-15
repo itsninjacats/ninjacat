@@ -1,0 +1,18 @@
+apiVersion: v2
+name: ninjacat-operators
+description: >-
+  The two operators the ninjacat chart can create its databases with:
+  CloudNativePG for Postgres and Altinity's for ClickHouse. A release of its
+  own, installed before ninjacat; leave off the one the cluster already runs.
+type: application
+version: 0.1.0
+dependencies:
+  - name: cloudnative-pg
+    version: 0.29.1
+    repository: https://cloudnative-pg.github.io/charts
+    condition: cloudnative-pg.enabled
+  - name: altinity-clickhouse-operator
+    alias: clickhouse-operator
+    version: 0.27.4
+    repository: https://helm.altinity.com
+    condition: clickhouse-operator.enabled

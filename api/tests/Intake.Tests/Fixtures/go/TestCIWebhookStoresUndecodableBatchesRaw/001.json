@@ -1,0 +1,97 @@
+{
+ "recorded_at": "2026-10-01T15:21:19.001299453Z",
+ "request": {
+  "body_b64": "W3siYSI6MX0s",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/webhook"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeCIWebhook"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:19.001296959Z",
+     "webhook",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/api/v2/webhook",
+     {},
+     "application/json",
+     "",
+     {},
+     "[{\"a\":1},",
+     9,
+     "batch: unexpected end of JSON input"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "[{\"a\":1},",
+     "BodyBytes": 9,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "webhook",
+     "Method": "POST",
+     "Note": "batch: unexpected end of JSON input",
+     "Path": "/api/v2/webhook",
+     "Query": {},
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T15:21:19.001296959Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCIWebhookStoresUndecodableBatchesRaw",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

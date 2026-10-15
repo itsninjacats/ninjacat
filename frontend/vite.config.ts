@@ -9,9 +9,6 @@ export default defineConfig({
 	plugins: [
 		tailwindcss(),
 		sveltekit({
-			// Remote functions: funkcje pisane raz, wywolywane z klienta,
-			// wykonywane na serwerze. Wciaz eksperymentalne, stad flaga.
-			experimental: { remoteFunctions: true },
 			compilerOptions: {
 				// Force runes mode for the project, except for libraries. Can be removed in svelte 6.
 				runes: ({ filename }) =>
@@ -20,7 +17,7 @@ export default defineConfig({
 			adapter: adapter(),
 			typescript: {
 				config: (config) => {
-					config.include.push('../drizzle.config.ts');
+					config.include.push('../drizzle.config.ts', '../playwright.config.ts');
 				}
 			}
 		}),

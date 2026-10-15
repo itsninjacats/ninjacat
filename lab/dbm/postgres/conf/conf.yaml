@@ -1,0 +1,15 @@
+init_config:
+instances:
+  - dbm: true
+    host: dbmlab-db
+    port: 5432
+    username: datadog
+    password: datadog
+    dbname: shop
+    tags: ["team:core"]
+    query_metrics: { collection_interval: 10 }
+    query_samples: { collection_interval: 1 }
+    query_activity: { collection_interval: 10 }
+    collect_settings: { enabled: true, collection_interval: 30 }
+    collect_schemas: { enabled: true, collection_interval: 30 }
+    collect_column_statistics: { enabled: true, collection_interval: 30 }

@@ -1,0 +1,287 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.440865691Z",
+ "request": {
+  "body_b64": "AQAuCQoCczISDHM0IDwmPiAiw6kiChgGIPj//////////wEqjAIICxoJCgVrZXkxNhARGgkKBWtleTE0EA8olNCs8w446P//////////AUjl//////////8BWJ3iz6oGaiQKEAoFa2V5MzURspybbs0PQkAKEAoFa2V5MzMRspybbs0PQUByDQoFa2V5NDAQqa6ZpA9yDQoFa2V5MzgQp+LPqgaCAUkKA3M0NRIDczQ3IgNzNTAyA3M1M0INczU2IDwmPiAiw6kiClIMCgVrZXk2MRIDczYyUhYKBWtleTU5Eg1zNjAgPCY+ICLDqSIKggE/CgNzNjUaDXM2OCA8Jj4gIsOpIgoqA3M3MToDczc0SgNzNzdaDAoFa2V5ODISA3M4M1oMCgVrZXk4MBIDczgxMgdrODU6djg1MhVrODU6b3RoZXI6d2l0aDpjb2xvbnMyBmJhcmU4NTIIejg1Omxhc3Q6GhDZ4s+qBiINczkyIDwmPiAiw6kiCjIDczk1",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "uint32",
+     "uint32",
+     "uint32",
+     "uint64",
+     "uint64",
+     "uint64",
+     "uint64",
+     "map[string]uint32",
+     "map[string]uint32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "int32",
+     "int32",
+     "string",
+     "map[string][]string",
+     "map[string][]string",
+     "string",
+     "*time.Time",
+     "map[string]float64",
+     "map[string]int64",
+     "map[string]int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]map[string]string",
+     "[]map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.440861253Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     11,
+     0,
+     4000000020,
+     18446744073709551589,
+     0,
+     18446744073709551592,
+     0,
+     {},
+     {
+      "key14": 15,
+      "key16": 17
+     },
+     0,
+     9,
+     null,
+     "protobuf",
+     6,
+     -8,
+     "0.1700000089.0-s92 <&> \"é\"\n",
+     {
+      "bare85": [
+       ""
+      ],
+      "k85": [
+       "v85",
+       "other:with:colons"
+      ],
+      "z85": [
+       "last"
+      ]
+     },
+     {},
+     "",
+     "2023-11-14T22:13:49Z",
+     {
+      "key33": 34.123456789,
+      "key35": 36.123456789
+     },
+     {},
+     {
+      "key38": 1700000039,
+      "key40": 4102444841
+     },
+     [
+      "s45",
+      "s65"
+     ],
+     [
+      "s47",
+      ""
+     ],
+     [
+      "",
+      "s68 <&> \"é\"\n"
+     ],
+     [
+      "s50",
+      ""
+     ],
+     [
+      "",
+      "s71"
+     ],
+     [
+      "s53",
+      ""
+     ],
+     [
+      "",
+      "s74"
+     ],
+     [
+      "s56 <&> \"é\"\n",
+      ""
+     ],
+     [
+      "",
+      "s77"
+     ],
+     [
+      {
+       "key59": "s60 <&> \"é\"\n",
+       "key61": "s62"
+      },
+      {}
+     ],
+     [
+      {},
+      {
+       "key80": "s81",
+       "key82": "s83"
+      }
+     ]
+    ]
+   ],
+   "insert": "INSERT INTO k8s_cluster\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, node_count,\n\t\t\t pod_capacity, pod_allocatable, cpu_capacity, cpu_allocatable,\n\t\t\t memory_capacity, memory_allocatable, kubelet_versions, apiserver_versions,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t group_id, group_size, agent_version, tags, cluster_tags,\n\t\t\t resource_version, creation_timestamp, metrics,\n\t\t\t extended_resources_capacity, extended_resources_allocatable,\n\t\t\t nodes_name, nodes_region, nodes_instance_type, nodes_os, nodes_os_image,\n\t\t\t nodes_architecture, nodes_kernel_version, nodes_container_runtime_version,\n\t\t\t nodes_kubelet_version, nodes_allocatable, nodes_capacity)",
+   "rows": [
+    {
+     "APIServerVersions": {
+      "key14": 15,
+      "key16": 17
+     },
+     "AgentVersion": "0.1700000089.0-s92 <&> \"é\"\n",
+     "CPUAllocatable": 0,
+     "CPUCapacity": 18446744073709551589,
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterName": "s2",
+     "ClusterTags": {},
+     "CollectedAt": "2026-10-01T16:08:42.440861253Z",
+     "CreationTimestamp": "2023-11-14T22:13:49Z",
+     "Encoding": "protobuf",
+     "ExtendedResourcesAllocatable": {
+      "key38": 1700000039,
+      "key40": 4102444841
+     },
+     "ExtendedResourcesCapacity": {},
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": null,
+     "KubeletVersions": {},
+     "MemoryAllocatable": 0,
+     "MemoryCapacity": 18446744073709551592,
+     "Metrics": {
+      "key33": 34.123456789,
+      "key35": 36.123456789
+     },
+     "NodeCount": 11,
+     "NodesAllocatable": [
+      {
+       "key59": "s60 <&> \"é\"\n",
+       "key61": "s62"
+      },
+      {}
+     ],
+     "NodesArchitecture": [
+      "s53",
+      ""
+     ],
+     "NodesCapacity": [
+      {},
+      {
+       "key80": "s81",
+       "key82": "s83"
+      }
+     ],
+     "NodesContainerRuntimeVersion": [
+      "s56 <&> \"é\"\n",
+      ""
+     ],
+     "NodesInstanceType": [
+      "",
+      "s68 <&> \"é\"\n"
+     ],
+     "NodesKernelVersion": [
+      "",
+      "s74"
+     ],
+     "NodesKubeletVersion": [
+      "",
+      "s77"
+     ],
+     "NodesName": [
+      "s45",
+      "s65"
+     ],
+     "NodesOS": [
+      "s50",
+      ""
+     ],
+     "NodesOSImage": [
+      "",
+      "s71"
+     ],
+     "NodesRegion": [
+      "s47",
+      ""
+     ],
+     "OrgID": 0,
+     "PodAllocatable": 4000000020,
+     "PodCapacity": 0,
+     "ResourceVersion": "",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare85": [
+       ""
+      ],
+      "k85": [
+       "v85",
+       "other:with:colons"
+      ],
+      "z85": [
+       "last"
+      ]
+     },
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_k8s_cluster",
+   "type": "storage.WriteK8sCluster"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorCluster_3",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/CollectedAt"
+ ]
+}

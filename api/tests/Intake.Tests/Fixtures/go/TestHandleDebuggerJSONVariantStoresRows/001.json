@@ -1,0 +1,94 @@
+{
+ "recorded_at": "2026-10-01T15:21:28.464711573Z",
+ "request": {
+  "body_b64": "W3sic2VydmljZSI6InN2Yy1hIiwiZGRzb3VyY2UiOiJkZF9kZWJ1Z2dlciIsImV4dHJhX29uZSI6MX1d",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/debugger?ddtags=env:prod,team:x"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeDebugger"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "[]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:28.464705973Z",
+     "svc-a",
+     "dd_debugger",
+     {
+      "env": [
+       "prod"
+      ],
+      "team": [
+       "x"
+      ]
+     },
+     "{\"service\":\"svc-a\",\"ddsource\":\"dd_debugger\",\"extra_one\":1}",
+     [
+      "extra_one"
+     ]
+    ]
+   ],
+   "insert": "INSERT INTO debugger_logs\n\t\t\t(tenant_id, received_at, service, ddsource, ddtags, entry, extra_keys)",
+   "rows": [
+    {
+     "DDSource": "dd_debugger",
+     "DDTags": {
+      "env": [
+       "prod"
+      ],
+      "team": [
+       "x"
+      ]
+     },
+     "Entry": "{\"service\":\"svc-a\",\"ddsource\":\"dd_debugger\",\"extra_one\":1}",
+     "ExtraKeys": [
+      "extra_one"
+     ],
+     "ReceivedAt": "2026-10-01T15:21:28.464705973Z",
+     "Service": "svc-a",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_debugger_logs",
+   "type": "storage.WriteDebuggerLogs"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleDebuggerJSONVariantStoresRows",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

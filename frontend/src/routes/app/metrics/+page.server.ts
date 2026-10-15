@@ -6,7 +6,7 @@ import type { PageServerLoad } from './$types';
 // the sibling data/ and meta/ endpoints, so changing any control never
 // reloads the page.
 //
-// A Go server that is down must not blank the screen: the load returns an
+// A server that is down must not blank the screen: the load returns an
 // error string and the page explains itself instead of throwing a 500.
 export const load: PageServerLoad = async () => {
 	try {

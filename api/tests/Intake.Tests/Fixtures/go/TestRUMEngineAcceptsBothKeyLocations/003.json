@@ -1,0 +1,42 @@
+{
+ "recorded_at": "2026-10-01T15:21:30.830277872Z",
+ "request": {
+  "body_b64": "eyJ0eXBlIjoiYWN0aW9uIiwiZGF0ZSI6MSwiYXBwbGljYXRpb24iOnsiaWQiOiJhcHAifSwic2Vzc2lvbiI6eyJpZCI6InMifSwiYWN0aW9uIjp7ImlkIjoiYSIsInR5cGUiOiJjbGljayJ9fQ==",
+  "headers": {
+   "Origin": [
+    "https://shop.example"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/rum?ddsource=browser&dd-api-key=wrong"
+ },
+ "response": {
+  "body_b64": "eyJlcnJvcnMiOlsiaW52YWxpZCBBUEkga2V5Il19",
+  "body_json": {
+   "errors": [
+    "invalid API key"
+   ]
+  },
+  "headers": {
+   "Access-Control-Allow-Origin": [
+    "https://shop.example"
+   ],
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ],
+   "Vary": [
+    "Origin"
+   ]
+  },
+  "status": 403
+ },
+ "routes": [
+  "routeRUM"
+ ],
+ "sends": [],
+ "seq": 3,
+ "test": "TestRUMEngineAcceptsBothKeyLocations",
+ "volatile": [],
+ "edited": "The CORS headers of the response are the ones ASP.NET's CORS middleware sets. The Go server wrote its own: Allow-Methods, Allow-Headers and Max-Age on every answer, and Allow-Origin: * for a request with no Origin. The middleware keeps those three for preflights and says nothing to a request that names no origin."
+}

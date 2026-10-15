@@ -5,22 +5,22 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1789852875428,
-      "tag": "0000_mature_forgotten_one",
+      "when": 1791910010821,
+      "tag": "0000_bright_layla_miller",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1789861275266,
-      "tag": "0001_brave_salo",
+      "when": 1791913028210,
+      "tag": "0001_one_membership_per_tenant",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "7",
-      "when": 1789863777223,
-      "tag": "0002_daily_may_parker",
+      "when": 1791922506342,
+      "tag": "0002_monitor",
       "breakpoints": true
     }
   ]

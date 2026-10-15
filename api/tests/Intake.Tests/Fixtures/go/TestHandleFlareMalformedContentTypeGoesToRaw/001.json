@@ -1,0 +1,100 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.028580703Z",
+ "request": {
+  "body_b64": "bm90IGEgbXVsdGlwYXJ0IGJvZHk=",
+  "headers": {
+   "Content-Type": [
+    "application/zip"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/support/flare"
+ },
+ "response": {
+  "body_b64": "eyJjYXNlX2lkIjowLCJlcnJvciI6ImNvbnRlbnQtdHlwZSBpcyBub3QgbXVsdGlwYXJ0L2Zvcm0tZGF0YSIsInJlcXVlc3RfdXVpZCI6ImNhZDFkMDRmLTI5ODEtNDJlZC05ZGQzLTgwNDMyNmI1ZTdhOCJ9",
+  "body_json": {
+   "case_id": 0,
+   "error": "content-type is not multipart/form-data",
+   "request_uuid": "cad1d04f-2981-42ed-9dd3-804326b5e7a8"
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.028576285Z",
+     "flare",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/support/flare",
+     {},
+     "application/zip",
+     "",
+     {},
+     "not a multipart body",
+     20,
+     "content-type is not multipart/form-data"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "not a multipart body",
+     "BodyBytes": 20,
+     "ContentEncoding": "",
+     "ContentType": "application/zip",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "flare",
+     "Method": "POST",
+     "Note": "content-type is not multipart/form-data",
+     "Path": "/support/flare",
+     "Query": {},
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T15:21:14.028576285Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleFlareMalformedContentTypeGoesToRaw",
+ "volatile": [
+  "/response/body_json/request_uuid",
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

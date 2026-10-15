@@ -1,0 +1,151 @@
+{
+ "recorded_at": "2026-10-01T15:21:23.618815757Z",
+ "request": {
+  "body_b64": "ewoJCSJhcGlfdmVyc2lvbiI6ICJ2MiIsCgkJInJlcXVlc3RfdHlwZSI6ICJhZ2VudC1tZXRyaWNzIiwKCQkiZXZlbnRfdGltZSI6IDE3MzIwMDAwMDAsCgkJImhvc3QiOiB7Imhvc3RuYW1lIjogImFnZW50LTEifSwKCQkicGF5bG9hZCI6IHsibWVzc2FnZSI6ICJvayJ9Cgl9",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/apmtelemetry"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeTelemetry"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*int64",
+     "*time.Time",
+     "string",
+     "*time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string]string",
+     "*uint32",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:23.618805859Z",
+     "agent-metrics",
+     "agent-telemetry",
+     "v2",
+     "",
+     null,
+     null,
+     "",
+     "2024-11-19T07:06:40Z",
+     "1732000000",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "agent-1",
+     "",
+     "",
+     {},
+     "{\"message\": \"ok\"}",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     {},
+     null,
+     ""
+    ]
+   ],
+   "insert": "INSERT INTO apm_telemetry\n\t\t\t(tenant_id, received_at, request_type, producer, api_version, runtime_id,\n\t\t\t seq_id, tracer_time, tracer_time_raw, event_time, event_time_raw,\n\t\t\t service_name, service_version, env, language_name, language_version, tracer_version,\n\t\t\t hostname, host_os, host_architecture, host_extra,\n\t\t\t payload, debug, origin,\n\t\t\t via, dd_agent_hostname, dd_agent_env, datadog_container_id, x_datadog_container_tags,\n\t\t\t extra, batch_index, parent_request_type)",
+   "rows": [
+    {
+     "APIVersion": "v2",
+     "BatchIndex": null,
+     "DDAgentEnv": "",
+     "DDAgentHostname": "",
+     "DatadogContainerID": "",
+     "Debug": "",
+     "Env": "",
+     "EventTime": "2024-11-19T07:06:40Z",
+     "EventTimeRaw": "1732000000",
+     "Extra": {},
+     "HostArchitecture": "",
+     "HostExtra": {},
+     "HostOS": "",
+     "Hostname": "agent-1",
+     "LanguageName": "",
+     "LanguageVersion": "",
+     "Origin": "",
+     "ParentRequestType": "",
+     "Payload": "{\"message\": \"ok\"}",
+     "Producer": "agent-telemetry",
+     "ReceivedAt": "2026-10-01T15:21:23.618805859Z",
+     "RequestType": "agent-metrics",
+     "RuntimeID": "",
+     "SeqID": null,
+     "ServiceName": "",
+     "ServiceVersion": "",
+     "TenantID": "test",
+     "TracerTime": null,
+     "TracerTimeRaw": "",
+     "TracerVersion": "",
+     "Via": "",
+     "XDatadogContainerTags": ""
+    }
+   ],
+   "to": "storage_apm_telemetry",
+   "type": "storage.WriteAPMTelemetry"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleTelemetryAbsentFieldsStoreEmptyNotDashSentinel",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

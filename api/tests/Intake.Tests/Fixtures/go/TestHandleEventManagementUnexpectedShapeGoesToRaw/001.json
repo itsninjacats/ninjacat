@@ -1,0 +1,97 @@
+{
+ "recorded_at": "2026-10-01T15:21:19.008495636Z",
+ "request": {
+  "body_b64": "eyJkYXRhIjogeyJ0eXBlIjogImV2ZW50In19",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/events"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeEventManagement"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:19.008493192Z",
+     "event-management",
+     "unexpected_shape",
+     "POST",
+     "example.com",
+     "/api/v2/events",
+     {},
+     "application/json",
+     "",
+     {},
+     "{\"data\": {\"type\": \"event\"}}",
+     27,
+     "data.attributes is missing or not an object"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "{\"data\": {\"type\": \"event\"}}",
+     "BodyBytes": 27,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "event-management",
+     "Method": "POST",
+     "Note": "data.attributes is missing or not an object",
+     "Path": "/api/v2/events",
+     "Query": {},
+     "Reason": "unexpected_shape",
+     "ReceivedAt": "2026-10-01T15:21:19.008493192Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleEventManagementUnexpectedShapeGoesToRaw",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

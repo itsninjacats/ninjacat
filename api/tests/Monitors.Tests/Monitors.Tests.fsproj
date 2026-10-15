@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="TestPostgres.fs" />
+    <Compile Include="TestClickHouse.fs" />
+    <Compile Include="EntityTests.fs" />
+    <Compile Include="ManagerTests.fs" />
+    <Compile Include="DefinitionsTests.fs" />
+    <Compile Include="StoreTests.fs" />
+    <Compile Include="NotifierTests.fs" />
+    <Compile Include="ClusterTests.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Akka.TestKit.Xunit" />
+    <PackageReference Include="ClickHouse.Driver" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Monitors/Monitors.fsproj" />
+  </ItemGroup>
+</Project>

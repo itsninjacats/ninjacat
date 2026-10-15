@@ -1,0 +1,22 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.667576628Z",
+ "request": {
+  "body_b64": "",
+  "headers": {},
+  "host": "install.datadoghq.com",
+  "method": "HEAD",
+  "url": "/"
+ },
+ "response": {
+  "body_b64": "",
+  "headers": {},
+  "status": 200
+ },
+ "routes": [
+  "routeInstall"
+ ],
+ "sends": null,
+ "seq": 54,
+ "test": "anonymous",
+ "volatile": []
+}

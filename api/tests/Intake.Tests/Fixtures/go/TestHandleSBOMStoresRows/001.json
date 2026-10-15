@@ -1,0 +1,306 @@
+{
+ "recorded_at": "2026-10-01T15:21:35.288624743Z",
+ "request": {
+  "body_b64": "CAESAmgxIj0IARICZTFSNQoDMS40KhUaBnBrZzpjMUIGbGliZm9vSgMxLjBSFwoGcGtnOmMxEg1DVkUtMjAyNC0xMjM0",
+  "headers": {
+   "Content-Type": [
+    "application/x-protobuf"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/sbom"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeSBOM"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "uuid.UUID",
+     "int32",
+     "string",
+     "*string",
+     "*string",
+     "string",
+     "string",
+     "*time.Time",
+     "[]string",
+     "[]string",
+     "uint8",
+     "*int64",
+     "map[string][]string",
+     "uint8",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint32",
+     "uint32"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:35.28858508Z",
+     "a6342fe4-fc4a-4407-8e23-69f646f16508",
+     1,
+     "h1",
+     null,
+     null,
+     "CONTAINER_IMAGE_LAYERS",
+     "e1",
+     null,
+     [],
+     [],
+     0,
+     null,
+     {},
+     0,
+     "",
+     "SUCCESS",
+     "",
+     "",
+     "",
+     "{\"specVersion\":\"1.4\", \"components\":[{\"bomRef\":\"pkg:c1\", \"name\":\"libfoo\", \"version\":\"1.0\"}], \"vulnerabilities\":[{\"bomRef\":\"pkg:c1\", \"id\":\"CVE-2024-1234\"}]}",
+     "",
+     1,
+     1
+    ]
+   ],
+   "insert": "INSERT INTO sbom_entities\n\t\t\t(tenant_id, received_at, entity_id, payload_version, host, source, dd_env,\n\t\t\t type, id, generated_at, repo_tags, repo_digests, in_use,\n\t\t\t generation_duration_ms, dd_tags, heartbeat, hash, status,\n\t\t\t kernel_version, cpu_architecture, error, bom, bom_raw,\n\t\t\t component_count, vulnerability_count)",
+   "rows": [
+    {
+     "Bom": "{\"specVersion\":\"1.4\", \"components\":[{\"bomRef\":\"pkg:c1\", \"name\":\"libfoo\", \"version\":\"1.0\"}], \"vulnerabilities\":[{\"bomRef\":\"pkg:c1\", \"id\":\"CVE-2024-1234\"}]}",
+     "BomRaw": "",
+     "CPUArchitecture": "",
+     "ComponentCount": 1,
+     "DDTags": {},
+     "DdEnv": null,
+     "EntityID": "a6342fe4-fc4a-4407-8e23-69f646f16508",
+     "Error": "",
+     "GeneratedAt": null,
+     "GenerationDurationMs": null,
+     "Hash": "",
+     "Heartbeat": 0,
+     "Host": "h1",
+     "ID": "e1",
+     "InUse": 0,
+     "KernelVersion": "",
+     "PayloadVersion": 1,
+     "ReceivedAt": "2026-10-01T15:21:35.28858508Z",
+     "RepoDigests": [],
+     "RepoTags": [],
+     "Source": null,
+     "Status": "SUCCESS",
+     "TenantID": "test",
+     "Type": "CONTAINER_IMAGE_LAYERS",
+     "VulnerabilityCount": 1
+    }
+   ],
+   "to": "storage_sbom_entities",
+   "type": "storage.WriteSBOMEntities"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "uuid.UUID",
+     "string",
+     "string",
+     "uint16",
+     "string",
+     "string",
+     "string",
+     "*string",
+     "*string",
+     "*string",
+     "*string",
+     "*string",
+     "*string",
+     "string",
+     "[]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:35.28858508Z",
+     "a6342fe4-fc4a-4407-8e23-69f646f16508",
+     "pkg:c1",
+     "",
+     0,
+     "CLASSIFICATION_NULL",
+     "libfoo",
+     "1.0",
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     "SCOPE_UNSPECIFIED",
+     [],
+     {},
+     {},
+     "",
+     ""
+    ]
+   ],
+   "insert": "INSERT INTO sbom_components\n\t\t\t(tenant_id, received_at, entity_id, bom_ref, parent_bom_ref, depth,\n\t\t\t type, name, version, purl, cpe, `group`, publisher, author,\n\t\t\t description, scope, licenses, hashes, properties,\n\t\t\t external_references, evidence)",
+   "rows": [
+    {
+     "Author": null,
+     "BomRef": "pkg:c1",
+     "Cpe": null,
+     "Depth": 0,
+     "Description": null,
+     "EntityID": "a6342fe4-fc4a-4407-8e23-69f646f16508",
+     "Evidence": "",
+     "ExternalReferences": "",
+     "Group": null,
+     "Hashes": {},
+     "Licenses": [],
+     "Name": "libfoo",
+     "ParentBomRef": "",
+     "Properties": {},
+     "Publisher": null,
+     "Purl": null,
+     "ReceivedAt": "2026-10-01T15:21:35.28858508Z",
+     "Scope": "SCOPE_UNSPECIFIED",
+     "TenantID": "test",
+     "Type": "CLASSIFICATION_NULL",
+     "Version": "1.0"
+    }
+   ],
+   "to": "storage_sbom_components",
+   "type": "storage.WriteSBOMComponents"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "uuid.UUID",
+     "string",
+     "string",
+     "*string",
+     "*string",
+     "string",
+     "[]int32",
+     "*string",
+     "*string",
+     "*string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "string",
+     "[]string",
+     "string",
+     "[]string",
+     "string",
+     "map[string][]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:35.28858508Z",
+     "a6342fe4-fc4a-4407-8e23-69f646f16508",
+     "pkg:c1",
+     "CVE-2024-1234",
+     null,
+     null,
+     "",
+     [],
+     null,
+     null,
+     null,
+     "",
+     null,
+     null,
+     null,
+     "",
+     "",
+     [],
+     "",
+     [],
+     "",
+     {}
+    ]
+   ],
+   "insert": "INSERT INTO sbom_vulnerabilities\n\t\t\t(tenant_id, received_at, entity_id, bom_ref, id, source_name, source_url,\n\t\t\t ratings, cwes, description, detail, recommendation, advisories,\n\t\t\t created, published, updated,\n\t\t\t analysis_state, analysis_justification, analysis_response, analysis_detail,\n\t\t\t affects_refs, affects, properties)",
+   "rows": [
+    {
+     "Advisories": "",
+     "Affects": "",
+     "AffectsRefs": [],
+     "AnalysisDetail": "",
+     "AnalysisJustification": "",
+     "AnalysisResponse": [],
+     "AnalysisState": "",
+     "BomRef": "pkg:c1",
+     "Created": null,
+     "Cwes": [],
+     "Description": null,
+     "Detail": null,
+     "EntityID": "a6342fe4-fc4a-4407-8e23-69f646f16508",
+     "ID": "CVE-2024-1234",
+     "Properties": {},
+     "Published": null,
+     "Ratings": "",
+     "ReceivedAt": "2026-10-01T15:21:35.28858508Z",
+     "Recommendation": null,
+     "SourceName": null,
+     "SourceURL": null,
+     "TenantID": "test",
+     "Updated": null
+    }
+   ],
+   "to": "storage_sbom_vulnerabilities",
+   "type": "storage.WriteSBOMVulnerabilities"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleSBOMStoresRows",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/0/2",
+  "/sends/0/rows/0/EntityID",
+  "/sends/0/rows/0/ReceivedAt",
+  "/sends/1/args/0/1",
+  "/sends/1/args/0/2",
+  "/sends/1/rows/0/EntityID",
+  "/sends/1/rows/0/ReceivedAt",
+  "/sends/2/args/0/1",
+  "/sends/2/args/0/2",
+  "/sends/2/rows/0/EntityID",
+  "/sends/2/rows/0/ReceivedAt"
+ ]
+}

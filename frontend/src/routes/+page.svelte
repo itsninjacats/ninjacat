@@ -3,20 +3,24 @@
 	import * as Card from '$lib/components/ui/card';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
-	import * as Chart from '$lib/components/ui/chart';
-	import { AreaChart } from 'layerchart';
-	import { curveMonotoneX } from 'd3-shape';
+	import Chart from '$lib/components/app/metrics/uplot-chart.svelte';
 
-	// Dane przykladowe — docelowo pojda z ClickHouse przez /api.
-	const teraz = Date.now();
-	const dane = Array.from({ length: 48 }, (_, i) => ({
-		czas: new Date(teraz - (47 - i) * 30 * 60 * 1000),
-		przyjete: 40 + Math.round(25 * Math.sin(i / 5) + (i % 7) * 2)
-	}));
-
-	const konfiguracja = {
-		przyjete: { label: 'Punkty / min', color: 'var(--chart-1)' }
-	} satisfies Chart.ChartConfig;
+	// Sample data, until this page reads the intake's own numbers.
+	const now = Date.now();
+	const sampleWindow = { from: now - 47 * 30 * 60 * 1000, to: now };
+	const sample = [
+		{
+			key: 'accepted',
+			label: 'Punkty / min',
+			color: 'var(--chart-1)',
+			points: Array.from({ length: 48 }, (_, i) => ({
+				t: now - (47 - i) * 30 * 60 * 1000,
+				v: 40 + Math.round(25 * Math.sin(i / 5) + (i % 7) * 2)
+			})),
+			band: [],
+			forecast: []
+		}
+	];
 
 	const endpointy = [
 		{ sciezka: '/api/v2/series', opis: 'Metryki jako protobuf', stan: 'gotowe' },
@@ -43,8 +47,7 @@
 				<span class="font-heading text-sm font-semibold tracking-tight">ninjacat</span>
 			</div>
 			<nav class="flex items-center gap-1">
-				<Button href="/zadania" variant="ghost" size="sm">Zadania</Button>
-				<Button href="/demo/better-auth" variant="ghost" size="sm">Konto</Button>
+				<Button href="/app" variant="ghost" size="sm">Panel</Button>
 			</nav>
 		</div>
 	</header>
@@ -52,12 +55,12 @@
 	<!-- Hero -->
 	<section class="mx-auto max-w-5xl px-6 py-20">
 		<Badge variant="secondary" class="mb-4">Agent 7.83.2 — protokół rozpoznany</Badge>
-		<h1 class="font-heading max-w-2xl text-5xl leading-[1.05] font-semibold tracking-tight">
+		<h1 class="max-w-2xl font-heading text-5xl leading-[1.05] font-semibold tracking-tight">
 			Twój Datadog.<br />Twoje dane.
 		</h1>
-		<p class="text-muted-foreground mt-5 max-w-xl text-base leading-relaxed">
-			Odbiornik mówiący protokołem Datadog Agenta. Przekierowujesz agenty, dane zostają
-			u Ciebie w ClickHouse. Bez wymiany czegokolwiek na maszynach.
+		<p class="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground">
+			Odbiornik mówiący protokołem Datadog Agenta. Przekierowujesz agenty, dane zostają u Ciebie w
+			ClickHouse. Bez wymiany czegokolwiek na maszynach.
 		</p>
 		<div class="mt-8 flex gap-3">
 			<Button>Zacznij zbierać</Button>
@@ -75,26 +78,15 @@
 				<Card.Description>Punkty pomiarowe przyjęte w ostatniej dobie</Card.Description>
 			</Card.Header>
 			<Card.Content>
-				<Chart.Container config={konfiguracja} class="h-[240px] w-full">
-					<AreaChart
-						data={dane}
-						x="czas"
-						series={[{ key: 'przyjete', label: 'Punkty / min', color: 'var(--chart-1)' }]}
-						props={{ area: { curve: curveMonotoneX, 'fill-opacity': 0.25 } }}
-					>
-						{#snippet tooltip()}
-							<Chart.Tooltip />
-						{/snippet}
-					</AreaChart>
-				</Chart.Container>
+				<Chart lines={sample} display="area" window={sampleWindow} />
 			</Card.Content>
 		</Card.Root>
 	</section>
 
 	<!-- Endpointy -->
 	<section class="mx-auto max-w-5xl px-6 pb-20">
-		<h2 class="font-heading mb-1 text-2xl font-semibold tracking-tight">Obsługiwane endpointy</h2>
-		<p class="text-muted-foreground mb-6 text-sm">
+		<h2 class="mb-1 font-heading text-2xl font-semibold tracking-tight">Obsługiwane endpointy</h2>
+		<p class="mb-6 text-sm text-muted-foreground">
 			Ustalone przez podsłuchanie agenta — Datadog tego nie dokumentuje.
 		</p>
 
@@ -104,7 +96,7 @@
 					<div class="flex items-start justify-between gap-3">
 						<div class="min-w-0">
 							<code class="text-sm font-medium">{e.sciezka}</code>
-							<p class="text-muted-foreground mt-1 text-xs">{e.opis}</p>
+							<p class="mt-1 text-xs text-muted-foreground">{e.opis}</p>
 						</div>
 						<Badge variant={e.stan === 'gotowe' ? 'default' : 'outline'} class="shrink-0">
 							{e.stan}
@@ -116,7 +108,7 @@
 	</section>
 
 	<footer class="border-t">
-		<div class="text-muted-foreground mx-auto max-w-5xl px-6 py-8 text-xs">
+		<div class="mx-auto max-w-5xl px-6 py-8 text-xs text-muted-foreground">
 			ninjacat — odbiornik telemetrii. Dane w ClickHouse, agenty bez zmian.
 		</div>
 	</footer>

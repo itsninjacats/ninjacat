@@ -1,0 +1,326 @@
+{
+ "recorded_at": "2026-10-01T16:19:49.958064108Z",
+ "request": {
+  "body_b64": "IFsgeyJiIiA6IDEsICJhIjogeyAibmVzdGVkIiA6IHRydWUgfSwgImIiOiAyfSAsCiAianVzdCBhIHN0cmluZyIsIDEyLjUwLCBudWxsLCBbMSwgMl0sIHRydWUsIHt9LCB7Ilx1MDBlOSI6MSwieiI6MCwiQSI6MH0gXSA=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ],
+   "Dd-Evp-Origin": [
+    "agent"
+   ],
+   "Dd-Evp-Origin-Version": [
+    "7.58.2"
+   ],
+   "X-Requested-With": [
+    "datadog-agent-diagnose"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/data_streams_messages"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeTrace"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "uint32",
+     "string",
+     "[]string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "uint32",
+     "string",
+     "[]string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "uint32",
+     "string",
+     "[]string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "uint32",
+     "string",
+     "[]string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "uint32",
+     "string",
+     "[]string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "uint32",
+     "string",
+     "[]string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "uint32",
+     "string",
+     "[]string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "uint32",
+     "string",
+     "[]string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:19:49.958007093Z",
+     0,
+     "{\"b\" : 1, \"a\": { \"nested\" : true }, \"b\": 2}",
+     [
+      "a",
+      "b"
+     ],
+     "agent",
+     "7.58.2",
+     ""
+    ],
+    [
+     "test",
+     "2026-10-01T16:19:49.958007093Z",
+     1,
+     "\"just a string\"",
+     [],
+     "agent",
+     "7.58.2",
+     ""
+    ],
+    [
+     "test",
+     "2026-10-01T16:19:49.958007093Z",
+     2,
+     "12.50",
+     [],
+     "agent",
+     "7.58.2",
+     ""
+    ],
+    [
+     "test",
+     "2026-10-01T16:19:49.958007093Z",
+     3,
+     "null",
+     [],
+     "agent",
+     "7.58.2",
+     ""
+    ],
+    [
+     "test",
+     "2026-10-01T16:19:49.958007093Z",
+     4,
+     "[1, 2]",
+     [],
+     "agent",
+     "7.58.2",
+     ""
+    ],
+    [
+     "test",
+     "2026-10-01T16:19:49.958007093Z",
+     5,
+     "true",
+     [],
+     "agent",
+     "7.58.2",
+     ""
+    ],
+    [
+     "test",
+     "2026-10-01T16:19:49.958007093Z",
+     6,
+     "{}",
+     [],
+     "agent",
+     "7.58.2",
+     ""
+    ],
+    [
+     "test",
+     "2026-10-01T16:19:49.958007093Z",
+     7,
+     "{\"\\u00e9\":1,\"z\":0,\"A\":0}",
+     [
+      "A",
+      "z",
+      "é"
+     ],
+     "agent",
+     "7.58.2",
+     ""
+    ]
+   ],
+   "insert": "INSERT INTO dsm_messages\n\t\t\t(tenant_id, received_at, position, message, keys,\n\t\t\t dd_evp_origin, dd_evp_origin_version, content_encoding)",
+   "rows": [
+    {
+     "ContentEncoding": "",
+     "DDEVPOrigin": "agent",
+     "DDEVPOriginVersion": "7.58.2",
+     "Keys": [
+      "a",
+      "b"
+     ],
+     "Message": "{\"b\" : 1, \"a\": { \"nested\" : true }, \"b\": 2}",
+     "Position": 0,
+     "ReceivedAt": "2026-10-01T16:19:49.958007093Z",
+     "TenantID": "test"
+    },
+    {
+     "ContentEncoding": "",
+     "DDEVPOrigin": "agent",
+     "DDEVPOriginVersion": "7.58.2",
+     "Keys": [],
+     "Message": "\"just a string\"",
+     "Position": 1,
+     "ReceivedAt": "2026-10-01T16:19:49.958007093Z",
+     "TenantID": "test"
+    },
+    {
+     "ContentEncoding": "",
+     "DDEVPOrigin": "agent",
+     "DDEVPOriginVersion": "7.58.2",
+     "Keys": [],
+     "Message": "12.50",
+     "Position": 2,
+     "ReceivedAt": "2026-10-01T16:19:49.958007093Z",
+     "TenantID": "test"
+    },
+    {
+     "ContentEncoding": "",
+     "DDEVPOrigin": "agent",
+     "DDEVPOriginVersion": "7.58.2",
+     "Keys": [],
+     "Message": "null",
+     "Position": 3,
+     "ReceivedAt": "2026-10-01T16:19:49.958007093Z",
+     "TenantID": "test"
+    },
+    {
+     "ContentEncoding": "",
+     "DDEVPOrigin": "agent",
+     "DDEVPOriginVersion": "7.58.2",
+     "Keys": [],
+     "Message": "[1, 2]",
+     "Position": 4,
+     "ReceivedAt": "2026-10-01T16:19:49.958007093Z",
+     "TenantID": "test"
+    },
+    {
+     "ContentEncoding": "",
+     "DDEVPOrigin": "agent",
+     "DDEVPOriginVersion": "7.58.2",
+     "Keys": [],
+     "Message": "true",
+     "Position": 5,
+     "ReceivedAt": "2026-10-01T16:19:49.958007093Z",
+     "TenantID": "test"
+    },
+    {
+     "ContentEncoding": "",
+     "DDEVPOrigin": "agent",
+     "DDEVPOriginVersion": "7.58.2",
+     "Keys": [],
+     "Message": "{}",
+     "Position": 6,
+     "ReceivedAt": "2026-10-01T16:19:49.958007093Z",
+     "TenantID": "test"
+    },
+    {
+     "ContentEncoding": "",
+     "DDEVPOrigin": "agent",
+     "DDEVPOriginVersion": "7.58.2",
+     "Keys": [
+      "A",
+      "z",
+      "é"
+     ],
+     "Message": "{\"\\u00e9\":1,\"z\":0,\"A\":0}",
+     "Position": 7,
+     "ReceivedAt": "2026-10-01T16:19:49.958007093Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_dsm_messages",
+   "type": "storage.WriteDSMMessages"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortDataStreams",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/args/2/1",
+  "/sends/0/args/3/1",
+  "/sends/0/args/4/1",
+  "/sends/0/args/5/1",
+  "/sends/0/args/6/1",
+  "/sends/0/args/7/1",
+  "/sends/0/rows/0/ReceivedAt",
+  "/sends/0/rows/1/ReceivedAt",
+  "/sends/0/rows/2/ReceivedAt",
+  "/sends/0/rows/3/ReceivedAt",
+  "/sends/0/rows/4/ReceivedAt",
+  "/sends/0/rows/5/ReceivedAt",
+  "/sends/0/rows/6/ReceivedAt",
+  "/sends/0/rows/7/ReceivedAt"
+ ]
+}

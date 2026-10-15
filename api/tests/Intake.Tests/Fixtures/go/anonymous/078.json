@@ -1,0 +1,35 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.669371865Z",
+ "request": {
+  "body_b64": "W3sibGV2ZWwiOiJwaXBlbGluZSIsIm5hbWUiOiJidWlsZCIsInN0YXR1cyI6InN1Y2Nlc3MifV0=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ]
+  },
+  "host": "webhook-intake.example.test",
+  "method": "POST",
+  "url": "/api/v2/webhook/"
+ },
+ "response": {
+  "body_b64": "eyJlcnJvcnMiOlsiaW52YWxpZCBBUEkga2V5Il19",
+  "body_json": {
+   "errors": [
+    "invalid API key"
+   ]
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 403
+ },
+ "routes": [
+  "routeCIWebhook"
+ ],
+ "sends": null,
+ "seq": 78,
+ "test": "anonymous",
+ "volatile": []
+}

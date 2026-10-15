@@ -1,0 +1,84 @@
+{{- if .Values.clickhouse.create }}
+{{- $secret := include "ninjacat.secretName" . -}}
+{{- $db := .Values.clickhouse.database -}}
+# One ClickHouse pod, run by Altinity's operator; its Service is
+# clickhouse-<name>. The users and their passwords come from the chart's
+# Secret. They may sign in from any address: the operator would otherwise
+# admit only ClickHouse's own pods, and the pod network has no stable range.
+apiVersion: clickhouse.altinity.com/v1
+kind: ClickHouseInstallation
+metadata:
+  name: {{ include "ninjacat.fullname" . }}
+  # The operator copies these onto its pod, so nothing that changes with each
+  # chart version, which would restart ClickHouse.
+  labels:
+    {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "clickhouse") | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  defaults:
+    templates:
+      podTemplate: clickhouse
+      dataVolumeClaimTemplate: data
+  configuration:
+    users:
+      {{ .Values.clickhouse.user }}/password:
+        valueFrom:
+          secretKeyRef: { name: {{ $secret }}, key: CLICKHOUSE_PASSWORD }
+      {{ .Values.clickhouse.user }}/networks/ip: ["0.0.0.0/0", "::/0"]
+      {{- with .Values.clickhouse.queryUser }}
+      {{ . }}/password:
+        valueFrom:
+          secretKeyRef: { name: {{ $secret }}, key: CLICKHOUSE_QUERY_PASSWORD }
+      {{ . }}/networks/ip: ["0.0.0.0/0", "::/0"]
+      {{ . }}/grants/query:
+        - GRANT SELECT ON {{ $db }}.*
+      {{- end }}
+      {{- with .Values.clickhouse.monitorsUser }}
+      {{ . }}/password:
+        valueFrom:
+          secretKeyRef: { name: {{ $secret }}, key: CLICKHOUSE_MONITORS_PASSWORD }
+      {{ . }}/networks/ip: ["0.0.0.0/0", "::/0"]
+      {{ . }}/profile: monitors
+      {{ . }}/grants/query:
+        - GRANT SELECT ON {{ $db }}.metrics_1m
+        - GRANT SELECT, INSERT ON {{ $db }}.metrics
+        - GRANT SELECT, INSERT ON {{ $db }}.monitor_transitions
+        - GRANT SELECT, INSERT ON {{ $db }}.monitor_evaluations
+        - GRANT SELECT, INSERT ON {{ $db }}.monitor_notifications
+    profiles:
+      monitors/max_concurrent_queries_for_user: 64
+      {{- end }}
+    clusters:
+      - name: ninjacat
+        layout:
+          shardsCount: 1
+          replicasCount: 1
+  templates:
+    podTemplates:
+      - name: clickhouse
+        spec:
+          containers:
+            - name: clickhouse
+              image: {{ .Values.clickhouse.image }}
+              env:
+                # The image creates it on its first start.
+                - name: CLICKHOUSE_DB
+                  value: {{ $db | quote }}
+              {{- with .Values.clickhouse.resources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+    volumeClaimTemplates:
+      - name: data
+        # The operator's default deletes the volume with the installation.
+        reclaimPolicy: Retain
+        spec:
+          accessModes: [ReadWriteOnce]
+          {{- with .Values.clickhouse.storageClass }}
+          storageClassName: {{ . }}
+          {{- end }}
+          resources:
+            requests:
+              storage: {{ .Values.clickhouse.storage }}
+{{- end }}

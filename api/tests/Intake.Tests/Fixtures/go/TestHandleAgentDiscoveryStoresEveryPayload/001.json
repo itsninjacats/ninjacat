@@ -1,0 +1,94 @@
+{
+ "recorded_at": "2026-10-01T15:21:19.008167113Z",
+ "request": {
+  "body_b64": "ChgKCHBvc3RncmVzEgZweXRob24qBHJ0LTESBmhvc3QtMQ==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/agentdiscovery"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeAgentDiscovery"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]string",
+     "[]string",
+     "[]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:19.008164879Z",
+     "host-1",
+     "postgres",
+     "python",
+     "rt-1",
+     null,
+     [],
+     [],
+     "",
+     [],
+     [],
+     []
+    ]
+   ],
+   "insert": "INSERT INTO agent_discovery\n\t\t\t(tenant_id, received_at, host_id, integration, runtime, runtime_id,\n\t\t\t ingestion_timestamp, config_paths, config_contents, config_truncated,\n\t\t\t config_formats, env_var_names, env_var_values)",
+   "rows": [
+    {
+     "ConfigContents": [],
+     "ConfigFormats": [],
+     "ConfigPaths": [],
+     "ConfigTruncated": "",
+     "EnvVarNames": [],
+     "EnvVarValues": [],
+     "HostID": "host-1",
+     "IngestionTimestamp": null,
+     "Integration": "postgres",
+     "ReceivedAt": "2026-10-01T15:21:19.008164879Z",
+     "Runtime": "python",
+     "RuntimeID": "rt-1",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_agent_discovery",
+   "type": "storage.WriteAgentDiscovery"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleAgentDiscoveryStoresEveryPayload",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

@@ -1,0 +1,127 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.032016111Z",
+ "request": {
+  "body_b64": "ewoJCSJhcGlLZXkiOiIiLAoJCSJpbnRlcm5hbEhvc3RuYW1lIjoiYWdlbnQtaG9zdCIsCgkJImV2ZW50cyI6eyJTeXN0ZW0iOlt7CgkJCSJtc2dfdGl0bGUiOiJkb2NrZXIgcmVzdGFydGVkIiwibXNnX3RleHQiOiJ0aGUgcnVudGltZSBjYW1lIGJhY2siLAoJCQkidGltZXN0YW1wIjoxNzkwMTUxMzMwLCJob3N0IjoiaDEiLCJhbGVydF90eXBlIjoic3VjY2VzcyIsCgkJCSJwcmlvcml0eSI6ImxvdyIsImFnZ3JlZ2F0aW9uX2tleSI6ImRvY2tlciIsImV2ZW50X3R5cGUiOiJkb2NrZXIiLAoJCQkic291cmNlX3R5cGVfbmFtZSI6ImRvY2tlciIsInRhZ3MiOlsiZW52OnByb2QiLCJlbnY6Y2FuYXJ5Il0sCgkJCSJzb21ldGhpbmdfbmV3Ijo0MgoJCX1dfQoJfQ==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/intake/"
+ },
+ "response": {
+  "body_b64": "eyJzdGF0dXMiOiJvayJ9",
+  "body_json": {
+   "status": "ok"
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "uuid.UUID",
+     "uint64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "*int64",
+     "string",
+     "string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-09-23T08:15:30Z",
+     "0ade8272-f8e7-4bb8-a9f0-23ebc6ce8ada",
+     391603407761417692,
+     "docker restarted",
+     "the runtime came back",
+     "h1",
+     "success",
+     "low",
+     "docker",
+     "docker",
+     "",
+     {
+      "env": [
+       "prod",
+       "canary"
+      ]
+     },
+     "docker",
+     null,
+     "success",
+     "low",
+     {
+      "something_new": "42"
+     }
+    ]
+   ],
+   "insert": "INSERT INTO events\n\t\t\t(tenant_id, timestamp, event_id, event_id_num, title, text, host,\n\t\t\t alert_type, priority, aggregation_key, source_type_name, device_name, tags,\n\t\t\t event_type, related_event_id, alert_type_raw, priority_raw, extra)",
+   "rows": [
+    {
+     "AggregationKey": "docker",
+     "AlertType": "success",
+     "AlertTypeRaw": "success",
+     "DeviceName": "",
+     "EventID": "0ade8272-f8e7-4bb8-a9f0-23ebc6ce8ada",
+     "EventIDNum": 391603407761417692,
+     "EventType": "docker",
+     "Extra": {
+      "something_new": "42"
+     },
+     "Host": "h1",
+     "Priority": "low",
+     "PriorityRaw": "low",
+     "RelatedEventID": null,
+     "SourceTypeName": "docker",
+     "Tags": {
+      "env": [
+       "prod",
+       "canary"
+      ]
+     },
+     "TenantID": "test",
+     "Text": "the runtime came back",
+     "Timestamp": "2026-09-23T08:15:30Z",
+     "Title": "docker restarted"
+    }
+   ],
+   "to": "storage_events",
+   "type": "storage.WriteEvents"
+  }
+ ],
+ "seq": 1,
+ "test": "TestIntakeEventsBecomeEventRows",
+ "volatile": [
+  "/sends/0/args/0/2",
+  "/sends/0/args/0/3",
+  "/sends/0/rows/0/EventID",
+  "/sends/0/rows/0/EventIDNum"
+ ]
+}

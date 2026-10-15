@@ -1,6 +1,9 @@
 import { env } from '$env/dynamic/private';
+import { getRequestEvent } from '$app/server';
+import { SignJWT } from 'jose';
+import type { State } from '$lib/monitors/states';
 
-// Address of the Go panel API. This is NOT the agent intake port (8080),
+// Address of the server's internal port. This is NOT the agent intake port (8080),
 // which is exposed to the machines running agents. The panel talks to 8081,
 // which can stay on an internal network.
 //
@@ -8,11 +11,8 @@ import { env } from '$env/dynamic/private';
 // address exists.
 const BASE = env.NINJACAT_INTERNAL_URL || 'http://localhost:8081';
 
-// Control calls are best-effort and must never hold up a page.
-const CONTROL_TIMEOUT_MS = 2000;
-
-// Queries hit ClickHouse, so they get more room. Still shorter than the Go
-// side's own budget, so a slow query surfaces as our timeout rather than
+// Queries hit ClickHouse, so they get more room. Still shorter than the
+// server's own budget, so a slow query surfaces as our timeout rather than
 // hanging a request handler.
 const QUERY_TIMEOUT_MS = 10_000;
 
@@ -54,14 +54,43 @@ export type LogFacets = {
 	statuses: FacetCount[];
 };
 
-/** Thrown by the query helpers when the Go server cannot answer. */
+/** Thrown by the query helpers when the server cannot answer. */
 export class NinjacatError extends Error {}
+
+export const reasonOf = (e: unknown) => (e instanceof NinjacatError ? e.message : String(e));
+
+/**
+ * The query process answers only a token the panel signed, and runs every
+ * query for the tenant it names (api/src/Server/QueryToken.fs). One is minted
+ * per call, for the user and tenant of the request being served.
+ */
+async function queryToken(): Promise<string> {
+	const { locals } = getRequestEvent();
+	if (!locals.user || !locals.tenant) {
+		throw new NinjacatError('this request has no tenant to query for');
+	}
+	const secret = new TextEncoder().encode(env.NINJACAT_QUERY_TOKEN_SECRET ?? '');
+	if (secret.length < 32) {
+		throw new NinjacatError('NINJACAT_QUERY_TOKEN_SECRET must be at least 32 bytes');
+	}
+	return new SignJWT({ tenant: locals.tenant.id, role: locals.tenant.role })
+		.setProtectedHeader({ alg: 'HS256' })
+		.setSubject(locals.user.id)
+		.setIssuer('ninjacat-panel')
+		.setAudience('ninjacat-query')
+		.setIssuedAt()
+		.setExpirationTime('60s')
+		.sign(secret);
+}
 
 async function get<T>(path: string, timeoutMs = QUERY_TIMEOUT_MS): Promise<T> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), timeoutMs);
 	try {
-		const res = await fetch(`${BASE}${path}`, { signal: controller.signal });
+		const res = await fetch(`${BASE}${path}`, {
+			headers: { authorization: `Bearer ${await queryToken()}` },
+			signal: controller.signal
+		});
 		const body = await res.json().catch(() => null);
 		if (!res.ok) {
 			throw new NinjacatError(body?.error ?? `server responded ${res.status}`);
@@ -134,6 +163,200 @@ export async function fetchMetricSeries(opts: {
 	return get<SeriesResponse>(`/internal/metrics/query?${q}`);
 }
 
+// ---- the query API: Datadog's v2 query endpoints ----------------------------------
+
+// Datadog's query language (formulas, functions, anomalies, forecasts), on the
+// same internal port as the calls above.
+
+/** One query as Datadog writes it, e.g. `avg:system.cpu.user{env:prod} by {host}`. */
+export type NamedQuery = { name: string; query: string };
+
+export type TimePoint = { t: number; v: number };
+export type BandPoint = { t: number; lower: number; upper: number };
+export type ForecastPoint = { t: number; v: number; lower: number; upper: number };
+
+/** One series of one formula (or of one query, when there are no formulas). */
+export type Timeseries = {
+	/** Index into the formulas, or into the queries when there are none. */
+	output: number;
+	/** `key:value` for each group-by key; empty for an ungrouped series. */
+	tags: string[];
+	points: TimePoint[];
+	/** anomalies(): the expected range, where known. */
+	band: BandPoint[];
+	/** forecast(): points after the window. */
+	forecast: ForecastPoint[];
+};
+
+export type ScalarTable = {
+	/** Column names of the values: the formulas, or the queries. */
+	names: string[];
+	rows: { tags: string[]; values: (number | null)[] }[];
+};
+
+/**
+ * The query API rejects a request with every problem listed, in Datadog's
+ * `{"errors": [...]}` envelope. They are kept apart so the page can show each.
+ */
+export class QueryError extends NinjacatError {
+	constructor(readonly problems: string[]) {
+		super(problems.join('; '));
+	}
+}
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
+	try {
+		const res = await fetch(`${BASE}${path}`, {
+			method: 'POST',
+			headers: {
+				authorization: `Bearer ${await queryToken()}`,
+				'content-type': 'application/json'
+			},
+			body: JSON.stringify(body),
+			signal: controller.signal
+		});
+		const json = await res.json().catch(() => null);
+		if (!res.ok) {
+			const problems: unknown = json?.errors;
+			if (Array.isArray(problems) && problems.length > 0)
+				throw new QueryError(problems.map(String));
+			throw new NinjacatError(`query API responded ${res.status}`);
+		}
+		return json as T;
+	} catch (e) {
+		if (e instanceof NinjacatError) throw e;
+		if (e instanceof Error && e.name === 'AbortError') {
+			throw new NinjacatError('the query API did not respond in time');
+		}
+		throw new NinjacatError(e instanceof Error ? e.message : 'unknown error');
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+function datadogQueries(queries: NamedQuery[]) {
+	return queries.map((q) => ({ data_source: 'metrics', name: q.name, query: q.query }));
+}
+
+type TimeseriesResponse = {
+	data: {
+		attributes: {
+			series: { group_tags: string[]; query_index: number }[];
+			times: number[];
+			values: (number | null)[][];
+			ninjacat_bounds?: ({ upper: (number | null)[]; lower: (number | null)[] } | null)[];
+			ninjacat_forecast?: ({
+				times: number[];
+				values: number[];
+				upper: number[];
+				lower: number[];
+			} | null)[];
+		};
+	};
+};
+
+/** `POST /api/v2/query/timeseries`, reshaped from parallel arrays into one record per series. */
+export async function queryTimeseries(opts: {
+	from: number;
+	to: number;
+	queries: NamedQuery[];
+	formulas: string[];
+}): Promise<Timeseries[]> {
+	const body = await post<TimeseriesResponse>('/api/v2/query/timeseries', {
+		data: {
+			type: 'timeseries_request',
+			attributes: {
+				from: opts.from,
+				to: opts.to,
+				queries: datadogQueries(opts.queries),
+				...(opts.formulas.length > 0 && { formulas: opts.formulas.map((formula) => ({ formula })) })
+			}
+		}
+	});
+
+	const a = body.data.attributes;
+	return a.series.map((s, i) => {
+		const values = a.values[i] ?? [];
+		const bounds = a.ninjacat_bounds?.[i];
+		const forecast = a.ninjacat_forecast?.[i];
+
+		const points: TimePoint[] = [];
+		const band: BandPoint[] = [];
+		a.times.forEach((t, j) => {
+			const v = values[j];
+			if (v !== null && v !== undefined) points.push({ t, v });
+			const lower = bounds?.lower[j];
+			const upper = bounds?.upper[j];
+			if (lower != null && upper != null) band.push({ t, lower, upper });
+		});
+
+		return {
+			output: s.query_index,
+			tags: s.group_tags,
+			points,
+			band,
+			forecast: forecast
+				? forecast.times.map((t, j) => ({
+						t,
+						v: forecast.values[j],
+						lower: forecast.lower[j],
+						upper: forecast.upper[j]
+					}))
+				: []
+		};
+	});
+}
+
+type ScalarResponse = {
+	data: {
+		attributes: {
+			columns: (
+				| { name: string; type: 'group'; values: string[][] }
+				| { name: string; type: 'number'; values: (number | null)[] }
+			)[];
+		};
+	};
+};
+
+/** `POST /api/v2/query/scalar`: the window reduced to one value per group and formula. */
+export async function queryScalar(opts: {
+	from: number;
+	to: number;
+	queries: NamedQuery[];
+	formulas: string[];
+	aggregator: string;
+}): Promise<ScalarTable> {
+	const body = await post<ScalarResponse>('/api/v2/query/scalar', {
+		data: {
+			type: 'scalar_request',
+			attributes: {
+				from: opts.from,
+				to: opts.to,
+				queries: opts.queries.map((q) => ({
+					...datadogQueries([q])[0],
+					aggregator: opts.aggregator
+				})),
+				...(opts.formulas.length > 0 && { formulas: opts.formulas.map((formula) => ({ formula })) })
+			}
+		}
+	});
+
+	const columns = body.data.attributes.columns;
+	const groups = columns.filter((c) => c.type === 'group');
+	const numbers = columns.filter((c) => c.type === 'number');
+	const rowCount = numbers[0]?.values.length ?? 0;
+
+	return {
+		names: numbers.map((c) => c.name),
+		rows: Array.from({ length: rowCount }, (_, r) => ({
+			tags: groups.flatMap((g) => g.values[r].map((v) => `${g.name}:${v}`)),
+			values: numbers.map((c) => c.values[r])
+		}))
+	};
+}
+
 /** Full-text log search with optional facet and tag filters. */
 export async function searchLogs(opts: {
 	q?: string;
@@ -169,29 +392,156 @@ export async function fetchLogFacets(from: string, to?: string): Promise<LogFace
 	};
 }
 
+// ---- monitors ----------------------------------------------------------------------
+
+// What the monitor service stored for the token's tenant (api/src/Server/MonitorHandlers.fs).
+// Times are RFC 3339 strings in UTC.
+
+/** Checks a monitor as it would be saved: its type, query and options. */
+export async function validateMonitor(definition: {
+	type: string;
+	query: string;
+	options: Record<string, unknown>;
+}): Promise<{ problems: string[]; notActedOn: string[] }> {
+	const body = await post<{ problems: string[]; not_acted_on: string[] }>(
+		'/internal/monitors/validate',
+		definition
+	);
+	return { problems: body.problems ?? [], notActedOn: body.not_acted_on ?? [] };
+}
+
+export type MonitorStatus = {
+	id: number;
+	/** null when no group is open ("no groups found"). */
+	state: State | null;
+	groups: Record<State, number>;
+	lastTriggeredAt: string | null;
+};
+
+// The server's limit per request (Read.maxIds), which keeps the URL short.
+const statusBatch = 200;
+
+/** One status per id, in the order given. */
+export async function fetchMonitorStatus(ids: number[]): Promise<MonitorStatus[]> {
+	const batches: number[][] = [];
+	for (let i = 0; i < ids.length; i += statusBatch) batches.push(ids.slice(i, i + statusBatch));
+	const answers = await Promise.all(batches.map(fetchStatusBatch));
+	return answers.flat();
+}
+
+async function fetchStatusBatch(ids: number[]): Promise<MonitorStatus[]> {
+	const q = new URLSearchParams({ ids: ids.join(',') });
+	const body = await get<{
+		monitors: {
+			id: number;
+			state?: State;
+			groups: Record<State, number>;
+			last_triggered_at?: string;
+		}[];
+	}>(`/internal/monitors/status?${q}`);
+	return body.monitors.map((m) => ({
+		id: m.id,
+		state: m.state ?? null,
+		groups: m.groups,
+		lastTriggeredAt: m.last_triggered_at ?? null
+	}));
+}
+
+export type MonitorGroup = {
+	/** Sorted `key:value` pairs joined with `,`; `*` for a simple alert. */
+	group: string;
+	state: State;
+	since: string;
+	reason: string;
+	lastTriggeredAt: string | null;
+	/** null when no evaluation judged the group in the last day. */
+	value: number | null;
+};
+
+/** The open groups of a monitor. */
+export async function fetchMonitorGroups(id: number): Promise<MonitorGroup[]> {
+	const body = await get<{
+		groups: {
+			group: string;
+			state: State;
+			since: string;
+			reason: string;
+			last_triggered_at?: string;
+			value?: number;
+		}[];
+	}>(`/internal/monitors/${id}/groups`);
+	return body.groups.map((g) => ({
+		group: g.group,
+		state: g.state,
+		since: g.since,
+		reason: g.reason,
+		lastTriggeredAt: g.last_triggered_at ?? null,
+		value: g.value ?? null
+	}));
+}
+
+/** `from` and `to`: RFC 3339, "now" or an offset like "-1d". */
+export type MonitorRange = { from: string; to?: string; group?: string };
+
+function rangeQuery(range: MonitorRange): URLSearchParams {
+	const q = new URLSearchParams({ from: range.from });
+	if (range.to) q.set('to', range.to);
+	if (range.group) q.set('group', range.group);
+	return q;
+}
+
+type TransitionJson = {
+	group: string;
+	at: string;
+	from_state?: State;
+	to_state: State;
+	reason: string;
+	value?: number;
+	crossed?: string;
+};
+
+function transitionOf(t: TransitionJson) {
+	return {
+		group: t.group,
+		at: t.at,
+		fromState: t.from_state ?? null,
+		toState: t.to_state,
+		reason: t.reason,
+		value: t.value ?? null,
+		crossed: t.crossed ?? null
+	};
+}
+
 /**
- * Asks the Go server to re-read the API keys from the database now.
- *
- * Called after a key is added or removed so the change takes effect
- * immediately instead of waiting for the periodic refresh.
- *
- * NEVER throws: a Go server that is down must not break an operation that
- * already succeeded in Postgres — the keeper will pick the key up within 30
- * seconds anyway. It reports whether it worked instead.
+ * A monitor's transitions in a range, oldest first. `initial` is each open
+ * group's latest transition before `from`; past the server's limit the oldest
+ * are left out and `truncated` says so.
  */
-export async function refreshApiKeys(): Promise<{ ok: boolean; reason?: string }> {
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), CONTROL_TIMEOUT_MS);
-	try {
-		const res = await fetch(`${BASE}/internal/apikeys/refresh`, {
-			method: 'POST',
-			signal: controller.signal
-		});
-		if (!res.ok) return { ok: false, reason: `server responded ${res.status}` };
-		return { ok: true };
-	} catch (e) {
-		return { ok: false, reason: e instanceof Error ? e.message : 'unknown error' };
-	} finally {
-		clearTimeout(timer);
-	}
+export async function fetchMonitorTransitions(id: number, range: MonitorRange) {
+	const body = await get<{
+		initial: TransitionJson[];
+		transitions: TransitionJson[];
+		truncated: boolean;
+	}>(`/internal/monitors/${id}/transitions?${rangeQuery(range)}`);
+	return {
+		initial: body.initial.map(transitionOf),
+		transitions: body.transitions.map(transitionOf),
+		truncated: body.truncated
+	};
+}
+
+/** A monitor's evaluated values in a range, oldest first; `group` is empty for a whole-monitor skip or failure. */
+export async function fetchMonitorEvaluations(id: number, range: MonitorRange) {
+	const body = await get<{
+		evaluations: { group: string; at: string; value?: number }[];
+		truncated: boolean;
+	}>(`/internal/monitors/${id}/evaluations?${rangeQuery(range)}`);
+	return {
+		evaluations: body.evaluations.map((e) => ({
+			group: e.group,
+			at: e.at,
+			value: e.value ?? null
+		})),
+		truncated: body.truncated
+	};
 }

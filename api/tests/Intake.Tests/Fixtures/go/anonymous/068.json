@@ -1,0 +1,29 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.668293805Z",
+ "request": {
+  "body_b64": "",
+  "headers": {},
+  "host": "http-intake.logs.example.test",
+  "method": "GET",
+  "url": "/_health"
+ },
+ "response": {
+  "body_b64": "eyJzdGF0dXMiOiJvayJ9",
+  "body_json": {
+   "status": "ok"
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeLogs"
+ ],
+ "sends": null,
+ "seq": 68,
+ "test": "anonymous",
+ "volatile": []
+}

@@ -3,12 +3,15 @@
 #   docker compose -f compose.prod.yaml up -d --build
 #
 # Differences from compose.yaml that matter: images are built rather than
-# bind-mounted, no toolchain ships in either runtime image, nothing reloads,
+# bind-mounted, no toolchain ships in any runtime image, nothing reloads,
 # and every secret comes from the environment instead of a literal.
 #
 # Copy .env.example to .env and fill it in before starting.
 
 name: ninjacat-prod
+
+# The images are built here and named so that they cannot be pulled: a name
+# with a slash would be looked up on Docker Hub under someone else's account.
 
 services:
   clickhouse:
@@ -19,7 +22,7 @@ services:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-ninjacat}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD}
     # No docker-entrypoint-initdb.d mount: the server applies its embedded
-    # ClickHouse migrations at startup (server/schema). CLICKHOUSE_DB still
+    # ClickHouse migrations at startup (api/schema). CLICKHOUSE_DB still
     # creates the (empty) database itself.
     volumes:
       - clickhouse-data:/var/lib/clickhouse
@@ -56,7 +59,7 @@ services:
   # Same image as the panel, different entrypoint. Under Kubernetes this is
   # the pre-upgrade hook Job; here it is a service that runs to completion.
   migrate:
-    image: ninjacat/frontend:local
+    image: ninjacat-frontend:local
     build:
       context: ./frontend
     command: ["node", "migrate.js"]
@@ -66,30 +69,77 @@ services:
       postgres: { condition: service_healthy }
     restart: "no"
 
-  server:
+  # The server is one image run as two processes, so that what agents can
+  # reach and what the panel reads from share neither a port nor a container.
+
+  # What agents send to. It owns every write to ClickHouse and its schema.
+  intake:
+    image: ninjacat-api:local
     build:
-      context: ./server
+      context: ./api
+      target: api
+    command: ["intake"]
     restart: unless-stopped
     ports:
-      # The intake must be reachable by the agents. The panel API on 8081 is
-      # deliberately NOT published — only the frontend container needs it,
-      # and it reaches it over the compose network.
       - "8080:8080"
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-ninjacat}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ninjacat}
-      CLICKHOUSE_ADDR: clickhouse:9000
+      CLICKHOUSE_HTTP_ADDR: clickhouse:8123
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ninjacat}
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-ninjacat}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
       NINJACAT_ADDR: ":8080"
-      NINJACAT_INTERNAL_ADDR: ":8081"
     depends_on:
       clickhouse: { condition: service_healthy }
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
 
+  # What the panel reads from. Its port is deliberately NOT published: only
+  # the frontend container needs it, over the compose network, and it asks
+  # for the frontend's token, not for an API key. It only reads, so it can be
+  # given a ClickHouse user of its own that cannot write (CLICKHOUSE_QUERY_USER).
+  query:
+    image: ninjacat-api:local
+    command: ["query"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-ninjacat}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ninjacat}
+      CLICKHOUSE_HTTP_ADDR: clickhouse:8123
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ninjacat}
+      CLICKHOUSE_USER: ${CLICKHOUSE_QUERY_USER:-${CLICKHOUSE_USER:-ninjacat}}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_QUERY_PASSWORD:-${CLICKHOUSE_PASSWORD}}
+      NINJACAT_INTERNAL_ADDR: ":8081"
+      NINJACAT_QUERY_TOKEN_SECRET: ${NINJACAT_QUERY_TOKEN_SECRET:?set NINJACAT_QUERY_TOKEN_SECRET}
+    depends_on:
+      clickhouse: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      # Built there, and it creates the tables this one reads.
+      intake: { condition: service_started }
+
+  # One Akka node that seeds itself; nothing outside reaches its ports.
+  monitors:
+    image: ninjacat-monitors:local
+    build:
+      context: ./api
+      target: monitors
+    restart: unless-stopped
+    # Docker's 10 s would cut the shutdown short; the process gives it 45 s.
+    stop_grace_period: 60s
+    environment:
+      DATABASE_URL: ${MONITORS_DATABASE_URL:-postgres://${POSTGRES_USER:-ninjacat}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ninjacat}}
+      CLICKHOUSE_HTTP_ADDR: clickhouse:8123
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ninjacat}
+      CLICKHOUSE_USER: ${CLICKHOUSE_MONITORS_USER:-${CLICKHOUSE_USER:-ninjacat}}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_MONITORS_PASSWORD:-${CLICKHOUSE_PASSWORD}}
+    depends_on:
+      clickhouse: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+      # It creates the tables this one reads and writes.
+      intake: { condition: service_started }
+
   frontend:
-    image: ninjacat/frontend:local
+    image: ninjacat-frontend:local
     build:
       context: ./frontend
     restart: unless-stopped
@@ -97,14 +147,15 @@ services:
       - "3000:3000"
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-ninjacat}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ninjacat}
-      NINJACAT_INTERNAL_URL: http://server:8081
+      NINJACAT_INTERNAL_URL: http://query:8081
       # Must be the URL users actually reach, or form actions and auth break.
       ORIGIN: ${ORIGIN:?set ORIGIN, e.g. https://ninjacat.example.com}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
+      NINJACAT_QUERY_TOKEN_SECRET: ${NINJACAT_QUERY_TOKEN_SECRET:?set NINJACAT_QUERY_TOKEN_SECRET}
     depends_on:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
-      server: { condition: service_started }
+      query: { condition: service_started }
 
 volumes:
   clickhouse-data:

@@ -1,13 +1,29 @@
-import { redirect } from '@sveltejs/kit';
-import { auth } from '$lib/server/auth';
-import type { Actions } from './$types';
+import { db } from '$lib/server/db';
+import { listMonitors } from '$lib/server/monitors';
+import { fetchMonitorStatus } from '$lib/server/ninjacat';
+import type { PageServerLoad } from './$types';
 
-// Straznik i dane uzytkownika sa w +layout.server.ts — obejmuja cale /app.
-// Tutaj zostaje tylko akcja wylogowania, bo akcje moga zyc wylacznie
-// w +page.server.ts. The sidebar footer targets it explicitly as /app?/signOut.
-export const actions: Actions = {
-	signOut: async ({ request }) => {
-		await auth.api.signOut({ headers: request.headers });
-		redirect(302, '/login');
+// The monitor tile: how many the tenant has, and how many are alerting. A
+// query process that is down leaves the count without the states.
+export const load: PageServerLoad = async ({ locals }) => {
+	const tenantId = locals.tenant?.id;
+	if (!tenantId) {
+		return { monitors: { total: 0, alert: 0, warn: 0, noData: 0, known: true } };
+	}
+	const rows = await listMonitors(db, tenantId);
+	try {
+		const statuses = await fetchMonitorStatus(rows.map((r) => r.id));
+		const count = (state: string) => statuses.filter((s) => s.state === state).length;
+		return {
+			monitors: {
+				total: rows.length,
+				alert: count('Alert'),
+				warn: count('Warn'),
+				noData: count('No Data'),
+				known: true
+			}
+		};
+	} catch {
+		return { monitors: { total: rows.length, alert: 0, warn: 0, noData: 0, known: false } };
 	}
 };

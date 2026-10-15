@@ -1,21 +1,32 @@
 import { randomBytes, createHash } from 'node:crypto';
+import { sql } from 'drizzle-orm';
+import { db } from './db';
 
-// Klucz w formacie datadogowym: 32 znaki szesnastkowe (128 bitow entropii).
-// Dzieki temu wchodzi do istniejacych konfiguracji agenta bez zmian.
-export function nowyKlucz(): string {
+// Datadog's shape, 32 hex characters (128 bits), so a key drops into an
+// existing agent config unchanged.
+export function newKey(): string {
 	return randomBytes(16).toString('hex');
 }
 
-// SHA-256, bo odbiornik szuka PO SKROCIE przy kazdym zadaniu agenta.
-// Bcrypt by tu nie zadzialal - jest solony, wiec ten sam klucz dawalby
-// inny skrot za kazdym razem i nie dalo by sie go odnalezc.
-// To bezpieczne, bo klucza o 128 bitach entropii nie da sie zgadnac
-// ani rozbic slownikiem.
-export function skrotKlucza(klucz: string): string {
-	return createHash('sha256').update(klucz).digest('hex');
+// SHA-256 rather than bcrypt: the intake looks a key up by its hash on every
+// request, and a salted hash differs each time. 128 random bits cannot be
+// guessed or found in a dictionary, so the hash needs no salt.
+export function keyHash(key: string): string {
+	return createHash('sha256').update(key).digest('hex');
 }
 
-// Pierwsze znaki klucza - do rozpoznania go na liscie bez ujawniania calosci.
-export function prefiks(klucz: string): string {
-	return klucz.slice(0, 8);
+// Enough of the key to recognise it in the list without revealing it.
+export function keyPrefix(key: string): string {
+	return key.slice(0, 8);
+}
+
+// NOTIFY on the channel the intake listens on (api/src/Server/ApiKeysKeeper.fs).
+// Never throws: the key is stored, and the intake re-reads every 30s anyway.
+export async function refreshApiKeys(): Promise<boolean> {
+	try {
+		await db.execute(sql`NOTIFY ninjacat_api_keys`);
+		return true;
+	} catch {
+		return false;
+	}
 }

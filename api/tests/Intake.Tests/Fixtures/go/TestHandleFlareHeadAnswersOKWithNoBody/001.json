@@ -1,0 +1,24 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.027438707Z",
+ "request": {
+  "body_b64": "",
+  "headers": {
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "HEAD",
+  "url": "/support/flare"
+ },
+ "response": {
+  "body_b64": "",
+  "headers": {},
+  "status": 200
+ },
+ "routes": [],
+ "sends": [],
+ "seq": 1,
+ "test": "TestHandleFlareHeadAnswersOKWithNoBody",
+ "volatile": []
+}

@@ -1,0 +1,22 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.667653129Z",
+ "request": {
+  "body_b64": "",
+  "headers": {},
+  "host": "install.datad0g.com",
+  "method": "HEAD",
+  "url": "/"
+ },
+ "response": {
+  "body_b64": "",
+  "headers": {},
+  "status": 200
+ },
+ "routes": [
+  "routeInstall"
+ ],
+ "sends": null,
+ "seq": 56,
+ "test": "anonymous",
+ "volatile": []
+}

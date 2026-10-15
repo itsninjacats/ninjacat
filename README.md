@@ -30,6 +30,9 @@ changes.
   digest.
 - **API keys** — Datadog-shaped, created in the panel, enforced at intake.
 - **Query API + panel** — metric search, per-host series, charts over an arbitrary range.
+- **Monitors** — Datadog-style metric monitors (threshold, change, anomaly, forecast,
+  outlier), defined in the panel and evaluated by a service of their own. Notifications
+  are a stub so far.
 - **Self-monitoring** — NinjaCat reports its own metrics through its own pipeline.
 - **Capture lab** — a sealed network that records exactly what a real agent sends, which
   is how the protocol is being worked out endpoint by endpoint.
@@ -43,54 +46,88 @@ git clone <this repo> && cd ninjacat
 docker compose up
 ```
 
-That brings up ClickHouse, Postgres, the backend and the panel, applies both schemas,
-and watches both source trees: saving a `.go` file rebuilds and restarts the server
-(via Air), saving a Svelte file hot-reloads the browser.
+That brings up ClickHouse, Postgres, the server's three processes and the panel, applies
+both schemas, and watches both source trees: saving an F# file rebuilds and restarts the
+server (via `dotnet watch`), saving a Svelte file hot-reloads the browser.
 
 | | |
 |---|---|
 | Panel | http://localhost:5173 |
 | Agent intake | http://localhost:8080 |
-| Panel API | http://localhost:8081 |
-| Ergo observer | http://localhost:9911 |
+| Panel and query API (internal, loopback only) | http://localhost:8081 |
 
 To work on the host instead, run just the databases with
-`docker compose up -d postgres clickhouse`, then `go run ./cmd/ninjacat` in `server/`
-and `bun run dev` in `frontend/`. Development needs Go 1.26+ and [Bun](https://bun.sh);
-the build requires `CGO_ENABLED=1`, because the process-agent frames use a legacy zstd
-that is not pure Go.
+`docker compose up -d postgres clickhouse`, then `dotnet run --project src/Server -- intake`,
+`dotnet run --project src/Server -- query` and `dotnet run --project src/Monitors` in `api/`,
+and `bun run dev` in `frontend/`. Development needs the .NET 10 SDK and [Bun](https://bun.sh).
 
-Create an API key in the panel under Settings, then send an agent at it:
+Nobody can register: accounts are made on the server. Create the first one, then sign in:
+
+```bash
+docker compose exec frontend bun run user:create -- you@example.com --name 'Your Name'
+# with the shipping image: node create-user.js you@example.com --name 'Your Name'
+```
+
+It asks for the password, as Django's `createsuperuser` does. Where nobody is there to type
+(a Job, a script), it takes it from `NINJACAT_USER_PASSWORD`.
+
+The first account on an empty database is the instance admin and owner of the tenant
+`default`; later ones take `--admin` (an instance admin, who creates tenants and accounts),
+`--tenant <id|slug>` (repeatable) and `--role owner|admin|member` (default `member`).
+
+Create an API key in the panel under Settings, then send an agent at it. The intake
+routes on the hostname, as Datadog does, so each product needs its Datadog-shaped name
+(`app.`, `trace.agent.`, `process.`, …) resolving to NinjaCat:
 
 ```bash
 DD_API_KEY=<the key you just created>
-DD_DD_URL=http://ninjacat-host:8080
-DD_APM_DD_URL=http://ninjacat-host:8080
-DD_PROCESS_CONFIG_PROCESS_DD_URL=http://ninjacat-host:8080
-DD_LOGS_CONFIG_LOGS_DD_URL=ninjacat-host:8080
+DD_DD_URL=http://app.ninjacat.example:8080
+DD_APM_DD_URL=http://trace.agent.ninjacat.example:8080
+DD_PROCESS_CONFIG_PROCESS_DD_URL=http://process.ninjacat.example:8080
+DD_LOGS_CONFIG_LOGS_DD_URL=agent-http-intake.logs.ninjacat.example:8080
 DD_LOGS_CONFIG_USE_HTTP=true
 DD_LOGS_CONFIG_LOGS_NO_SSL=true
 ```
 
-`server/docker-compose.datadog-lab.yml` runs a real agent against NinjaCat on a network
-with `internal: true`, so nothing can escape to Datadog regardless of how the agent is
-configured. That is the recommended way to try this the first time.
+`compose.lab.yaml` does exactly that with a real agent, on a network with
+`internal: true`, so nothing can escape to Datadog regardless of how the agent is
+configured. That is the recommended way to try this the first time:
+
+```bash
+DD_API_KEY=<key> docker compose -f compose.yaml -f compose.lab.yaml up
+```
+
+### NinjaCat watching itself
+
+`compose.self.yaml` makes the installation its own first customer. The panel reports
+through Datadog's browser SDKs (RUM, browser logs), the server's three processes through
+Datadog's .NET tracer (traces, runtime metrics, profiles, logs), and an agent reports the
+host — all of it to this installation's own intake, none of it to Datadog. It is off
+unless the file is named:
+
+```bash
+NINJACAT_SELF_KEY=<key> docker compose -f compose.yaml -f compose.self.yaml up
+```
+
+Use a key made for this alone: the panel hands it to every browser that opens it.
 
 ## Architecture
 
 ```
-Datadog Agent ──:8080──▶ intake ──▶ storage actors ──▶ ClickHouse
-                                          ▲
-SvelteKit panel ──:8081──▶ panel API ──▶ query pool ──┘
-       │
-       └──▶ Postgres (users, sessions, API keys)
+Datadog Agent ──:8080──▶ intake ──▶ one writer per table ──▶ ClickHouse
+                                                                 ▲
+SvelteKit panel ──:8081──▶ query (panel and query API) ─────────┤
+       │                                                         │
+       │                     monitors (Akka.NET cluster) ────────┘
+       │                         ▲ reads `monitor`, LISTEN ninjacat_monitors
+       └──▶ Postgres (users, sessions, tenants and their members, API keys, monitors)
 ```
 
-The backend runs as a single [Ergo](https://ergo.services) node: every component is a
-supervised application, so a failure is contained and restarted rather than taking the
-process down. Ingest and querying are deliberately separate applications — a slow
-dashboard query must never be able to stall the write path, and the two are meant to be
-splittable across nodes later.
+The server is two F# programs (`api/`) run as three processes: agents reach `intake` and only
+`intake`; the panel's API and Datadog's query API are served by `query`, on a port of its own;
+`ninjacat-monitors` evaluates the monitors and writes what they went through. The agent
+gets its answer before anything is written — rows are buffered per table and inserted in
+batches, so a burst of logs cannot delay metrics.
 
 Intake routes on the `Host` header, mirroring the way Datadog puts every product on its
 own hostname. That is what lets a single `DD_SITE` reconfigure an entire agent.
@@ -110,8 +147,8 @@ converted as they are touched.
 [GNU AGPL v3](LICENSE).
 
 If you run a modified NinjaCat as a network service, AGPL section 13 requires you to
-offer its users the corresponding source. The panel links back to this repository for
-that purpose; if you modify it, that link must point at your source, not this one.
+offer its users the corresponding source. The panel does not link to its source yet
+(`TODO.md`); until it does, that offer is yours to make.
 
 Copyright (C) 2026 Michal Hodur.
 

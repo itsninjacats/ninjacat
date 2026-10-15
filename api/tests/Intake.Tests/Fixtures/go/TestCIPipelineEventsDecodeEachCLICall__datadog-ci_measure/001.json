@@ -1,0 +1,110 @@
+{
+ "recorded_at": "2026-10-01T15:21:18.998999871Z",
+ "request": {
+  "body_b64": "eyJkYXRhIjp7InR5cGUiOiJjaV9jdXN0b21fbWV0cmljIiwiYXR0cmlidXRlcyI6eyJjaV9sZXZlbCI6MywicHJvdmlkZXIiOiJnaXRsYWIiLAoJCQkJImNpX2VudiI6eyJDSV9KT0JfSUQiOiI3NyJ9LCJtZXRyaWNzIjp7ImJ1aWxkLnNlY29uZHMiOjQyLjUsImFydGlmYWN0cy5tYiI6M319fX0=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/ci/pipeline/metrics"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeCIVisibilityAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "*int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:18.998995673Z",
+     "measure",
+     "ci_custom_metric",
+     "gitlab",
+     3,
+     {
+      "CI_JOB_ID": "77"
+     },
+     {},
+     {
+      "artifacts.mb": 3,
+      "build.seconds": 42.5
+     },
+     "",
+     "",
+     "",
+     "{\"ci_level\":3,\"provider\":\"gitlab\",\n\t\t\t\t\"ci_env\":{\"CI_JOB_ID\":\"77\"},\"metrics\":{\"build.seconds\":42.5,\"artifacts.mb\":3}}",
+     "{\"data\":{\"type\":\"ci_custom_metric\",\"attributes\":{\"ci_level\":3,\"provider\":\"gitlab\",\n\t\t\t\t\"ci_env\":{\"CI_JOB_ID\":\"77\"},\"metrics\":{\"build.seconds\":42.5,\"artifacts.mb\":3}}}}",
+     {}
+    ]
+   ],
+   "insert": "INSERT INTO ci_pipeline_events\n\t\t\t(tenant_id, received_at, kind, data_type, provider, ci_level, ci_env,\n\t\t\t tags, metrics, span_name, span_start_raw, span_end_raw,\n\t\t\t attributes, body, extra)",
+   "rows": [
+    {
+     "Attributes": "{\"ci_level\":3,\"provider\":\"gitlab\",\n\t\t\t\t\"ci_env\":{\"CI_JOB_ID\":\"77\"},\"metrics\":{\"build.seconds\":42.5,\"artifacts.mb\":3}}",
+     "Body": "{\"data\":{\"type\":\"ci_custom_metric\",\"attributes\":{\"ci_level\":3,\"provider\":\"gitlab\",\n\t\t\t\t\"ci_env\":{\"CI_JOB_ID\":\"77\"},\"metrics\":{\"build.seconds\":42.5,\"artifacts.mb\":3}}}}",
+     "CIEnv": {
+      "CI_JOB_ID": "77"
+     },
+     "CILevel": 3,
+     "DataType": "ci_custom_metric",
+     "Extra": {},
+     "Kind": "measure",
+     "Metrics": {
+      "artifacts.mb": 3,
+      "build.seconds": 42.5
+     },
+     "Provider": "gitlab",
+     "ReceivedAt": "2026-10-01T15:21:18.998995673Z",
+     "SpanEndRaw": "",
+     "SpanName": "",
+     "SpanStartRaw": "",
+     "Tags": {},
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_ci_pipeline_events",
+   "type": "storage.WriteCIPipelineEvents"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCIPipelineEventsDecodeEachCLICall/datadog-ci_measure",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

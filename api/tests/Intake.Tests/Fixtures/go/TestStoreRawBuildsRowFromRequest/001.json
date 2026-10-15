@@ -1,0 +1,113 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.669961728Z",
+ "request": {
+  "body_b64": "",
+  "headers": {
+   "Authorization": [
+    "Bearer secret-value"
+   ],
+   "Content-Encoding": [
+    "gzip"
+   ],
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ],
+   "User-Agent": [
+    "datadog-agent/7.58.2"
+   ]
+  },
+  "host": "dbm-metrics-intake.ninjacat.local",
+  "method": "POST",
+  "url": "/api/v2/databasequery?api-version=2"
+ },
+ "response": {
+  "body_b64": "",
+  "headers": {},
+  "status": 202
+ },
+ "routes": [
+  "func1"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:37.669960826Z",
+     "dbm",
+     "no_schema",
+     "POST",
+     "dbm-metrics-intake.ninjacat.local",
+     "/api/v2/databasequery",
+     {
+      "api-version": [
+       "2"
+      ]
+     },
+     "application/json",
+     "gzip",
+     {
+      "User-Agent": "datadog-agent/7.58.2"
+     },
+     "{\"x\":1}",
+     7,
+     "no decoder for this track yet"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "{\"x\":1}",
+     "BodyBytes": 7,
+     "ContentEncoding": "gzip",
+     "ContentType": "application/json",
+     "Headers": {
+      "User-Agent": "datadog-agent/7.58.2"
+     },
+     "Host": "dbm-metrics-intake.ninjacat.local",
+     "Intake": "dbm",
+     "Method": "POST",
+     "Note": "no decoder for this track yet",
+     "Path": "/api/v2/databasequery",
+     "Query": {
+      "api-version": [
+       "2"
+      ]
+     },
+     "Reason": "no_schema",
+     "ReceivedAt": "2026-10-01T15:21:37.669960826Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestStoreRawBuildsRowFromRequest",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

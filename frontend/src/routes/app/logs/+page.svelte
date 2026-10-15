@@ -5,7 +5,6 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import { Separator } from '$lib/components/ui/separator';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -184,32 +183,41 @@
 				if (e.key === 'Enter') addTag();
 			}}
 			placeholder="Add tag filter (key:value)…"
-			class="h-8 w-56 font-mono text-xs"
+			class="h-8 w-64 font-mono text-xs md:text-xs"
 		/>
 		{#if tagGroups.length > 0}
-			<Separator orientation="vertical" class="h-5" />
 			{#each tagGroups as g, gi (g.key)}
-				{#if gi > 0}
-					<span class="text-[10px] font-semibold text-muted-foreground uppercase">and</span>
-				{/if}
-				<div class="flex items-center gap-1 rounded-md border bg-muted/40 px-1.5 py-1">
-					<span class="font-mono text-[11px] text-muted-foreground">{g.key}:</span>
-					{#each g.raws as raw, ri (raw)}
-						{#if ri > 0}
-							<span class="text-[10px] font-semibold text-muted-foreground uppercase">or</span>
-						{/if}
-						<Badge variant="secondary" class="gap-1 font-mono text-[11px]">
-							{raw.slice(g.key.length + 1)}
-							<button
-								type="button"
-								class="ml-0.5 opacity-60 hover:opacity-100"
-								onclick={() => removeTag(raw)}
-								aria-label={`Remove filter ${raw}`}
+				<!-- "and" stays with the group it joins when the row wraps. -->
+				<div class="flex max-w-full min-w-0 items-center gap-2">
+					{#if gi > 0}
+						<span class="text-[10px] font-semibold text-muted-foreground uppercase">and</span>
+					{/if}
+					<div
+						class="flex min-w-0 flex-wrap items-center gap-1 rounded-md border bg-muted/40 px-1.5 py-1"
+					>
+						<span class="min-w-0 font-mono text-[11px] wrap-anywhere text-muted-foreground"
+							>{g.key}:</span
+						>
+						{#each g.raws as raw, ri (raw)}
+							{#if ri > 0}
+								<span class="text-[10px] font-semibold text-muted-foreground uppercase">or</span>
+							{/if}
+							<Badge
+								variant="secondary"
+								class="h-auto max-w-full gap-1 rounded-md font-mono text-[11px] wrap-anywhere whitespace-normal"
 							>
-								×
-							</button>
-						</Badge>
-					{/each}
+								<span>{raw.slice(g.key.length + 1)}</span>
+								<button
+									type="button"
+									class="ml-0.5 opacity-60 hover:opacity-100"
+									onclick={() => removeTag(raw)}
+									aria-label={`Remove filter ${raw}`}
+								>
+									×
+								</button>
+							</Badge>
+						{/each}
+					</div>
 				</div>
 			{/each}
 			<Button size="sm" variant="ghost" onclick={() => apply({ tag: null })}>clear</Button>
@@ -281,7 +289,7 @@
 					</div>
 				{:else if logs.length === 0}
 					<div
-						class="mx-6 mb-6 flex h-40 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground"
+						class="mx-6 mb-6 flex h-40 items-center justify-center rounded-md border border-dashed px-4 text-center text-sm text-muted-foreground"
 					>
 						No log events match. Try a wider range or fewer filters.
 					</div>

@@ -1,0 +1,152 @@
+{
+ "recorded_at": "2026-10-01T15:21:25.863402583Z",
+ "request": {
+  "body_b64": "W3siYmdwX25leHRfaG9wIjoiMTAuMC4wLjI1NCIsImJ5dGVzIjoxMDk5NTExNjI3Nzc2LCJkZXN0aW5hdGlvbiI6eyJpcCI6IjEwLjAuMC4zIiwicG9ydCI6IjUwMDAiLCJtYWMiOiIiLCJtYXNrIjoiIn0sImRldmljZSI6eyJuYW1lc3BhY2UiOiJkZWZhdWx0In0sImRpcmVjdGlvbiI6IiIsImRzY3AiOjAsImRzY3BfbmFtZSI6IiIsImVncmVzcyI6eyJpbnRlcmZhY2UiOnsiaW5kZXgiOjB9fSwiZW5kIjoxNzAwMDAwMDEwLCJleHBvcnRlciI6eyJpcCI6IjEwLjAuMC4xIn0sImZsdXNoX3RpbWVzdGFtcCI6MTc1ODMyNjQwMDEyMywiaG9zdCI6IiIsImluZ3Jlc3MiOnsiaW50ZXJmYWNlIjp7ImluZGV4IjowfX0sImlwX3Byb3RvY29sIjoiVENQIiwibmV4dF9ob3AiOnsiaXAiOiIifSwicGFja2V0cyI6MTAwMCwic2FtcGxpbmdfcmF0ZSI6MCwic291cmNlIjp7ImlwIjoiMTAuMC4wLjIiLCJwb3J0IjoiNDQzIiwibWFjIjoiIiwibWFzayI6IiJ9LCJzdGFydCI6MTcwMDAwMDAwMCwidG9zIjowLCJ0eXBlIjoibmV0ZmxvdzkifV0=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/ndmflow"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeNDM"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "uint64",
+     "string",
+     "time.Time",
+     "time.Time",
+     "uint64",
+     "uint64",
+     "string",
+     "string",
+     "uint32",
+     "uint32",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint32",
+     "uint32",
+     "string",
+     "[]string",
+     "string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2025-09-20T00:00:00.123Z",
+     "netflow9",
+     0,
+     "",
+     "2023-11-14T22:13:20Z",
+     "2023-11-14T22:13:30Z",
+     1099511627776,
+     1000,
+     "",
+     "TCP",
+     0,
+     0,
+     "",
+     "default",
+     "10.0.0.1",
+     "10.0.0.2",
+     "443",
+     "",
+     "",
+     "",
+     "10.0.0.3",
+     "5000",
+     "",
+     "",
+     "",
+     0,
+     0,
+     "",
+     [],
+     "",
+     {
+      "bgp_next_hop": "\"10.0.0.254\""
+     }
+    ]
+   ],
+   "insert": "INSERT INTO netflow_flows\n\t\t\t(tenant_id, flush_timestamp, flow_type, sampling_rate, direction,\n\t\t\t flow_start, flow_end, bytes, packets, ether_type, ip_protocol, tos, dscp, dscp_name,\n\t\t\t device_namespace, exporter_ip,\n\t\t\t source_ip, source_port, source_mac, source_mask, source_reverse_dns_hostname,\n\t\t\t destination_ip, destination_port, destination_mac, destination_mask, destination_reverse_dns_hostname,\n\t\t\t ingress_interface_index, egress_interface_index,\n\t\t\t host, tcp_flags, next_hop_ip, additional_fields)",
+   "rows": [
+    {
+     "AdditionalFields": {
+      "bgp_next_hop": "\"10.0.0.254\""
+     },
+     "Bytes": 1099511627776,
+     "DSCP": 0,
+     "DSCPName": "",
+     "DestinationIP": "10.0.0.3",
+     "DestinationMac": "",
+     "DestinationMask": "",
+     "DestinationPort": "5000",
+     "DestinationReverseDNSHostname": "",
+     "DeviceNamespace": "default",
+     "Direction": "",
+     "EgressInterfaceIndex": 0,
+     "End": "2023-11-14T22:13:30Z",
+     "EtherType": "",
+     "ExporterIP": "10.0.0.1",
+     "FlowType": "netflow9",
+     "FlushTimestamp": "2025-09-20T00:00:00.123Z",
+     "Host": "",
+     "IPProtocol": "TCP",
+     "IngressInterfaceIndex": 0,
+     "NextHopIP": "",
+     "Packets": 1000,
+     "SamplingRate": 0,
+     "SourceIP": "10.0.0.2",
+     "SourceMac": "",
+     "SourceMask": "",
+     "SourcePort": "443",
+     "SourceReverseDNSHostname": "",
+     "Start": "2023-11-14T22:13:20Z",
+     "TCPFlags": [],
+     "TOS": 0,
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_netflow_flows",
+   "type": "storage.WriteNetflowFlows"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleNDMFlowStoresAdditionalFields",
+ "volatile": []
+}

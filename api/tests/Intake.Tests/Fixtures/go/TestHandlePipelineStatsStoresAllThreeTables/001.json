@@ -1,0 +1,338 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.663616828Z",
+ "request": {
+  "body_b64": "H4sIAAAAAAAA/2pe7JpXtqSgKD9leXBqUVlmcuqy/KKU1KLipcEliSXFE1tBdFHJefHpc/6ZaTEwrHApLUosyczPO8/AwMAUwv2EAaqwaYlHYnHG+f9QsMI1JT01JDG9eOKqksqCVKvsxLTsxBVOicnZOfnpxRObloDlVhckFpVkgoyzMl4alphTmvp+TUhRYl5xYnJJZn5e8RFmRiZmwACl4TMGowAAAA==",
+  "headers": {
+   "Content-Encoding": [
+    "gzip"
+   ],
+   "Content-Type": [
+    "application/msgpack"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ],
+   "Via": [
+    "trace-agent 7.58.2"
+   ],
+   "X-Datadog-Additional-Tags": [
+    "_dd.tags.container:cid"
+   ],
+   "X-Datadog-Container-Tags": [
+    "kube_namespace:shop"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v0.1/pipeline_stats"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeTrace"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "uint64",
+     "time.Time",
+     "uint64",
+     "[]string",
+     "uint64",
+     "uint64",
+     "string",
+     "string",
+     "string",
+     "*float64",
+     "*float64",
+     "*float64",
+     "*float64",
+     "[]int32",
+     "[]float64",
+     "string",
+     "string",
+     "*float64",
+     "*float64",
+     "*float64",
+     "*float64",
+     "[]int32",
+     "[]float64",
+     "string",
+     "string",
+     "*float64",
+     "*float64",
+     "*float64",
+     "*float64",
+     "[]int32",
+     "[]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:37.663602131Z",
+     "prod",
+     "orders",
+     "",
+     "",
+     "",
+     [],
+     0,
+     "2023-11-14T22:13:20Z",
+     10000000000,
+     [
+      "type:kafka"
+     ],
+     18446744073709551615,
+     0,
+     "",
+     "",
+     "absent",
+     null,
+     null,
+     null,
+     null,
+     [],
+     [],
+     "",
+     "absent",
+     null,
+     null,
+     null,
+     null,
+     [],
+     [],
+     "",
+     "absent",
+     null,
+     null,
+     null,
+     null,
+     [],
+     [],
+     "trace-agent 7.58.2",
+     "_dd.tags.container:cid",
+     "kube_namespace:shop",
+     "gzip",
+     [],
+     ""
+    ]
+   ],
+   "insert": "INSERT INTO dsm_pipeline_stats\n\t\t\t(tenant_id, received_at,\n\t\t\t env, service, tracer_version, lang, version, process_tags, product_mask,\n\t\t\t bucket_start, bucket_duration_ns,\n\t\t\t edge_tags, hash, parent_hash, timestamp_type,\n\t\t\t pathway_latency, pathway_latency_state,\n\t\t\t pathway_count, pathway_sum, pathway_min, pathway_max,\n\t\t\t pathway_bin_keys, pathway_bin_counts,\n\t\t\t edge_latency, edge_latency_state,\n\t\t\t edge_count, edge_sum, edge_min, edge_max,\n\t\t\t edge_bin_keys, edge_bin_counts,\n\t\t\t payload_size, payload_size_state,\n\t\t\t payload_size_count, payload_size_sum, payload_size_min, payload_size_max,\n\t\t\t payload_size_bin_keys, payload_size_bin_counts,\n\t\t\t via, additional_tags, container_tags, content_encoding,\n\t\t\t unknown_keys, unknown_json)",
+   "rows": [
+    {
+     "AdditionalTags": "_dd.tags.container:cid",
+     "ContainerTags": "kube_namespace:shop",
+     "ContentEncoding": "gzip",
+     "DSMCommon": {
+      "BucketDurationNs": 10000000000,
+      "BucketStart": "2023-11-14T22:13:20Z",
+      "Env": "prod",
+      "Lang": "",
+      "ProcessTags": [],
+      "ProductMask": 0,
+      "ReceivedAt": "2026-10-01T15:21:37.663602131Z",
+      "Service": "orders",
+      "TenantID": "test",
+      "TracerVersion": "",
+      "Version": ""
+     },
+     "EdgeLatency": {
+      "BinCounts": [],
+      "BinKeys": [],
+      "Count": null,
+      "Max": null,
+      "Min": null,
+      "Raw": "",
+      "State": "absent",
+      "Sum": null
+     },
+     "EdgeTags": [
+      "type:kafka"
+     ],
+     "Hash": 18446744073709551615,
+     "ParentHash": 0,
+     "PathwayLatency": {
+      "BinCounts": [],
+      "BinKeys": [],
+      "Count": null,
+      "Max": null,
+      "Min": null,
+      "Raw": "",
+      "State": "absent",
+      "Sum": null
+     },
+     "PayloadSize": {
+      "BinCounts": [],
+      "BinKeys": [],
+      "Count": null,
+      "Max": null,
+      "Min": null,
+      "Raw": "",
+      "State": "absent",
+      "Sum": null
+     },
+     "TimestampType": "",
+     "UnknownJSON": "",
+     "UnknownKeys": [],
+     "Via": "trace-agent 7.58.2"
+    }
+   ],
+   "to": "storage_dsm_pipeline_stats",
+   "type": "storage.WriteDSMPipelineStats"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "uint64",
+     "time.Time",
+     "uint64",
+     "[]string",
+     "int64"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:37.663602131Z",
+     "prod",
+     "orders",
+     "",
+     "",
+     "",
+     [],
+     0,
+     "2023-11-14T22:13:20Z",
+     10000000000,
+     [
+      "partition:3"
+     ],
+     -17
+    ]
+   ],
+   "insert": "INSERT INTO dsm_backlogs\n\t\t\t(tenant_id, received_at,\n\t\t\t env, service, tracer_version, lang, version, process_tags, product_mask,\n\t\t\t bucket_start, bucket_duration_ns,\n\t\t\t tags, value)",
+   "rows": [
+    {
+     "DSMCommon": {
+      "BucketDurationNs": 10000000000,
+      "BucketStart": "2023-11-14T22:13:20Z",
+      "Env": "prod",
+      "Lang": "",
+      "ProcessTags": [],
+      "ProductMask": 0,
+      "ReceivedAt": "2026-10-01T15:21:37.663602131Z",
+      "Service": "orders",
+      "TenantID": "test",
+      "TracerVersion": "",
+      "Version": ""
+     },
+     "Tags": [
+      "partition:3"
+     ],
+     "Value": -17
+    }
+   ],
+   "to": "storage_dsm_backlogs",
+   "type": "storage.WriteDSMBacklogs"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "uint64",
+     "time.Time",
+     "uint64",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:37.663602131Z",
+     "prod",
+     "orders",
+     "",
+     "",
+     "",
+     [],
+     0,
+     "2023-11-14T22:13:20Z",
+     10000000000,
+     "\u0001\u0002\u0003",
+     ""
+    ]
+   ],
+   "insert": "INSERT INTO dsm_bucket_transactions\n\t\t\t(tenant_id, received_at,\n\t\t\t env, service, tracer_version, lang, version, process_tags, product_mask,\n\t\t\t bucket_start, bucket_duration_ns,\n\t\t\t transactions, transaction_checkpoint_ids)",
+   "rows": [
+    {
+     "DSMCommon": {
+      "BucketDurationNs": 10000000000,
+      "BucketStart": "2023-11-14T22:13:20Z",
+      "Env": "prod",
+      "Lang": "",
+      "ProcessTags": [],
+      "ProductMask": 0,
+      "ReceivedAt": "2026-10-01T15:21:37.663602131Z",
+      "Service": "orders",
+      "TenantID": "test",
+      "TracerVersion": "",
+      "Version": ""
+     },
+     "TransactionCheckpointIDs": "",
+     "Transactions": "\u0001\u0002\u0003"
+    }
+   ],
+   "to": "storage_dsm_bucket_transactions",
+   "type": "storage.WriteDSMBucketTransactions"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandlePipelineStatsStoresAllThreeTables",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/DSMCommon/ReceivedAt",
+  "/sends/1/args/0/1",
+  "/sends/1/rows/0/DSMCommon/ReceivedAt",
+  "/sends/2/args/0/1",
+  "/sends/2/rows/0/DSMCommon/ReceivedAt"
+ ]
+}

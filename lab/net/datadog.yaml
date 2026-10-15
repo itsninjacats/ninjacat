@@ -1,0 +1,30 @@
+dd_url: http://app.ninjacat.lab:8080
+log_level: info
+remote_configuration:
+  enabled: false
+apm_config:
+  enabled: false
+network_devices:
+  metadata:
+    logs_dd_url: "ndm-intake.ninjacat.lab:8080"
+    logs_no_ssl: true
+  snmp_traps:
+    enabled: true
+    port: 9162
+    community_strings: ["public"]
+    forwarder:
+      logs_dd_url: "snmp-traps-intake.ninjacat.lab:8080"
+      logs_no_ssl: true
+  netflow:
+    enabled: true
+    aggregator_flush_interval: 10
+    listeners:
+      - flow_type: netflow5
+        port: 2055
+    forwarder:
+      logs_dd_url: "ndmflow-intake.ninjacat.lab:8080"
+      logs_no_ssl: true
+network_path:
+  forwarder:
+    logs_dd_url: "netpath-intake.ninjacat.lab:8080"
+    logs_no_ssl: true

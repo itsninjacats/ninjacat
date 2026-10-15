@@ -1,0 +1,188 @@
+{
+ "recorded_at": "2026-10-01T16:19:49.959172547Z",
+ "request": {
+  "body_b64": "WzEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MCwgMWU5OTksICJcdWQ4M2RcdWRlMDAiLCB7ImtcbiI6MX1d",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ],
+   "Dd-Evp-Origin": [
+    "agent"
+   ],
+   "Dd-Evp-Origin-Version": [
+    "7.58.2"
+   ],
+   "X-Requested-With": [
+    "datadog-agent-diagnose"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/data_streams_messages"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeTrace"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "uint32",
+     "string",
+     "[]string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "uint32",
+     "string",
+     "[]string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "uint32",
+     "string",
+     "[]string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "uint32",
+     "string",
+     "[]string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:19:49.959168329Z",
+     0,
+     "123456789012345678901234567890",
+     [],
+     "agent",
+     "7.58.2",
+     ""
+    ],
+    [
+     "test",
+     "2026-10-01T16:19:49.959168329Z",
+     1,
+     "1e999",
+     [],
+     "agent",
+     "7.58.2",
+     ""
+    ],
+    [
+     "test",
+     "2026-10-01T16:19:49.959168329Z",
+     2,
+     "\"\\ud83d\\ude00\"",
+     [],
+     "agent",
+     "7.58.2",
+     ""
+    ],
+    [
+     "test",
+     "2026-10-01T16:19:49.959168329Z",
+     3,
+     "{\"k\\n\":1}",
+     [
+      "k\n"
+     ],
+     "agent",
+     "7.58.2",
+     ""
+    ]
+   ],
+   "insert": "INSERT INTO dsm_messages\n\t\t\t(tenant_id, received_at, position, message, keys,\n\t\t\t dd_evp_origin, dd_evp_origin_version, content_encoding)",
+   "rows": [
+    {
+     "ContentEncoding": "",
+     "DDEVPOrigin": "agent",
+     "DDEVPOriginVersion": "7.58.2",
+     "Keys": [],
+     "Message": "123456789012345678901234567890",
+     "Position": 0,
+     "ReceivedAt": "2026-10-01T16:19:49.959168329Z",
+     "TenantID": "test"
+    },
+    {
+     "ContentEncoding": "",
+     "DDEVPOrigin": "agent",
+     "DDEVPOriginVersion": "7.58.2",
+     "Keys": [],
+     "Message": "1e999",
+     "Position": 1,
+     "ReceivedAt": "2026-10-01T16:19:49.959168329Z",
+     "TenantID": "test"
+    },
+    {
+     "ContentEncoding": "",
+     "DDEVPOrigin": "agent",
+     "DDEVPOriginVersion": "7.58.2",
+     "Keys": [],
+     "Message": "\"\\ud83d\\ude00\"",
+     "Position": 2,
+     "ReceivedAt": "2026-10-01T16:19:49.959168329Z",
+     "TenantID": "test"
+    },
+    {
+     "ContentEncoding": "",
+     "DDEVPOrigin": "agent",
+     "DDEVPOriginVersion": "7.58.2",
+     "Keys": [
+      "k\n"
+     ],
+     "Message": "{\"k\\n\":1}",
+     "Position": 3,
+     "ReceivedAt": "2026-10-01T16:19:49.959168329Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_dsm_messages",
+   "type": "storage.WriteDSMMessages"
+  }
+ ],
+ "seq": 14,
+ "test": "TestPortDataStreams",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/args/2/1",
+  "/sends/0/args/3/1",
+  "/sends/0/rows/0/ReceivedAt",
+  "/sends/0/rows/1/ReceivedAt",
+  "/sends/0/rows/2/ReceivedAt",
+  "/sends/0/rows/3/ReceivedAt"
+ ]
+}

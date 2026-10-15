@@ -2,7 +2,9 @@
 	import { page } from '$app/state';
 	import AppSidebar from '$lib/components/app/app-sidebar.svelte';
 	import { Separator } from '$lib/components/ui/separator';
+	import { Toaster } from '$lib/components/ui/sonner';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
+	import { m } from '$lib/paraglide/messages';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
@@ -13,18 +15,26 @@
 		const p = page.url.pathname;
 		if (p.startsWith('/app/metrics')) return 'Metrics';
 		if (p.startsWith('/app/logs')) return 'Logs';
-		if (p.startsWith('/app/ustawienia/klucze')) return 'API keys';
+		if (p.startsWith('/app/monitors')) return m.monitors();
+		if (p.startsWith('/app/settings/keys')) return m.api_keys();
+		if (p.startsWith('/app/admin/tenants')) return m.tenants();
+		if (p.startsWith('/app/admin/users')) return m.admin_users();
 		return 'Overview';
 	});
 </script>
 
 <Sidebar.Provider>
-	<AppSidebar user={data.user} />
+	<AppSidebar
+		user={data.user}
+		tenant={data.tenant}
+		tenants={data.tenants}
+		instanceAdmin={data.instanceAdmin}
+	/>
 
 	<Sidebar.Inset class="flex h-svh flex-col overflow-hidden">
 		<header class="flex h-14 shrink-0 items-center gap-2 border-b px-4">
 			<Sidebar.Trigger class="-ms-1" />
-			<Separator orientation="vertical" class="mr-2 h-4" />
+			<Separator orientation="vertical" class="mr-2 h-4 data-vertical:self-center" />
 			<h1 class="font-heading text-sm font-semibold tracking-tight">{title}</h1>
 		</header>
 
@@ -33,3 +43,5 @@
 		</div>
 	</Sidebar.Inset>
 </Sidebar.Provider>
+
+<Toaster />

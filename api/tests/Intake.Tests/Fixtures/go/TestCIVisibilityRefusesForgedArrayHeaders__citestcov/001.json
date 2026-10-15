@@ -1,0 +1,105 @@
+{
+ "recorded_at": "2026-10-01T15:21:18.999676213Z",
+ "request": {
+  "body_b64": "LS1lOTc4NzJmZTlhMWMxZGEzZDI4YzI4ZTQwZWFkM2QwZTk2N2JlODEyZjMyNWQ5NDQzODc3MGUwNWNhMjMNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZXZlbnQiDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL2pzb24NCg0KeyJkdW1teSI6IHRydWV9DQotLWU5Nzg3MmZlOWExYzFkYTNkMjhjMjhlNDBlYWQzZDBlOTY3YmU4MTJmMzI1ZDk0NDM4NzcwZTA1Y2EyMw0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJjb3ZlcmFnZXgiDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL21zZ3BhY2sNCg0Kgqd2ZXJzaW9uAqljb3ZlcmFnZXPd/////g0KLS1lOTc4NzJmZTlhMWMxZGEzZDI4YzI4ZTQwZWFkM2QwZTk2N2JlODEyZjMyNWQ5NDQzODc3MGUwNWNhMjMtLQ0K",
+  "headers": {
+   "Content-Type": [
+    "multipart/form-data; boundary=e97872fe9a1c1da3d28c28e40ead3d0e967be812f325d94438770e05ca23"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/citestcov"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeCITestCov"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:18.999667176Z",
+     "citestcov",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/api/v2/citestcov",
+     {},
+     "multipart/form-data; boundary=e97872fe9a1c1da3d28c28e40ead3d0e967be812f325d94438770e05ca23",
+     "",
+     {},
+     {
+      "$b64": "LS1lOTc4NzJmZTlhMWMxZGEzZDI4YzI4ZTQwZWFkM2QwZTk2N2JlODEyZjMyNWQ5NDQzODc3MGUwNWNhMjMNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZXZlbnQiDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL2pzb24NCg0KeyJkdW1teSI6IHRydWV9DQotLWU5Nzg3MmZlOWExYzFkYTNkMjhjMjhlNDBlYWQzZDBlOTY3YmU4MTJmMzI1ZDk0NDM4NzcwZTA1Y2EyMw0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJjb3ZlcmFnZXgiDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL21zZ3BhY2sNCg0Kgqd2ZXJzaW9uAqljb3ZlcmFnZXPd/////g0KLS1lOTc4NzJmZTlhMWMxZGEzZDI4YzI4ZTQwZWFkM2QwZTk2N2JlODEyZjMyNWQ5NDQzODc3MGUwNWNhMjMtLQ0K"
+     },
+     405,
+     "coverage part (application/msgpack): coverages[0]: msgp: too few bytes left to read object"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": {
+      "$b64": "LS1lOTc4NzJmZTlhMWMxZGEzZDI4YzI4ZTQwZWFkM2QwZTk2N2JlODEyZjMyNWQ5NDQzODc3MGUwNWNhMjMNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZXZlbnQiDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL2pzb24NCg0KeyJkdW1teSI6IHRydWV9DQotLWU5Nzg3MmZlOWExYzFkYTNkMjhjMjhlNDBlYWQzZDBlOTY3YmU4MTJmMzI1ZDk0NDM4NzcwZTA1Y2EyMw0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJjb3ZlcmFnZXgiDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL21zZ3BhY2sNCg0Kgqd2ZXJzaW9uAqljb3ZlcmFnZXPd/////g0KLS1lOTc4NzJmZTlhMWMxZGEzZDI4YzI4ZTQwZWFkM2QwZTk2N2JlODEyZjMyNWQ5NDQzODc3MGUwNWNhMjMtLQ0K"
+     },
+     "BodyBytes": 405,
+     "ContentEncoding": "",
+     "ContentType": "multipart/form-data; boundary=e97872fe9a1c1da3d28c28e40ead3d0e967be812f325d94438770e05ca23",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "citestcov",
+     "Method": "POST",
+     "Note": "coverage part (application/msgpack): coverages[0]: msgp: too few bytes left to read object",
+     "Path": "/api/v2/citestcov",
+     "Query": {},
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T15:21:18.999667176Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCIVisibilityRefusesForgedArrayHeaders/citestcov",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/0/8",
+  "/sends/0/args/0/11/$b64",
+  "/sends/0/rows/0/Body/$b64",
+  "/sends/0/rows/0/ContentType",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

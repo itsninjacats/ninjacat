@@ -1,0 +1,143 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.03358386Z",
+ "request": {
+  "body_b64": "eyJ0aXRsZSI6ImRlcGxveSIsInRleHQiOiJ2MiBpcyBvdXQiLCJkYXRlX2hhcHBlbmVkIjoxNzkwMTUxMzMwLAoJCSJob3N0IjoiaDEiLCJhbGVydF90eXBlIjoid2FybmluZyIsInByaW9yaXR5IjoibG93IiwKCQkicmVsYXRlZF9ldmVudF9pZCI6ODY3NTMwOSwidGFncyI6WyJlbnY6cHJvZCJdLCJ0ZWFtIjoiY29yZSJ9",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v1/events"
+ },
+ "response": {
+  "body_b64": "eyJldmVudCI6eyJhbGVydF90eXBlIjoid2FybmluZyIsImRhdGVfaGFwcGVuZWQiOjE3OTAxNTEzMzAsImRldmljZV9uYW1lIjoiIiwiaG9zdCI6ImgxIiwiaWQiOjU1MTAxMjUwMDY0NTc3MDk4NDMsImlkX3N0ciI6IjU1MTAxMjUwMDY0NTc3MDk4NDMiLCJwcmlvcml0eSI6ImxvdyIsInNvdXJjZV90eXBlX25hbWUiOiIiLCJ0YWdzIjpbImVudjpwcm9kIl0sInRleHQiOiJ2MiBpcyBvdXQiLCJ0aXRsZSI6ImRlcGxveSIsInVybCI6IiJ9LCJzdGF0dXMiOiJvayJ9",
+  "body_json": {
+   "event": {
+    "alert_type": "warning",
+    "date_happened": 1790151330,
+    "device_name": "",
+    "host": "h1",
+    "id": 5510125006457709843,
+    "id_str": "5510125006457709843",
+    "priority": "low",
+    "source_type_name": "",
+    "tags": [
+     "env:prod"
+    ],
+    "text": "v2 is out",
+    "title": "deploy",
+    "url": ""
+   },
+   "status": "ok"
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "uuid.UUID",
+     "uint64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "*int64",
+     "string",
+     "string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-09-23T08:15:30Z",
+     "98efcaff-bbd1-4a27-ba60-53b374ff9a10",
+     5510125006457709843,
+     "deploy",
+     "v2 is out",
+     "h1",
+     "warning",
+     "low",
+     "",
+     "",
+     "",
+     {
+      "env": [
+       "prod"
+      ]
+     },
+     "",
+     8675309,
+     "warning",
+     "low",
+     {
+      "team": "\"core\""
+     }
+    ]
+   ],
+   "insert": "INSERT INTO events\n\t\t\t(tenant_id, timestamp, event_id, event_id_num, title, text, host,\n\t\t\t alert_type, priority, aggregation_key, source_type_name, device_name, tags,\n\t\t\t event_type, related_event_id, alert_type_raw, priority_raw, extra)",
+   "rows": [
+    {
+     "AggregationKey": "",
+     "AlertType": "warning",
+     "AlertTypeRaw": "warning",
+     "DeviceName": "",
+     "EventID": "98efcaff-bbd1-4a27-ba60-53b374ff9a10",
+     "EventIDNum": 5510125006457709843,
+     "EventType": "",
+     "Extra": {
+      "team": "\"core\""
+     },
+     "Host": "h1",
+     "Priority": "low",
+     "PriorityRaw": "low",
+     "RelatedEventID": 8675309,
+     "SourceTypeName": "",
+     "Tags": {
+      "env": [
+       "prod"
+      ]
+     },
+     "TenantID": "test",
+     "Text": "v2 is out",
+     "Timestamp": "2026-09-23T08:15:30Z",
+     "Title": "deploy"
+    }
+   ],
+   "to": "storage_events",
+   "type": "storage.WriteEvents"
+  }
+ ],
+ "seq": 1,
+ "test": "TestEventsKeepTheirParentAndTheirOriginalWords",
+ "volatile": [
+  "/response/body_json/event/id",
+  "/response/body_json/event/id_str",
+  "/sends/0/args/0/2",
+  "/sends/0/args/0/3",
+  "/sends/0/rows/0/EventID",
+  "/sends/0/rows/0/EventIDNum"
+ ]
+}

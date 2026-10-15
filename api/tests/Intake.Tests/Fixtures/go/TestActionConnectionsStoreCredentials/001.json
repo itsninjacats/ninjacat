@@ -1,0 +1,95 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.036616097Z",
+ "request": {
+  "body_b64": "eyJkYXRhIjp7InR5cGUiOiJjb25uZWN0aW9uIiwiaWQiOiJjLTEiLCJhdHRyaWJ1dGVzIjp7CgkJIm5hbWUiOiJwcm9kIGppcmEiLCJydW5uZXJfaWQiOiJyLTEiLCJ0YWdzIjpbImVudjpwcm9kIiwiZW52OmV1Il0sCgkJImludGVncmF0aW9uIjp7InR5cGUiOiJqaXJhIiwiY3JlZGVudGlhbHMiOnsidG9rZW4iOiJzM2NyM3QifSwiYW5fdW5uYW1lZF9rZXkiOjF9LAoJCSJhbl91bm5hbWVkX2F0dHJpYnV0ZSI6MgoJfX19",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/actions/connections"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.036607181Z",
+     "prod jira",
+     "r-1",
+     {
+      "env": [
+       "prod",
+       "eu"
+      ]
+     },
+     "jira",
+     "{\"token\":\"s3cr3t\"}",
+     {
+      "an_unnamed_attribute": "2",
+      "integration.an_unnamed_key": "1"
+     }
+    ]
+   ],
+   "insert": "INSERT INTO action_connections\n\t\t\t(tenant_id, at, name, runner_id, tags, integration_type, credentials, extra)",
+   "rows": [
+    {
+     "At": "2026-10-01T15:21:14.036607181Z",
+     "Credentials": "{\"token\":\"s3cr3t\"}",
+     "Extra": {
+      "an_unnamed_attribute": "2",
+      "integration.an_unnamed_key": "1"
+     },
+     "IntegrationType": "jira",
+     "Name": "prod jira",
+     "RunnerID": "r-1",
+     "Tags": {
+      "env": [
+       "prod",
+       "eu"
+      ]
+     },
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_action_connections",
+   "type": "storage.WriteActionConnections"
+  }
+ ],
+ "seq": 1,
+ "test": "TestActionConnectionsStoreCredentials",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/At"
+ ]
+}

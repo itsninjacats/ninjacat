@@ -1,0 +1,212 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.032265359Z",
+ "request": {
+  "body_b64": "ewoJCSJhcGlLZXkiOiJkZWFkYmVlZiIsImludGVybmFsSG9zdG5hbWUiOiJhZ2VudC1ob3N0IiwiYWdlbnRWZXJzaW9uIjoiNy41OC4yIiwKCQkidXVpZCI6IjRmMWEiLCJtZXRhIjp7InNvY2tldC1ob3N0bmFtZSI6ImFnZW50LWhvc3QifSwKCQkiYWdlbnRfY2hlY2tzIjpbCgkJCVsiZG9ja2VyIiwiZG9ja2VyIiwiZG9ja2VyOjEiLDAsIiJdLAoJCQlbImt1YmVsZXQiLCJrdWJlcm5ldGVzIiwia3ViZWxldDoyIiwyLCJjb25uZWN0aW9uIHJlZnVzZWQiLCJhIHNpeHRoIGVsZW1lbnQiXQoJCV0sCgkJImV4dGVybmFsX2hvc3RfdGFncyI6WwoJCQlbInZtLTEiLHsidnNwaGVyZSI6WyJjbHVzdGVyOnByb2QiLCJjbHVzdGVyOmV1Il0sImF3cyI6WyJyZWdpb246ZXUtd2VzdC0xIl19XQoJCV0KCX0=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/intake/"
+ },
+ "response": {
+  "body_b64": "eyJzdGF0dXMiOiJvayJ9",
+  "body_json": {
+   "status": "ok"
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*int64",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*int64",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.032258857Z",
+     "agent-host",
+     "7.58.2",
+     "4f1a",
+     "docker",
+     "docker",
+     "docker:1",
+     0,
+     "",
+     "",
+     "{\"socket-hostname\":\"agent-host\"}"
+    ],
+    [
+     "test",
+     "2026-10-01T15:21:14.032258857Z",
+     "agent-host",
+     "7.58.2",
+     "4f1a",
+     "kubelet",
+     "kubernetes",
+     "kubelet:2",
+     2,
+     "connection refused",
+     "[\"a sixth element\"]",
+     "{\"socket-hostname\":\"agent-host\"}"
+    ]
+   ],
+   "insert": "INSERT INTO agent_checks\n\t\t\t(tenant_id, received_at, hostname, agent_version, uuid,\n\t\t\t check_name, source_type, instance_id, status, message,\n\t\t\t positional_extra, meta)",
+   "rows": [
+    {
+     "AgentVersion": "7.58.2",
+     "CheckName": "docker",
+     "Hostname": "agent-host",
+     "InstanceID": "docker:1",
+     "Message": "",
+     "Meta": "{\"socket-hostname\":\"agent-host\"}",
+     "PositionalExtra": "",
+     "ReceivedAt": "2026-10-01T15:21:14.032258857Z",
+     "SourceType": "docker",
+     "Status": 0,
+     "TenantID": "test",
+     "UUID": "4f1a"
+    },
+    {
+     "AgentVersion": "7.58.2",
+     "CheckName": "kubelet",
+     "Hostname": "agent-host",
+     "InstanceID": "kubelet:2",
+     "Message": "connection refused",
+     "Meta": "{\"socket-hostname\":\"agent-host\"}",
+     "PositionalExtra": "[\"a sixth element\"]",
+     "ReceivedAt": "2026-10-01T15:21:14.032258857Z",
+     "SourceType": "kubernetes",
+     "Status": 2,
+     "TenantID": "test",
+     "UUID": "4f1a"
+    }
+   ],
+   "to": "storage_agent_checks",
+   "type": "storage.WriteAgentChecks"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "map[string][]string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "map[string][]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.032258857Z",
+     "vm-1",
+     "aws",
+     {
+      "region": [
+       "eu-west-1"
+      ]
+     }
+    ],
+    [
+     "test",
+     "2026-10-01T15:21:14.032258857Z",
+     "vm-1",
+     "vsphere",
+     {
+      "cluster": [
+       "prod",
+       "eu"
+      ]
+     }
+    ]
+   ],
+   "insert": "INSERT INTO external_host_tags\n\t\t\t(tenant_id, received_at, host, source, tags)",
+   "rows": [
+    {
+     "Host": "vm-1",
+     "ReceivedAt": "2026-10-01T15:21:14.032258857Z",
+     "Source": "aws",
+     "Tags": {
+      "region": [
+       "eu-west-1"
+      ]
+     },
+     "TenantID": "test"
+    },
+    {
+     "Host": "vm-1",
+     "ReceivedAt": "2026-10-01T15:21:14.032258857Z",
+     "Source": "vsphere",
+     "Tags": {
+      "cluster": [
+       "prod",
+       "eu"
+      ]
+     },
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_external_host_tags",
+   "type": "storage.WriteExternalHostTags"
+  }
+ ],
+ "seq": 1,
+ "test": "TestIntakeAgentChecksAndExternalHostTags",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/ReceivedAt",
+  "/sends/0/rows/1/ReceivedAt",
+  "/sends/1/args/0/1",
+  "/sends/1/args/1/1",
+  "/sends/1/rows/0/ReceivedAt",
+  "/sends/1/rows/1/ReceivedAt"
+ ]
+}

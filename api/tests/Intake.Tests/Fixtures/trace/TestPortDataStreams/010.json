@@ -1,0 +1,43 @@
+{
+ "recorded_at": "2026-10-01T16:19:49.958952192Z",
+ "request": {
+  "body_b64": "e30=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ],
+   "Dd-Evp-Origin": [
+    "agent"
+   ],
+   "Dd-Evp-Origin-Version": [
+    "7.58.2"
+   ],
+   "X-Requested-With": [
+    "datadog-agent-diagnose"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/data_streams_messages"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeTrace"
+ ],
+ "sends": [],
+ "seq": 10,
+ "test": "TestPortDataStreams",
+ "volatile": []
+}

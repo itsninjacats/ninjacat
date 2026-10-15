@@ -1,0 +1,14 @@
+init_config:
+instances:
+  - hosts: ["dbmlab-db:27017"]
+    username: datadog
+    password: datadog
+    options: { authSource: admin, directConnection: "true" }
+    dbm: true
+    cluster_name: lab
+    tags: ["team:core"]
+    operation_samples: { enabled: true, collection_interval: 2 }
+    slow_operations: { enabled: true, collection_interval: 10 }
+    collect_schemas: { enabled: true, collection_interval: 30 }
+    schemas: { enabled: true, collection_interval: 30 }
+    query_metrics: { enabled: true, collection_interval: 10 }

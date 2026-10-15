@@ -1,8 +1,8 @@
 # NinjaCat end-to-end lab
 
 A single-node [kind](https://kind.sigs.k8s.io/) cluster that runs the whole
-NinjaCat stack (ClickHouse, Postgres, the Go server, the panel, a TLS proxy)
-plus a real Datadog agent pointed at it. The agent collects genuine cluster
+NinjaCat stack (ClickHouse and Postgres through their operators, the server's
+two processes, the monitor service, the panel, Traefik) plus a real Datadog agent pointed at it. The agent collects genuine cluster
 telemetry and ships it into NinjaCat, so the full intake path is exercised
 exactly as in production.
 
@@ -20,13 +20,47 @@ exactly as in production.
 ./scripts/up.sh
 ```
 
+`kind` adds its context to your kubeconfig and makes it the current one. To keep
+the lab out of that file altogether, give it one of its own — every script and
+command here then sees only the lab:
+
+```sh
+export KUBECONFIG=$PWD/.kubeconfig
+./scripts/up.sh
+```
+
+The databases' operators come first, as a release of their own from
+`helm/ninjacat-operators` (CloudNativePG and Altinity's ClickHouse operator),
+installed with `--wait`. NinjaCat itself is installed after them from the
+chart in `helm/ninjacat`, with `ninjacat-values.yaml`: the chart makes a
+Postgres `Cluster` and a `ClickHouseInstallation` through the operators, its
+hook Jobs migrate both schemas once they are up, the `intake`, `query`,
+`monitors` and panel Deployments start, and the agent reaches the intake
+through the chart's own Ingress, served by Traefik with the lab's certificate.
+So a lab run is the chart's end-to-end test: the databases, hooks, Ingress,
+the redirect from HTTP, the NetworkPolicies around the query process and the
+monitor pods, and the monitor pods forming one cluster through the Kubernetes
+API. `up.sh` then makes the first account (`lab@ninjacat.lab`, password
+`ninjacat`) and the agent's API key. The host ports are NodePorts in
+`manifests/`, which the chart does not own.
+
 ## Host ports
 
 | Host port | What |
 |-----------|------|
 | 8888      | Panel (browser) — `http://localhost:8888` |
 | 18123     | ClickHouse HTTP — `curl 'localhost:18123/?user=ninjacat&password=ninjacat&query=SELECT+1'` |
-| 18081     | NinjaCat panel API — `curl localhost:18081/ping` |
+
+The query process has no host port: the chart's NetworkPolicy admits the
+panel's pods only. To poke it, forward a port and mint a token with the secret
+`up.sh` generated, as `api/README.md` shows for the dev stack, then ask
+`127.0.0.1:18081`:
+
+```sh
+kubectl --context kind-ninjacat-lab -n ninjacat-lab port-forward deploy/ninjacat-query 18081:8081
+export SECRET=$(kubectl --context kind-ninjacat-lab -n ninjacat-lab get secret ninjacat-secrets \
+  -o jsonpath='{.data.NINJACAT_QUERY_TOKEN_SECRET}' | base64 -d)
+```
 
 ## Verify data is flowing
 
@@ -83,5 +117,5 @@ agent DaemonSet entirely while `helm template` locally still rendered it.
 kind delete cluster --name ninjacat-lab
 ```
 
-Everything is in-memory (`emptyDir`), so deleting the cluster removes all
-state. Nothing persists between runs.
+The databases keep their data on kind's local-path volumes, inside the node,
+so deleting the cluster removes all state. Nothing persists between runs.

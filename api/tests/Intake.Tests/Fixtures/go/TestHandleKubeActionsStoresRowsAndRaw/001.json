@@ -1,0 +1,112 @@
+{
+ "recorded_at": "2026-10-01T15:21:21.401290479Z",
+ "request": {
+  "body_b64": "W3siYWN0aW9uX2lkIjoiYS0xIiwiZXZlbnRfdHlwZSI6ImFjdGlvbl9leGVjdXRlZCIsInN0YXR1cyI6InN1Y2Nlc3MiLAoJCSJjbHVzdGVyX25hbWUiOiJwcm9kIiwicmVzb3VyY2Vfa2luZCI6IkRlcGxveW1lbnQiLCJyZXNvdXJjZV9uYW1lIjoiY2hlY2tvdXQifV0=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/kubeactions"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "map[string]string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:21.401288275Z",
+     "a-1",
+     0,
+     "action_executed",
+     "success",
+     "",
+     "",
+     "prod",
+     "",
+     "Deployment",
+     "checkout",
+     "",
+     "",
+     "",
+     [],
+     {},
+     "",
+     ""
+    ]
+   ],
+   "insert": "INSERT INTO k8s_actions\n\t\t\t(tenant_id, timestamp, action_id, org_id, event_type, status, action_type,\n\t\t\t cluster_id, cluster_name, resource_id, resource_kind, resource_name,\n\t\t\t resource_namespace, requested_by, message, extra_keys,\n\t\t\t payloads, extra, timestamp_raw)",
+   "rows": [
+    {
+     "ActionID": "a-1",
+     "ActionType": "",
+     "ClusterID": "",
+     "ClusterName": "prod",
+     "EventType": "action_executed",
+     "Extra": "",
+     "ExtraKeys": [],
+     "Message": "",
+     "OrgID": 0,
+     "Payloads": {},
+     "RequestedBy": "",
+     "ResourceID": "",
+     "ResourceKind": "Deployment",
+     "ResourceName": "checkout",
+     "ResourceNamespace": "",
+     "Status": "success",
+     "TenantID": "test",
+     "Timestamp": "2026-10-01T15:21:21.401288275Z",
+     "TimestampRaw": ""
+    }
+   ],
+   "to": "storage_k8s_actions",
+   "type": "storage.WriteK8sActions"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleKubeActionsStoresRowsAndRaw",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/Timestamp"
+ ]
+}

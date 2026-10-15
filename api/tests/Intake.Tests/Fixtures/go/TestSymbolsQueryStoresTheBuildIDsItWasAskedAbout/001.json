@@ -1,0 +1,80 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.035622493Z",
+ "request": {
+  "body_b64": "eyJkYXRhIjp7InR5cGUiOiJzeW1ib2xzUXVlcnkiLCJpZCI6IjEiLCJhdHRyaWJ1dGVzIjp7CgkJImFyY2giOiJ4ODZfNjQiLCJidWlsZElkcyI6WyJhYWFhIiwiYmJiYiIsImNjY2MiXX19fQ==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/profiles/symbols/query"
+ },
+ "response": {
+  "body_b64": "eyJkYXRhIjpbXX0=",
+  "body_json": {
+   "data": []
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "[]string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.035618265Z",
+     "x86_64",
+     [
+      "aaaa",
+      "bbbb",
+      "cccc"
+     ],
+     "{\"data\":{\"type\":\"symbolsQuery\",\"id\":\"1\",\"attributes\":{\n\t\t\"arch\":\"x86_64\",\"buildIds\":[\"aaaa\",\"bbbb\",\"cccc\"]}}}"
+    ]
+   ],
+   "insert": "INSERT INTO symbol_queries\n\t\t\t(tenant_id, at, arch, build_ids, resource)",
+   "rows": [
+    {
+     "Arch": "x86_64",
+     "At": "2026-10-01T15:21:14.035618265Z",
+     "BuildIDs": [
+      "aaaa",
+      "bbbb",
+      "cccc"
+     ],
+     "Resource": "{\"data\":{\"type\":\"symbolsQuery\",\"id\":\"1\",\"attributes\":{\n\t\t\"arch\":\"x86_64\",\"buildIds\":[\"aaaa\",\"bbbb\",\"cccc\"]}}}",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_symbol_queries",
+   "type": "storage.WriteSymbolQueries"
+  }
+ ],
+ "seq": 1,
+ "test": "TestSymbolsQueryStoresTheBuildIDsItWasAskedAbout",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/At"
+ ]
+}

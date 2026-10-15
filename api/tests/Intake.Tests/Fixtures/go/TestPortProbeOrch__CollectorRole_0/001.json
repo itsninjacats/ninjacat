@@ -1,0 +1,754 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.45495424Z",
+ "request": {
+  "body_b64": "AwA2CZIQAAB78VNlAAAAAAoCczISDHM0IDwmPiAiw6kiChgGIPj//////////wEqqwYK9wEKDXMxMiA8Jj4gIsOpIgoSA3MxNBoNczE2IDwmPiAiw6kiCiCS4s+qBijs//////////8BMgdrMjI6djIyMhVrMjI6b3RoZXI6d2l0aDpjb2xvbnMyBmJhcmUyMjIIejIyOmxhc3Q6B2syNDp2MjQ6FWsyNDpvdGhlcjp3aXRoOmNvbG9uczoGYmFyZTI0Ogh6MjQ6bGFzdEIPCgNzMjcSA3MyORoDczMxQg8KA3MzMxIDczM1GgNzMzdKA3MzOVIHazQxOnY0MVIVazQxOm90aGVyOndpdGg6Y29sb25zUgZiYXJlNDFSCHo0MTpsYXN0WKviz6oGEvoBCgdrNDY6djQ2ChVrNDY6b3RoZXI6d2l0aDpjb2xvbnMKBmJhcmU0NgoIejQ2Omxhc3QSB2s0ODp2NDgSFWs0ODpvdGhlcjp3aXRoOmNvbG9ucxIGYmFyZTQ4Egh6NDg6bGFzdBoHazUwOnY1MBoVazUwOm90aGVyOndpdGg6Y29sb25zGgZiYXJlNTAaCHo1MDpsYXN0IgdrNTI6djUyIhVrNTI6b3RoZXI6d2l0aDpjb2xvbnMiBmJhcmU1MiIIejUyOmxhc3QqB2s1NDp2NTQqFWs1NDpvdGhlcjp3aXRoOmNvbG9ucyoGYmFyZTU0Kgh6NTQ6bGFzdBL6AQoHazU2OnY1NgoVazU2Om90aGVyOndpdGg6Y29sb25zCgZiYXJlNTYKCHo1NjpsYXN0EgdrNTg6djU4EhVrNTg6b3RoZXI6d2l0aDpjb2xvbnMSBmJhcmU1OBIIejU4Omxhc3QaB2s2MDp2NjAaFWs2MDpvdGhlcjp3aXRoOmNvbG9ucxoGYmFyZTYwGgh6NjA6bGFzdCIHazYyOnY2MiIVazYyOm90aGVyOndpdGg6Y29sb25zIgZiYXJlNjIiCHo2MjpsYXN0KgdrNjQ6djY0KhVrNjQ6b3RoZXI6d2l0aDpjb2xvbnMqBmJhcmU2NCoIejY0Omxhc3QaA/8AQiIHazY4OnY2OCIVazY4Om90aGVyOndpdGg6Y29sb25zIgZiYXJlNjgiCHo2ODpsYXN0KvgGCoECCgNzNzESA3M3MxoDczc1IM3iz6oGKM/iz6oGMgdrODE6djgxMhVrODE6b3RoZXI6d2l0aDpjb2xvbnMyBmJhcmU4MTIIejgxOmxhc3Q6B2s4Mzp2ODM6FWs4MzpvdGhlcjp3aXRoOmNvbG9uczoGYmFyZTgzOgh6ODM6bGFzdEIZCgNzODYSDXM4OCA8Jj4gIsOpIgoaA3M5MEIjCg1zOTIgPCY+ICLDqSIKEgNzOTQaDXM5NiA8Jj4gIsOpIgpKA3M5OFIJazEwMDp2MTAwUhZrMTAwOm90aGVyOndpdGg6Y29sb25zUgdiYXJlMTAwUgl6MTAwOmxhc3RY5uLPqgYSkwIKCWsxMDU6djEwNQoWazEwNTpvdGhlcjp3aXRoOmNvbG9ucwoHYmFyZTEwNQoJejEwNTpsYXN0EglrMTA3OnYxMDcSFmsxMDc6b3RoZXI6d2l0aDpjb2xvbnMSB2JhcmUxMDcSCXoxMDc6bGFzdBoJazEwOTp2MTA5GhZrMTA5Om90aGVyOndpdGg6Y29sb25zGgdiYXJlMTA5Ggl6MTA5Omxhc3QiCWsxMTE6djExMSIWazExMTpvdGhlcjp3aXRoOmNvbG9ucyIHYmFyZTExMSIJejExMTpsYXN0KglrMTEzOnYxMTMqFmsxMTM6b3RoZXI6d2l0aDpjb2xvbnMqB2JhcmUxMTMqCXoxMTM6bGFzdBKTAgoJazExNTp2MTE1ChZrMTE1Om90aGVyOndpdGg6Y29sb25zCgdiYXJlMTE1Cgl6MTE1Omxhc3QSCWsxMTc6djExNxIWazExNzpvdGhlcjp3aXRoOmNvbG9ucxIHYmFyZTExNxIJejExNzpsYXN0GglrMTE5OnYxMTkaFmsxMTk6b3RoZXI6d2l0aDpjb2xvbnMaB2JhcmUxMTkaCXoxMTk6bGFzdCIJazEyMTp2MTIxIhZrMTIxOm90aGVyOndpdGg6Y29sb25zIgdiYXJlMTIxIgl6MTIxOmxhc3QqCWsxMjM6djEyMyoWazEyMzpvdGhlcjp3aXRoOmNvbG9ucyoHYmFyZTEyMyoJejEyMzpsYXN0Gg9raW5kOiBUaGluZzEyNQoiCWsxMjc6djEyNyIWazEyNzpvdGhlcjp3aXRoOmNvbG9ucyIHYmFyZTEyNyIJejEyNzpsYXN0MglrMTI5OnYxMjkyFmsxMjk6b3RoZXI6d2l0aDpjb2xvbnMyB2JhcmUxMjkyCXoxMjk6bGFzdDouCITjz6oGEIbjz6oGGIivmaQPIgRzMTM4Kg5zMTQwIDwmPiAiw6kiCjIEczE0Mg==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/orch"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeKubeops"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "map[string]int64",
+     "map[string]string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "int32",
+     "int32",
+     "int32",
+     "uint8",
+     "*int64",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "*int64",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]*time.Time",
+     "[]*time.Time",
+     "[]*time.Time",
+     "string",
+     "string",
+     "map[string]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "*time.Time",
+     "string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "[]int32",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]string",
+     "[]uint8",
+     "string",
+     "[]string",
+     "uint8",
+     "string",
+     "string",
+     "[]string",
+     "map[string]int64",
+     "map[string]int64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.454875174Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     "Role",
+     "s14",
+     "s12 <&> \"é\"\n",
+     "s16 <&> \"é\"\n",
+     "s39",
+     "s31",
+     "s27",
+     "",
+     "",
+     "",
+     0,
+     0,
+     0,
+     {
+      "rules": 2
+     },
+     {
+      "bare22": "",
+      "k22": "other:with:colons",
+      "z22": "last"
+     },
+     {
+      "bare24": "",
+      "k24": "other:with:colons",
+      "z24": "last"
+     },
+     {
+      "bare129": [
+       ""
+      ],
+      "bare68": [
+       ""
+      ],
+      "k129": [
+       "v129",
+       "other:with:colons"
+      ],
+      "k68": [
+       "v68",
+       "other:with:colons"
+      ],
+      "z129": [
+       "last"
+      ],
+      "z68": [
+       "last"
+      ]
+     },
+     "1700000132.1700000134.4102444936-s138",
+     6,
+     -8,
+     4242,
+     9,
+     1700000123,
+     "protobuf",
+     "2023-11-14T22:13:38Z",
+     null,
+     1700000043,
+     [
+      "k41:v41",
+      "k41:other:with:colons",
+      "bare41",
+      "z41:last"
+     ],
+     [
+      "s31",
+      "s37"
+     ],
+     [
+      "s27",
+      "s33"
+     ],
+     [
+      "s29",
+      "s35"
+     ],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     {},
+     "{ \"metadata\": { \"name\": \"s12 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s14\", \"uid\": \"s16 \\u003c&\\u003e \\\"é\\\"\\n\", \"creationTimestamp\": \"1700000018\", \"deletionTimestamp\": \"-20\", \"labels\": [ \"k22:v22\", \"k22:other:with:colons\", \"bare22\", \"z22:last\" ], \"annotations\": [ \"k24:v24\", \"k24:other:with:colons\", \"bare24\", \"z24:last\" ], \"ownerReferences\": [ { \"name\": \"s27\", \"uid\": \"s29\", \"kind\": \"s31\" }, { \"name\": \"s33\", \"uid\": \"s35\", \"kind\": \"s37\" } ], \"resourceVersion\": \"s39\", \"finalizers\": [ \"k41:v41\", \"k41:other:with:colons\", \"bare41\", \"z41:last\" ], \"deletionGracePeriodSeconds\": \"1700000043\" }, \"rules\": [ { \"verbs\": [ \"k46:v46\", \"k46:other:with:colons\", \"bare46\", \"z46:last\" ], \"apiGroups\": [ \"k48:v48\", \"k48:other:with:colons\", \"bare48\", \"z48:last\" ], \"resources\": [ \"k50:v50\", \"k50:other:with:colons\", \"bare50\", \"z50:last\" ], \"resourceNames\": [ \"k52:v52\", \"k52:other:with:colons\", \"bare52\", \"z52:last\" ], \"nonResourceURLs\": [ \"k54:v54\", \"k54:other:with:colons\", \"bare54\", \"z54:last\" ] }, { \"verbs\": [ \"k56:v56\", \"k56:other:with:colons\", \"bare56\", \"z56:last\" ], \"apiGroups\": [ \"k58:v58\", \"k58:other:with:colons\", \"bare58\", \"z58:last\" ], \"resources\": [ \"k60:v60\", \"k60:other:with:colons\", \"bare60\", \"z60:last\" ], \"resourceNames\": [ \"k62:v62\", \"k62:other:with:colons\", \"bare62\", \"z62:last\" ], \"nonResourceURLs\": [ \"k64:v64\", \"k64:other:with:colons\", \"bare64\", \"z64:last\" ] } ], \"yaml\": \"/wBC\", \"tags\": [ \"k68:v68\", \"k68:other:with:colons\", \"bare68\", \"z68:last\" ] }",
+     "",
+     "",
+     "",
+     "",
+     null,
+     null,
+     "",
+     [],
+     [],
+     "",
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     [],
+     0,
+     "",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "[{\"verbs\":[\"k46:v46\",\"k46:other:with:colons\",\"bare46\",\"z46:last\"],\"apiGroups\":[\"k48:v48\",\"k48:other:with:colons\",\"bare48\",\"z48:last\"],\"resources\":[\"k50:v50\",\"k50:other:with:colons\",\"bare50\",\"z50:last\"],\"resourceNames\":[\"k52:v52\",\"k52:other:with:colons\",\"bare52\",\"z52:last\"],\"nonResourceURLs\":[\"k54:v54\",\"k54:other:with:colons\",\"bare54\",\"z54:last\"]},{\"verbs\":[\"k56:v56\",\"k56:other:with:colons\",\"bare56\",\"z56:last\"],\"apiGroups\":[\"k58:v58\",\"k58:other:with:colons\",\"bare58\",\"z58:last\"],\"resources\":[\"k60:v60\",\"k60:other:with:colons\",\"bare60\",\"z60:last\"],\"resourceNames\":[\"k62:v62\",\"k62:other:with:colons\",\"bare62\",\"z62:last\"],\"nonResourceURLs\":[\"k64:v64\",\"k64:other:with:colons\",\"bare64\",\"z64:last\"]}]",
+     "",
+     "",
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k129:v129\", \"k129:other:with:colons\", \"bare129\", \"z129:last\" ], \"agentVersion\": { \"Major\": \"1700000132\", \"Minor\": \"1700000134\", \"Patch\": \"4102444936\", \"Pre\": \"s138\", \"Meta\": \"s140 \\u003c&\\u003e \\\"é\\\"\\n\", \"Commit\": \"s142\" } }"
+    ],
+    [
+     "test",
+     "2026-10-01T16:08:42.454875174Z",
+     "s4 <&> \"é\"\n",
+     "s2",
+     "Role",
+     "s73",
+     "s71",
+     "s75",
+     "s98",
+     "s90",
+     "s86",
+     "",
+     "",
+     "",
+     0,
+     0,
+     0,
+     {
+      "rules": 2
+     },
+     {
+      "bare81": "",
+      "k81": "other:with:colons",
+      "z81": "last"
+     },
+     {
+      "bare83": "",
+      "k83": "other:with:colons",
+      "z83": "last"
+     },
+     {
+      "bare127": [
+       ""
+      ],
+      "bare129": [
+       ""
+      ],
+      "k127": [
+       "v127",
+       "other:with:colons"
+      ],
+      "k129": [
+       "v129",
+       "other:with:colons"
+      ],
+      "z127": [
+       "last"
+      ],
+      "z129": [
+       "last"
+      ]
+     },
+     "1700000132.1700000134.4102444936-s138",
+     6,
+     -8,
+     4242,
+     9,
+     1700000123,
+     "protobuf",
+     "2023-11-14T22:14:37Z",
+     "2023-11-14T22:14:39Z",
+     1700000102,
+     [
+      "k100:v100",
+      "k100:other:with:colons",
+      "bare100",
+      "z100:last"
+     ],
+     [
+      "s90",
+      "s96 <&> \"é\"\n"
+     ],
+     [
+      "s86",
+      "s92 <&> \"é\"\n"
+     ],
+     [
+      "s88 <&> \"é\"\n",
+      "s94"
+     ],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     {},
+     "{ \"metadata\": { \"name\": \"s71\", \"namespace\": \"s73\", \"uid\": \"s75\", \"creationTimestamp\": \"1700000077\", \"deletionTimestamp\": \"1700000079\", \"labels\": [ \"k81:v81\", \"k81:other:with:colons\", \"bare81\", \"z81:last\" ], \"annotations\": [ \"k83:v83\", \"k83:other:with:colons\", \"bare83\", \"z83:last\" ], \"ownerReferences\": [ { \"name\": \"s86\", \"uid\": \"s88 \\u003c&\\u003e \\\"é\\\"\\n\", \"kind\": \"s90\" }, { \"name\": \"s92 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s94\", \"kind\": \"s96 \\u003c&\\u003e \\\"é\\\"\\n\" } ], \"resourceVersion\": \"s98\", \"finalizers\": [ \"k100:v100\", \"k100:other:with:colons\", \"bare100\", \"z100:last\" ], \"deletionGracePeriodSeconds\": \"1700000102\" }, \"rules\": [ { \"verbs\": [ \"k105:v105\", \"k105:other:with:colons\", \"bare105\", \"z105:last\" ], \"apiGroups\": [ \"k107:v107\", \"k107:other:with:colons\", \"bare107\", \"z107:last\" ], \"resources\": [ \"k109:v109\", \"k109:other:with:colons\", \"bare109\", \"z109:last\" ], \"resourceNames\": [ \"k111:v111\", \"k111:other:with:colons\", \"bare111\", \"z111:last\" ], \"nonResourceURLs\": [ \"k113:v113\", \"k113:other:with:colons\", \"bare113\", \"z113:last\" ] }, { \"verbs\": [ \"k115:v115\", \"k115:other:with:colons\", \"bare115\", \"z115:last\" ], \"apiGroups\": [ \"k117:v117\", \"k117:other:with:colons\", \"bare117\", \"z117:last\" ], \"resources\": [ \"k119:v119\", \"k119:other:with:colons\", \"bare119\", \"z119:last\" ], \"resourceNames\": [ \"k121:v121\", \"k121:other:with:colons\", \"bare121\", \"z121:last\" ], \"nonResourceURLs\": [ \"k123:v123\", \"k123:other:with:colons\", \"bare123\", \"z123:last\" ] } ], \"yaml\": \"a2luZDogVGhpbmcxMjUK\", \"tags\": [ \"k127:v127\", \"k127:other:with:colons\", \"bare127\", \"z127:last\" ] }",
+     "",
+     "",
+     "",
+     "",
+     null,
+     null,
+     "",
+     [],
+     [],
+     "",
+     [],
+     [],
+     [],
+     [],
+     [],
+     "",
+     "",
+     [],
+     0,
+     "",
+     "",
+     [],
+     {},
+     {},
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "[{\"verbs\":[\"k105:v105\",\"k105:other:with:colons\",\"bare105\",\"z105:last\"],\"apiGroups\":[\"k107:v107\",\"k107:other:with:colons\",\"bare107\",\"z107:last\"],\"resources\":[\"k109:v109\",\"k109:other:with:colons\",\"bare109\",\"z109:last\"],\"resourceNames\":[\"k111:v111\",\"k111:other:with:colons\",\"bare111\",\"z111:last\"],\"nonResourceURLs\":[\"k113:v113\",\"k113:other:with:colons\",\"bare113\",\"z113:last\"]},{\"verbs\":[\"k115:v115\",\"k115:other:with:colons\",\"bare115\",\"z115:last\"],\"apiGroups\":[\"k117:v117\",\"k117:other:with:colons\",\"bare117\",\"z117:last\"],\"resources\":[\"k119:v119\",\"k119:other:with:colons\",\"bare119\",\"z119:last\"],\"resourceNames\":[\"k121:v121\",\"k121:other:with:colons\",\"bare121\",\"z121:last\"],\"nonResourceURLs\":[\"k123:v123\",\"k123:other:with:colons\",\"bare123\",\"z123:last\"]}]",
+     "",
+     "",
+     "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k129:v129\", \"k129:other:with:colons\", \"bare129\", \"z129:last\" ], \"agentVersion\": { \"Major\": \"1700000132\", \"Minor\": \"1700000134\", \"Patch\": \"4102444936\", \"Pre\": \"s138\", \"Meta\": \"s140 \\u003c&\\u003e \\\"é\\\"\\n\", \"Commit\": \"s142\" } }"
+    ]
+   ],
+   "insert": "INSERT INTO k8s_resources\n\t\t\t(tenant_id, collected_at, cluster_id, cluster_name, kind, namespace, name,\n\t\t\t uid, resource_version, owner_kind, owner_name, node_name, phase, status,\n\t\t\t ready, desired, available, counts, labels, annotations, tags,\n\t\t\t agent_version, group_id, group_size,\n\t\t\t org_id, subscription_id, header_timestamp, encoding,\n\t\t\t creation_timestamp, deletion_timestamp, deletion_grace_period_seconds,\n\t\t\t finalizers, owner_kinds, owner_names, owner_uids,\n\t\t\t condition_types, condition_statuses, condition_reasons, condition_messages,\n\t\t\t condition_last_transition, condition_last_update, condition_last_probe,\n\t\t\t condition_message, resource_requirements, metrics, object,\n\t\t\t pod_ip, nominated_node_name, qos_class, priority_class,\n\t\t\t start_time, scheduled_time, host_name,\n\t\t\t container_names, container_ids, container_ready, container_restarts,\n\t\t\t container_states, container_messages, container_images,\n\t\t\t container_image_ids, container_is_init,\n\t\t\t pod_cidr, pod_cidrs, unschedulable, taints, provider_id, node_roles,\n\t\t\t capacity, allocatable, node_addresses,\n\t\t\t kubelet_version, kube_proxy_version, operating_system, architecture,\n\t\t\t kernel_version, os_image, container_runtime_version,\n\t\t\t service_type, cluster_ip, service_ports,\n\t\t\t rbac_rules, rbac_subjects, rbac_role_ref, envelope)",
+   "rows": [
+    {
+     "AgentVersion": "1700000132.1700000134.4102444936-s138",
+     "Allocatable": {},
+     "Annotations": {
+      "bare24": "",
+      "k24": "other:with:colons",
+      "z24": "last"
+     },
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterIP": "",
+     "ClusterName": "s2",
+     "CollectedAt": "2026-10-01T16:08:42.454875174Z",
+     "ConditionLastProbe": [],
+     "ConditionLastTransition": [],
+     "ConditionLastUpdate": [],
+     "ConditionMessage": "",
+     "ConditionMessages": [],
+     "ConditionReasons": [],
+     "ConditionStatuses": [],
+     "ConditionTypes": [],
+     "ContainerIDs": [],
+     "ContainerImageIDs": [],
+     "ContainerImages": [],
+     "ContainerIsInit": "",
+     "ContainerMessages": [],
+     "ContainerNames": [],
+     "ContainerReady": "",
+     "ContainerRestarts": [],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [],
+     "Counts": {
+      "rules": 2
+     },
+     "CreationTimestamp": "2023-11-14T22:13:38Z",
+     "DeletionGracePeriodSeconds": 1700000043,
+     "DeletionTimestamp": null,
+     "Desired": 0,
+     "Encoding": "protobuf",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k129:v129\", \"k129:other:with:colons\", \"bare129\", \"z129:last\" ], \"agentVersion\": { \"Major\": \"1700000132\", \"Minor\": \"1700000134\", \"Patch\": \"4102444936\", \"Pre\": \"s138\", \"Meta\": \"s140 \\u003c&\\u003e \\\"é\\\"\\n\", \"Commit\": \"s142\" } }",
+     "Finalizers": [
+      "k41:v41",
+      "k41:other:with:colons",
+      "bare41",
+      "z41:last"
+     ],
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": 1700000123,
+     "HostName": "",
+     "KernelVersion": "",
+     "Kind": "Role",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare22": "",
+      "k22": "other:with:colons",
+      "z22": "last"
+     },
+     "Metrics": {},
+     "Name": "s12 <&> \"é\"\n",
+     "Namespace": "s14",
+     "NodeAddresses": "",
+     "NodeName": "",
+     "NodeRoles": [],
+     "NominatedNodeName": "",
+     "OSImage": "",
+     "Object": "{ \"metadata\": { \"name\": \"s12 \\u003c&\\u003e \\\"é\\\"\\n\", \"namespace\": \"s14\", \"uid\": \"s16 \\u003c&\\u003e \\\"é\\\"\\n\", \"creationTimestamp\": \"1700000018\", \"deletionTimestamp\": \"-20\", \"labels\": [ \"k22:v22\", \"k22:other:with:colons\", \"bare22\", \"z22:last\" ], \"annotations\": [ \"k24:v24\", \"k24:other:with:colons\", \"bare24\", \"z24:last\" ], \"ownerReferences\": [ { \"name\": \"s27\", \"uid\": \"s29\", \"kind\": \"s31\" }, { \"name\": \"s33\", \"uid\": \"s35\", \"kind\": \"s37\" } ], \"resourceVersion\": \"s39\", \"finalizers\": [ \"k41:v41\", \"k41:other:with:colons\", \"bare41\", \"z41:last\" ], \"deletionGracePeriodSeconds\": \"1700000043\" }, \"rules\": [ { \"verbs\": [ \"k46:v46\", \"k46:other:with:colons\", \"bare46\", \"z46:last\" ], \"apiGroups\": [ \"k48:v48\", \"k48:other:with:colons\", \"bare48\", \"z48:last\" ], \"resources\": [ \"k50:v50\", \"k50:other:with:colons\", \"bare50\", \"z50:last\" ], \"resourceNames\": [ \"k52:v52\", \"k52:other:with:colons\", \"bare52\", \"z52:last\" ], \"nonResourceURLs\": [ \"k54:v54\", \"k54:other:with:colons\", \"bare54\", \"z54:last\" ] }, { \"verbs\": [ \"k56:v56\", \"k56:other:with:colons\", \"bare56\", \"z56:last\" ], \"apiGroups\": [ \"k58:v58\", \"k58:other:with:colons\", \"bare58\", \"z58:last\" ], \"resources\": [ \"k60:v60\", \"k60:other:with:colons\", \"bare60\", \"z60:last\" ], \"resourceNames\": [ \"k62:v62\", \"k62:other:with:colons\", \"bare62\", \"z62:last\" ], \"nonResourceURLs\": [ \"k64:v64\", \"k64:other:with:colons\", \"bare64\", \"z64:last\" ] } ], \"yaml\": \"/wBC\", \"tags\": [ \"k68:v68\", \"k68:other:with:colons\", \"bare68\", \"z68:last\" ] }",
+     "OperatingSystem": "",
+     "OrgID": 4242,
+     "OwnerKind": "s31",
+     "OwnerKinds": [
+      "s31",
+      "s37"
+     ],
+     "OwnerName": "s27",
+     "OwnerNames": [
+      "s27",
+      "s33"
+     ],
+     "OwnerUIDs": [
+      "s29",
+      "s35"
+     ],
+     "Phase": "",
+     "PodCIDR": "",
+     "PodCIDRs": [],
+     "PodIP": "",
+     "PriorityClass": "",
+     "ProviderID": "",
+     "QOSClass": "",
+     "RBACRoleRef": "",
+     "RBACRules": "[{\"verbs\":[\"k46:v46\",\"k46:other:with:colons\",\"bare46\",\"z46:last\"],\"apiGroups\":[\"k48:v48\",\"k48:other:with:colons\",\"bare48\",\"z48:last\"],\"resources\":[\"k50:v50\",\"k50:other:with:colons\",\"bare50\",\"z50:last\"],\"resourceNames\":[\"k52:v52\",\"k52:other:with:colons\",\"bare52\",\"z52:last\"],\"nonResourceURLs\":[\"k54:v54\",\"k54:other:with:colons\",\"bare54\",\"z54:last\"]},{\"verbs\":[\"k56:v56\",\"k56:other:with:colons\",\"bare56\",\"z56:last\"],\"apiGroups\":[\"k58:v58\",\"k58:other:with:colons\",\"bare58\",\"z58:last\"],\"resources\":[\"k60:v60\",\"k60:other:with:colons\",\"bare60\",\"z60:last\"],\"resourceNames\":[\"k62:v62\",\"k62:other:with:colons\",\"bare62\",\"z62:last\"],\"nonResourceURLs\":[\"k64:v64\",\"k64:other:with:colons\",\"bare64\",\"z64:last\"]}]",
+     "RBACSubjects": "",
+     "Ready": 0,
+     "ResourceRequirements": "",
+     "ResourceVersion": "s39",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": null,
+     "Status": "",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare129": [
+       ""
+      ],
+      "bare68": [
+       ""
+      ],
+      "k129": [
+       "v129",
+       "other:with:colons"
+      ],
+      "k68": [
+       "v68",
+       "other:with:colons"
+      ],
+      "z129": [
+       "last"
+      ],
+      "z68": [
+       "last"
+      ]
+     },
+     "Taints": "",
+     "TenantID": "test",
+     "UID": "s16 <&> \"é\"\n",
+     "Unschedulable": 0
+    },
+    {
+     "AgentVersion": "1700000132.1700000134.4102444936-s138",
+     "Allocatable": {},
+     "Annotations": {
+      "bare83": "",
+      "k83": "other:with:colons",
+      "z83": "last"
+     },
+     "Architecture": "",
+     "Available": 0,
+     "Capacity": {},
+     "ClusterID": "s4 <&> \"é\"\n",
+     "ClusterIP": "",
+     "ClusterName": "s2",
+     "CollectedAt": "2026-10-01T16:08:42.454875174Z",
+     "ConditionLastProbe": [],
+     "ConditionLastTransition": [],
+     "ConditionLastUpdate": [],
+     "ConditionMessage": "",
+     "ConditionMessages": [],
+     "ConditionReasons": [],
+     "ConditionStatuses": [],
+     "ConditionTypes": [],
+     "ContainerIDs": [],
+     "ContainerImageIDs": [],
+     "ContainerImages": [],
+     "ContainerIsInit": "",
+     "ContainerMessages": [],
+     "ContainerNames": [],
+     "ContainerReady": "",
+     "ContainerRestarts": [],
+     "ContainerRuntimeVersion": "",
+     "ContainerStates": [],
+     "Counts": {
+      "rules": 2
+     },
+     "CreationTimestamp": "2023-11-14T22:14:37Z",
+     "DeletionGracePeriodSeconds": 1700000102,
+     "DeletionTimestamp": "2023-11-14T22:14:39Z",
+     "Desired": 0,
+     "Encoding": "protobuf",
+     "Envelope": "{ \"clusterName\": \"s2\", \"clusterId\": \"s4 \\u003c&\\u003e \\\"é\\\"\\n\", \"groupId\": 6, \"groupSize\": -8, \"tags\": [ \"k129:v129\", \"k129:other:with:colons\", \"bare129\", \"z129:last\" ], \"agentVersion\": { \"Major\": \"1700000132\", \"Minor\": \"1700000134\", \"Patch\": \"4102444936\", \"Pre\": \"s138\", \"Meta\": \"s140 \\u003c&\\u003e \\\"é\\\"\\n\", \"Commit\": \"s142\" } }",
+     "Finalizers": [
+      "k100:v100",
+      "k100:other:with:colons",
+      "bare100",
+      "z100:last"
+     ],
+     "GroupID": 6,
+     "GroupSize": -8,
+     "HeaderTimestamp": 1700000123,
+     "HostName": "",
+     "KernelVersion": "",
+     "Kind": "Role",
+     "KubeProxyVersion": "",
+     "KubeletVersion": "",
+     "Labels": {
+      "bare81": "",
+      "k81": "other:with:colons",
+      "z81": "last"
+     },
+     "Metrics": {},
+     "Name": "s71",
+     "Namespace": "s73",
+     "NodeAddresses": "",
+     "NodeName": "",
+     "NodeRoles": [],
+     "NominatedNodeName": "",
+     "OSImage": "",
+     "Object": "{ \"metadata\": { \"name\": \"s71\", \"namespace\": \"s73\", \"uid\": \"s75\", \"creationTimestamp\": \"1700000077\", \"deletionTimestamp\": \"1700000079\", \"labels\": [ \"k81:v81\", \"k81:other:with:colons\", \"bare81\", \"z81:last\" ], \"annotations\": [ \"k83:v83\", \"k83:other:with:colons\", \"bare83\", \"z83:last\" ], \"ownerReferences\": [ { \"name\": \"s86\", \"uid\": \"s88 \\u003c&\\u003e \\\"é\\\"\\n\", \"kind\": \"s90\" }, { \"name\": \"s92 \\u003c&\\u003e \\\"é\\\"\\n\", \"uid\": \"s94\", \"kind\": \"s96 \\u003c&\\u003e \\\"é\\\"\\n\" } ], \"resourceVersion\": \"s98\", \"finalizers\": [ \"k100:v100\", \"k100:other:with:colons\", \"bare100\", \"z100:last\" ], \"deletionGracePeriodSeconds\": \"1700000102\" }, \"rules\": [ { \"verbs\": [ \"k105:v105\", \"k105:other:with:colons\", \"bare105\", \"z105:last\" ], \"apiGroups\": [ \"k107:v107\", \"k107:other:with:colons\", \"bare107\", \"z107:last\" ], \"resources\": [ \"k109:v109\", \"k109:other:with:colons\", \"bare109\", \"z109:last\" ], \"resourceNames\": [ \"k111:v111\", \"k111:other:with:colons\", \"bare111\", \"z111:last\" ], \"nonResourceURLs\": [ \"k113:v113\", \"k113:other:with:colons\", \"bare113\", \"z113:last\" ] }, { \"verbs\": [ \"k115:v115\", \"k115:other:with:colons\", \"bare115\", \"z115:last\" ], \"apiGroups\": [ \"k117:v117\", \"k117:other:with:colons\", \"bare117\", \"z117:last\" ], \"resources\": [ \"k119:v119\", \"k119:other:with:colons\", \"bare119\", \"z119:last\" ], \"resourceNames\": [ \"k121:v121\", \"k121:other:with:colons\", \"bare121\", \"z121:last\" ], \"nonResourceURLs\": [ \"k123:v123\", \"k123:other:with:colons\", \"bare123\", \"z123:last\" ] } ], \"yaml\": \"a2luZDogVGhpbmcxMjUK\", \"tags\": [ \"k127:v127\", \"k127:other:with:colons\", \"bare127\", \"z127:last\" ] }",
+     "OperatingSystem": "",
+     "OrgID": 4242,
+     "OwnerKind": "s90",
+     "OwnerKinds": [
+      "s90",
+      "s96 <&> \"é\"\n"
+     ],
+     "OwnerName": "s86",
+     "OwnerNames": [
+      "s86",
+      "s92 <&> \"é\"\n"
+     ],
+     "OwnerUIDs": [
+      "s88 <&> \"é\"\n",
+      "s94"
+     ],
+     "Phase": "",
+     "PodCIDR": "",
+     "PodCIDRs": [],
+     "PodIP": "",
+     "PriorityClass": "",
+     "ProviderID": "",
+     "QOSClass": "",
+     "RBACRoleRef": "",
+     "RBACRules": "[{\"verbs\":[\"k105:v105\",\"k105:other:with:colons\",\"bare105\",\"z105:last\"],\"apiGroups\":[\"k107:v107\",\"k107:other:with:colons\",\"bare107\",\"z107:last\"],\"resources\":[\"k109:v109\",\"k109:other:with:colons\",\"bare109\",\"z109:last\"],\"resourceNames\":[\"k111:v111\",\"k111:other:with:colons\",\"bare111\",\"z111:last\"],\"nonResourceURLs\":[\"k113:v113\",\"k113:other:with:colons\",\"bare113\",\"z113:last\"]},{\"verbs\":[\"k115:v115\",\"k115:other:with:colons\",\"bare115\",\"z115:last\"],\"apiGroups\":[\"k117:v117\",\"k117:other:with:colons\",\"bare117\",\"z117:last\"],\"resources\":[\"k119:v119\",\"k119:other:with:colons\",\"bare119\",\"z119:last\"],\"resourceNames\":[\"k121:v121\",\"k121:other:with:colons\",\"bare121\",\"z121:last\"],\"nonResourceURLs\":[\"k123:v123\",\"k123:other:with:colons\",\"bare123\",\"z123:last\"]}]",
+     "RBACSubjects": "",
+     "Ready": 0,
+     "ResourceRequirements": "",
+     "ResourceVersion": "s98",
+     "ScheduledTime": null,
+     "ServicePorts": "",
+     "ServiceType": "",
+     "StartTime": null,
+     "Status": "",
+     "SubscriptionID": 9,
+     "Tags": {
+      "bare127": [
+       ""
+      ],
+      "bare129": [
+       ""
+      ],
+      "k127": [
+       "v127",
+       "other:with:colons"
+      ],
+      "k129": [
+       "v129",
+       "other:with:colons"
+      ],
+      "z127": [
+       "last"
+      ],
+      "z129": [
+       "last"
+      ]
+     },
+     "Taints": "",
+     "TenantID": "test",
+     "UID": "s75",
+     "Unschedulable": 0
+    }
+   ],
+   "to": "storage_k8s_resources",
+   "type": "storage.WriteK8sResources"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeOrch/CollectorRole_0",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/CollectedAt",
+  "/sends/0/rows/1/CollectedAt"
+ ],
+ "edited": "The JSON columns of these rows are written by the protobuf library (JsonFormatter), in proto3's JSON mapping: a 64-bit integer is a string, an enum is its name, an absent message or an empty list is \"\" where the Go server wrote \"null\", and a number JSON has no form for (NaN, an infinity) is written as text instead of emptying the column. The Go server wrote them with encoding/json over its generated structs."
+}

@@ -1,0 +1,108 @@
+{
+ "recorded_at": "2026-10-01T16:08:42.507727108Z",
+ "request": {
+  "body_b64": "EgZub2RlLTMaAxIBeA==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/contimage"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeContainers"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint32",
+     "float64",
+     "map[string][]string",
+     "uint32",
+     "uint32",
+     "uint32",
+     "map[string]string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:08:42.507723932Z",
+     "ninjacat.intake.images.skipped",
+     "node-3",
+     "COUNT",
+     "ninjacat",
+     "",
+     0,
+     1,
+     {
+      "reason": [
+       "no_identity"
+      ]
+     },
+     0,
+     0,
+     0,
+     {},
+     {}
+    ]
+   ],
+   "insert": "INSERT INTO metrics\n\t\t\t(tenant_id, timestamp, metric, host, metric_type, source_type, unit, interval, value, tags,\n\t\t\t origin_product, origin_category, origin_service, resources, extra)",
+   "rows": [
+    {
+     "Extra": {},
+     "Host": "node-3",
+     "Interval": 0,
+     "Metric": "ninjacat.intake.images.skipped",
+     "MetricType": "COUNT",
+     "OriginCategory": 0,
+     "OriginProduct": 0,
+     "OriginService": 0,
+     "Resources": {},
+     "SourceType": "ninjacat",
+     "Tags": {
+      "reason": [
+       "no_identity"
+      ]
+     },
+     "TenantID": "test",
+     "Timestamp": "2026-10-01T16:08:42.507723932Z",
+     "Unit": "",
+     "Value": 1
+    }
+   ],
+   "to": "storage_metrics",
+   "type": "storage.WriteMetrics"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortProbeContainers/images_only_unidentified",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/Timestamp"
+ ]
+}

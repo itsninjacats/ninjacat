@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	import { signOut } from '$lib/auth-client';
+	import { m } from '$lib/paraglide/messages';
 	import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
@@ -34,8 +35,10 @@
 							<Avatar.Fallback class="rounded-lg">{initials}</Avatar.Fallback>
 						</Avatar.Root>
 						<div class="grid flex-1 text-left text-sm leading-tight">
-							<span class="truncate font-medium">{display}</span>
-							<span class="truncate text-xs text-muted-foreground">{user.email}</span>
+							<span class="truncate font-medium" title={display}>{display}</span>
+							<span class="truncate text-xs text-muted-foreground" title={user.email}
+								>{user.email}</span
+							>
 						</div>
 						<ChevronsUpDownIcon class="ml-auto size-4" />
 					</Sidebar.MenuButton>
@@ -43,7 +46,7 @@
 			</DropdownMenu.Trigger>
 
 			<DropdownMenu.Content
-				class="w-(--bits-dropdown-menu-anchor-width) min-w-56 rounded-lg"
+				class="w-72 max-w-[calc(100vw-2rem)] rounded-lg"
 				side={sidebar.isMobile ? 'bottom' : 'right'}
 				align="end"
 				sideOffset={4}
@@ -53,25 +56,19 @@
 						<Avatar.Root class="size-8 rounded-lg">
 							<Avatar.Fallback class="rounded-lg">{initials}</Avatar.Fallback>
 						</Avatar.Root>
-						<div class="grid flex-1 text-left text-sm leading-tight">
-							<span class="truncate font-medium">{display}</span>
-							<span class="truncate text-xs text-muted-foreground">{user.email}</span>
+						<div class="grid flex-1 gap-0.5 text-left text-sm leading-tight wrap-anywhere">
+							<span class="font-medium">{display}</span>
+							{#if display !== user.email}
+								<span class="text-xs text-muted-foreground">{user.email}</span>
+							{/if}
 						</div>
 					</div>
 				</DropdownMenu.Label>
 				<DropdownMenu.Separator />
-				<!-- The sign-out action lives in /app/+page.server.ts, so the form
-				     targets that page explicitly rather than the current route. -->
-				<form method="POST" action="/app?/signOut" use:enhance class="w-full">
-					<DropdownMenu.Item closeOnSelect={false}>
-						{#snippet child({ props })}
-							<button type="submit" {...props} class="{props.class} w-full">
-								<LogOutIcon />
-								Sign out
-							</button>
-						{/snippet}
-					</DropdownMenu.Item>
-				</form>
+				<DropdownMenu.Item onSelect={signOut}>
+					<LogOutIcon />
+					{m.sign_out()}
+				</DropdownMenu.Item>
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
 	</Sidebar.MenuItem>

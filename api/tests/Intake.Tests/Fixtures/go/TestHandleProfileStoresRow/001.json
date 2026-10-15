@@ -1,0 +1,214 @@
+{
+ "recorded_at": "2026-10-01T15:21:28.464314464Z",
+ "request": {
+  "body_b64": "LS03NGM3ZDc4YzNmYmFmNTQxOTI0ZTNiZjgyZTBhM2IzZjg0ODg1NzY2NjMyZDg4ZTYyMDE4ZDA5MjdmNjYNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iY3B1LnBwcm9mIg0KDQofiwgAAAAAAAD/AGgAl/8KBAgBEAISBAgBEGQiCwgBGIAgIgQIARAqKggIARADGAMgBDIAMgNjcHUyC25hbm9zZWNvbmRzMgltYWluLm1haW4yB21haW4uZ29IgICoseOf58sXUIDIr6AlWgQIARACYICt4gRwAAMAbGRbpmgAAAANCi0tNzRjN2Q3OGMzZmJhZjU0MTkyNGUzYmY4MmUwYTNiM2Y4NDg4NTc2NjYzMmQ4OGU2MjAxOGQwOTI3ZjY2DQpDb250ZW50LURpc3Bvc2l0aW9uOiBmb3JtLWRhdGE7IG5hbWU9ImV2ZW50Ig0KDQp7ImZhbWlseSI6ImdvIiwidGFnc19wcm9maWxlciI6InNlcnZpY2U6bXktc3ZjIn0NCi0tNzRjN2Q3OGMzZmJhZjU0MTkyNGUzYmY4MmUwYTNiM2Y4NDg4NTc2NjYzMmQ4OGU2MjAxOGQwOTI3ZjY2LS0NCg==",
+  "headers": {
+   "Content-Type": [
+    "multipart/form-data; boundary=74c7d78c3fbaf541924e3bf82e0a3b3f84885766632d88e62018d0927f66"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/profile"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeProfile"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "string",
+     "*time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "[]string",
+     "[]string",
+     "[]uint64",
+     "[]uint8",
+     "[][]string",
+     "[][]string",
+     "[]uint64",
+     "[]int64",
+     "[]int64",
+     "[]string",
+     "[]int64",
+     "[]uint32",
+     "[]uint32",
+     "[]uint32"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:28.464306149Z",
+     "profile",
+     "",
+     "",
+     "{\"family\":\"go\",\"tags_profiler\":\"service:my-svc\"}",
+     "",
+     null,
+     "",
+     null,
+     "go",
+     "",
+     "",
+     "",
+     {
+      "service": [
+       "my-svc"
+      ]
+     },
+     [
+      "cpu.pprof"
+     ],
+     [
+      {
+       "$b64": "H4sIAAAAAAAA/wBoAJf/CgQIARACEgQIARBkIgsIARiAICIECAEQKioICAEQAxgDIAQyADIDY3B1MgtuYW5vc2Vjb25kczIJbWFpbi5tYWluMgdtYWluLmdvSICAqLHjn+fLF1CAyK+gJVoECAEQAmCAreIEcAADAGxkW6ZoAAAA"
+      }
+     ],
+     [
+      129
+     ],
+     "\u0001",
+     [
+      [
+       "cpu"
+      ]
+     ],
+     [
+      [
+       "nanoseconds"
+      ]
+     ],
+     [
+      1
+     ],
+     [
+      1700000000000000000
+     ],
+     [
+      10000000000
+     ],
+     [
+      "cpu/nanoseconds"
+     ],
+     [
+      10000000
+     ],
+     [
+      0
+     ],
+     [
+      1
+     ],
+     [
+      1
+     ]
+    ]
+   ],
+   "insert": "INSERT INTO profiles\n\t\t\t(tenant_id, received_at, variant, dd_evp_origin, dd_evp_origin_version,\n\t\t\t event, start_raw, start_parsed, end_raw, end_parsed,\n\t\t\t family, version, runtime, language, tags_profiler,\n\t\t\t attach_name, attach_bytes, attach_size, attach_parsed,\n\t\t\t attach_sample_types, attach_sample_units, attach_sample_count,\n\t\t\t attach_time_nanos, attach_duration_nanos, attach_period_type, attach_period,\n\t\t\t attach_mapping_count, attach_location_count, attach_function_count)",
+   "rows": [
+    {
+     "AttachBytes": [
+      {
+       "$b64": "H4sIAAAAAAAA/wBoAJf/CgQIARACEgQIARBkIgsIARiAICIECAEQKioICAEQAxgDIAQyADIDY3B1MgtuYW5vc2Vjb25kczIJbWFpbi5tYWluMgdtYWluLmdvSICAqLHjn+fLF1CAyK+gJVoECAEQAmCAreIEcAADAGxkW6ZoAAAA"
+      }
+     ],
+     "AttachDurationNanos": [
+      10000000000
+     ],
+     "AttachFunctionCount": [
+      1
+     ],
+     "AttachLocationCount": [
+      1
+     ],
+     "AttachMappingCount": [
+      0
+     ],
+     "AttachName": [
+      "cpu.pprof"
+     ],
+     "AttachParsed": "\u0001",
+     "AttachPeriod": [
+      10000000
+     ],
+     "AttachPeriodType": [
+      "cpu/nanoseconds"
+     ],
+     "AttachSampleCount": [
+      1
+     ],
+     "AttachSampleTypes": [
+      [
+       "cpu"
+      ]
+     ],
+     "AttachSampleUnits": [
+      [
+       "nanoseconds"
+      ]
+     ],
+     "AttachSize": [
+      129
+     ],
+     "AttachTimeNanos": [
+      1700000000000000000
+     ],
+     "DDEvpOrigin": "",
+     "DDEvpOriginVersion": "",
+     "EndParsed": null,
+     "EndRaw": "",
+     "Event": "{\"family\":\"go\",\"tags_profiler\":\"service:my-svc\"}",
+     "Family": "go",
+     "Language": "",
+     "ReceivedAt": "2026-10-01T15:21:28.464306149Z",
+     "Runtime": "",
+     "StartParsed": null,
+     "StartRaw": "",
+     "TagsProfiler": {
+      "service": [
+       "my-svc"
+      ]
+     },
+     "TenantID": "test",
+     "Variant": "profile",
+     "Version": ""
+    }
+   ],
+   "to": "storage_profiles",
+   "type": "storage.WriteProfiles"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleProfileStoresRow",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

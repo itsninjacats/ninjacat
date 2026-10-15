@@ -1,0 +1,33 @@
+{
+ "recorded_at": "2026-10-01T15:21:19.001446343Z",
+ "request": {
+  "body_b64": "",
+  "headers": {
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "GET",
+  "url": "/api/unstable/synthetics/agents/tests?agent_hostname=runner-7&agent_version=7.83.0"
+ },
+ "response": {
+  "body_b64": "eyJ0ZXN0cyI6W119",
+  "body_json": {
+   "tests": []
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeSyntheticsAgent"
+ ],
+ "sends": [],
+ "seq": 1,
+ "test": "TestSyntheticsAgentPollerGetsAnEmptyTestList",
+ "volatile": []
+}

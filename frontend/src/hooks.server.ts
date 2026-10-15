@@ -5,6 +5,9 @@ import { svelteKitHandler } from 'better-auth/svelte-kit';
 import type { Handle } from '@sveltejs/kit';
 import { getTextDirection } from '$lib/paraglide/runtime';
 import { paraglideMiddleware } from '$lib/paraglide/server';
+import { handleGuard } from '$lib/server/guard';
+import { db } from '$lib/server/db';
+import { memberships, resolveTenant } from '$lib/server/tenant';
 
 const handleParaglide: Handle = ({ event, resolve }) =>
 	paraglideMiddleware(event.request, ({ request, locale }) => {
@@ -19,14 +22,22 @@ const handleParaglide: Handle = ({ event, resolve }) =>
 	});
 
 const handleBetterAuth: Handle = async ({ event, resolve }) => {
-	const session = await auth.api.getSession({ headers: event.request.headers });
+	const headers = event.request.headers;
+	const session = await auth.api.getSession({ headers });
 
 	if (session) {
 		event.locals.session = session.session;
 		event.locals.user = session.user;
 	}
+	const { tenants, tenant } = await resolveTenant(session?.session ?? null, {
+		memberships: (userId) => memberships(db, userId),
+		setActive: (organizationId) =>
+			auth.api.setActiveOrganization({ headers, body: { organizationId } })
+	});
+	event.locals.tenants = tenants;
+	event.locals.tenant = tenant;
 
 	return svelteKitHandler({ event, resolve, auth, building });
 };
 
-export const handle: Handle = sequence(handleParaglide, handleBetterAuth);
+export const handle: Handle = sequence(handleParaglide, handleBetterAuth, handleGuard);

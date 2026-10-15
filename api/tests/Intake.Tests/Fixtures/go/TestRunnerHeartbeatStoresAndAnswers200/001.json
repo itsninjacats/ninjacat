@@ -1,0 +1,73 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.036783895Z",
+ "request": {
+  "body_b64": "eyJkYXRhIjp7InR5cGUiOiJoZWFydGJlYXQiLCJpZCI6IjEiLCJhdHRyaWJ1dGVzIjp7CgkJInRhc2tfaWQiOiJ0LTEiLCJhY3Rpb25fZnFuIjoiY29tLmRhdGFkb2docS5odHRwLnJlcXVlc3QiLCJqb2JfaWQiOiJqLTEiLAoJCSJjbGllbnQiOnsidmVyc2lvbiI6IjEuMi4zIn19fX0=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/on-prem-management-service/workflow-tasks/heartbeat"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.03678111Z",
+     "t-1",
+     "com.datadoghq.http.request",
+     "j-1",
+     "{\"version\":\"1.2.3\"}"
+    ]
+   ],
+   "insert": "INSERT INTO runner_heartbeats\n\t\t\t(tenant_id, at, task_id, action_fqn, job_id, client)",
+   "rows": [
+    {
+     "ActionFQN": "com.datadoghq.http.request",
+     "At": "2026-10-01T15:21:14.03678111Z",
+     "Client": "{\"version\":\"1.2.3\"}",
+     "JobID": "j-1",
+     "TaskID": "t-1",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_runner_heartbeats",
+   "type": "storage.WriteRunnerHeartbeats"
+  }
+ ],
+ "seq": 1,
+ "test": "TestRunnerHeartbeatStoresAndAnswers200",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/At"
+ ]
+}

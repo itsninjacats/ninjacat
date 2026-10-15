@@ -1,0 +1,81 @@
+# NinjaCat itself, installed from the chart in helm/ninjacat — the same chart
+# a real deployment uses, so a lab run is also the chart's test.
+#
+# Only what differs from the chart's defaults. up.sh adds the values that
+# must not be in git (secrets.betterAuthSecret, secrets.queryTokenSecret).
+
+domainRoot: ninjacat.lab
+
+# The Deployments and Services become ninjacat-intake, ninjacat-query,
+# ninjacat-monitors and ninjacat-frontend. The names are load-bearing: up.sh
+# waits on all four and creates the TLS Secrets the chart looks for under
+# these names.
+fullnameOverride: ninjacat
+
+# Both databases made by the chart, with the query and monitors users exercised too.
+postgres:
+  create: true
+clickhouse:
+  create: true
+  queryUser: query
+  monitorsUser: monitors
+  # ClickHouse grabs memory eagerly; 1.5Gi is the ceiling that still leaves
+  # room for the rest of the lab on a ~5 GB host.
+  resources:
+    limits: { memory: 1536Mi }
+secrets:
+  clickhousePassword: ninjacat
+  clickhouseQueryPassword: ninjacat-query
+  clickhouseMonitorsPassword: ninjacat-monitors
+
+# Built on the host and side-loaded with `kind load docker-image`; the images
+# exist in no registry, and IfNotPresent (the chart's default) is what keeps
+# the kubelet from trying to pull them.
+api:
+  image:
+    repository: ninjacat/api
+    tag: lab
+
+# Traefik's pods are somewhere in kind's pod network.
+trustedProxies:
+  - 10.244.0.0/16
+
+# Three pods on the lab's one node, where the chart's default (one per node)
+# would leave two of them pending.
+monitors:
+  image:
+    repository: ninjacat/monitors
+    tag: lab
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: monitors
+
+intake:
+  env:
+    # Dump every request, to see what a real agent sends:
+    #   kubectl --context kind-ninjacat-lab -n ninjacat-lab exec deploy/ninjacat-intake -- ls captures
+    DEBUG: "true"
+
+frontend:
+  image:
+    repository: ninjacat/frontend
+    tag: lab
+  # What the BROWSER on the host sees: NodePort 30000 is mapped by kind to
+  # host port 8888. SvelteKit and Better Auth reject a request whose Origin
+  # does not match this, so the panel is used through that port and not
+  # through the Ingress, which is here for the agents.
+  origin: http://localhost:8888
+
+# The front door is the chart's own Ingress, served by Traefik (up.sh
+# installs it), with the lab's certificate in the two Secrets the chart
+# names by default. The chart sees Traefik's CRDs and adds the redirect from
+# HTTP by itself.
+ingress:
+  enabled: true
+  className: traefik

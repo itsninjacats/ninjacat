@@ -1,0 +1,97 @@
+{
+ "recorded_at": "2026-10-01T15:21:18.995754642Z",
+ "request": {
+  "body_b64": "eyJ2ZXJzaW9uIjoxLCJtZXRhZGF0YSI6e319",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/citestcycle"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeCITestCycle"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:18.995752799Z",
+     "citestcycle",
+     "unexpected_shape",
+     "POST",
+     "example.com",
+     "/api/v2/citestcycle",
+     {},
+     "application/json",
+     "",
+     {},
+     "{\"version\":1,\"metadata\":{}}",
+     27,
+     "envelope carries no events"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "{\"version\":1,\"metadata\":{}}",
+     "BodyBytes": 27,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "citestcycle",
+     "Method": "POST",
+     "Note": "envelope carries no events",
+     "Path": "/api/v2/citestcycle",
+     "Query": {},
+     "Reason": "unexpected_shape",
+     "ReceivedAt": "2026-10-01T15:21:18.995752799Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCITestCycleStoresUndecodableBodiesRaw/envelope_with_no_events",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

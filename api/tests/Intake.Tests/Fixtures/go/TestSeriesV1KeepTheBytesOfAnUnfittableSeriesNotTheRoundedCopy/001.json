@@ -1,0 +1,100 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.035048489Z",
+ "request": {
+  "body_b64": "eyJzZXJpZXMiOlt7Im1ldHJpYyI6Im0iLCJwb2ludHMiOiJub3QtYS1saXN0IiwidHJhY2VfaWQiOjEyMzQ1Njc4OTAxMjM0NTY3ODkxfV19",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v1/series"
+ },
+ "response": {
+  "body_b64": "eyJlcnJvcnMiOltdfQ==",
+  "body_json": {
+   "errors": []
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.035037579Z",
+     "series",
+     "unexpected_shape",
+     "POST",
+     "example.com",
+     "/api/v1/series",
+     {},
+     "application/json",
+     "",
+     {},
+     "{\"metric\":\"m\",\"points\":\"not-a-list\",\"trace_id\":12345678901234567891}",
+     68,
+     "series[0].points: expected a list of [timestamp, value] pairs, got string"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "{\"metric\":\"m\",\"points\":\"not-a-list\",\"trace_id\":12345678901234567891}",
+     "BodyBytes": 68,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "series",
+     "Method": "POST",
+     "Note": "series[0].points: expected a list of [timestamp, value] pairs, got string",
+     "Path": "/api/v1/series",
+     "Query": {},
+     "Reason": "unexpected_shape",
+     "ReceivedAt": "2026-10-01T15:21:14.035037579Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestSeriesV1KeepTheBytesOfAnUnfittableSeriesNotTheRoundedCopy",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ],
+ "edited": "The notes say which member did not fit and what was found there, in one wording for every intake. They used to be the Go server's, naming the Go API client's model types."
+}

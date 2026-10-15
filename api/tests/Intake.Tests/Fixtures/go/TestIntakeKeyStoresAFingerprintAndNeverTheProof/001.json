@@ -1,0 +1,76 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.035455967Z",
+ "request": {
+  "body_b64": "",
+  "headers": {
+   "Authorization": [
+    "Delegated super-secret-proof"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/intake-key"
+ },
+ "response": {
+  "body_b64": "eyJkYXRhIjp7ImF0dHJpYnV0ZXMiOnsiYXBpX2tleSI6IjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAxIn19fQ==",
+  "body_json": {
+   "data": {
+    "attributes": {
+     "api_key": "00000000000000000000000000000001"
+    }
+   }
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.035439196Z",
+     "Delegated",
+     "88effd7be8d22d3cfe386ccffcef969ab1508b062cc85d99dbef6ae28eff85d9",
+     "test"
+    ]
+   ],
+   "insert": "INSERT INTO delegated_auth_requests\n\t\t\t(tenant_id, at, scheme, proof_fingerprint, api_key_id)",
+   "rows": [
+    {
+     "APIKeyID": "test",
+     "At": "2026-10-01T15:21:14.035439196Z",
+     "ProofFingerprint": "88effd7be8d22d3cfe386ccffcef969ab1508b062cc85d99dbef6ae28eff85d9",
+     "Scheme": "Delegated",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_delegated_auth_requests",
+   "type": "storage.WriteDelegatedAuthRequests"
+  }
+ ],
+ "seq": 1,
+ "test": "TestIntakeKeyStoresAFingerprintAndNeverTheProof",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/At"
+ ]
+}

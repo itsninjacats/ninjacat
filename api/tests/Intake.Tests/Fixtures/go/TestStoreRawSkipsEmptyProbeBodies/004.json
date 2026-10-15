@@ -1,0 +1,29 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.670201298Z",
+ "request": {
+  "body_b64": "IHt9IAo=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/probe"
+ },
+ "response": {
+  "body_b64": "",
+  "headers": {},
+  "status": 202
+ },
+ "routes": [
+  "func1"
+ ],
+ "sends": [],
+ "seq": 4,
+ "test": "TestStoreRawSkipsEmptyProbeBodies",
+ "volatile": []
+}

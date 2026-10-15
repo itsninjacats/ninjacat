@@ -1,0 +1,99 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.03334988Z",
+ "request": {
+  "body_b64": "eyJob3N0bmFtZSI6ImgxIiwiYnJhbmRfbmV3X21ldGFkYXRhIjp7ImEiOjF9fQ==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v1/metadata"
+ },
+ "response": {
+  "body_b64": "eyJzdGF0dXMiOiJvayJ9",
+  "body_json": {
+   "status": "ok"
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.033345803Z",
+     "metadata",
+     "no_schema",
+     "POST",
+     "example.com",
+     "/api/v1/metadata",
+     {},
+     "application/json",
+     "",
+     {},
+     "{\"hostname\":\"h1\",\"brand_new_metadata\":{\"a\":1}}",
+     46,
+     "no known /api/v1/metadata variant key, keys: brand_new_metadata, hostname"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "{\"hostname\":\"h1\",\"brand_new_metadata\":{\"a\":1}}",
+     "BodyBytes": 46,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "metadata",
+     "Method": "POST",
+     "Note": "no known /api/v1/metadata variant key, keys: brand_new_metadata, hostname",
+     "Path": "/api/v1/metadata",
+     "Query": {},
+     "Reason": "no_schema",
+     "ReceivedAt": "2026-10-01T15:21:14.033345803Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestMetadataUnknownVariantGoesToRawPayloads",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

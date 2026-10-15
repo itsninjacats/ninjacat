@@ -1,0 +1,101 @@
+{
+ "recorded_at": "2026-10-01T15:21:16.874676501Z",
+ "request": {
+  "body_b64": "GqkCCjIPc3lzdGVtLmNwdS51c2VyFWh0dHAucmVxdWVzdC5kdXJhdGlvbgtxdWV1ZS5kZXB0aBIwCGVudjpwcm9kDmt1YmVfc2VydmljZTphDmt1YmVfc2VydmljZTpiCHJvbGU6d2ViGgcGAgICBAEKIh8EaG9zdAZ3ZWItMDEGZGV2aWNlBGV0aDAGd2ViLTAyKgIBAjIDAgIEOgMECgFCBwZzeXN0ZW1KAwoLKlIEEbMENFoDAgICYgMCAgFqAwICAXIDDwoAggEIgMSf1QweChSKAQMOEgyaASAAAAAAAAD4PwAAAAAAAChAAAAAAAAA8D8AAAAAAAAiQKIBAQOqAQMIAgiyAQMBAgO6AQMCAQDCAQMCAADKAQwLbWlsbGlzZWNvbmTSAQEC",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/intake/metrics/v3/series"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeApp"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:16.874658748Z",
+     "v3series",
+     "unexpected_shape",
+     "POST",
+     "example.com",
+     "/api/intake/metrics/v3/series",
+     {},
+     "application/json",
+     "",
+     {},
+     {
+      "$b64": "GqkCCjIPc3lzdGVtLmNwdS51c2VyFWh0dHAucmVxdWVzdC5kdXJhdGlvbgtxdWV1ZS5kZXB0aBIwCGVudjpwcm9kDmt1YmVfc2VydmljZTphDmt1YmVfc2VydmljZTpiCHJvbGU6d2ViGgcGAgICBAEKIh8EaG9zdAZ3ZWItMDEGZGV2aWNlBGV0aDAGd2ViLTAyKgIBAjIDAgIEOgMECgFCBwZzeXN0ZW1KAwoLKlIEEbMENFoDAgICYgMCAgFqAwICAXIDDwoAggEIgMSf1QweChSKAQMOEgyaASAAAAAAAAD4PwAAAAAAAChAAAAAAAAA8D8AAAAAAAAiQKIBAQOqAQMIAgiyAQMBAgO6AQMCAQDCAQMCAADKAQwLbWlsbGlzZWNvbmTSAQEC"
+     },
+     300,
+     "numPoints has 0 entries for 3 series"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": {
+      "$b64": "GqkCCjIPc3lzdGVtLmNwdS51c2VyFWh0dHAucmVxdWVzdC5kdXJhdGlvbgtxdWV1ZS5kZXB0aBIwCGVudjpwcm9kDmt1YmVfc2VydmljZTphDmt1YmVfc2VydmljZTpiCHJvbGU6d2ViGgcGAgICBAEKIh8EaG9zdAZ3ZWItMDEGZGV2aWNlBGV0aDAGd2ViLTAyKgIBAjIDAgIEOgMECgFCBwZzeXN0ZW1KAwoLKlIEEbMENFoDAgICYgMCAgFqAwICAXIDDwoAggEIgMSf1QweChSKAQMOEgyaASAAAAAAAAD4PwAAAAAAAChAAAAAAAAA8D8AAAAAAAAiQKIBAQOqAQMIAgiyAQMBAgO6AQMCAQDCAQMCAADKAQwLbWlsbGlzZWNvbmTSAQEC"
+     },
+     "BodyBytes": 300,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "v3series",
+     "Method": "POST",
+     "Note": "numPoints has 0 entries for 3 series",
+     "Path": "/api/intake/metrics/v3/series",
+     "Query": {},
+     "Reason": "unexpected_shape",
+     "ReceivedAt": "2026-10-01T15:21:16.874658748Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestHandleAppV3KeepsPayloadWithoutNumPoints",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

@@ -1,0 +1,101 @@
+{
+ "recorded_at": "2026-10-01T15:21:18.996709445Z",
+ "request": {
+  "body_b64": "LS1jZTcxMTExNzI5ZGQzODZhODZjODRmZGRmMDRlNDgxMTM3MWUyNDhkZGU2ZjRjY2MxNDdmYjRjNTQ2MGQNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZXZlbnQiDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL2pzb24NCg0KeyJkdW1teSI6IHRydWV9DQotLWNlNzExMTE3MjlkZDM4NmE4NmM4NGZkZGYwNGU0ODExMzcxZTI0OGRkZTZmNGNjYzE0N2ZiNGM1NDYwZC0tDQo=",
+  "headers": {
+   "Content-Type": [
+    "multipart/form-data; boundary=ce71111729dd386a86c84fddf04e4811371e248dde6f4ccc147fb4c5460d"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/citestcov"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeCITestCov"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:18.996706069Z",
+     "citestcov",
+     "unexpected_shape",
+     "POST",
+     "example.com",
+     "/api/v2/citestcov",
+     {},
+     "multipart/form-data; boundary=ce71111729dd386a86c84fddf04e4811371e248dde6f4ccc147fb4c5460d",
+     "",
+     {},
+     "--ce71111729dd386a86c84fddf04e4811371e248dde6f4ccc147fb4c5460d\r\nContent-Disposition: form-data; name=\"event\"\r\nContent-Type: application/json\r\n\r\n{\"dummy\": true}\r\n--ce71111729dd386a86c84fddf04e4811371e248dde6f4ccc147fb4c5460d--\r\n",
+     227,
+     "multipart carries no coverage part (only event)"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "--ce71111729dd386a86c84fddf04e4811371e248dde6f4ccc147fb4c5460d\r\nContent-Disposition: form-data; name=\"event\"\r\nContent-Type: application/json\r\n\r\n{\"dummy\": true}\r\n--ce71111729dd386a86c84fddf04e4811371e248dde6f4ccc147fb4c5460d--\r\n",
+     "BodyBytes": 227,
+     "ContentEncoding": "",
+     "ContentType": "multipart/form-data; boundary=ce71111729dd386a86c84fddf04e4811371e248dde6f4ccc147fb4c5460d",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "citestcov",
+     "Method": "POST",
+     "Note": "multipart carries no coverage part (only event)",
+     "Path": "/api/v2/citestcov",
+     "Query": {},
+     "Reason": "unexpected_shape",
+     "ReceivedAt": "2026-10-01T15:21:18.996706069Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCITestCovStoresUndecodablePayloadsRaw/event_only",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/0/8",
+  "/sends/0/args/0/11",
+  "/sends/0/rows/0/Body",
+  "/sends/0/rows/0/ContentType",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

@@ -1,0 +1,117 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.035825035Z",
+ "request": {
+  "body_b64": "eyJkYXRhIjp7ImF0dHJpYnV0ZXMiOnsiYWdlbnRfZmxhdm9yIjoiYWdlbnQiLCJhZ2VudF9ob3N0bmFtZSI6ImFnZW50LWhvc3QiLCJhbl9hdHRyaWJ1dGVfd2VfZG9fbm90X25hbWUiOiJrZXB0Iiwib3JjaF9jbHVzdGVyX2lkIjoiY2x1c3Rlci05IiwicHVibGljX2tleV9wZW0iOiItLS0tLUJFR0lOIFBVQkxJQyBLRVktLS0tLVxuTUZrd0V3WUhcbi0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLVxuIiwicnVubmVyX2hvc3QiOiJydW5uZXItaG9zdCIsInJ1bm5lcl9tb2RlcyI6WyJ3b3JrZmxvd19hdXRvbWF0aW9uIiwiYXBwX2J1aWxkZXIiXSwicnVubmVyX25hbWUiOiJydW5uZXItMSJ9LCJ0eXBlIjoiY3JlYXRlUnVubmVyUmVxdWVzdCJ9fQ==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/unstable/on_prem_runners/api_key_only"
+ },
+ "response": {
+  "body_b64": "eyJkYXRhIjp7ImF0dHJpYnV0ZXMiOnsiYWdlbnRfZmxhdm9yIjoiYWdlbnQiLCJhZ2VudF9ob3N0bmFtZSI6ImFnZW50LWhvc3QiLCJvcmNoX2NsdXN0ZXJfaWQiOiJjbHVzdGVyLTkiLCJvcmdfaWQiOjkwMDM2NjcwMzczNDMzMjM1MzksInJ1bm5lcl9pZCI6ImNlZGZiNDJiLTk1OWUtNGJjMy1iYzAxLTc1ZWE4NWUwOTNkZSIsInJ1bm5lcl9tb2RlcyI6WyJ3b3JrZmxvd19hdXRvbWF0aW9uIiwiYXBwX2J1aWxkZXIiXX0sImlkIjoiY2VkZmI0MmItOTU5ZS00YmMzLWJjMDEtNzVlYTg1ZTA5M2RlIiwidHlwZSI6ImNyZWF0ZVJ1bm5lclJlc3BvbnNlIn19",
+  "body_json": {
+   "data": {
+    "attributes": {
+     "agent_flavor": "agent",
+     "agent_hostname": "agent-host",
+     "orch_cluster_id": "cluster-9",
+     "org_id": 9003667037343323539,
+     "runner_id": "cedfb42b-959e-4bc3-bc01-75ea85e093de",
+     "runner_modes": [
+      "workflow_automation",
+      "app_builder"
+     ]
+    },
+    "id": "cedfb42b-959e-4bc3-bc01-75ea85e093de",
+    "type": "createRunnerResponse"
+   }
+  },
+  "headers": {
+   "Content-Type": [
+    "application/vnd.api+json"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "string",
+     "time.Time",
+     "string",
+     "[]string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "int64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "cedfb42b-959e-4bc3-bc01-75ea85e093de",
+     "2026-10-01T15:21:14.035801341Z",
+     "runner-1",
+     [
+      "workflow_automation",
+      "app_builder"
+     ],
+     "runner-host",
+     "-----BEGIN PUBLIC KEY-----\nMFkwEwYH\n-----END PUBLIC KEY-----\n",
+     "agent-host",
+     "cluster-9",
+     "agent",
+     9003667037343323539,
+     "{\"agent_flavor\":\"agent\",\"agent_hostname\":\"agent-host\",\"an_attribute_we_do_not_name\":\"kept\",\"orch_cluster_id\":\"cluster-9\",\"public_key_pem\":\"-----BEGIN PUBLIC KEY-----\\nMFkwEwYH\\n-----END PUBLIC KEY-----\\n\",\"runner_host\":\"runner-host\",\"runner_modes\":[\"workflow_automation\",\"app_builder\"],\"runner_name\":\"runner-1\"}"
+    ]
+   ],
+   "insert": "INSERT INTO runner_enrollments\n\t\t\t(tenant_id, runner_id, enrolled_at, name, modes, host, public_key_pem,\n\t\t\t agent_hostname, orch_cluster_id, agent_flavor, org_id, attributes)",
+   "rows": [
+    {
+     "AgentFlavor": "agent",
+     "AgentHostname": "agent-host",
+     "Attributes": "{\"agent_flavor\":\"agent\",\"agent_hostname\":\"agent-host\",\"an_attribute_we_do_not_name\":\"kept\",\"orch_cluster_id\":\"cluster-9\",\"public_key_pem\":\"-----BEGIN PUBLIC KEY-----\\nMFkwEwYH\\n-----END PUBLIC KEY-----\\n\",\"runner_host\":\"runner-host\",\"runner_modes\":[\"workflow_automation\",\"app_builder\"],\"runner_name\":\"runner-1\"}",
+     "EnrolledAt": "2026-10-01T15:21:14.035801341Z",
+     "Host": "runner-host",
+     "Modes": [
+      "workflow_automation",
+      "app_builder"
+     ],
+     "Name": "runner-1",
+     "OrchClusterID": "cluster-9",
+     "OrgID": 9003667037343323539,
+     "PublicKeyPEM": "-----BEGIN PUBLIC KEY-----\nMFkwEwYH\n-----END PUBLIC KEY-----\n",
+     "RunnerID": "cedfb42b-959e-4bc3-bc01-75ea85e093de",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_runner_enrollments",
+   "type": "storage.WriteRunnerEnrollments"
+  }
+ ],
+ "seq": 1,
+ "test": "TestRunnerEnrollStoresTheIdentityItHandsOut",
+ "volatile": [
+  "/response/body_json/data/attributes/runner_id",
+  "/response/body_json/data/id",
+  "/sends/0/args/0/1",
+  "/sends/0/args/0/2",
+  "/sends/0/rows/0/EnrolledAt",
+  "/sends/0/rows/0/RunnerID"
+ ]
+}

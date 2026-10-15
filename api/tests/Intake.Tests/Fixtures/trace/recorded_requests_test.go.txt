@@ -1,0 +1,782 @@
+package intake
+
+import (
+	"bytes"
+	"math"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	pb "github.com/DataDog/datadog-agent/pkg/proto/pbgo/trace"
+	"github.com/DataDog/datadog-agent/pkg/proto/pbgo/trace/idx"
+	"github.com/DataDog/sketches-go/ddsketch"
+	"github.com/DataDog/sketches-go/ddsketch/mapping"
+	"github.com/DataDog/sketches-go/ddsketch/pb/sketchpb"
+	"github.com/DataDog/sketches-go/ddsketch/store"
+	"github.com/tinylib/msgp/msgp"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
+)
+
+// The requests behind api/tests/Intake.Tests/Fixtures/trace: payloads the
+// Go tests of router_trace.go did not send through HTTP (the idx wire format,
+// real sketches, every msgp error, unknown Data Streams fields), recorded by
+// fixtures_test.go's recorder the same way the fixtures in ../go were. To
+// record again, put this file in server/intake as a _test.go file.
+
+func portSketch(t *testing.T, m mapping.IndexMapping, values ...float64) []byte {
+	t.Helper()
+	sk := ddsketch.NewDDSketch(m, store.NewDenseStore(), store.NewDenseStore())
+	for _, v := range values {
+		if err := sk.Add(v); err != nil {
+			t.Fatalf("add %g: %v", v, err)
+		}
+	}
+	raw, err := proto.Marshal(sk.ToProto())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+func portProto(t *testing.T, m proto.Message) []byte {
+	t.Helper()
+	raw, err := proto.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+func TestPortTraces(t *testing.T) {
+	a, _ := newTestServer(t)
+	e := newTestEngine(t, a, a.routeTrace)
+
+	// 001: a rich v0.4 payload.
+	v04 := &pb.AgentPayload{
+		HostName: "ip-10-0-0-1", Env: "prod", AgentVersion: "7.58.2",
+		TargetTPS: 10.5, ErrorTPS: 2, RareSamplerEnabled: true,
+		Tags: map[string]string{"cluster": "eu-1", "zone": "a"},
+		TracerPayloads: []*pb.TracerPayload{
+			{
+				ContainerID: "abc123", LanguageName: "python", LanguageVersion: "3.12.1",
+				TracerVersion: "2.9.0", RuntimeID: "0f4c-runtime", Env: "prod", Hostname: "pod-1",
+				AppVersion: "1.4.0", Tags: map[string]string{"team": "payments"},
+				ContainerDebug: &pb.ContainerDebug{Error: "context deadline exceeded", LatencyMs: 0,
+					WasBuffered: true, BufferMs: 250, BufferEvictionReason: "timeout"},
+				Chunks: []*pb.TraceChunk{
+					{
+						Priority: -1, Origin: "lambda", DroppedTrace: true,
+						Tags: map[string]string{"_dd.p.dm": "-1"},
+						Spans: []*pb.Span{
+							{
+								Service: "checkout", Name: "flask.request", Resource: "GET /pay <a&b>",
+								Type: "web", TraceID: 18446744073709551615, SpanID: 222, ParentID: 0,
+								Start: 1_700_000_000_000_000_123, Duration: 5_000_000, Error: 0,
+								Meta:       map[string]string{"span.kind": "server", "_dd.p.tid": "67890abcdef01234", "ünï": "çödé"},
+								Metrics:    map[string]float64{"_sampling_priority_v1": 1, "ratio": 0.1},
+								MetaStruct: map[string][]byte{"appsec": {0x81, 0xa3, 'k', 'e', 'y', 0x00, 0xff}, "text": []byte("plain")},
+								SpanLinks: []*pb.SpanLink{
+									{TraceID: 10, TraceIDHigh: 99, SpanID: 11, Tracestate: "dd=s:1", Flags: 0x80000001,
+										Attributes: map[string]string{"rel": "follows", "a": "b"}},
+									{TraceID: 20, SpanID: 21},
+								},
+								SpanEvents: []*pb.SpanEvent{
+									{TimeUnixNano: 1_700_000_000_000_000_001, Name: "exception", Attributes: map[string]*pb.AttributeAnyValue{
+										"code":    {Type: pb.AttributeAnyValue_INT_VALUE, IntValue: -9223372036854775808},
+										"message": {Type: pb.AttributeAnyValue_STRING_VALUE, StringValue: "boom \"quoted\""},
+										"ratio":   {Type: pb.AttributeAnyValue_DOUBLE_VALUE, DoubleValue: 0.5},
+										"big":     {Type: pb.AttributeAnyValue_DOUBLE_VALUE, DoubleValue: 1e300},
+										"retry":   {Type: pb.AttributeAnyValue_BOOL_VALUE, BoolValue: true},
+										"odd":     {Type: 9},
+										"frames": {Type: pb.AttributeAnyValue_ARRAY_VALUE, ArrayValue: &pb.AttributeArray{
+											Values: []*pb.AttributeArrayValue{
+												{Type: pb.AttributeArrayValue_STRING_VALUE, StringValue: "a"},
+												{Type: pb.AttributeArrayValue_INT_VALUE, IntValue: 7},
+												{Type: pb.AttributeArrayValue_BOOL_VALUE, BoolValue: false},
+												{Type: pb.AttributeArrayValue_DOUBLE_VALUE, DoubleValue: 2.5},
+												{Type: 7},
+											}}},
+										"noarray": {Type: pb.AttributeAnyValue_ARRAY_VALUE},
+									}},
+									{TimeUnixNano: 18446744073709551615, Name: "log"},
+									{Name: "nan", Attributes: map[string]*pb.AttributeAnyValue{
+										"x": {Type: pb.AttributeAnyValue_DOUBLE_VALUE, DoubleValue: math.NaN()},
+									}},
+									{Name: "inf", Attributes: map[string]*pb.AttributeAnyValue{
+										"x": {Type: pb.AttributeAnyValue_ARRAY_VALUE, ArrayValue: &pb.AttributeArray{
+											Values: []*pb.AttributeArrayValue{{Type: pb.AttributeArrayValue_DOUBLE_VALUE, DoubleValue: math.Inf(-1)}}}},
+									}},
+								},
+							},
+							{
+								Service: "checkout", Name: "postgres.query", Resource: "SELECT 1",
+								Type: "db", TraceID: 111, SpanID: 333, ParentID: 222,
+								Start: -5, Duration: -900_000, Error: -1,
+								Meta: map[string]string{"_dd.p.tid": "not hex", "span.kind": ""},
+							},
+							{SpanID: 334, Meta: map[string]string{"_dd.p.tid": "00000000000000000000000000000001F"}},
+							{SpanID: 335, Meta: map[string]string{"_dd.p.tid": "1ffffffffffffffff"}},
+							{SpanID: 336, Meta: map[string]string{"_dd.p.tid": "FFFFFFFFFFFFFFFF"}},
+							{SpanID: 337, Meta: map[string]string{"_dd.p.tid": "+1"}},
+						},
+					},
+					{Priority: 2},
+					{Spans: []*pb.Span{{SpanID: 9}}},
+				},
+			},
+			{LanguageName: "go", Chunks: []*pb.TraceChunk{{Spans: []*pb.Span{{SpanID: 1, Service: "second"}}}}},
+		},
+	}
+	body, err := v04.MarshalVT()
+	if err != nil {
+		t.Fatal(err)
+	}
+	post(t, e, "/api/v0.2/traces", body)
+
+	// 002: idx.
+	strs := []string{"", "checkout", "flask.request", "GET /pay", "web", "python",
+		"3.12.1", "2.9.0", "runtime-1", "prod", "pod-1", "1.4.0", "http.method",
+		"GET", "retries", "payload", "tags", "a", "dd=s:1", "exception", "cid", "lambda",
+		"err text", "evicted", "d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8", "flag", "empty", "kv", "deep", "comp"}
+	traceID := []byte{0x67, 0x89, 0x0a, 0xbc, 0xde, 0xf0, 0x12, 0x34, 0, 0, 0, 0, 0, 0, 0, 0x6f}
+
+	deep := &idx.AnyValue{Value: &idx.AnyValue_StringValueRef{StringValueRef: 17}}
+	for i := 0; i < 40; i++ {
+		deep = &idx.AnyValue{Value: &idx.AnyValue_ArrayValue{ArrayValue: &idx.ArrayValue{Values: []*idx.AnyValue{deep}}}}
+	}
+	dbl := func(v float64) *idx.AnyValue { return &idx.AnyValue{Value: &idx.AnyValue_DoubleValue{DoubleValue: v}} }
+	str := func(r uint32) *idx.AnyValue {
+		return &idx.AnyValue{Value: &idx.AnyValue_StringValueRef{StringValueRef: r}}
+	}
+
+	idxPayload := &pb.AgentPayload{
+		HostName: "agent-host",
+		IdxTracerPayloads: []*idx.TracerPayload{{
+			Strings:            strs,
+			ContainerIDRef:     20,
+			LanguageNameRef:    5,
+			LanguageVersionRef: 6,
+			TracerVersionRef:   7,
+			RuntimeIDRef:       8,
+			EnvRef:             9,
+			HostnameRef:        10,
+			AppVersionRef:      999,
+			ContainerDebug:     &idx.ContainerDebug{ErrorRef: 22, LatencyMs: 12, WasBuffered: false, BufferMs: -1, BufferEvictionReasonRef: 23},
+			Attributes: map[uint32]*idx.AnyValue{
+				16: {Value: &idx.AnyValue_KeyValueList{KeyValueList: &idx.KeyValueList{
+					KeyValues: []*idx.KeyValue{
+						{Key: 12, Value: str(13)},
+						{Key: 12, Value: &idx.AnyValue{Value: &idx.AnyValue_IntValue{IntValue: 5}}},
+						{Key: 14},
+					},
+				}}},
+				24: dbl(1e21), 25: dbl(1e-7), 26: dbl(123456789.125), 27: dbl(100000), 28: dbl(1000000),
+				29: dbl(0.000123), 30: dbl(math.Copysign(0, -1)), 31: dbl(-2.5e-5),
+				32: {Value: &idx.AnyValue_BoolValue{BoolValue: true}},
+				14: {Value: &idx.AnyValue_IntValue{IntValue: -42}},
+				12: str(13),
+				33: {Value: &idx.AnyValue_BytesValue{BytesValue: []byte{}}},
+			},
+			Chunks: []*idx.TraceChunk{
+				{
+					Priority: 2, OriginRef: 21, DroppedTrace: true, TraceID: traceID, SamplingMechanism: 4,
+					Attributes: map[uint32]*idx.AnyValue{
+						12: str(13),
+						24: dbl(math.NaN()),
+					},
+					Spans: []*idx.Span{
+						{
+							ServiceRef: 1, NameRef: 2, ResourceRef: 3, TypeRef: 4, SpanID: 333, ParentID: 222,
+							Start: 1_700_000_000_000_000_123, Duration: 5_000_000, Error: true,
+							Kind: idx.SpanKind_SPAN_KIND_SERVER, EnvRef: 9, VersionRef: 11, ComponentRef: 36,
+							Attributes: map[uint32]*idx.AnyValue{
+								12: str(13),
+								14: {Value: &idx.AnyValue_IntValue{IntValue: 9007199254740993}},
+								15: {Value: &idx.AnyValue_BytesValue{BytesValue: []byte{0x00, 0x01, 0xff}}},
+								16: {Value: &idx.AnyValue_ArrayValue{ArrayValue: &idx.ArrayValue{Values: []*idx.AnyValue{str(17), dbl(1.5)}}}},
+								32: {Value: &idx.AnyValue_BoolValue{BoolValue: false}},
+								24: dbl(2.5),
+								35: deep,
+								33: {},
+							},
+							Links: []*idx.SpanLink{
+								{TraceID: traceID, SpanID: 11, TracestateRef: 18, Flags: 1, Attributes: map[uint32]*idx.AnyValue{12: str(13)}},
+								{TraceID: []byte{0xff}, SpanID: 12},
+								{TraceID: append([]byte{0xaa, 0xbb}, traceID...), SpanID: 13},
+							},
+							Events: []*idx.SpanEvent{
+								{Time: 1_700_000_000_000_000_000, NameRef: 19, Attributes: map[uint32]*idx.AnyValue{14: {Value: &idx.AnyValue_IntValue{IntValue: 3}}}},
+								{Time: 5, NameRef: 500},
+							},
+						},
+						{SpanID: 1, Kind: idx.SpanKind_SPAN_KIND_CONSUMER},
+						{SpanID: 2, Kind: 77},
+						{SpanID: 3, Kind: idx.SpanKind_SPAN_KIND_INTERNAL, Start: 18446744073709551615, Duration: 18446744073709551615},
+					},
+				},
+				{Priority: -3, Spans: []*idx.Span{{SpanID: 44, Kind: idx.SpanKind_SPAN_KIND_CLIENT}, {SpanID: 45, Kind: idx.SpanKind_SPAN_KIND_PRODUCER}}},
+			},
+		}},
+	}
+	body, err = idxPayload.MarshalVT()
+	if err != nil {
+		t.Fatal(err)
+	}
+	post(t, e, "/api/v0.2/traces", body)
+
+	// 003: both shapes in one envelope.
+	both := &pb.AgentPayload{
+		HostName:          "both",
+		TracerPayloads:    []*pb.TracerPayload{{Chunks: []*pb.TraceChunk{{Spans: []*pb.Span{{SpanID: 1, Name: "v04"}}}}}},
+		IdxTracerPayloads: []*idx.TracerPayload{{Strings: []string{"", "idx"}, Chunks: []*idx.TraceChunk{{Spans: []*idx.Span{{SpanID: 2, NameRef: 1}}}}}},
+	}
+	body, _ = both.MarshalVT()
+	post(t, e, "/api/v0.2/traces", body)
+
+	// 004: an empty body, no diagnose header.
+	post(t, e, "/api/v0.2/traces", nil)
+
+	// 005: truncated protobuf.
+	body, _ = v04.MarshalVT()
+	post(t, e, "/api/v0.2/traces", body[:len(body)/2])
+
+	// 006: a tracer payload with no chunks: payloads present, zero rows.
+	post(t, e, "/api/v0.2/traces", mustVT(t, &pb.AgentPayload{TracerPayloads: []*pb.TracerPayload{{LanguageName: "go"}}}))
+
+	oneSpan := mustVT(t, &pb.AgentPayload{TracerPayloads: []*pb.TracerPayload{{Chunks: []*pb.TraceChunk{{Spans: []*pb.Span{{SpanID: 1}}}}}}})
+
+	// 007: an unknown group field at the top level, then a span.
+	group := protowire.AppendTag(nil, 50, protowire.StartGroupType)
+	group = protowire.AppendTag(group, 1, protowire.VarintType)
+	group = protowire.AppendVarint(group, 7)
+	group = protowire.AppendTag(group, 50, protowire.EndGroupType)
+	post(t, e, "/api/v0.2/traces", append(group, oneSpan...))
+
+	// 008: a span, then garbage.
+	post(t, e, "/api/v0.2/traces", append(oneSpan, 0xff, 0xff))
+}
+
+func mustVT(t *testing.T, p *pb.AgentPayload) []byte {
+	t.Helper()
+	b, err := p.MarshalVT()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+func TestPortStats(t *testing.T) {
+	a, _ := newTestServer(t)
+	e := newTestEngine(t, a, a.routeTrace)
+
+	logMap, _ := mapping.NewLogarithmicMapping(0.01)
+	linMap, _ := mapping.NewLinearlyInterpolatedMapping(0.01)
+	cubMap, _ := mapping.NewCubicallyInterpolatedMapping(0.01)
+	logOff, _ := mapping.NewLogarithmicMappingWithGamma(1.05, 3.5)
+
+	many := make([]float64, 0, 60)
+	for i := 0; i < 60; i++ {
+		many = append(many, 1000*math.Pow(1.37, float64(i%24))+float64(i))
+	}
+
+	sparse := portProto(t, &sketchpb.DDSketch{
+		Mapping:        &sketchpb.IndexMapping{Gamma: 1.02020202020202, IndexOffset: 0},
+		PositiveValues: &sketchpb.Store{BinCounts: map[int32]float64{-5: 2, 1000: 1.5, 3: 0, 7: 4}, ContiguousBinCounts: []float64{1, 0, 2}, ContiguousBinIndexOffset: 6},
+		NegativeValues: &sketchpb.Store{BinCounts: map[int32]float64{12: 3}},
+		ZeroCount:      2,
+	})
+	zeroOnly := portProto(t, &sketchpb.DDSketch{Mapping: &sketchpb.IndexMapping{Gamma: 1.02}, ZeroCount: 4})
+	negOnly := portProto(t, &sketchpb.DDSketch{
+		Mapping:        &sketchpb.IndexMapping{Gamma: 1.02, Interpolation: sketchpb.IndexMapping_CUBIC},
+		NegativeValues: &sketchpb.Store{ContiguousBinCounts: []float64{1, 2, 3}, ContiguousBinIndexOffset: -4},
+	})
+	noMapping := portProto(t, &sketchpb.DDSketch{ZeroCount: 4})
+	badGamma := portProto(t, &sketchpb.DDSketch{Mapping: &sketchpb.IndexMapping{Gamma: 1}, ZeroCount: 4})
+	quadratic := portProto(t, &sketchpb.DDSketch{Mapping: &sketchpb.IndexMapping{Gamma: 1.5, Interpolation: sketchpb.IndexMapping_QUADRATIC}, ZeroCount: 4})
+	emptyWithMapping := portProto(t, &sketchpb.DDSketch{Mapping: &sketchpb.IndexMapping{Gamma: 1.5}})
+
+	group := func(name string, ok, errS []byte) *pb.ClientGroupedStats {
+		return &pb.ClientGroupedStats{Service: "checkout", Name: name, OkSummary: ok, ErrorSummary: errS}
+	}
+
+	payload := &pb.StatsPayload{
+		AgentHostname: "agent-1", AgentEnv: "prod", AgentVersion: "7.58.2", ClientComputed: true, SplitPayload: true,
+		Stats: []*pb.ClientStatsPayload{
+			{
+				Hostname: "pod-1", Env: "prod", Version: "1.4.0", Lang: "python", TracerVersion: "2.9.0",
+				RuntimeID: "runtime-1", Sequence: 7, AgentAggregation: "distributions", Service: "checkout", ContainerID: "abc123",
+				Tags:         []string{"kube_service:a", "kube_service:b", "bare", "url:http://x:1"},
+				GitCommitSha: "deadbeef", ImageTag: "v1.4.0", ProcessTags: "entrypoint:gunicorn", ProcessTagsHash: 18446744073709551615,
+				Stats: []*pb.ClientStatsBucket{
+					{
+						Start: 1_700_000_000_000_000_001, Duration: 10_000_000_000, AgentTimeShift: -500,
+						Stats: []*pb.ClientGroupedStats{
+							{
+								Service: "checkout", Name: "flask.request", Resource: "GET /pay",
+								HTTPStatusCode: 200, Type: "web", DBType: "pg", Hits: 120, Errors: 3,
+								Duration: 900_000_000, Synthetics: true, TopLevelHits: 119, SpanKind: "server",
+								IsTraceRoot: pb.Trilean_TRUE, GRPCStatusCode: "0", HTTPMethod: "GET", HTTPEndpoint: "/pay",
+								ServiceSource: "opt", PeerTags: []string{"db.hostname:pg-1"},
+								SpanDerivedPrimaryTags: []string{"dc:eu"}, AdditionalMetricTags: []string{"region:eu"},
+								OkSummary:    portSketch(t, logMap, 1e6, 2e6, 3e6),
+								ErrorSummary: []byte("not a sketch"),
+							},
+							{Service: "checkout", Name: "false-root", IsTraceRoot: pb.Trilean_FALSE},
+							{Service: "checkout", Name: "odd-root", IsTraceRoot: 7},
+							group("many-log", portSketch(t, logMap, many...), portSketch(t, logMap)),
+							group("many-lin", portSketch(t, linMap, many...), portSketch(t, linMap, 0.2, 0.3, 0.5, 2)),
+							group("many-cub", portSketch(t, cubMap, many...), portSketch(t, cubMap, 0.2, 0.3, 0.5, 2)),
+							group("offset", portSketch(t, logOff, 0.5, 1, 2, 1e3), portSketch(t, logMap, 0, 0, 5)),
+							group("negatives", portSketch(t, logMap, -1, -100, 3, 0), portSketch(t, logMap, -50, -3)),
+							group("sparse", sparse, zeroOnly),
+							group("neg-only", negOnly, noMapping),
+							group("bad", badGamma, quadratic),
+							group("empty-mapping", emptyWithMapping, []byte{0x08}),
+						},
+					},
+					{Start: 5},
+				},
+			},
+			{Service: "second", Stats: []*pb.ClientStatsBucket{{Stats: []*pb.ClientGroupedStats{{Name: "x", Hits: 1}}}}},
+		},
+	}
+	body, err := payload.MarshalMsg(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	post(t, e, "/api/v0.2/stats", body) // 001
+
+	// Hand-built bodies.
+	type w = []byte
+	hdr := func(b w, n uint32) w { return msgp.AppendMapHeader(b, n) }
+	str := func(b w, s string) w { return msgp.AppendString(b, s) }
+	arr := func(b w, n uint32) w { return msgp.AppendArrayHeader(b, n) }
+
+	// one group nested three levels down, with the given tail
+	nested := func(tail func(b w) w) w {
+		b := hdr(nil, 2)
+		b = str(b, "AgentHostname")
+		b = str(b, "h")
+		b = str(b, "Stats")
+		b = arr(b, 2)
+		b = hdr(b, 1) // client 0
+		b = str(b, "Service")
+		b = str(b, "c0")
+		b = hdr(b, 1) // client 1
+		b = str(b, "Stats")
+		b = arr(b, 1)
+		b = hdr(b, 1) // bucket 0
+		b = str(b, "Stats")
+		b = arr(b, 3)
+		b = hdr(b, 1) // group 0
+		b = str(b, "Name")
+		b = str(b, "g0")
+		b = msgp.AppendNil(b) // group 1 nil
+		return tail(b)        // group 2
+	}
+
+	cases := []w{
+		// 002 wrong type deep
+		nested(func(b w) w { b = hdr(b, 1); b = str(b, "Hits"); return str(b, "x") }),
+		// 003 negative uint
+		nested(func(b w) w { b = hdr(b, 1); b = str(b, "Hits"); return msgp.AppendInt64(b, -5) }),
+		// 004 uint32 overflow
+		nested(func(b w) w { b = hdr(b, 1); b = str(b, "HTTPStatusCode"); return msgp.AppendUint64(b, 1<<40) }),
+		// 005 int32 overflow
+		nested(func(b w) w { b = hdr(b, 1); b = str(b, "IsTraceRoot"); return msgp.AppendInt64(b, 1<<40) }),
+		// 006 truncated
+		nested(func(b w) w { b = hdr(b, 2); b = str(b, "Hits"); return msgp.AppendUint64(b, 5) }),
+		// 007 unknown key skipped, nested value
+		nested(func(b w) w {
+			b = hdr(b, 2)
+			b = str(b, "Brand")
+			b = hdr(b, 1)
+			b = str(b, "k")
+			b = arr(b, 2)
+			b = msgp.AppendFloat64(b, 1.5)
+			b = msgp.AppendBytes(b, []byte{1, 2})
+			b = str(b, "Hits")
+			return msgp.AppendInt8(b, 9)
+		}),
+		// 008 unknown key with an invalid byte inside
+		nested(func(b w) w { b = hdr(b, 1); b = str(b, "Brand"); b = arr(b, 1); return append(b, 0xc1) }),
+		// 009 bin as map key, str for OkSummary
+		nested(func(b w) w {
+			b = hdr(b, 2)
+			b = msgp.AppendBytes(b, []byte("Name"))
+			b = str(b, "binkey")
+			b = str(b, "OkSummary")
+			return str(b, "text")
+		}),
+		// 010 top-level nil
+		msgp.AppendNil(nil),
+		// 011 trailing bytes after the payload
+		append(nested(func(b w) w { b = hdr(b, 1); b = str(b, "Hits"); return msgp.AppendUint64(b, 5) }), 0xc1, 0xc1),
+		// 012 uint64 above MaxInt64 for a signed field
+		func() w {
+			b := hdr(nil, 1)
+			b = str(b, "Stats")
+			b = arr(b, 1)
+			b = hdr(b, 1)
+			b = str(b, "Stats")
+			b = arr(b, 1)
+			b = hdr(b, 1)
+			b = str(b, "AgentTimeShift")
+			return msgp.AppendUint64(b, 1<<63)
+		}(),
+		// 013 float for Hits
+		nested(func(b w) w { b = hdr(b, 1); b = str(b, "Hits"); return msgp.AppendFloat64(b, 2) }),
+		// 014 a negative fixint for a uint
+		nested(func(b w) w { b = hdr(b, 1); b = str(b, "Errors"); return append(b, 0xff) }),
+		// 015 bool given a number
+		func() w { b := hdr(nil, 1); b = str(b, "ClientComputed"); return msgp.AppendInt(b, 1) }(),
+		// 016 map header instead of string array
+		nested(func(b w) w {
+			b = hdr(b, 1)
+			b = str(b, "PeerTags")
+			b = arr(b, 2)
+			b = str(b, "a")
+			return msgp.AppendInt(b, 3)
+		}),
+		// 017 integer key
+		func() w { b := hdr(nil, 1); return msgp.AppendInt(b, 1) }(),
+		// 018 a float32 where a string belongs, three levels down
+		nested(func(b w) w { b = hdr(b, 1); b = str(b, "Service"); return msgp.AppendFloat32(b, 1.5) }),
+		// 019 the invalid byte as a string
+		func() w { b := hdr(nil, 1); b = str(b, "AgentEnv"); return append(b, 0xc1) }(),
+		// 020 the invalid byte as a top-level value
+		{0xc1},
+		// 021 ext where an array belongs
+		func() w { b := hdr(nil, 1); b = str(b, "Stats"); return append(b, 0xd4, 0x05, 0x00) }(),
+		// 022 str32 with a forged length
+		func() w {
+			b := hdr(nil, 1)
+			b = str(b, "AgentEnv")
+			return append(b, 0xdb, 0xff, 0xff, 0xff, 0xff, 'a')
+		}(),
+		// 023 array16 claiming more than is there
+		func() w { b := hdr(nil, 1); b = str(b, "Stats"); return append(b, 0xdc, 0x00, 0x05) }(),
+		// 024 unknown key nested 200 deep, skipped
+		func() w {
+			b := hdr(nil, 2)
+			b = str(b, "X")
+			for i := 0; i < 200; i++ {
+				b = arr(b, 1)
+			}
+			b = msgp.AppendInt(b, 1)
+			b = str(b, "AgentEnv")
+			return str(b, "prod")
+		}(),
+	}
+	for _, c := range cases {
+		post(t, e, "/api/v0.2/stats", c)
+	}
+}
+
+func portDSMFull(t *testing.T) []byte {
+	t.Helper()
+	logMap, _ := mapping.NewLogarithmicMapping(0.01)
+	pathway := portSketch(t, logMap, 0.2, 0.3)
+
+	var buf bytes.Buffer
+	w := msgp.NewWriter(&buf)
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("encode: %v", err)
+		}
+	}
+	must(w.WriteMapHeader(12))
+	must(w.WriteString("Env"))
+	must(w.WriteString("prod"))
+	must(w.WriteString("Service"))
+	must(w.WriteString("orders"))
+	must(w.WriteString("TracerVersion"))
+	must(w.WriteString("2.9.0"))
+	must(w.WriteString("Lang"))
+	must(w.WriteString("go"))
+	must(w.WriteString("Version"))
+	must(w.WriteString("1.4.0"))
+	must(w.WriteString("ProcessTags"))
+	must(w.WriteArrayHeader(2))
+	must(w.WriteString("entrypoint:worker"))
+	must(w.WriteString("cwd:/srv"))
+	must(w.WriteString("ProductMask"))
+	must(w.WriteUint64(3))
+	must(w.WriteString("SomethingNew"))
+	must(w.WriteString("hello"))
+	must(w.WriteString("Nested"))
+	must(w.WriteMapHeader(9))
+	{
+		must(w.WriteString("z"))
+		must(w.WriteArrayHeader(4))
+		must(w.WriteInt64(-7))
+		must(w.WriteUint64(18446744073709551615))
+		must(w.WriteNil())
+		must(w.WriteBool(true))
+		must(w.WriteString("a"))
+		must(w.WriteBytes([]byte{0x00, 0xff, 0x10}))
+		must(w.WriteString("empty"))
+		must(w.WriteBytes([]byte{}))
+		must(w.WriteString("f32"))
+		must(w.WriteFloat32(1.1))
+		must(w.WriteString("f64"))
+		must(w.WriteFloat64(1e21))
+		must(w.WriteString("small"))
+		must(w.WriteFloat64(1.5e-9))
+		must(w.WriteString("ext"))
+		must(w.WriteExtension(&msgp.RawExtension{Type: 42, Data: []byte{1, 2, 3}}))
+		must(w.WriteString("ext0"))
+		must(w.WriteExtension(&msgp.RawExtension{Type: -7, Data: []byte{}}))
+		must(w.WriteString("i8"))
+		must(w.WriteInt8(5))
+	}
+	must(w.WriteString("Stats"))
+	must(w.WriteArrayHeader(2))
+	{
+		must(w.WriteMapHeader(7))
+		must(w.WriteString("Start"))
+		must(w.WriteUint64(1_700_000_000_000_000_007))
+		must(w.WriteString("Duration"))
+		must(w.WriteUint64(10_000_000_000))
+		must(w.WriteString("BucketNew"))
+		must(w.WriteInt64(-1))
+		must(w.WriteString("Stats"))
+		must(w.WriteArrayHeader(2))
+		{
+			must(w.WriteMapHeader(8))
+			must(w.WriteString("EdgeTags"))
+			must(w.WriteArrayHeader(2))
+			must(w.WriteString("type:kafka"))
+			must(w.WriteString("topic:orders"))
+			must(w.WriteString("Hash"))
+			must(w.WriteUint64(18446744073709551615))
+			must(w.WriteString("ParentHash"))
+			must(w.WriteInt64(42))
+			must(w.WriteString("PathwayLatency"))
+			must(w.WriteBytes(pathway))
+			must(w.WriteString("EdgeLatency"))
+			must(w.WriteNil())
+			must(w.WriteString("PayloadSize"))
+			must(w.WriteBytes([]byte("garbage")))
+			must(w.WriteString("TimestampType"))
+			must(w.WriteString("current"))
+			must(w.WriteString("PointNew"))
+			must(w.WriteArrayHeader(0))
+		}
+		{
+			must(w.WriteMapHeader(1))
+			must(w.WriteString("Hash"))
+			must(w.WriteUint64(1))
+		}
+		must(w.WriteString("Backlogs"))
+		must(w.WriteArrayHeader(2))
+		{
+			must(w.WriteMapHeader(3))
+			must(w.WriteString("Tags"))
+			must(w.WriteArrayHeader(2))
+			must(w.WriteString("type:kafka_commit"))
+			must(w.WriteString("partition:3"))
+			must(w.WriteString("Value"))
+			must(w.WriteInt64(-17))
+			must(w.WriteString("BacklogNew"))
+			must(w.WriteString("dropped"))
+		}
+		must(w.WriteNil())
+		must(w.WriteString("Transactions"))
+		must(w.WriteBytes([]byte{0x01, 0x02, 0x03}))
+		must(w.WriteString("TransactionCheckpointIds"))
+		must(w.WriteBytes([]byte{0xfe, 0xff}))
+	}
+	{
+		// a bucket with only checkpoint ids, and a nil points array
+		must(w.WriteMapHeader(3))
+		must(w.WriteString("Start"))
+		must(w.WriteUint64(5))
+		must(w.WriteString("Stats"))
+		must(w.WriteNil())
+		must(w.WriteString("TransactionCheckpointIds"))
+		must(w.WriteBytes([]byte{0x09}))
+	}
+	// "Stats" a second time: buckets accumulate.
+	must(w.WriteString("Stats"))
+	must(w.WriteArrayHeader(1))
+	{
+		must(w.WriteMapHeader(2))
+		must(w.WriteString("Start"))
+		must(w.WriteUint64(6))
+		must(w.WriteString("Stats"))
+		must(w.WriteArrayHeader(1))
+		must(w.WriteNil()) // a nil point is an empty point
+	}
+	must(w.WriteString("Env"))
+	must(w.WriteString("prod2"))
+	must(w.Flush())
+	return buf.Bytes()
+}
+
+func TestPortPipelineStats(t *testing.T) {
+	a, _ := newTestServer(t)
+	e := newTestEngine(t, a, a.routeTrace)
+
+	send := func(body []byte) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v0.1/pipeline_stats?x=1&x=2", bytes.NewReader(body))
+		req.Header.Set("Dd-Api-Key", testAPIKey)
+		req.Header.Set("Content-Type", "application/msgpack")
+		req.Header.Set("Via", "trace-agent 7.58.2")
+		req.Header.Set("X-Datadog-Additional-Tags", "_dd.tags.container:cid")
+		w := httptest.NewRecorder()
+		e.ServeHTTP(w, req)
+	}
+
+	send(portDSMFull(t)) // 001
+
+	type w = []byte
+	hdr := func(b w, n uint32) w { return msgp.AppendMapHeader(b, n) }
+	str := func(b w, s string) w { return msgp.AppendString(b, s) }
+	arr := func(b w, n uint32) w { return msgp.AppendArrayHeader(b, n) }
+
+	point := func(tail func(b w) w) w {
+		b := hdr(nil, 1)
+		b = str(b, "Stats")
+		b = arr(b, 1)
+		b = hdr(b, 1)
+		b = str(b, "Stats")
+		b = arr(b, 1)
+		return tail(b)
+	}
+
+	cases := []w{
+		// 002 nil body value
+		msgp.AppendNil(nil),
+		// 003 wrong type at payload level
+		func() w { b := hdr(nil, 1); b = str(b, "Env"); return msgp.AppendInt(b, 5) }(),
+		// 004 wrong type in a point
+		point(func(b w) w { b = hdr(b, 1); b = str(b, "Hash"); return str(b, "x") }),
+		// 005 negative hash
+		point(func(b w) w { b = hdr(b, 1); b = str(b, "Hash"); return msgp.AppendInt64(b, -3) }),
+		// 006 truncated inside a point
+		point(func(b w) w { b = hdr(b, 2); b = str(b, "Hash"); return msgp.AppendUint64(b, 3) }),
+		// 007 truncated string
+		func() w { b := hdr(nil, 1); b = str(b, "Env"); return append(b, 0xa5, 'a') }(),
+		// 008 unknown with invalid byte nested
+		point(func(b w) w { b = hdr(b, 1); b = str(b, "New\"x"); b = arr(b, 1); return append(b, 0xc1) }),
+		// 009 unknown map with a bin key
+		func() w {
+			b := hdr(nil, 1)
+			b = str(b, "New")
+			b = hdr(b, 1)
+			b = msgp.AppendBytes(b, []byte("k"))
+			return msgp.AppendInt(b, 1)
+		}(),
+		// 010 NaN in an unknown field
+		point(func(b w) w {
+			b = hdr(b, 2)
+			b = str(b, "Hash")
+			b = msgp.AppendUint64(b, 3)
+			b = str(b, "New")
+			return msgp.AppendFloat64(b, math.NaN())
+		}),
+		// 011 str where bytes belong
+		point(func(b w) w { b = hdr(b, 1); b = str(b, "PathwayLatency"); return str(b, "x") }),
+		// 012 backlog value too large
+		func() w {
+			b := hdr(nil, 1)
+			b = str(b, "Stats")
+			b = arr(b, 1)
+			b = hdr(b, 1)
+			b = str(b, "Backlogs")
+			b = arr(b, 1)
+			b = hdr(b, 1)
+			b = str(b, "Value")
+			return msgp.AppendUint64(b, 1<<63)
+		}(),
+		// 013 array claiming more than is there
+		func() w { b := hdr(nil, 1); b = str(b, "ProcessTags"); b = arr(b, 3); return str(b, "one") }(),
+		// 014 bin key at the top level
+		func() w { b := hdr(nil, 1); b = msgp.AppendBytes(b, []byte("Env")); return str(b, "x") }(),
+		// 015 unknown array longer than the body
+		func() w { b := hdr(nil, 1); b = str(b, "New"); return append(b, 0xdc, 0xff, 0xff) }(),
+		// 016 float32 NaN and nested map in unknown, with a duplicate key
+		func() w {
+			b := hdr(nil, 2)
+			b = str(b, "Stats")
+			b = arr(b, 1)
+			b = hdr(b, 1)
+			b = str(b, "Stats")
+			b = arr(b, 1)
+			b = hdr(b, 1)
+			b = str(b, "Hash")
+			b = msgp.AppendUint64(b, 3)
+			b = str(b, "New")
+			b = hdr(b, 2)
+			b = str(b, "k")
+			b = msgp.AppendInt(b, 1)
+			b = str(b, "k")
+			return msgp.AppendInt(b, 2)
+		}(),
+		// 017 a one-byte body that is a bin lead
+		{0xc4},
+		// 018 bytes field with one byte left
+		point(func(b w) w { b = hdr(b, 1); b = str(b, "EdgeLatency"); return append(b, 0xc4) }),
+		// 019 bytes field truncated data
+		point(func(b w) w { b = hdr(b, 1); b = str(b, "EdgeLatency"); return append(b, 0xc4, 0x05, 0x01) }),
+		// 020 map16 header truncated
+		{0xde, 0x00},
+		// 021 trailing bytes after the payload
+		append(point(func(b w) w { b = hdr(b, 1); b = str(b, "Hash"); return msgp.AppendUint64(b, 3) }), 0xc1),
+		// 022 str32 with a forged length
+		func() w { b := hdr(nil, 1); b = str(b, "Env"); return append(b, 0xdb, 0xff, 0xff, 0xff, 0xff, 'a') }(),
+	}
+	for _, c := range cases {
+		send(c)
+	}
+}
+
+func TestPortDataStreams(t *testing.T) {
+	a, _ := newTestServer(t)
+	e := newTestEngine(t, a, a.routeTrace)
+
+	send := func(body string) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/data_streams_messages", bytes.NewReader([]byte(body)))
+		req.Header.Set("Dd-Api-Key", testAPIKey)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Dd-Evp-Origin", "agent")
+		req.Header.Set("Dd-Evp-Origin-Version", "7.58.2")
+		req.Header.Set("X-Requested-With", "datadog-agent-diagnose")
+		w := httptest.NewRecorder()
+		e.ServeHTTP(w, req)
+	}
+
+	bodies := []string{
+		" [ {\"b\" : 1, \"a\": { \"nested\" : true }, \"b\": 2} ,\n \"just a string\", 12.50, null, [1, 2], true, {}, {\"\\u00e9\":1,\"z\":0,\"A\":0} ] ",
+		"null",
+		"\"str\"",
+		"12",
+		"true",
+		"false",
+		"[]",
+		"[1,2] x",
+		"[1,",
+		"{}",
+		" ",
+		"[{\"deep\":" + nestedJSON(100) + "}]",
+		"[{\"a\":\"x\xffy\"}]",
+		"[123456789012345678901234567890, 1e999, \"\\ud83d\\ude00\", {\"k\\n\":1}]",
+	}
+	for _, b := range bodies {
+		send(b)
+	}
+}
+
+func nestedJSON(n int) string {
+	var b bytes.Buffer
+	for i := 0; i < n; i++ {
+		b.WriteString("[")
+	}
+	for i := 0; i < n; i++ {
+		b.WriteString("]")
+	}
+	return b.String()
+}

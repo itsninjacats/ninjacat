@@ -1,0 +1,100 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.03455355Z",
+ "request": {
+  "body_b64": "eyJzZXJpZXMiOnsibGF0ZW5jeSI6W1sxNzkwMTUxMzMwLFsxLDIsM11dXX19",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v1/distribution_points"
+ },
+ "response": {
+  "body_b64": "eyJlcnJvcnMiOltdfQ==",
+  "body_json": {
+   "errors": []
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string][]string",
+     "string",
+     "string",
+     "map[string]string",
+     "string",
+     "uint64",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:14.034543352Z",
+     "distribution_points",
+     "decode_error",
+     "POST",
+     "example.com",
+     "/api/v1/distribution_points",
+     {},
+     "application/json",
+     "",
+     {},
+     "{\"series\":{\"latency\":[[1790151330,[1,2,3]]]}}",
+     45,
+     "JSON distribution_points: series: expected a list, got object"
+    ]
+   ],
+   "insert": "INSERT INTO raw_payloads\n\t\t\t(tenant_id, received_at, intake, reason, method, host, path, query,\n\t\t\t content_type, content_encoding, headers, body, body_bytes, note)",
+   "rows": [
+    {
+     "Body": "{\"series\":{\"latency\":[[1790151330,[1,2,3]]]}}",
+     "BodyBytes": 45,
+     "ContentEncoding": "",
+     "ContentType": "application/json",
+     "Headers": {},
+     "Host": "example.com",
+     "Intake": "distribution_points",
+     "Method": "POST",
+     "Note": "JSON distribution_points: series: expected a list, got object",
+     "Path": "/api/v1/distribution_points",
+     "Query": {},
+     "Reason": "decode_error",
+     "ReceivedAt": "2026-10-01T15:21:14.034543352Z",
+     "TenantID": "test"
+    }
+   ],
+   "to": "storage_raw_payloads",
+   "type": "storage.WriteRawPayloads"
+  }
+ ],
+ "seq": 1,
+ "test": "TestDistributionPointsKeepAPayloadThatFitNoSeriesList",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ],
+ "edited": "The notes say which member did not fit and what was found there, in one wording for every intake. They used to be the Go server's, naming the Go API client's model types. A body whose `series` is not a list is a decode error like any other body that cannot be read; Go's model kept it as an unparsed object, which made it unexpected_shape."
+}

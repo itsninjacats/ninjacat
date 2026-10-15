@@ -1,0 +1,667 @@
+{
+ "recorded_at": "2026-10-01T16:19:49.953299613Z",
+ "request": {
+  "body_b64": "jKNFbnakcHJvZKdTZXJ2aWNlpm9yZGVyc61UcmFjZXJWZXJzaW9upTIuOS4wpExhbmeiZ2+nVmVyc2lvbqUxLjQuMKtQcm9jZXNzVGFnc5KxZW50cnlwb2ludDp3b3JrZXKoY3dkOi9zcnarUHJvZHVjdE1hc2sDrFNvbWV0aGluZ05ld6VoZWxsb6ZOZXN0ZWSJoXqU+c///////////8DDoWHEAwD/EKVlbXB0ecQAo2YzMso/jMzNo2Y2NMtESxrk1uLvUKVzbWFsbMs+GcUR3DpB36NleHTHAyoBAgOkZXh0MMcA+aJpOAWlU3RhdHOSh6VTdGFydM8Xl5z+NioAB6hEdXJhdGlvbs8AAAACVAvkAKlCdWNrZXROZXf/pVN0YXRzkoioRWRnZVRhZ3OSqnR5cGU6a2Fma2GsdG9waWM6b3JkZXJzpEhhc2jP//////////+qUGFyZW50SGFzaCquUGF0aHdheUxhdGVuY3nEvgoJCf1KgVq/UvA/Eq4BEqgBAAAAAAAA8D8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPA/GKEBGgCrRWRnZUxhdGVuY3nAq1BheWxvYWRTaXplxAdnYXJiYWdlrVRpbWVzdGFtcFR5cGWnY3VycmVudKhQb2ludE5ld5CBpEhhc2gBqEJhY2tsb2dzkoOkVGFnc5KxdHlwZTprYWZrYV9jb21taXSrcGFydGl0aW9uOjOlVmFsdWXvqkJhY2tsb2dOZXenZHJvcHBlZMCsVHJhbnNhY3Rpb25zxAMBAgO4VHJhbnNhY3Rpb25DaGVja3BvaW50SWRzxAL+/4OlU3RhcnQFpVN0YXRzwLhUcmFuc2FjdGlvbkNoZWNrcG9pbnRJZHPEAQmlU3RhdHORgqVTdGFydAalU3RhdHORwKNFbnalcHJvZDI=",
+  "headers": {
+   "Content-Type": [
+    "application/msgpack"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ],
+   "Via": [
+    "trace-agent 7.58.2"
+   ],
+   "X-Datadog-Additional-Tags": [
+    "_dd.tags.container:cid"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v0.1/pipeline_stats?x=1&x=2"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeTrace"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "uint64",
+     "time.Time",
+     "uint64",
+     "[]string",
+     "uint64",
+     "uint64",
+     "string",
+     "string",
+     "string",
+     "*float64",
+     "*float64",
+     "*float64",
+     "*float64",
+     "[]int32",
+     "[]float64",
+     "string",
+     "string",
+     "*float64",
+     "*float64",
+     "*float64",
+     "*float64",
+     "[]int32",
+     "[]float64",
+     "string",
+     "string",
+     "*float64",
+     "*float64",
+     "*float64",
+     "*float64",
+     "[]int32",
+     "[]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "uint64",
+     "time.Time",
+     "uint64",
+     "[]string",
+     "uint64",
+     "uint64",
+     "string",
+     "string",
+     "string",
+     "*float64",
+     "*float64",
+     "*float64",
+     "*float64",
+     "[]int32",
+     "[]float64",
+     "string",
+     "string",
+     "*float64",
+     "*float64",
+     "*float64",
+     "*float64",
+     "[]int32",
+     "[]float64",
+     "string",
+     "string",
+     "*float64",
+     "*float64",
+     "*float64",
+     "*float64",
+     "[]int32",
+     "[]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "uint64",
+     "time.Time",
+     "uint64",
+     "[]string",
+     "uint64",
+     "uint64",
+     "string",
+     "string",
+     "string",
+     "*float64",
+     "*float64",
+     "*float64",
+     "*float64",
+     "[]int32",
+     "[]float64",
+     "string",
+     "string",
+     "*float64",
+     "*float64",
+     "*float64",
+     "*float64",
+     "[]int32",
+     "[]float64",
+     "string",
+     "string",
+     "*float64",
+     "*float64",
+     "*float64",
+     "*float64",
+     "[]int32",
+     "[]float64",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:19:49.95321644Z",
+     "prod2",
+     "orders",
+     "2.9.0",
+     "go",
+     "1.4.0",
+     [
+      "entrypoint:worker",
+      "cwd:/srv"
+     ],
+     3,
+     "2023-11-14T22:13:20.000000007Z",
+     10000000000,
+     [
+      "type:kafka",
+      "topic:orders"
+     ],
+     18446744073709551615,
+     42,
+     "current",
+     {
+      "$b64": "CgkJ/UqBWr9S8D8SrgESqAEAAAAAAADwPwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA8D8YoQEaAA=="
+     },
+     "ok",
+     2,
+     0.49803723434837827,
+     0.19986689232320565,
+     0.2981703420251726,
+     [
+      -81,
+      -61
+     ],
+     [
+      1,
+      1
+     ],
+     "",
+     "absent",
+     null,
+     null,
+     null,
+     null,
+     [],
+     [],
+     "garbage",
+     "undecodable",
+     null,
+     null,
+     null,
+     null,
+     [],
+     [],
+     "trace-agent 7.58.2",
+     "_dd.tags.container:cid",
+     "",
+     "",
+     [
+      "bucket.BucketNew",
+      "payload.Nested",
+      "payload.SomethingNew",
+      "point.PointNew"
+     ],
+     "{\"bucket.BucketNew\":-1,\"payload.Nested\":{\"a\":\"AP8Q\",\"empty\":null,\"ext\":{\"Data\":\"AQID\",\"Type\":42},\"ext0\":{\"Data\":null,\"Type\":-7},\"f32\":1.1,\"f64\":1e+21,\"i8\":5,\"small\":1.5e-9,\"z\":[-7,18446744073709551615,null,true]},\"payload.SomethingNew\":\"hello\",\"point.PointNew\":[]}"
+    ],
+    [
+     "test",
+     "2026-10-01T16:19:49.95321644Z",
+     "prod2",
+     "orders",
+     "2.9.0",
+     "go",
+     "1.4.0",
+     [
+      "entrypoint:worker",
+      "cwd:/srv"
+     ],
+     3,
+     "2023-11-14T22:13:20.000000007Z",
+     10000000000,
+     [],
+     1,
+     0,
+     "",
+     "",
+     "absent",
+     null,
+     null,
+     null,
+     null,
+     [],
+     [],
+     "",
+     "absent",
+     null,
+     null,
+     null,
+     null,
+     [],
+     [],
+     "",
+     "absent",
+     null,
+     null,
+     null,
+     null,
+     [],
+     [],
+     "trace-agent 7.58.2",
+     "_dd.tags.container:cid",
+     "",
+     "",
+     [
+      "bucket.BucketNew",
+      "payload.Nested",
+      "payload.SomethingNew"
+     ],
+     "{\"bucket.BucketNew\":-1,\"payload.Nested\":{\"a\":\"AP8Q\",\"empty\":null,\"ext\":{\"Data\":\"AQID\",\"Type\":42},\"ext0\":{\"Data\":null,\"Type\":-7},\"f32\":1.1,\"f64\":1e+21,\"i8\":5,\"small\":1.5e-9,\"z\":[-7,18446744073709551615,null,true]},\"payload.SomethingNew\":\"hello\"}"
+    ]
+   ],
+   "insert": "INSERT INTO dsm_pipeline_stats\n\t\t\t(tenant_id, received_at,\n\t\t\t env, service, tracer_version, lang, version, process_tags, product_mask,\n\t\t\t bucket_start, bucket_duration_ns,\n\t\t\t edge_tags, hash, parent_hash, timestamp_type,\n\t\t\t pathway_latency, pathway_latency_state,\n\t\t\t pathway_count, pathway_sum, pathway_min, pathway_max,\n\t\t\t pathway_bin_keys, pathway_bin_counts,\n\t\t\t edge_latency, edge_latency_state,\n\t\t\t edge_count, edge_sum, edge_min, edge_max,\n\t\t\t edge_bin_keys, edge_bin_counts,\n\t\t\t payload_size, payload_size_state,\n\t\t\t payload_size_count, payload_size_sum, payload_size_min, payload_size_max,\n\t\t\t payload_size_bin_keys, payload_size_bin_counts,\n\t\t\t via, additional_tags, container_tags, content_encoding,\n\t\t\t unknown_keys, unknown_json)",
+   "rows": [
+    {
+     "AdditionalTags": "_dd.tags.container:cid",
+     "ContainerTags": "",
+     "ContentEncoding": "",
+     "DSMCommon": {
+      "BucketDurationNs": 10000000000,
+      "BucketStart": "2023-11-14T22:13:20.000000007Z",
+      "Env": "prod2",
+      "Lang": "go",
+      "ProcessTags": [
+       "entrypoint:worker",
+       "cwd:/srv"
+      ],
+      "ProductMask": 3,
+      "ReceivedAt": "2026-10-01T16:19:49.95321644Z",
+      "Service": "orders",
+      "TenantID": "test",
+      "TracerVersion": "2.9.0",
+      "Version": "1.4.0"
+     },
+     "EdgeLatency": {
+      "BinCounts": [],
+      "BinKeys": [],
+      "Count": null,
+      "Max": null,
+      "Min": null,
+      "Raw": "",
+      "State": "absent",
+      "Sum": null
+     },
+     "EdgeTags": [
+      "type:kafka",
+      "topic:orders"
+     ],
+     "Hash": 18446744073709551615,
+     "ParentHash": 42,
+     "PathwayLatency": {
+      "BinCounts": [
+       1,
+       1
+      ],
+      "BinKeys": [
+       -81,
+       -61
+      ],
+      "Count": 2,
+      "Max": 0.2981703420251726,
+      "Min": 0.19986689232320565,
+      "Raw": {
+       "$b64": "CgkJ/UqBWr9S8D8SrgESqAEAAAAAAADwPwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA8D8YoQEaAA=="
+      },
+      "State": "ok",
+      "Sum": 0.49803723434837827
+     },
+     "PayloadSize": {
+      "BinCounts": [],
+      "BinKeys": [],
+      "Count": null,
+      "Max": null,
+      "Min": null,
+      "Raw": "garbage",
+      "State": "undecodable",
+      "Sum": null
+     },
+     "TimestampType": "current",
+     "UnknownJSON": "{\"bucket.BucketNew\":-1,\"payload.Nested\":{\"a\":\"AP8Q\",\"empty\":null,\"ext\":{\"Data\":\"AQID\",\"Type\":42},\"ext0\":{\"Data\":null,\"Type\":-7},\"f32\":1.1,\"f64\":1e+21,\"i8\":5,\"small\":1.5e-9,\"z\":[-7,18446744073709551615,null,true]},\"payload.SomethingNew\":\"hello\",\"point.PointNew\":[]}",
+     "UnknownKeys": [
+      "bucket.BucketNew",
+      "payload.Nested",
+      "payload.SomethingNew",
+      "point.PointNew"
+     ],
+     "Via": "trace-agent 7.58.2"
+    },
+    {
+     "AdditionalTags": "_dd.tags.container:cid",
+     "ContainerTags": "",
+     "ContentEncoding": "",
+     "DSMCommon": {
+      "BucketDurationNs": 10000000000,
+      "BucketStart": "2023-11-14T22:13:20.000000007Z",
+      "Env": "prod2",
+      "Lang": "go",
+      "ProcessTags": [
+       "entrypoint:worker",
+       "cwd:/srv"
+      ],
+      "ProductMask": 3,
+      "ReceivedAt": "2026-10-01T16:19:49.95321644Z",
+      "Service": "orders",
+      "TenantID": "test",
+      "TracerVersion": "2.9.0",
+      "Version": "1.4.0"
+     },
+     "EdgeLatency": {
+      "BinCounts": [],
+      "BinKeys": [],
+      "Count": null,
+      "Max": null,
+      "Min": null,
+      "Raw": "",
+      "State": "absent",
+      "Sum": null
+     },
+     "EdgeTags": [],
+     "Hash": 1,
+     "ParentHash": 0,
+     "PathwayLatency": {
+      "BinCounts": [],
+      "BinKeys": [],
+      "Count": null,
+      "Max": null,
+      "Min": null,
+      "Raw": "",
+      "State": "absent",
+      "Sum": null
+     },
+     "PayloadSize": {
+      "BinCounts": [],
+      "BinKeys": [],
+      "Count": null,
+      "Max": null,
+      "Min": null,
+      "Raw": "",
+      "State": "absent",
+      "Sum": null
+     },
+     "TimestampType": "",
+     "UnknownJSON": "{\"bucket.BucketNew\":-1,\"payload.Nested\":{\"a\":\"AP8Q\",\"empty\":null,\"ext\":{\"Data\":\"AQID\",\"Type\":42},\"ext0\":{\"Data\":null,\"Type\":-7},\"f32\":1.1,\"f64\":1e+21,\"i8\":5,\"small\":1.5e-9,\"z\":[-7,18446744073709551615,null,true]},\"payload.SomethingNew\":\"hello\"}",
+     "UnknownKeys": [
+      "bucket.BucketNew",
+      "payload.Nested",
+      "payload.SomethingNew"
+     ],
+     "Via": "trace-agent 7.58.2"
+    }
+   ],
+   "to": "storage_dsm_pipeline_stats",
+   "type": "storage.WriteDSMPipelineStats"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "uint64",
+     "time.Time",
+     "uint64",
+     "[]string",
+     "int64"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "uint64",
+     "time.Time",
+     "uint64",
+     "[]string",
+     "int64"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:19:49.95321644Z",
+     "prod2",
+     "orders",
+     "2.9.0",
+     "go",
+     "1.4.0",
+     [
+      "entrypoint:worker",
+      "cwd:/srv"
+     ],
+     3,
+     "2023-11-14T22:13:20.000000007Z",
+     10000000000,
+     [
+      "type:kafka_commit",
+      "partition:3"
+     ],
+     -17
+    ]
+   ],
+   "insert": "INSERT INTO dsm_backlogs\n\t\t\t(tenant_id, received_at,\n\t\t\t env, service, tracer_version, lang, version, process_tags, product_mask,\n\t\t\t bucket_start, bucket_duration_ns,\n\t\t\t tags, value)",
+   "rows": [
+    {
+     "DSMCommon": {
+      "BucketDurationNs": 10000000000,
+      "BucketStart": "2023-11-14T22:13:20.000000007Z",
+      "Env": "prod2",
+      "Lang": "go",
+      "ProcessTags": [
+       "entrypoint:worker",
+       "cwd:/srv"
+      ],
+      "ProductMask": 3,
+      "ReceivedAt": "2026-10-01T16:19:49.95321644Z",
+      "Service": "orders",
+      "TenantID": "test",
+      "TracerVersion": "2.9.0",
+      "Version": "1.4.0"
+     },
+     "Tags": [
+      "type:kafka_commit",
+      "partition:3"
+     ],
+     "Value": -17
+    }
+   ],
+   "to": "storage_dsm_backlogs",
+   "type": "storage.WriteDSMBacklogs"
+  },
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "uint64",
+     "time.Time",
+     "uint64",
+     "string",
+     "string"
+    ],
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "uint64",
+     "time.Time",
+     "uint64",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T16:19:49.95321644Z",
+     "prod2",
+     "orders",
+     "2.9.0",
+     "go",
+     "1.4.0",
+     [
+      "entrypoint:worker",
+      "cwd:/srv"
+     ],
+     3,
+     "2023-11-14T22:13:20.000000007Z",
+     10000000000,
+     "\u0001\u0002\u0003",
+     {
+      "$b64": "/v8="
+     }
+    ],
+    [
+     "test",
+     "2026-10-01T16:19:49.95321644Z",
+     "prod2",
+     "orders",
+     "2.9.0",
+     "go",
+     "1.4.0",
+     [
+      "entrypoint:worker",
+      "cwd:/srv"
+     ],
+     3,
+     "1970-01-01T00:00:00.000000005Z",
+     0,
+     "",
+     "\t"
+    ]
+   ],
+   "insert": "INSERT INTO dsm_bucket_transactions\n\t\t\t(tenant_id, received_at,\n\t\t\t env, service, tracer_version, lang, version, process_tags, product_mask,\n\t\t\t bucket_start, bucket_duration_ns,\n\t\t\t transactions, transaction_checkpoint_ids)",
+   "rows": [
+    {
+     "DSMCommon": {
+      "BucketDurationNs": 10000000000,
+      "BucketStart": "2023-11-14T22:13:20.000000007Z",
+      "Env": "prod2",
+      "Lang": "go",
+      "ProcessTags": [
+       "entrypoint:worker",
+       "cwd:/srv"
+      ],
+      "ProductMask": 3,
+      "ReceivedAt": "2026-10-01T16:19:49.95321644Z",
+      "Service": "orders",
+      "TenantID": "test",
+      "TracerVersion": "2.9.0",
+      "Version": "1.4.0"
+     },
+     "TransactionCheckpointIDs": {
+      "$b64": "/v8="
+     },
+     "Transactions": "\u0001\u0002\u0003"
+    },
+    {
+     "DSMCommon": {
+      "BucketDurationNs": 0,
+      "BucketStart": "1970-01-01T00:00:00.000000005Z",
+      "Env": "prod2",
+      "Lang": "go",
+      "ProcessTags": [
+       "entrypoint:worker",
+       "cwd:/srv"
+      ],
+      "ProductMask": 3,
+      "ReceivedAt": "2026-10-01T16:19:49.95321644Z",
+      "Service": "orders",
+      "TenantID": "test",
+      "TracerVersion": "2.9.0",
+      "Version": "1.4.0"
+     },
+     "TransactionCheckpointIDs": "\t",
+     "Transactions": ""
+    }
+   ],
+   "to": "storage_dsm_bucket_transactions",
+   "type": "storage.WriteDSMBucketTransactions"
+  }
+ ],
+ "seq": 1,
+ "test": "TestPortPipelineStats",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/args/1/1",
+  "/sends/0/rows/0/DSMCommon/ReceivedAt",
+  "/sends/0/rows/1/DSMCommon/ReceivedAt",
+  "/sends/1/args/0/1",
+  "/sends/1/rows/0/DSMCommon/ReceivedAt",
+  "/sends/2/args/0/1",
+  "/sends/2/args/1/1",
+  "/sends/2/rows/0/DSMCommon/ReceivedAt",
+  "/sends/2/rows/1/DSMCommon/ReceivedAt"
+ ],
+ "edited": "The Go recording had a third point and a second backlog, each with every field at zero: its reader turned a nil element of the Stats and Backlogs arrays into an empty row. A nil element is left out now, as in the APM stats payload."
+}

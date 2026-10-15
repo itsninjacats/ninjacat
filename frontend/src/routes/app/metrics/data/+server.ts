@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import { fetchMetricSeries, NinjacatError } from '$lib/server/ninjacat';
 import type { RequestHandler } from './$types';
 
-// Proxy between the browser and the Go panel API.
+// Proxy between the browser and the panel API.
 //
 // It exists so :8081 never has to be reachable from a browser. The page asks
 // this route, this route asks Go, and the internal port stays internal.

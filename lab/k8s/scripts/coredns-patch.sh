@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Points every *.ninjacat.lab name at the lab's TLS proxy.
+# Points every *.ninjacat.lab name at Traefik.
 #
 # This is the piece that makes DD_SITE work the way it does against the real
 # Datadog. The agent composes app.ninjacat.lab, kubeops-intake.ninjacat.lab,
@@ -23,7 +23,7 @@
 #    for us.
 set -euo pipefail
 CTX="${1:?usage: coredns-patch.sh <kube-context>}"
-TARGET="ninjacat-proxy.ninjacat-lab.svc.cluster.local"
+TARGET="traefik.traefik.svc.cluster.local"
 
 current=$(kubectl --context "$CTX" -n kube-system get configmap coredns -o jsonpath='{.data.Corefile}')
 

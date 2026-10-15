@@ -1,0 +1,112 @@
+{
+ "recorded_at": "2026-10-01T15:21:18.997353618Z",
+ "request": {
+  "body_b64": "eyJkYXRhIjp7InR5cGUiOiJ0ZXN0X3BhcmFtcyIsImF0dHJpYnV0ZXMiOnsidGVzdF9sZXZlbCI6InRlc3QiLAoJCSJzZXJ2aWNlIjoibXktc2VydmljZSIsImVudiI6ImNpIiwicmVwb3NpdG9yeV91cmwiOiJodHRwczovL2dpdC94Iiwic2hhIjoiYWJjIiwKCQkiY29uZmlndXJhdGlvbnMiOnt9fX19",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/ci/tests/skippable"
+ },
+ "response": {
+  "body_b64": "eyJtZXRhIjp7ImNvcnJlbGF0aW9uX2lkIjoiIiwiY292ZXJhZ2UiOnt9fSwiZGF0YSI6W119",
+  "body_json": {
+   "data": [],
+   "meta": {
+    "correlation_id": "",
+    "coverage": {}
+   }
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeCIVisibilityAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:18.997338931Z",
+     "skippable",
+     "",
+     "test_params",
+     "my-service",
+     "ci",
+     "https://git/x",
+     "",
+     "abc",
+     "test",
+     "",
+     "",
+     "",
+     "{}",
+     "{\"data\":{\"type\":\"test_params\",\"attributes\":{\"test_level\":\"test\",\n\t\t\"service\":\"my-service\",\"env\":\"ci\",\"repository_url\":\"https://git/x\",\"sha\":\"abc\",\n\t\t\"configurations\":{}}}}",
+     "{\"meta\":{\"correlation_id\":\"\",\"coverage\":{}},\"data\":[]}"
+    ]
+   ],
+   "insert": "INSERT INTO ci_settings_requests\n\t\t\t(tenant_id, received_at, endpoint, request_id, request_type,\n\t\t\t service, env, repository_url, branch, sha, test_level,\n\t\t\t module, commit_message, page_state, configurations,\n\t\t\t request_body, response_body)",
+   "rows": [
+    {
+     "Branch": "",
+     "CommitMessage": "",
+     "Configurations": "{}",
+     "Endpoint": "skippable",
+     "Env": "ci",
+     "Module": "",
+     "PageState": "",
+     "ReceivedAt": "2026-10-01T15:21:18.997338931Z",
+     "RepositoryURL": "https://git/x",
+     "RequestBody": "{\"data\":{\"type\":\"test_params\",\"attributes\":{\"test_level\":\"test\",\n\t\t\"service\":\"my-service\",\"env\":\"ci\",\"repository_url\":\"https://git/x\",\"sha\":\"abc\",\n\t\t\"configurations\":{}}}}",
+     "RequestID": "",
+     "RequestType": "test_params",
+     "ResponseBody": "{\"meta\":{\"correlation_id\":\"\",\"coverage\":{}},\"data\":[]}",
+     "SHA": "abc",
+     "Service": "my-service",
+     "TenantID": "test",
+     "TestLevel": "test"
+    }
+   ],
+   "to": "storage_ci_settings_requests",
+   "type": "storage.WriteCISettingsRequests"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCISkippableTestsSkipsNothing",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

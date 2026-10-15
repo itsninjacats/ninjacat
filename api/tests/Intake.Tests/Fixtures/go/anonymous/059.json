@@ -1,0 +1,32 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.667748694Z",
+ "request": {
+  "body_b64": "",
+  "headers": {},
+  "host": "api.example.test",
+  "method": "GET",
+  "url": "/api/v1/validate"
+ },
+ "response": {
+  "body_b64": "eyJlcnJvcnMiOlsiaW52YWxpZCBBUEkga2V5Il19",
+  "body_json": {
+   "errors": [
+    "invalid API key"
+   ]
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 403
+ },
+ "routes": [
+  "routeAPI",
+  "routeCIVisibilityAPI"
+ ],
+ "sends": null,
+ "seq": 59,
+ "test": "anonymous",
+ "volatile": []
+}

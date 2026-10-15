@@ -1,0 +1,113 @@
+{
+ "recorded_at": "2026-10-01T15:21:14.029650428Z",
+ "request": {
+  "body_b64": "eyJzZXJpZXMiOlt7InJlc291cmNlcyI6W3sidHlwZSI6Imhvc3QiLCJuYW1lIjoiaDEifSx7InR5cGUiOiJkZXZpY2UiLCJuYW1lIjoiZXRoMCJ9XSwibWV0cmljIjoic3lzdGVtLmNwdS5pZGxlIiwidGFncyI6WyJlbnY6cHJvZCIsImVudjpjYW5hcnkiXSwicG9pbnRzIjpbeyJ2YWx1ZSI6MC41LCJ0aW1lc3RhbXAiOjE3OTAxNTEzMzB9XSwibWV0YWRhdGEiOnsib3JpZ2luIjp7Im9yaWdpbl9wcm9kdWN0IjoxMCwib3JpZ2luX2NhdGVnb3J5IjoxMSwib3JpZ2luX3NlcnZpY2UiOjQyfX19XX0=",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/series"
+ },
+ "response": {
+  "body_b64": "eyJlcnJvcnMiOltdfQ==",
+  "body_json": {
+   "errors": []
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeAPI"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "uint32",
+     "float64",
+     "map[string][]string",
+     "uint32",
+     "uint32",
+     "uint32",
+     "map[string]string",
+     "map[string]string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-09-23T08:15:30Z",
+     "system.cpu.idle",
+     "h1",
+     "UNSPECIFIED",
+     "",
+     "",
+     0,
+     0.5,
+     {
+      "env": [
+       "prod",
+       "canary"
+      ]
+     },
+     10,
+     11,
+     42,
+     {
+      "device": "eth0"
+     },
+     {}
+    ]
+   ],
+   "insert": "INSERT INTO metrics\n\t\t\t(tenant_id, timestamp, metric, host, metric_type, source_type, unit, interval, value, tags,\n\t\t\t origin_product, origin_category, origin_service, resources, extra)",
+   "rows": [
+    {
+     "Extra": {},
+     "Host": "h1",
+     "Interval": 0,
+     "Metric": "system.cpu.idle",
+     "MetricType": "UNSPECIFIED",
+     "OriginCategory": 11,
+     "OriginProduct": 10,
+     "OriginService": 42,
+     "Resources": {
+      "device": "eth0"
+     },
+     "SourceType": "",
+     "Tags": {
+      "env": [
+       "prod",
+       "canary"
+      ]
+     },
+     "TenantID": "test",
+     "Timestamp": "2026-09-23T08:15:30Z",
+     "Unit": "",
+     "Value": 0.5
+    }
+   ],
+   "to": "storage_metrics",
+   "type": "storage.WriteMetrics"
+  }
+ ],
+ "seq": 1,
+ "test": "TestSeriesV2StoresOriginAndNonHostResources",
+ "volatile": []
+}

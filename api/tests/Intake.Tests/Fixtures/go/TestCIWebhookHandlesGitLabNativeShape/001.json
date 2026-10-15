@@ -1,0 +1,248 @@
+{
+ "recorded_at": "2026-10-01T15:21:19.000557912Z",
+ "request": {
+  "body_b64": "ewoJCSJvYmplY3Rfa2luZCI6ICJwaXBlbGluZSIsCgkJIm9iamVjdF9hdHRyaWJ1dGVzIjogeyJpZCI6IDMxLCAicmVmIjogIm1haW4iLCAic2hhIjogImFiYzEyMyIsICJzdGF0dXMiOiAic3VjY2VzcyJ9LAoJCSJwcm9qZWN0IjogeyJ3ZWJfdXJsIjogImh0dHBzOi8vZ2l0bGFiLmV4YW1wbGUudGVzdC9uaW5qYWNhdCIsICJkZWZhdWx0X2JyYW5jaCI6ICJtYWluIn0sCgkJInVzZXIiOiB7Im5hbWUiOiAibWljaGFsIiwgImVtYWlsIjogIm1pY2hhbEBleGFtcGxlLnRlc3QifSwKCQkiYnVpbGRzIjogW3siaWQiOiAzODAsICJzdGFnZSI6ICJ0ZXN0IiwgIm5hbWUiOiAidW5pdCIsICJzdGF0dXMiOiAic3VjY2VzcyJ9XQoJfQ==",
+  "headers": {
+   "Content-Type": [
+    "application/json"
+   ],
+   "Dd-Api-Key": [
+    "00000000000000000000000000000001"
+   ],
+   "X-Gitlab-Event": [
+    "Pipeline Hook"
+   ],
+   "X-Gitlab-Event-Uuid": [
+    "d6f1c0a2-1111-2222-3333-444455556666"
+   ]
+  },
+  "host": "example.com",
+  "method": "POST",
+  "url": "/api/v2/webhook"
+ },
+ "response": {
+  "body_b64": "e30=",
+  "body_json": {},
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 202
+ },
+ "routes": [
+  "routeCIWebhook"
+ ],
+ "sends": [
+  {
+   "arg_types": [
+    [
+     "string",
+     "time.Time",
+     "string",
+     "string",
+     "string",
+     "*int64",
+     "*uint8",
+     "*uint8",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "*time.Time",
+     "string",
+     "*time.Time",
+     "*int64",
+     "string",
+     "string",
+     "string",
+     "[]string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "string",
+     "map[string]string",
+     "map[string][]string",
+     "string",
+     "map[string]string",
+     "map[string]string",
+     "string"
+    ]
+   ],
+   "args": [
+    [
+     "test",
+     "2026-10-01T15:21:19.000523919Z",
+     "gitlab",
+     "pipeline",
+     "",
+     null,
+     null,
+     null,
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     null,
+     "",
+     null,
+     null,
+     "",
+     "",
+     "",
+     [],
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "michal",
+     "michal@example.test",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     {},
+     {},
+     "d6f1c0a2-1111-2222-3333-444455556666",
+     {
+      "X-Gitlab-Event": "Pipeline Hook",
+      "X-Gitlab-Event-Uuid": "d6f1c0a2-1111-2222-3333-444455556666"
+     },
+     {
+      "builds": "[{\"id\":380,\"name\":\"unit\",\"stage\":\"test\",\"status\":\"success\"}]",
+      "object_attributes": "{\"id\":31,\"ref\":\"main\",\"sha\":\"abc123\",\"status\":\"success\"}",
+      "object_kind": "\"pipeline\"",
+      "project": "{\"default_branch\":\"main\",\"web_url\":\"https://gitlab.example.test/ninjacat\"}"
+     },
+     "{\n\t\t\"object_kind\": \"pipeline\",\n\t\t\"object_attributes\": {\"id\": 31, \"ref\": \"main\", \"sha\": \"abc123\", \"status\": \"success\"},\n\t\t\"project\": {\"web_url\": \"https://gitlab.example.test/ninjacat\", \"default_branch\": \"main\"},\n\t\t\"user\": {\"name\": \"michal\", \"email\": \"michal@example.test\"},\n\t\t\"builds\": [{\"id\": 380, \"stage\": \"test\", \"name\": \"unit\", \"status\": \"success\"}]\n\t}"
+    ]
+   ],
+   "insert": "INSERT INTO ci_webhook_events\n\t\t\t(tenant_id, received_at, provider, level, service,\n\t\t\t payload_version, partial_retry, is_manual,\n\t\t\t trace_id, span_id, parent_span_id, id, unique_id,\n\t\t\t pipeline_id, pipeline_unique_id, pipeline_name,\n\t\t\t stage_id, stage_name, parent_stage_id,\n\t\t\t name, url, status,\n\t\t\t start_raw, start_parsed, end_raw, end_parsed, queue_time_ms,\n\t\t\t node_name, node_hostname, node_workspace, node_labels,\n\t\t\t git_repository_url, git_default_branch, git_branch, git_sha, git_tag,\n\t\t\t git_message, git_author_name, git_author_email, git_author_time,\n\t\t\t git_committer_name, git_committer_email, git_commit_time,\n\t\t\t user_name, user_email,\n\t\t\t error_message, error_type, error_domain, error_stack,\n\t\t\t parent_pipeline_trace_id, parent_pipeline_url,\n\t\t\t parameters, tags, delivery_id, headers, extra, body)",
+   "rows": [
+    {
+     "Body": "{\n\t\t\"object_kind\": \"pipeline\",\n\t\t\"object_attributes\": {\"id\": 31, \"ref\": \"main\", \"sha\": \"abc123\", \"status\": \"success\"},\n\t\t\"project\": {\"web_url\": \"https://gitlab.example.test/ninjacat\", \"default_branch\": \"main\"},\n\t\t\"user\": {\"name\": \"michal\", \"email\": \"michal@example.test\"},\n\t\t\"builds\": [{\"id\": 380, \"stage\": \"test\", \"name\": \"unit\", \"status\": \"success\"}]\n\t}",
+     "DeliveryID": "d6f1c0a2-1111-2222-3333-444455556666",
+     "EndParsed": null,
+     "EndRaw": "",
+     "ErrorDomain": "",
+     "ErrorMessage": "",
+     "ErrorStack": "",
+     "ErrorType": "",
+     "Extra": {
+      "builds": "[{\"id\":380,\"name\":\"unit\",\"stage\":\"test\",\"status\":\"success\"}]",
+      "object_attributes": "{\"id\":31,\"ref\":\"main\",\"sha\":\"abc123\",\"status\":\"success\"}",
+      "object_kind": "\"pipeline\"",
+      "project": "{\"default_branch\":\"main\",\"web_url\":\"https://gitlab.example.test/ninjacat\"}"
+     },
+     "GitAuthorEmail": "",
+     "GitAuthorName": "",
+     "GitAuthorTime": "",
+     "GitBranch": "",
+     "GitCommitTime": "",
+     "GitCommitterEmail": "",
+     "GitCommitterName": "",
+     "GitDefaultBranch": "",
+     "GitMessage": "",
+     "GitRepositoryURL": "",
+     "GitSHA": "",
+     "GitTag": "",
+     "Headers": {
+      "X-Gitlab-Event": "Pipeline Hook",
+      "X-Gitlab-Event-Uuid": "d6f1c0a2-1111-2222-3333-444455556666"
+     },
+     "ID": "",
+     "IsManual": null,
+     "Level": "pipeline",
+     "Name": "",
+     "NodeHostname": "",
+     "NodeLabels": [],
+     "NodeName": "",
+     "NodeWorkspace": "",
+     "Parameters": {},
+     "ParentPipelineTraceID": "",
+     "ParentPipelineURL": "",
+     "ParentSpanID": "",
+     "ParentStageID": "",
+     "PartialRetry": null,
+     "PayloadVersion": null,
+     "PipelineID": "",
+     "PipelineName": "",
+     "PipelineUniqueID": "",
+     "Provider": "gitlab",
+     "QueueTimeMs": null,
+     "ReceivedAt": "2026-10-01T15:21:19.000523919Z",
+     "Service": "",
+     "SpanID": "",
+     "StageID": "",
+     "StageName": "",
+     "StartParsed": null,
+     "StartRaw": "",
+     "Status": "",
+     "Tags": {},
+     "TenantID": "test",
+     "TraceID": "",
+     "URL": "",
+     "UniqueID": "",
+     "UserEmail": "michal@example.test",
+     "UserName": "michal"
+    }
+   ],
+   "to": "storage_ci_webhook_events",
+   "type": "storage.WriteCIWebhookEvents"
+  }
+ ],
+ "seq": 1,
+ "test": "TestCIWebhookHandlesGitLabNativeShape",
+ "volatile": [
+  "/sends/0/args/0/1",
+  "/sends/0/rows/0/ReceivedAt"
+ ]
+}

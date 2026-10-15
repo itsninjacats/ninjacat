@@ -1,0 +1,45 @@
+{
+ "recorded_at": "2026-10-01T15:21:37.666307588Z",
+ "request": {
+  "body_b64": "",
+  "headers": {
+   "Dd-Api-Key": [
+    "routes-test-key"
+   ]
+  },
+  "host": "api.example.test",
+  "method": "POST",
+  "url": "/api/v2/ci/libraries/tests/flaky"
+ },
+ "response": {
+  "body_b64": "eyJkYXRhIjp7ImlkIjoiIiwidHlwZSI6ImNpX2FwcF9saWJyYXJpZXNfdGVzdHMiLCJhdHRyaWJ1dGVzIjp7InRlc3RzIjp7fSwicGFnZV9pbmZvIjp7ImN1cnNvciI6IiIsInNpemUiOjAsImhhc19uZXh0IjpmYWxzZX19fX0=",
+  "body_json": {
+   "data": {
+    "attributes": {
+     "page_info": {
+      "cursor": "",
+      "has_next": false,
+      "size": 0
+     },
+     "tests": {}
+    },
+    "id": "",
+    "type": "ci_app_libraries_tests"
+   }
+  },
+  "headers": {
+   "Content-Type": [
+    "application/json; charset=utf-8"
+   ]
+  },
+  "status": 200
+ },
+ "routes": [
+  "routeAPI",
+  "routeCIVisibilityAPI"
+ ],
+ "sends": null,
+ "seq": 29,
+ "test": "anonymous",
+ "volatile": []
+}
