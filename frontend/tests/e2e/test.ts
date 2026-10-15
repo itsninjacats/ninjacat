@@ -5,8 +5,8 @@ export const errorsIn = new WeakMap<Page, string[]>();
 
 // A page that broke while loading (a failed import shows SvelteKit's 500 in
 // place of the page) would measure as a page with nothing to overflow, so any
-// error in the page fails the test. A test that provokes one on purpose names
-// it in `allowedErrors`.
+// error in the page, a Content-Security-Policy refusal among them, fails the
+// test. A test that provokes one on purpose names it in `allowedErrors`.
 export const test = base.extend<{ allowedErrors: RegExp[]; pageErrors: void }>({
 	allowedErrors: [[], { option: true }],
 	pageErrors: [
