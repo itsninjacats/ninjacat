@@ -428,6 +428,22 @@ data is here; the product is not.
 
 ## 6. Known rough edges
 
+- [ ] **Bug: `k8s_resources_current` keeps deleted objects.** Seen on 2026-10-15 with real
+      agents: pods replaced in a rollout stay there as `Failed` (the old Datadog agent pods
+      on the jose cluster). The table collapses as it should (`ReplacingMergeTree` on
+      `collected_at`, live objects refreshed every cycle); what is missing is expiry: an
+      object no later collection lists keeps its last row forever. Simplest fix, at read
+      time: count as current only what was collected within a few cycles.
+- [ ] **Host aliases are not resolved.** An agent that finds Docker on a Kubernetes node
+      takes the Docker daemon's host name (`jose1`), while the kubelet-based checks and the
+      cluster agent send the alias (`jose1-jose`, node name plus cluster name). The agent
+      lists the alias in its metadata (`host_aliases` in `hosts`). Datadog joins the two
+      into one host; NinjaCat shows two (1.17M points as `jose1`, 181k as `jose1-jose` on
+      2026-10-15). Map aliases to the canonical host, at query time or on write.
+- [ ] **`containers.name` and `containers.image` are empty from agent 7.84.** The
+      collector message no longer fills them; the values are in the tags
+      (`container_name`, `short_image`, `image_name`, `kube_namespace`). Fill the columns
+      from the tags when the fields are empty. With the Kubernetes explorer, not before.
 - [x] The query port asks for the panel's HS256 token (`Server/QueryToken.fs`,
       2026-10-13); its `tenant` claim is the only source of the tenant.
 - [ ] **Datadog's query API on the query port takes only the panel's token.**
