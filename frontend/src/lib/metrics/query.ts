@@ -285,7 +285,7 @@ export type FixedRange = { from: number; to: number };
 export function readFixedRange(params: URLSearchParams): FixedRange | null {
 	const from = Number(params.get('from_ts') || NaN);
 	const to = Number(params.get('to_ts') || NaN);
-	// The query process's dates end with the year 9999.
+	// The status page asks in RFC 3339, whose years end with 9999.
 	const valid = (t: number) => Number.isInteger(t) && t >= 0 && t <= 253_402_300_799_999;
 	if (params.get('live') === 'true' || !valid(from) || !valid(to)) return null;
 	return from < to ? { from, to } : null;

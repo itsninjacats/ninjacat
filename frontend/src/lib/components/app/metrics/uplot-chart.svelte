@@ -31,7 +31,8 @@
 		window,
 		rules = [],
 		zone = null,
-		onzoom
+		onzoom,
+		onreset
 	}: {
 		lines: ChartLine[];
 		display: 'line' | 'area' | 'bars';
@@ -42,6 +43,8 @@
 		zone?: ChartZone | null;
 		/** Called with the range dragged across, in ms; without it the chart cannot be dragged. */
 		onzoom?: (from: number, to: number) => void;
+		/** Called on a double-click, to undo a zoom; given only while zoomed. */
+		onreset?: () => void;
 	} = $props();
 
 	const HEIGHT = 320;
@@ -282,6 +285,13 @@
 				x: true,
 				y: false,
 				drag: { x: !!onzoom, y: false, setScale: false, dist: 5 },
+				// In place of uPlot's own, which rescales x to the data rather than the window.
+				bind: {
+					dblclick: () => () => {
+						onreset?.();
+						return null;
+					}
+				},
 				// The line stands on the time the tooltip shows, not between two.
 				move: (u, l, t) =>
 					l < 0 || u.data[0].length === 0 ? [l, t] : [u.valToPos(u.data[0][u.posToIdx(l)], 'x'), t],

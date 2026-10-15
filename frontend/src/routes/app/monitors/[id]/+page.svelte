@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { onMount } from 'svelte';
@@ -106,10 +107,22 @@
 
 	const groupLabel = (group: string) => (group === '*' ? m.monitor_group_all() : group);
 
+	// Kept beside a zoom, so that a double-click goes back to it.
+	const range = $derived(page.url.searchParams.get('range'));
+	const relative = $derived(range ? `range=${encodeURIComponent(range)}` : '');
+
 	function zoom(from: number, to: number) {
 		// Only the query string changes, on this same route, so there is no path to resolve.
 		// eslint-disable-next-line svelte/no-navigation-without-resolve
-		goto(`?${fixedRangeParams({ from, to })}`, { noScroll: true, keepFocus: true });
+		goto(`?${relative ? `${relative}&` : ''}${fixedRangeParams({ from, to })}`, {
+			noScroll: true,
+			keepFocus: true
+		});
+	}
+
+	function reset() {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve
+		goto(relative ? `?${relative}` : page.url.pathname, { noScroll: true, keepFocus: true });
 	}
 </script>
 
@@ -229,7 +242,15 @@
 					{m.monitor_no_evaluations()}
 				</div>
 			{:else}
-				<MetricsChart {lines} window={{ from, to }} display="line" {rules} {zone} onzoom={zoom} />
+				<MetricsChart
+					{lines}
+					window={{ from, to }}
+					display="line"
+					{rules}
+					{zone}
+					onzoom={zoom}
+					onreset={data.range === null ? reset : undefined}
+				/>
 			{/if}
 		</Card.Content>
 	</Card.Root>

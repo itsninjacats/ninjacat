@@ -188,16 +188,31 @@ test.describe('chart zoom', () => {
 		await page.mouse.up();
 	}
 
-	test("puts Datadog's fixed range in the URL, and a preset takes it out", async ({ page }) => {
+	test("puts Datadog's fixed range in the URL; a double-click or a preset takes it out", async ({
+		page
+	}) => {
+		await open(page, `/app/monitors/${monitors.threshold.id}?range=-1d`);
+		await page.locator('.u-over').dblclick();
+		await expect(page).toHaveURL(/\?range=-1d$/);
+
+		await drag(page);
+		await expect(page).toHaveURL(/\?range=-1d&from_ts=\d+&to_ts=\d+&live=false$/);
+		await page.locator('.u-over').dblclick();
+		await expect(page).toHaveURL(/\?range=-1d$/);
+
+		await drag(page);
+		await expect(page).toHaveURL(/&live=false$/);
+		await page.getByRole('link', { name: '1h', exact: true }).click();
+		await expect(page).toHaveURL(/\?range=-1h$/);
+
 		await open(page, `/app/monitors/${monitors.threshold.id}`);
 		await drag(page);
 		await expect(page).toHaveURL(/\?from_ts=\d+&to_ts=\d+&live=false$/);
-
-		await page.getByRole('link', { name: '1h', exact: true }).click();
-		await expect(page).toHaveURL(/\?range=-1h$/);
+		await page.locator('.u-over').dblclick();
+		await expect(page).toHaveURL(new RegExp(`/app/monitors/${monitors.threshold.id}$`));
 	});
 
-	test('in the explorer, Back undoes a zoom', async ({ page }) => {
+	test('in the explorer, Back or a double-click undoes a zoom', async ({ page }) => {
 		await page.route('**/app/metrics/query', async (route) => {
 			const { from, to } = route.request().postDataJSON();
 			const points = [0, 1, 2, 3, 4].map((i) => ({ t: from + ((to - from) / 4) * i, v: i }));
@@ -211,6 +226,13 @@ test.describe('chart zoom', () => {
 
 		await page.goBack();
 		await expect(page).toHaveURL(/\/app\/metrics\?view=[^&]+$/);
+
+		await drag(page);
+		await expect(page).toHaveURL(/&live=false$/);
+		await page.locator('.u-over').dblclick();
+		await expect(page).toHaveURL(/\/app\/metrics\?view=[^&]+$/);
+		await page.goBack();
+		await expect(page).toHaveURL(/&live=false$/);
 	});
 });
 

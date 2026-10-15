@@ -332,6 +332,7 @@
 					{rules}
 					{zone}
 					onzoom={(from, to) => (zoom = { from, to })}
+					onreset={zoom ? () => (zoom = null) : undefined}
 				/>
 			{/if}
 

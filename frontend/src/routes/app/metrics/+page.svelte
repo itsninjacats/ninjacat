@@ -382,6 +382,7 @@
 							window={shownWindow}
 							display={view.display as 'line' | 'area' | 'bars'}
 							onzoom={(from, to) => setRange({ from, to }, false)}
+							onreset={fixed ? () => setRange(null, false) : undefined}
 						/>
 					{/if}
 				</Card.Content>

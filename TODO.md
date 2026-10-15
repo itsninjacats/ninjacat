@@ -530,7 +530,7 @@ data is here; the product is not.
 - [ ] Global time picker.
 - [x] Drag-to-zoom on charts (2026-10-15): a zoom is Datadog's `from_ts`/`to_ts`/`live=false`
       in the URL, beside `view`; the monitor editor keeps its zoom in the page, as its
-      queries are not in the URL.
+      queries are not in the URL. A double-click goes back to the range before the zoom.
 - [ ] Crash when switching the display type in the metrics explorer (not reproduced yet).
 - [ ] Explorer strings into Paraglide (`en` first, then `es`, `pl`).
 - [ ] Remove the unused `app/metrics/data` route and `fetchMetricSeries`.
