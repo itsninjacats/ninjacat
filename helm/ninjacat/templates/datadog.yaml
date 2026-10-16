@@ -1,0 +1,32 @@
+{{- if .Values.datadog.enabled }}
+# Lets the Datadog agents read the password of the `datadog` logins through
+# their Kubernetes secret backend, and nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "ninjacat.fullname" . }}-datadog
+  labels:
+    {{- include "ninjacat.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [{{ .Values.datadog.secretName | quote }}]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ninjacat.fullname" . }}-datadog
+  labels:
+    {{- include "ninjacat.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "ninjacat.fullname" . }}-datadog
+subjects:
+  {{- range .Values.datadog.serviceAccounts }}
+  - kind: ServiceAccount
+    name: {{ .name }}
+    namespace: {{ .namespace }}
+  {{- end }}
+{{- end }}

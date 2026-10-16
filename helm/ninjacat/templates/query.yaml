@@ -25,6 +25,9 @@ spec:
         {{- end }}
       labels:
         {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "query") | nindent 8 }}
+        {{- with .Values.query.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:

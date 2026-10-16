@@ -96,6 +96,21 @@ metrics:
   retentionDays: ""
   rollupRetentionDays: ""
 
+# Lets a Datadog agent watch both databases the chart makes: a `datadog` login
+# in Postgres (pg_monitor) and in ClickHouse (SELECT on system tables only, so
+# not on any tenant's data), and pg_stat_statements. Switching it on restarts
+# both databases once.
+datadog:
+  enabled: false
+  # A kubernetes.io/basic-auth Secret (username: datadog, password: ...), made
+  # outside the chart like the main one.
+  secretName: ""
+  # Given `get` on that one Secret, for the agent's Kubernetes secret backend
+  # (ENC[<namespace>/<secretName>;password] in a check's config).
+  serviceAccounts:
+    - { name: datadog-agent, namespace: datadog }
+    - { name: datadog-cluster-agent, namespace: datadog }
+
 # Secret values. Either let the chart create the Secret from these, or set
 # existingSecret to a Secret you manage yourself with the same keys:
 # DATABASE_URL (not with postgres.create), CLICKHOUSE_PASSWORD,
@@ -156,6 +171,11 @@ intake:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { memory: 1Gi }
   podAnnotations: {}
+  # Beside the chart's own labels, which they must not repeat: the
+  # app.kubernetes.io/* keys are the selector. Datadog's admission controller
+  # takes its opt-in and service names from pod labels
+  # (admission.datadoghq.com/enabled, tags.datadoghq.com/service).
+  podLabels: {}
   nodeSelector: {}
   tolerations: []
   affinity: {}
@@ -174,6 +194,7 @@ query:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { memory: 512Mi }
   podAnnotations: {}
+  podLabels: {}
   nodeSelector: {}
   tolerations: []
   affinity: {}
@@ -213,6 +234,7 @@ monitors:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { memory: 768Mi }
   podAnnotations: {}
+  podLabels: {}
   nodeSelector: {}
   tolerations: []
   affinity: {}
@@ -241,6 +263,7 @@ frontend:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { memory: 384Mi }
   podAnnotations: {}
+  podLabels: {}
   nodeSelector: {}
   tolerations: []
   affinity: {}
