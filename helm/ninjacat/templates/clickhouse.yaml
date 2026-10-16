@@ -34,6 +34,19 @@ spec:
       {{ . }}/grants/query:
         - GRANT SELECT ON {{ $db }}.*
       {{- end }}
+      {{- if .Values.datadog.enabled }}
+      # Datadog's grants for its ClickHouse check, without SELECT on the
+      # database, which only adds explain plans.
+      datadog/password:
+        valueFrom:
+          secretKeyRef: { name: {{ required "datadog.secretName is required" .Values.datadog.secretName }}, key: password }
+      datadog/networks/ip: ["0.0.0.0/0", "::/0"]
+      datadog/grants/query:
+        {{- range list "metrics" "events" "asynchronous_metrics" "errors" "parts" "replicas" "dictionaries" "macros" "clusters" "settings" "table_engines" "one" "query_log" "processes" "detached_parts" "merges" "mutations" "replication_queue" "merge_tree_settings" }}
+        - GRANT SELECT ON system.{{ . }}
+        {{- end }}
+        - GRANT REMOTE ON *.*
+      {{- end }}
       {{- with .Values.clickhouse.monitorsUser }}
       {{ . }}/password:
         valueFrom:

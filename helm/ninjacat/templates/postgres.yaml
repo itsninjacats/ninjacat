@@ -26,4 +26,22 @@ spec:
   resources:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- if .Values.datadog.enabled }}
+  managed:
+    roles:
+      - name: datadog
+        ensure: present
+        login: true
+        inRoles: [pg_monitor]
+        passwordSecret:
+          name: {{ required "datadog.secretName is required" .Values.datadog.secretName }}
+  postgresql:
+    parameters:
+      # Any pg_stat_statements.* makes the operator preload it and create the
+      # extension.
+      pg_stat_statements.track: all
+      pg_stat_statements.max: "10000"
+      track_activity_query_size: "4096"
+      track_io_timing: "on"
+  {{- end }}
 {{- end }}
