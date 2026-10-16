@@ -444,6 +444,13 @@ data is here; the product is not.
       collector message no longer fills them; the values are in the tags
       (`container_name`, `short_image`, `image_name`, `kube_namespace`). Fill the columns
       from the tags when the fields are empty. With the Kubernetes explorer, not before.
+- [ ] **A ClickHouse outage loses data silently.** The intake answers 202 before it writes,
+      and a batch whose insert fails is counted and dropped (`Storage/Writer.fs`), so the
+      agent, already answered, never resends it. Every restart of ClickHouse (an upgrade,
+      the operator rolling the pod, a crash) leaves a gap in every table as long as the
+      outage. Needs a decision before anyone relies on NinjaCat: retry with backoff in the
+      writer, a spill to local disk, or a durable queue between intake and the writers
+      (NATS JetStream or similar), which would also let the writers restart on their own.
 - [x] The query port asks for the panel's HS256 token (`Server/QueryToken.fs`,
       2026-10-13); its `tenant` claim is the only source of the tenant.
 - [ ] **Datadog's query API on the query port takes only the panel's token.**
