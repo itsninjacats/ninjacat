@@ -171,6 +171,11 @@ intake:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { memory: 1Gi }
   podAnnotations: {}
+  # Beside the chart's own labels, which they must not repeat: the
+  # app.kubernetes.io/* keys are the selector. Datadog's admission controller
+  # takes its opt-in and service names from pod labels
+  # (admission.datadoghq.com/enabled, tags.datadoghq.com/service).
+  podLabels: {}
   nodeSelector: {}
   tolerations: []
   affinity: {}
@@ -189,6 +194,7 @@ query:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { memory: 512Mi }
   podAnnotations: {}
+  podLabels: {}
   nodeSelector: {}
   tolerations: []
   affinity: {}
@@ -228,6 +234,7 @@ monitors:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { memory: 768Mi }
   podAnnotations: {}
+  podLabels: {}
   nodeSelector: {}
   tolerations: []
   affinity: {}
@@ -256,6 +263,7 @@ frontend:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { memory: 384Mi }
   podAnnotations: {}
+  podLabels: {}
   nodeSelector: {}
   tolerations: []
   affinity: {}

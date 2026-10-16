@@ -111,6 +111,13 @@ NINJACAT_SELF_KEY=<key> docker compose -f compose.yaml -f compose.self.yaml up
 
 Use a key made for this alone: the panel hands it to every browser that opens it.
 
+On Kubernetes the same tracer comes from the Datadog agent itself: its cluster agent's
+admission controller injects it into pods labelled `admission.datadoghq.com/enabled: "true"`
+and annotated with its version (`admission.datadoghq.com/dotnet-lib.version`). The chart's
+`podLabels`, `podAnnotations` and `env` per component give them to the intake, query and
+monitors pods (with APM and the admission controller on in the agent). The service names
+come from the label `tags.datadoghq.com/service`.
+
 ## Architecture
 
 ```
