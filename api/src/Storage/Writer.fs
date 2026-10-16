@@ -80,7 +80,17 @@ type TableWriter(table: string, limits: WriterLimits, insert: obj[][] -> Task, l
         | Some batch -> flushInBackground batch
         | None -> ()
 
-    let timer = new Timer((fun _ -> flush ()), null, limits.FlushInterval, limits.FlushInterval)
+    // A writer is made by the first request that writes its table. A timer keeps
+    // the ExecutionContext it was made in, so without this every flush would run
+    // inside that request, and join its trace, for the life of the process.
+    let timer =
+        let make () = new Timer((fun _ -> flush ()), null, limits.FlushInterval, limits.FlushInterval)
+
+        if ExecutionContext.IsFlowSuppressed() then
+            make ()
+        else
+            use _ = ExecutionContext.SuppressFlow()
+            make ()
 
     member _.Add(rows: obj[][]) =
         let batch =

@@ -349,3 +349,25 @@ let ``a body of one object, an array, or null`` () =
     Assert.Equal(Ok 2, Json.tryParseArray (Encoding.UTF8.GetBytes "[1, 2]") |> Result.map List.length)
     Assert.Equal(Ok 0, Json.tryParseArray (Encoding.UTF8.GetBytes "null") |> Result.map List.length)
     Assert.Equal(Error "expected a list, got object", Json.tryParseArray (Encoding.UTF8.GetBytes "{}") |> Result.map List.length)
+
+[<Fact>]
+let ``a flush on the timer does not run in the context of the request that made the writer`` () =
+    task {
+        let request = System.Threading.AsyncLocal<string>()
+        request.Value <- "the first request"
+        let seen = System.Threading.Tasks.TaskCompletionSource<string>()
+
+        let insert (_: obj[][]) =
+            seen.TrySetResult request.Value |> ignore
+            System.Threading.Tasks.Task.CompletedTask
+
+        let limits: NinjaCat.Api.Storage.WriterLimits =
+            { MaxRows = 1000; FlushInterval = System.TimeSpan.FromMilliseconds 20.0; BufferLimit = 1000; MaxInFlight = 1 }
+
+        let writer = NinjaCat.Api.Storage.TableWriter("t", limits, insert, NullLogger.Instance)
+        writer.Add [| [| box 1 |] |]
+
+        let! inFlush = seen.Task.WaitAsync(System.TimeSpan.FromSeconds 10.0)
+        do! writer.StopAsync()
+        Assert.Null inFlush
+    }
