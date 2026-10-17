@@ -326,7 +326,7 @@ module SnmpTraps =
                      r.VarOIDs; r.VarTypes; r.VarValues; r.Enriched; r.Raw |])
           with
               MaxRows = 200
-              FlushInterval = TimeSpan.FromSeconds 2.0
+              FlushInterval = TimeSpan.FromSeconds 5.0
               BufferLimit = 20_000
               MaxInFlight = 2 }
 
@@ -353,7 +353,7 @@ module NetflowFlows =
           with
               // The busiest NDM table, in the class of logs.
               MaxRows = 20000
-              FlushInterval = TimeSpan.FromSeconds 1.0
+              FlushInterval = TimeSpan.FromSeconds 5.0
               BufferLimit = 500_000
               MaxInFlight = 2 }
 

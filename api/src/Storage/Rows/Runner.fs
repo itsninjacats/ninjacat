@@ -100,7 +100,7 @@ module RunnerTaskUpdates =
                      r.Branch; r.Outputs; Col.opt r.ErrorCode; r.ErrorDetails; r.APIError; r.Extra |])
           with
               MaxRows = 200
-              FlushInterval = TimeSpan.FromSeconds 2.0 }
+              FlushInterval = TimeSpan.FromSeconds 5.0 }
 
 module RunnerHeartbeats =
     let table: Table<RunnerHeartbeatRow> =

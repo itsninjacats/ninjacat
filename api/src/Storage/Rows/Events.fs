@@ -49,4 +49,4 @@ module Events =
                      r.EventType; Col.opt r.RelatedEventID; r.AlertTypeRaw; r.PriorityRaw; r.Extra |])
           with
               MaxRows = 200
-              FlushInterval = TimeSpan.FromSeconds 2.0 }
+              FlushInterval = TimeSpan.FromSeconds 5.0 }

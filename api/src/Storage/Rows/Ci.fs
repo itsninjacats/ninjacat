@@ -443,7 +443,7 @@ module CIPipelineEvents =
                      r.Attributes; r.Body; r.Extra |])
           with
               MaxRows = 200
-              FlushInterval = TimeSpan.FromSeconds 2.0 }
+              FlushInterval = TimeSpan.FromSeconds 5.0 }
 
 module SyntheticsTestConfigs =
     let table: Table<SyntheticsTestConfigRow> =

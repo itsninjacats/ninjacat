@@ -248,7 +248,7 @@ module SecurityEvents =
           with
               // Logs-shaped traffic, so the logs table's numbers.
               MaxRows = 20000
-              FlushInterval = TimeSpan.FromSeconds 1.0
+              FlushInterval = TimeSpan.FromSeconds 5.0
               BufferLimit = 500_000 }
 
 module SbomEntities =
