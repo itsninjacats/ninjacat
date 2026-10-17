@@ -68,6 +68,9 @@ spec:
                 secretKeyRef:
                   name: {{ $secret }}
                   key: CLICKHOUSE_PASSWORD
+            {{- with .Values.intake.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           # The intake routes on the Host header: a request for a host it
           # does not know is a 404 by design, so both probes name one it does.
           readinessProbe:

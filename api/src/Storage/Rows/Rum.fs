@@ -151,7 +151,7 @@ module RumViews =
               // An active page re-sends its view every few seconds and every
               // row carries the whole event, so the limits stand for memory.
               MaxRows = 2000
-              FlushInterval = TimeSpan.FromSeconds 3.0
+              FlushInterval = TimeSpan.FromSeconds 5.0
               BufferLimit = 50_000
               MaxInFlight = 2 }
 
@@ -260,7 +260,7 @@ module RumEvents =
               // The high-volume table of the family: resources alone are
               // dozens per page load, each row with its whole event.
               MaxRows = 10000
-              FlushInterval = TimeSpan.FromSeconds 2.0
+              FlushInterval = TimeSpan.FromSeconds 5.0
               BufferLimit = 100_000
               MaxInFlight = 4 }
 
@@ -462,4 +462,4 @@ module RumSpans =
                          r.Start; r.DurationNS; r.Error; r.Meta; r.Metrics; r.Span; r.EnvelopeExtra |])
           with
               MaxRows = 5000
-              FlushInterval = TimeSpan.FromSeconds 2.0 }
+              FlushInterval = TimeSpan.FromSeconds 5.0 }

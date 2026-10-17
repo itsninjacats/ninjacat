@@ -192,7 +192,7 @@ module DebuggerDiagnostics =
                      r.ProbeID; r.Status; r.ProbeVersion; Col.opt r.ExceptionType; Col.opt r.ExceptionMessage; r.Message |])
           with
               MaxRows = 200
-              FlushInterval = TimeSpan.FromSeconds 2.0 }
+              FlushInterval = TimeSpan.FromSeconds 5.0 }
 
 module SymdbUploads =
     let table: Table<SymdbUploadRow> =

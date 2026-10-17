@@ -81,32 +81,52 @@ let private tenantOf (TenantId tenant) = SqlValue.String tenant
 let private boundedLimit (asked: int) (fallback: int) : SqlValue =
     SqlValue.Int64(int64 (if asked <= 0 || asked > 1000 then fallback else asked))
 
-/// Metric names, optionally those containing `search`.
-let listMetrics (tenant: TenantId) (search: string) (limit: int) : Sql =
+/// The hours of `metric_tag_keys` a range touches; the hour holding `from`
+/// counts in full.
+let private hours (bound: SqlParams) (from: DateTimeOffset) (until: DateTimeOffset) =
+    $" AND hour >= toStartOfHour(fromUnixTimestamp64Milli({bound.Add(SqlValue.Int64(from.ToUnixTimeMilliseconds()))}))"
+    + $" AND hour < fromUnixTimestamp64Milli({bound.Add(SqlValue.Int64(until.ToUnixTimeMilliseconds()))})"
+
+/// Metric names seen in a time range, optionally those containing `search`.
+let listMetrics (tenant: TenantId) (from: DateTimeOffset) (until: DateTimeOffset) (search: string) (limit: int) : Sql =
     let bound = SqlParams()
-    let where = $"tenant_id = {bound.Add(tenantOf tenant)}"
+    let where = $"tenant_id = {bound.Add(tenantOf tenant)}{hours bound from until}"
     let searchFilter = if search = "" then "" else $" AND positionCaseInsensitive(metric, {bound.Add(SqlValue.String search)}) > 0"
 
-    { Text = $"SELECT DISTINCT metric FROM metrics WHERE {where}{searchFilter} ORDER BY metric LIMIT {bound.Add(boundedLimit limit 500)}"
+    { Text = $"SELECT DISTINCT metric FROM metric_tag_keys WHERE {where}{searchFilter} ORDER BY metric LIMIT {bound.Add(boundedLimit limit 500)}"
       Parameters = bound.All }
 
-/// Tag keys seen, optionally on one metric.
-let listTagKeys (tenant: TenantId) (metric: string) : Sql =
+/// Tag keys seen in a time range, optionally on one metric. The key '' only
+/// lists a metric without tags.
+let listTagKeys (tenant: TenantId) (from: DateTimeOffset) (until: DateTimeOffset) (metric: string) : Sql =
     let bound = SqlParams()
-    let where = $"tenant_id = {bound.Add(tenantOf tenant)}"
+    let where = $"tenant_id = {bound.Add(tenantOf tenant)}{hours bound from until}"
     let metricFilter = if metric = "" then "" else $" AND metric = {bound.Add(SqlValue.String metric)}"
 
-    { Text = $"SELECT DISTINCT arrayJoin(mapKeys(tags)) AS k FROM metrics WHERE {where}{metricFilter} ORDER BY k LIMIT 1000"
+    { Text = $"SELECT DISTINCT key FROM metric_tag_keys WHERE {where}{metricFilter} AND key != '' ORDER BY key LIMIT 1000"
       Parameters = bound.All }
 
-/// Values of one tag key, optionally on one metric and containing `search`.
-let listTagValues (tenant: TenantId) (metric: string) (key: string) (search: string) (limit: int) : Sql =
+/// Values of one tag key seen in a time range, optionally on one metric and
+/// containing `search`.
+let listTagValues
+    (tenant: TenantId)
+    (from: DateTimeOffset)
+    (until: DateTimeOffset)
+    (metric: string)
+    (key: string)
+    (search: string)
+    (limit: int)
+    : Sql =
     let bound = SqlParams()
-    let values = $"SELECT arrayJoin(tags[{bound.Add(SqlValue.String key)}]) AS v FROM metrics WHERE tenant_id = {bound.Add(tenantOf tenant)}"
+    let column = if Metrics.liftedTags.Contains key then key else $"tags[{bound.Add(SqlValue.String key)}]"
+    let tenantFilter = $"tenant_id = {bound.Add(tenantOf tenant)}"
     let metricFilter = if metric = "" then "" else $" AND metric = {bound.Add(SqlValue.String metric)}"
+    let fromSql = $"fromUnixTimestamp64Milli({bound.Add(SqlValue.Int64(from.ToUnixTimeMilliseconds()))})"
+    let untilSql = $"fromUnixTimestamp64Milli({bound.Add(SqlValue.Int64(until.ToUnixTimeMilliseconds()))})"
+    let values = $"SELECT arrayJoin({column}) AS v FROM metrics WHERE {tenantFilter}{metricFilter} AND {Metrics.rawWindow fromSql untilSql}"
     let searchFilter = if search = "" then "" else $" WHERE positionCaseInsensitive(v, {bound.Add(SqlValue.String search)}) > 0"
 
-    { Text = $"SELECT DISTINCT v FROM ({values}{metricFilter}){searchFilter} ORDER BY v LIMIT {bound.Add(boundedLimit limit 200)}"
+    { Text = $"SELECT DISTINCT v FROM ({values}){searchFilter} ORDER BY v LIMIT {bound.Add(boundedLimit limit 200)}"
       Parameters = bound.All }
 
 type SeriesQuery =
@@ -204,7 +224,7 @@ let private logsWhere (bound: SqlParams) (q: LogSearch) : string =
             let tokens = messageTokens phrase |> List.map (fun token -> $" AND hasToken(message, {bound.Add(SqlValue.String token)})") |> String.concat ""
             tokens + $" AND position(message, {bound.Add(SqlValue.String phrase)}) > 0"
 
-    let tags = if q.Tags = All then "" else $" AND ({Filter.sql bound q.Tags})"
+    let tags = if q.Tags = All then "" else $" AND ({Filter.sql Set.empty bound q.Tags})"
     scope + facets + text + tags
 
 /// Two queries: the newest matching logs, and how many match in all.

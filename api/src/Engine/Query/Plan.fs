@@ -185,8 +185,8 @@ type Seasonality =
     /// Points per season.
     member s.Period = int (s.Length / s.Step)
 
-/// How long the two metrics tables keep their rows: `metrics`
-/// (NINJACAT_METRICS_RETENTION_DAYS) and `metrics_1m`
+/// How long the metrics tables keep their rows: `metrics`
+/// (NINJACAT_METRICS_RETENTION_DAYS), and `metrics_1m` and `metric_tag_keys`
 /// (NINJACAT_METRICS_ROLLUP_RETENTION_DAYS). The migrating process sets the
 /// same values as the tables' TTLs.
 type Retention = { Raw: TimeSpan; Rollup: TimeSpan }
@@ -199,10 +199,11 @@ let defaultRetention =
 type Table =
     /// `metrics`: every point.
     | PointsTable
-    /// `metrics_1m`: one row per series per minute, holding aggregate states.
+    /// `metrics_1m`: one row per series per minute, holding counts, sums,
+    /// minima, maxima and a rate's events.
     | RollupTable
 
-/// A step of whole minutes reads the rollup: its per-minute states merge into
+/// A step of whole minutes reads the rollup: its per-minute rows add up into
 /// such a bucket exactly, so the answer is the raw table's, from about a
 /// quarter of the rows.
 let tableFor (step: TimeSpan) : Table =

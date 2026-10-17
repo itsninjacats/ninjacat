@@ -259,21 +259,13 @@ let ``the rollup answers whole-minute steps as the raw points do`` () =
                             for r, u in List.zip raw rollup do
                                 Assert.True(close r.Value u.Value, $"{label} at {r.BucketMs}: raw {r.Value}, rollup {u.Value}")
 
-        // `last` has no query of its own yet: the stored state against the raw points.
+        // The rollup counts every point once.
         use reader =
-            scratch
-                .ExecuteReaderAsync(
-                    "SELECT countIf(raw.l != rollup.l), count() FROM "
-                    + "(SELECT series_id, toStartOfMinute(timestamp) AS m, argMax(value, timestamp) AS l FROM metrics GROUP BY series_id, m) AS raw "
-                    + "FULL JOIN (SELECT series_id, minute AS m, argMaxMerge(value_last) AS l FROM metrics_1m GROUP BY series_id, m) AS rollup "
-                    + "USING (series_id, m)"
-                )
-                .GetAwaiter()
-                .GetResult()
+            scratch.ExecuteReaderAsync("SELECT (SELECT sum(points) FROM metrics_1m), (SELECT count() FROM metrics)").GetAwaiter().GetResult()
 
         Assert.True(reader.Read())
-        Assert.Equal(0UL, reader.GetFieldValue<uint64> 0)
-        Assert.Equal(360UL, reader.GetFieldValue<uint64> 1))
+        Assert.Equal(uint64 (rollupPoints start).Length, reader.GetFieldValue<uint64> 0)
+        Assert.Equal(uint64 (rollupPoints start).Length, reader.GetFieldValue<uint64> 1))
 
 [<Fact>]
 let ``0002 fills the rollup from the raw points it finds`` () =
@@ -301,6 +293,98 @@ let ``0002 fills the rollup from the raw points it finds`` () =
         Assert.True(reader.Read())
         Assert.Equal(uint64 points.Length, reader.GetFieldValue<uint64> 0))
 
+/// The rows of a query, each as its columns' text.
+let private texts (scratch: ClickHouseClient) (sql: string) : string list list =
+    use reader = scratch.ExecuteReaderAsync(sql).GetAwaiter().GetResult()
+    [ while reader.Read() do [ for i in 0 .. reader.FieldCount - 1 -> string (reader.GetValue i) ] ]
+
+[<Fact>]
+let ``0005 moves the metrics to the new layout and counts each point once`` () =
+    inScratch false (fun scratch ->
+        let migrations =
+            match Migrations.load () with
+            | Ok all -> all
+            | Error e -> failwith e
+
+        let run (m: Migrations.Migration) =
+            for statement in Migrations.splitStatements m.Sql do
+                scratch.ExecuteNonQueryAsync(statement).GetAwaiter().GetResult() |> ignore
+
+        let now = DateTime.UtcNow
+        let start = DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0, DateTimeKind.Utc).AddHours -2.0
+        let points = rollupPoints start
+        let fresh = string (points.Length - 500)
+
+        for m in migrations |> List.filter (fun m -> m.Version <= 4u) do
+            run m
+
+        writePoints scratch points[.. 499]
+        run (migrations |> List.find (fun m -> m.Version = 5u))
+        writePoints scratch points[500..]
+
+        Assert.Equal<string list list>([ [ fresh; fresh ] ], texts scratch "SELECT (SELECT count() FROM metrics), (SELECT sum(points) FROM metrics_1m)")
+        Assert.Equal<string list list>([ [ "500"; "500" ] ], texts scratch "SELECT (SELECT count() FROM metrics_old), (SELECT countMerge(points) FROM metrics_1m_old)")
+
+        // Only what arrived after 0005: the side table has no backfill.
+        Assert.Equal<string list list>(
+            points[500..] |> Array.map (fun p -> [ p.Metric ]) |> Array.distinct |> Array.sort |> List.ofArray,
+            texts scratch "SELECT DISTINCT metric FROM metric_tag_keys WHERE key = '' ORDER BY metric"
+        )
+
+        Assert.Equal<string list list>([ [ "" ]; [ "env" ]; [ "role" ] ], texts scratch "SELECT DISTINCT key FROM metric_tag_keys ORDER BY key"))
+
+[<Fact>]
+let ``a lifted tag holds every value of the tag`` () =
+    inScratch true (fun scratch ->
+        let now = DateTime.UtcNow.AddMinutes -5.0
+
+        writePoints
+            scratch
+            [| { Metrics.point "default" now "lifted" 1.0 with
+                   Host = "web-1"
+                   Tags = Map [ "env", [| "prod"; "staging" |] ] } |]
+
+        Assert.Equal<string list list>([ [ "['prod','staging']" ] ], texts scratch "SELECT toString(env) FROM metrics")
+
+        let plan: Plan.Plan =
+            { From = DateTimeOffset(now.AddMinutes -10.0)
+              To = DateTimeOffset(now.AddMinutes 10.0)
+              Step = TimeSpan.FromSeconds 20.0
+              Queries = []
+              Outputs = []
+              Retention = Plan.defaultRetention }
+
+        let query: Plan.QueryPlan =
+            { Metric = "lifted"
+              Filter = MetricQuery.Ast.Tag("env", "staging")
+              GroupBy = [ "env" ]
+              SpaceAgg = Plan.Sum
+              TimeAgg = Plan.Plain Plan.Sum
+              Step = TimeSpan.FromSeconds 20.0
+              Lookback = 0
+              Fill = Plan.NoFill }
+
+        let rows =
+            Compile.compileOn Plan.PointsTable (TenantId "default") plan query
+            |> NinjaCat.Api.Platform.ClickHouse.metricRows scratch Threading.CancellationToken.None
+            |> fun t -> t.GetAwaiter().GetResult()
+
+        // One point, in the group of each of its values.
+        Assert.Equal<string option list list>([ [ Some "prod" ]; [ Some "staging" ] ], rows |> List.map _.Groups |> List.sort))
+
+[<Fact>]
+let ``a metric with no tags is listed`` () =
+    inScratch true (fun scratch ->
+        let now = DateTimeOffset.UtcNow
+        writePoints scratch [| Metrics.point "default" (now.UtcDateTime.AddMinutes -5.0) "untagged" 1.0 |]
+
+        let names =
+            Panel.listMetrics (TenantId "default") (now.AddHours -1.0) now "" 0
+            |> NinjaCat.Api.Platform.ClickHouse.query scratch Threading.CancellationToken.None _.GetString(0)
+            |> fun t -> t.GetAwaiter().GetResult()
+
+        Assert.Equal<string list>([ "untagged" ], names))
+
 [<Fact>]
 let ``the metrics retention is set without rewriting the tables`` () =
     inScratch true (fun scratch ->
@@ -315,6 +399,7 @@ let ``the metrics retention is set without rewriting the tables`` () =
         let engine table = scalar $"SELECT engine_full FROM system.tables WHERE database = currentDatabase() AND name = '{table}'"
         Assert.Contains("TTL toDateTime(timestamp) + toIntervalDay(45)", engine "metrics")
         Assert.Contains("TTL minute + toIntervalDay(500)", engine "metrics_1m")
+        Assert.Contains("TTL hour + toIntervalDay(500)", engine "metric_tag_keys")
         Assert.Equal("0", scalar "SELECT count() FROM system.mutations WHERE database = currentDatabase()"))
 
 // --- monitors ------------------------------------------------------------------------------

@@ -183,7 +183,7 @@ module Spans =
                      r.EventTime; r.EventName; r.EventAttributes |])
           with
               MaxRows = 10_000
-              FlushInterval = TimeSpan.FromSeconds 2.0
+              FlushInterval = TimeSpan.FromSeconds 5.0
               BufferLimit = 200_000
               MaxInFlight = 4 }
 

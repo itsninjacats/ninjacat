@@ -33,8 +33,8 @@ module Table =
           Name = name
           Columns = columns
           Values = values
-          MaxRows = 5000
-          FlushInterval = TimeSpan.FromSeconds 2.0
+          MaxRows = 10_000
+          FlushInterval = TimeSpan.FromSeconds 5.0
           BufferLimit = 200_000
           MaxInFlight = 4 }
 

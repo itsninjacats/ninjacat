@@ -163,7 +163,7 @@ module EventManagement =
                      r.OuterExtra |])
           with
               MaxRows = 200
-              FlushInterval = TimeSpan.FromSeconds 2.0 }
+              FlushInterval = TimeSpan.FromSeconds 5.0 }
 
 /// One software entry of a softinv payload: a row per package, so "every
 /// host running curl < 8.0" is a plain query.
@@ -202,7 +202,7 @@ module HostSoftware =
           with
               // A full inventory is a few hundred rows per host.
               MaxRows = 10_000
-              FlushInterval = TimeSpan.FromSeconds 3.0
+              FlushInterval = TimeSpan.FromSeconds 5.0
               BufferLimit = 100_000
               MaxInFlight = 2 }
 
@@ -339,4 +339,4 @@ module QueryActionResults =
               (fun r -> [| r.TenantID; r.ReceivedAt; r.Result; r.Keys; r.DDEVPOrigin; r.DDEVPOriginVersion |])
           with
               MaxRows = 200
-              FlushInterval = TimeSpan.FromSeconds 2.0 }
+              FlushInterval = TimeSpan.FromSeconds 5.0 }

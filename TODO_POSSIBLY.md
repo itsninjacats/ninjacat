@@ -69,3 +69,29 @@ would make the separation a fact of the build: the intake image would hold no qu
 the reverse, and the dev stack would stop compiling everything twice. The cost is a sixth
 and seventh project and a shared library for `Config`, the ClickHouse clients and the
 Postgres connection string.
+
+## The tracer inside NinjaCat's images, or brought by the agent
+
+Today no image carries a tracer. On Kubernetes the Datadog agent's admission controller
+injects `dd-trace-dotnet` into the intake, query and monitors pods (chart `podLabels`,
+since 0.2.2); locally `compose.self.yaml` copies it in. The code depends on nothing of it.
+
+- **`Datadog.Trace.Bundle` in the images** would buy tracing wherever NinjaCat runs (compose,
+  a cluster without the admission controller, a plain VM), at a version pinned in the repo
+  and tested in CI. It costs every user larger images and puts a Datadog library in the
+  dependencies of a project meant as the way out of Datadog (Apache 2.0, so allowed by
+  AGPL; a question of principle, not law). It still needs switching on
+  (`CORECLR_ENABLE_PROFILING` and the path to its native library).
+- **`Datadog.Trace` for our own spans**: no. Code would depend on one vendor's API.
+- **Leaning to:** our own spans and metrics through .NET's `ActivitySource` and `Meter`
+  (OpenTelemetry's API, part of the runtime), the tracer chosen at deployment: dd-trace
+  injected as now, reading them with `DD_TRACE_OTEL_ENABLED=true`, or later the
+  OpenTelemetry SDK sending OTLP. First users: `writer.flush` (`TODO.md`, section 1b) and a
+  `monitor.evaluate` span with the monitor's id.
+- **Trace ids in our log lines**: `DD_LOGS_INJECTION=true` and
+  `Logging__Console__FormatterOptions__IncludeScopes=true` in the pods' env make the
+  injected tracer put `dd_trace_id`/`dd_span_id` into each JSON line's `Scopes`. Useful only
+  once the intake unpacks JSON messages and reads those ids (`TODO.md`, section 6, the log
+  level item).
+- Not known: whether the injected tracer of 3.54 reads `ActivitySource` spans without
+  further settings, and the exact shape of the scope it adds to `ILogger`.

@@ -188,7 +188,7 @@ module Processes =
           with
               // A few hundred rows per host per snapshot, every ~10 s.
               MaxRows = 10000
-              FlushInterval = TimeSpan.FromSeconds 3.0 }
+              FlushInterval = TimeSpan.FromSeconds 5.0 }
 
 // --- the rest of the process intake ---
 //
@@ -767,7 +767,7 @@ module ProcessStats =
           with
               // The shape of processes at five times the cadence (2 s, not 10 s).
               MaxRows = 10000
-              FlushInterval = TimeSpan.FromSeconds 3.0 }
+              FlushInterval = TimeSpan.FromSeconds 5.0 }
 
 module Containers =
     let table: Table<ContainerRow> =
@@ -830,7 +830,7 @@ module ContainerStats =
           with
               // Narrow numeric rows on the 2-second stream.
               MaxRows = 10000
-              FlushInterval = TimeSpan.FromSeconds 3.0 }
+              FlushInterval = TimeSpan.FromSeconds 5.0 }
 
 module ProcessDiscoveries =
     let table: Table<ProcessDiscoveryRow> =
@@ -851,7 +851,7 @@ module ProcessDiscoveries =
           with
               // A full process list per pass, like processes, with smaller rows.
               MaxRows = 10000
-              FlushInterval = TimeSpan.FromSeconds 3.0 }
+              FlushInterval = TimeSpan.FromSeconds 5.0 }
 
 module Connections =
     let table: Table<ConnectionRow> =
@@ -915,7 +915,7 @@ module Connections =
               // The highest-volume table of this intake: a busy host reports
               // thousands of connections per frame.
               MaxRows = 20000
-              FlushInterval = TimeSpan.FromSeconds 1.0
+              FlushInterval = TimeSpan.FromSeconds 5.0
               BufferLimit = 500_000 }
 
 module ConnectionsPayloads =

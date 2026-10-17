@@ -14,6 +14,8 @@ let ``tenant and from are bound, never inlined`` () =
     let sql = Metrics.activeMetrics (req None)
     Assert.Contains("tenant_id = {tenant:String}", sql.Text)
     Assert.Contains("fromUnixTimestamp({from:Int64})", sql.Text)
+    // The key has the 15-minute bucket after the metric: this is what prunes.
+    Assert.Contains("toStartOfFifteenMinutes(timestamp) >= toStartOfFifteenMinutes(fromUnixTimestamp({from:Int64}))", sql.Text)
     Assert.DoesNotContain("acme", sql.Text)
     Assert.Equal<(string * SqlValue) list>([ "tenant", String "acme"; "from", Int64 1_700_000_000L ], sql.Parameters)
 
