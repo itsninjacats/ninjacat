@@ -129,6 +129,9 @@ spec:
                 secretKeyRef:
                   name: {{ $secret }}
                   key: {{ ternary "CLICKHOUSE_MONITORS_PASSWORD" "CLICKHOUSE_PASSWORD" (ne .Values.clickhouse.monitorsUser "") }}
+            {{- with .Values.monitors.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           # Ready once in the cluster; discovery lists unready pods too, so the
           # cluster's first formation is not held up.
           readinessProbe:

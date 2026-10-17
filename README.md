@@ -118,6 +118,9 @@ and annotated with its version (`admission.datadoghq.com/dotnet-lib.version`). T
 monitors pods (with APM and the admission controller on in the agent). The service names
 come from the label `tags.datadoghq.com/service`.
 
+How the injection works, where each kind of data goes and how to check it:
+[docs/self-observability.md](docs/self-observability.md).
+
 ## Architecture
 
 ```

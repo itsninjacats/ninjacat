@@ -71,6 +71,9 @@ spec:
                 secretKeyRef:
                   name: {{ $secret }}
                   key: NINJACAT_QUERY_TOKEN_SECRET
+            {{- with .Values.query.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           readinessProbe:
             httpGet:
               path: /ping

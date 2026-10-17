@@ -165,6 +165,11 @@ intake:
   # NINJACAT_RUM_ALLOWED_ORIGINS, ...). See api/README.md.
   env: {}
 
+  # Entries for the container's env list, as Kubernetes spells them: for what
+  # must not sit in the ConfigMap (secretKeyRef) or comes from the pod
+  # (fieldRef). An entry here wins over the same name in `env`.
+  extraEnv: []
+
   # One request may hold a 64 MiB body and as much again inflated; the rest is
   # the rows waiting to be written.
   resources:
@@ -189,6 +194,7 @@ query:
     port: 8081
 
   env: {}
+  extraEnv: []
 
   resources:
     requests: { cpu: 50m, memory: 128Mi }
@@ -229,6 +235,7 @@ monitors:
   # Extra non-secret environment (NINJACAT_MONITOR_CONCURRENCY,
   # NINJACAT_MONITOR_MAX_GROUPS, ...). See api/README.md.
   env: {}
+  extraEnv: []
 
   resources:
     requests: { cpu: 100m, memory: 256Mi }
