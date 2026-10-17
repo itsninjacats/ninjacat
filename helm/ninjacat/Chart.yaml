@@ -6,5 +6,5 @@ description: >-
   service and the SvelteKit panel. Postgres and ClickHouse are yours, or
   made through CloudNativePG and Altinity's operator (helm/ninjacat-operators).
 type: application
-version: 0.5.0
-appVersion: "0.2.2"
+version: 0.6.0
+appVersion: "0.3.0"
