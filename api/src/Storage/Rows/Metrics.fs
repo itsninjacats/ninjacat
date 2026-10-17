@@ -45,14 +45,23 @@ type SketchRow =
 
 module Metrics =
     let table: Table<MetricPoint> =
-        Table.create
-            "storage_metrics"
-            "metrics"
-            [ "tenant_id"; "timestamp"; "metric"; "host"; "metric_type"; "source_type"; "unit"; "interval"; "value"; "tags"
-              "origin_product"; "origin_category"; "origin_service"; "resources"; "extra" ]
-            (fun r ->
-                [| r.TenantID; r.Timestamp; r.Metric; r.Host; r.MetricType; r.SourceType; r.Unit; r.Interval; r.Value; r.Tags
-                   r.OriginProduct; r.OriginCategory; r.OriginService; r.Resources; r.Extra |])
+        { Table.create
+              "storage_metrics"
+              "metrics"
+              [ "tenant_id"; "timestamp"; "metric"; "host"; "metric_type"; "source_type"; "unit"; "interval"; "value"; "tags"
+                "origin_product"; "origin_category"; "origin_service"; "resources"; "extra" ]
+              (fun (r: MetricPoint) ->
+                  [| r.TenantID; r.Timestamp; r.Metric; r.Host; r.MetricType; r.SourceType; r.Unit; r.Interval; r.Value; r.Tags
+                     r.OriginProduct; r.OriginCategory; r.OriginService; r.Resources; r.Extra |])
+          with
+              // One insert is a part here and one in each table the views fill
+              // (metrics_1m, metric_tag_keys). A buffered point with its tags
+              // takes a few KB, and while ClickHouse stalls four batches are
+              // in flight beside the buffer, so the limit is what keeps the
+              // intake inside its memory.
+              MaxRows = 50_000
+              FlushInterval = TimeSpan.FromSeconds 10.0
+              BufferLimit = 150_000 }
 
     /// A point with only what every point has; the rest is empty.
     let point (tenant: string) (timestamp: DateTime) (metric: string) (value: float) : MetricPoint =

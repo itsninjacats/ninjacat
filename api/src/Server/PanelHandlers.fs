@@ -50,31 +50,46 @@ let private names (sql: Sql) (respond: string list -> obj) : EndpointHandler =
             | Error e -> return! fail 400 e ctx
         }
 
-let metricNames: EndpointHandler =
-    fun ctx -> names (Panel.listMetrics (QueryToken.tenant ctx) (queryValue ctx "search") (queryInt ctx "limit")) (fun found -> {| metrics = found |}) ctx
-
-let metricTagKeys: EndpointHandler =
-    fun ctx -> names (Panel.listTagKeys (QueryToken.tenant ctx) (queryValue ctx "metric")) (fun found -> {| keys = found |}) ctx
-
-let metricTagValues: EndpointHandler =
-    fun ctx ->
-        match queryValue ctx "key" with
-        | "" -> fail 400 "key is required" ctx
-        | key ->
-            names
-                (Panel.listTagValues (QueryToken.tenant ctx) (queryValue ctx "metric") key (queryValue ctx "search") (queryInt ctx "limit"))
-                (fun found -> {| values = found |})
-                ctx
-
-/// `from` and `to` of a request: an hour back to now unless given.
-let timeRange (ctx: HttpContext) : Result<DateTimeOffset * DateTimeOffset, string> =
+/// `from` and `to` of a request: `back` before now, to now, unless given.
+let timeRangeOr (back: TimeSpan) (ctx: HttpContext) : Result<DateTimeOffset * DateTimeOffset, string> =
     let now = DateTimeOffset.UtcNow
 
-    match Panel.parseTime (queryValue ctx "from") (now.AddHours -1.0) now, Panel.parseTime (queryValue ctx "to") now now with
+    match Panel.parseTime (queryValue ctx "from") (now.Add(-back)) now, Panel.parseTime (queryValue ctx "to") now now with
     | Error e, _ -> Error("bad from: " + e)
     | _, Error e -> Error("bad to: " + e)
     | Ok from, Ok until when until <= from -> Error "to must be after from"
     | Ok from, Ok until -> Ok(UnixTime.ofMillis from, UnixTime.ofMillis until)
+
+/// The range of the metric listings unless given: a day, the same for names,
+/// keys and values, so a key offered has values to offer.
+let private listingRange (ctx: HttpContext) = timeRangeOr (TimeSpan.FromDays 1.0) ctx
+
+let metricNames: EndpointHandler =
+    fun ctx ->
+        match listingRange ctx with
+        | Error e -> fail 400 e ctx
+        | Ok(from, until) ->
+            names (Panel.listMetrics (QueryToken.tenant ctx) from until (queryValue ctx "search") (queryInt ctx "limit")) (fun found -> {| metrics = found |}) ctx
+
+let metricTagKeys: EndpointHandler =
+    fun ctx ->
+        match listingRange ctx with
+        | Error e -> fail 400 e ctx
+        | Ok(from, until) -> names (Panel.listTagKeys (QueryToken.tenant ctx) from until (queryValue ctx "metric")) (fun found -> {| keys = found |}) ctx
+
+let metricTagValues: EndpointHandler =
+    fun ctx ->
+        match queryValue ctx "key", listingRange ctx with
+        | "", _ -> fail 400 "key is required" ctx
+        | _, Error e -> fail 400 e ctx
+        | key, Ok(from, until) ->
+            names
+                (Panel.listTagValues (QueryToken.tenant ctx) from until (queryValue ctx "metric") key (queryValue ctx "search") (queryInt ctx "limit"))
+                (fun found -> {| values = found |})
+                ctx
+
+/// `from` and `to` of a request: an hour back to now unless given.
+let timeRange (ctx: HttpContext) = timeRangeOr (TimeSpan.FromHours 1.0) ctx
 
 /// One metric over a time range, one series per host or per combination of
 /// the `by` keys. The query engine runs it, as it runs every other query.

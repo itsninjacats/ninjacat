@@ -180,9 +180,10 @@ Kompilator jest właściwym miejscem, żeby to zmienić, bo wybór zależy od py
   jest tańszy
 - `Step` drobniejszy niż minuta → tylko `metrics`, rollup nie ma tej rozdzielczości
 
-Przy `metrics_1m` zmienia się też składnia agregacji: `avg(value)` staje się
-`avgMerge(value_avg)`. To kolejny powód, żeby generować SQL w jednym miejscu —
-przy dwóch źródłach o różnej składni ręczne sklejanie przestaje być wykonalne.
+On `metrics_1m` the aggregation is written differently too: `avg(value)` becomes
+`sum(value_sum) / sum(points)` (since 0005). That is one more reason to generate
+the SQL in one place — with two sources of different syntax, gluing it by hand
+stops being workable.
 
 ## Ograniczenia, które kompilator musi wymuszać
 

@@ -56,11 +56,15 @@ let ``request values are bound, never inlined`` () =
     Assert.Equal(Int64 20L, boundAfter "toIntervalSecond(" sql)
 
 [<Fact>]
-let ``host is a column, other tags are in the map`` () =
+let ``host and the lifted tags are columns on the raw points, other tags are in the map`` () =
     Assert.Contains("host = {p", (compiled (Tag("host", "web-1")) []).Text)
     let env = compiled (Tag("env", "prod")) []
-    Assert.Contains("has(tags[{k", env.Text)
-    Assert.Equal(String "env", boundAfter "has(tags[" env)
+    Assert.Contains("has(env, {p", env.Text)
+    Assert.Equal(String "prod", boundAfter "has(env, " env)
+    Assert.DoesNotContain("tags[", env.Text)
+    let role = compiled (Tag("role", "api")) []
+    Assert.Contains("has(tags[{k", role.Text)
+    Assert.Equal(String "role", boundAfter "has(tags[" role)
 
 [<Fact>]
 let ``wildcards become LIKE, with LIKE's own wildcards escaped`` () =
@@ -71,6 +75,8 @@ let ``wildcards become LIKE, with LIKE's own wildcards escaped`` () =
 [<Fact>]
 let ``a key-less tag asks for the key`` () =
     Assert.Contains("mapContains(tags, {k", (compiled (Bare "canary") []).Text)
+    // Also for a lifted one: `{env}` asks whether the key exists, not whether it has an empty value.
+    Assert.Contains("mapContains(tags, {k", (compiled (Bare "env") []).Text)
 
 [<Fact>]
 let ``boolean structure is kept`` () =
@@ -86,6 +92,14 @@ let ``group by: host as a column, tags through arrayJoin, missing as NULL`` () =
     Assert.Contains("[NULL], CAST(tags[{k", sql.Text)
     Assert.Contains("GROUP BY g0, g1, bucket", sql.Text)
     Assert.Contains("GROUP BY series_id, g0, g1, bucket", sql.Text)
+
+[<Fact>]
+let ``group by a lifted tag reads its column on the raw points, the map on the rollup`` () =
+    let raw = compiled All [ "kube_namespace" ]
+    Assert.Contains("arrayJoin(if(empty(kube_namespace), [NULL], CAST(kube_namespace, 'Array(Nullable(String))'))) AS g0", raw.Text)
+    let rollup = compile (TenantId "acme") plan { query All [ "kube_namespace" ] with Step = TimeSpan.FromMinutes 1.0 }
+    Assert.Contains("arrayJoin(if(empty(tags[{k", rollup.Text)
+    Assert.Equal(String "kube_namespace", boundAfter "empty(tags[" rollup)
 
 // --- time aggregation ------------------------------------------------------------
 
@@ -149,4 +163,29 @@ let ``a step of whole minutes reads the rollup, a finer one the raw points`` () 
     Assert.Contains("FROM metrics\n", (withTime (Plain Avg) 20.0).Text)
     let rollup = (withTime (Plain Avg) 60.0).Text
     Assert.Contains("FROM metrics_1m\n", rollup)
-    Assert.Contains("avgMerge(value_avg) AS v", rollup)
+    Assert.Contains("sum(value_sum) / sum(points) AS v", rollup)
+    Assert.DoesNotContain("Merge(", rollup)
+
+let private count (part: string) (text: string) =
+    (text.Length - text.Replace(part, "").Length) / part.Length
+
+[<Fact>]
+let ``every read of the raw points states the 15-minute bucket`` () =
+    let raw = (compiled All []).Text
+    Assert.Equal(1, count "toStartOfFifteenMinutes(timestamp) >= " raw)
+    Assert.Contains("toStartOfFifteenMinutes(timestamp) >= toStartOfFifteenMinutes(fromUnixTimestamp64Milli({from", raw)
+    Assert.Contains("toStartOfFifteenMinutes(timestamp) < fromUnixTimestamp64Milli({to", raw)
+    // The rollup's own part has no such column; its tail from the raw points does.
+    let rollup = (withTime (Plain Avg) 60.0).Text
+    Assert.Equal(1, count "toStartOfFifteenMinutes(timestamp) >= " rollup)
+    Assert.Contains("toStartOfFifteenMinutes(timestamp) >= toStartOfFifteenMinutes(greatest(", rollup)
+
+[<Fact>]
+let ``the rollup filters by the map, its tail from the raw points by the lifted column`` () =
+    let sql = compile (TenantId "acme") plan { query (Tag("env", "prod")) [] with Step = TimeSpan.FromMinutes 1.0 }
+    let rollupPart = sql.Text.Substring(0, sql.Text.IndexOf "UNION ALL")
+    let tail = sql.Text.Substring(sql.Text.IndexOf "UNION ALL")
+    Assert.Contains("has(tags[{k", rollupPart)
+    Assert.DoesNotContain("has(env, ", rollupPart)
+    Assert.Contains("has(env, {p", tail)
+    Assert.DoesNotContain("tags[", tail.Substring(tail.IndexOf "WHERE"))

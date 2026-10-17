@@ -37,9 +37,13 @@ let createReadClient (cfg: Config.Config) (limitSeconds: int) =
 
 /// The client the write path uses. Kept apart from the read client so no
 /// query can ever write, and so a slow query and a slow insert do not share a
-/// timeout.
+/// timeout. Inserts are synchronous: ClickHouse 26.8 buffers them on its side
+/// by default (async_insert=1) and makes parts of its own choosing, while the
+/// writers' batches are what the part counts are tuned for.
 let createWriteClient (cfg: Config.Config) =
-    new ClickHouseClient(settings cfg (TimeSpan.FromMinutes 2.0))
+    let settings = settings cfg (TimeSpan.FromMinutes 2.0)
+    settings.CustomSettings["async_insert"] <- box 0
+    new ClickHouseClient(settings)
 
 /// The migrations, then the metrics TTLs; how many migrations ran. An hour's timeout:
 /// ClickHouse goes on with a write after the client gives up, so a migration cut short blocks the next start.

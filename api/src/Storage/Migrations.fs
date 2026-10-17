@@ -218,9 +218,9 @@ let apply (client: ClickHouseClient) : Task<Result<int, string>> =
                 | None -> return Ok complete
     }
 
-/// The metrics tables' TTLs, from the configured retention, after the
-/// migrations: a migration cannot read configuration, and an applied one
-/// never changes. Only the table's metadata changes; parts already written
+/// The TTLs of `metrics`, `metrics_1m` and `metric_tag_keys`, from the
+/// configured retention, after the migrations: a migration cannot read
+/// configuration, and an applied one never changes. Only the table's metadata changes; parts already written
 /// are not rewritten, and take the new TTL as they merge.
 let setMetricsRetention (client: ClickHouseClient) (rawDays: int) (rollupDays: int) : Task<Result<unit, string>> =
     task {
@@ -232,6 +232,11 @@ let setMetricsRetention (client: ClickHouseClient) (rawDays: int) (rollupDays: i
             let! _ =
                 client.ExecuteNonQueryAsync
                     $"ALTER TABLE metrics_1m MODIFY TTL minute + INTERVAL {rollupDays} DAY SETTINGS materialize_ttl_after_modify = 0"
+
+            // A metric is listed as long as the rollup can answer for it.
+            let! _ =
+                client.ExecuteNonQueryAsync
+                    $"ALTER TABLE metric_tag_keys MODIFY TTL hour + INTERVAL {rollupDays} DAY SETTINGS materialize_ttl_after_modify = 0"
 
             return Ok()
         with e ->

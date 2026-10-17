@@ -404,7 +404,7 @@ Package versions live in `Directory.Packages.props` only.
 | `NINJACAT_QUERY_TOKEN_SECRET` | required by `query` — at least 32 bytes, the key the panel signs its tokens with (below) |
 | `NINJACAT_AUTO_MIGRATE` | `true`; with several replicas set `false` and run `migrate` as a job |
 | `NINJACAT_METRICS_RETENTION_DAYS` | `30` — days `metrics` keeps raw points; a value that is not 1–36500 stops the start |
-| `NINJACAT_METRICS_ROLLUP_RETENTION_DAYS` | `400` — days `metrics_1m`, the one-minute rollup, keeps its rows; likewise, and not shorter than the raw retention |
+| `NINJACAT_METRICS_ROLLUP_RETENTION_DAYS` | `400` — days `metrics_1m`, the one-minute rollup, and `metric_tag_keys` keep their rows; likewise, and not shorter than the raw retention |
 | `NINJACAT_TRUSTED_PROXIES` | none — reverse proxies in front of the intake, as addresses or networks (`10.0.0.0/8`), comma-separated. Only their `X-Forwarded-For` is believed; the loopback is always trusted |
 | `NINJACAT_MAX_BODY_BYTES` | the largest request body the intake reads, 64 MiB by default; a larger one is answered 413. A body may inflate to 64 MiB |
 | `NINJACAT_ACK_UNKNOWN` | `true` answers 202 instead of 404 on unknown intake paths |
@@ -423,7 +423,7 @@ The connection, retention and self-monitoring variables apply to
 | `GET /health` | ClickHouse and Postgres reachability; 503 if either is down |
 | `GET /api/v1/metrics?from=<unix s>[&host=]` | Datadog's active metrics list; `tag_filter` not yet |
 | `POST /api/v2/query/timeseries`, `/api/v2/query/scalar` | Datadog's v2 query API: queries, formulas, functions |
-| `GET /internal/metrics/{names,tags,tag-values,query}` | the panel's metric pages |
+| `GET /internal/metrics/{names,tags,tag-values,query}` | the panel's metric pages; each takes `from`/`to`, by default the last day for names, tags and tag values and the last hour for the query |
 | `GET /internal/logs/{search,facets}` | the panel's log pages |
 | `POST /internal/monitors/validate` | checks a monitor in Datadog's JSON with the code the service evaluates with: `{problems, notActedOn}`, the options stored but not acted on |
 | `GET /internal/monitors/status?ids=` | per monitor: its state, its open groups by state, when it last triggered |
@@ -431,13 +431,22 @@ The connection, retention and self-monitoring variables apply to
 | `GET /internal/monitors/{id}/transitions?from&to[&group]` | the state timeline |
 | `GET /internal/monitors/{id}/evaluations?from&to[&group]` | the evaluated values, for the graph |
 
-**Metrics come from two tables.** `metrics` holds every point;
-`metrics_1m` holds one row per series per minute, with the tags and the
-aggregate states (count, sum, min, max, avg, the last value, and a rate's
-events for `as_count()`), filled by a materialized view as points arrive. A
-query whose step is a whole number of minutes reads the rollup and merges its
-states, which gives the raw table's answer from about a quarter of the rows
-(`Plan.tableFor`); a finer step reads the raw points. A window that reaches
+**Metrics come from three tables.** `metrics` holds every point, sorted by
+tenant, metric, the 15-minute bucket, host and series. ClickHouse does not
+derive the bucket from a condition on `timestamp`, so every read of it states
+the bucket as well (`Metrics.rawWindow`); without that a query reads every
+granule of its metric. `env`, `service`, `kube_namespace`, `kube_deployment`
+and `pod_name` are also kept as array columns of their own, each with every
+value of the tag, and a filter or a group on them reads the column rather than
+the map. `metrics_1m` holds one row per series per minute, with the tags and
+plain counts, sums, minima, maxima and a rate's events for `as_count()` (an
+average is the sum over the count), filled by a materialized view as points
+arrive. A query whose step is a whole number of minutes reads the rollup and
+adds its rows up, which gives the raw table's answer from about a quarter of
+the rows (`Plan.tableFor`); a finer step reads the raw points.
+`metric_tag_keys`, filled by another view, holds every metric and its tag
+keys per hour (a metric without tags under the key `''`); the panel lists
+metric names and tag keys from it, and tag values from the raw points. A window that reaches
 back past the raw retention gets whole-minute steps, since only the rollup
 still holds it. The process that migrates sets the two retentions as TTLs;
 the query process and the monitor service plan by the same two settings and
@@ -446,6 +455,34 @@ do not read the TTLs back, so give every process the same values (the chart's
 start stops if it would be). `metrics` is partitioned by day, so keep the raw
 retention short and let the rollup hold the long range. The other tables'
 TTLs are fixed in their migrations.
+
+**Upgrading past 0005.** 0005 swaps `metrics` and `metrics_1m` for tables in a
+new layout, which a release from before it cannot read. With the chart's
+pre-upgrade migration Job the old `query` and `monitors` pods run against the
+new tables until they are replaced: charts fail and monitors record errors,
+without transitions. A rollback to an older release stays broken the same way.
+The old tables are left as `metrics_old` and `metrics_1m_old`, and nothing
+reads them, so every query starts at the swap, a monitor's window included:
+mute monitors over long windows for that long, or restore the rollup's history
+right after the upgrade with the `INSERT … SELECT` in 0005's header (the raw
+points are not carried over). Run it once only, since a second run doubles every
+sum, and with `SETTINGS max_block_size = 65536, min_insert_block_size_rows =
+500000, min_insert_block_size_bytes = 0, max_insert_threads = 1`: without them
+it ran out of 4 GB after 4 M rows, while with them 100 M rows take about 8
+minutes. `metrics_old`
+empties itself through its TTL; drop `metrics_1m_old` by hand once copied, or
+when its history is not wanted.
+
+If 0005 stops part-way, every later start fails on a table it already made.
+Its statements run in order and the ledger row is written last, so find the
+first one that has not taken effect (`SHOW TABLES LIKE 'metric%'`,
+`SHOW CREATE TABLE metrics_1m`), run it and the rest by hand, and record the
+migration. When `metrics_old` already exists, a retry may have made an empty
+`metrics_next` or `metrics_1m_next`: drop it rather than renaming it.
+
+```sql
+INSERT INTO schema_migrations (version, name, checksum) VALUES (5, 'metrics_layout', 2867969176439395894)
+```
 
 Every route but `/ping` and `/health` asks for `Authorization: Bearer <token>`:
 an HS256 JWT the panel signs with `NINJACAT_QUERY_TOKEN_SECRET` for each call

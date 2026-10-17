@@ -242,6 +242,12 @@ every statement it evaluates and every monitor row it writes. Nothing falls back
 `default`: that tenant exists only because `create-user.ts` makes it with the first account,
 under that id, and self-monitoring writes there (`NINJACAT_SELFMON_TENANT`).
 
+**A read of raw `metrics` states the 15-minute bucket.** The table is sorted by tenant,
+metric, `toStartOfFifteenMinutes(timestamp)`, host and series, and ClickHouse does not derive
+the bucket from a condition on `timestamp`: a read without `Metrics.rawWindow`/`rawSince`
+reads every granule of its metric. The lifted tag columns (`Metrics.liftedTags`) exist only
+there; `metrics_1m` filters and groups on the `tags` map.
+
 **Plain F#.** `match`, `if`, small named functions. No custom operators, no home-made DSLs
 or computation expressions.
 
@@ -292,9 +298,9 @@ Migrations: `NINJACAT_AUTO_MIGRATE=false` stops the server from applying the Cli
 migrations at startup (use `ninjacat-api migrate` instead).
 
 Retention: `NINJACAT_METRICS_RETENTION_DAYS` (30, `metrics`) and
-`NINJACAT_METRICS_ROLLUP_RETENTION_DAYS` (400, `metrics_1m`), applied as TTLs by the
-migrating process; give `intake`, `migrate`, `query` and `ninjacat-monitors` the same values
-(`api/README.md`, "Metrics come from two tables").
+`NINJACAT_METRICS_ROLLUP_RETENTION_DAYS` (400, `metrics_1m` and `metric_tag_keys`), applied
+as TTLs by the migrating process; give `intake`, `migrate`, `query` and `ninjacat-monitors` the same values
+(`api/README.md`, "Metrics come from three tables").
 
 Limits: `NINJACAT_MAX_BODY_BYTES` (64 MiB) is the largest body the intake reads; a body may
 inflate to 64 MiB (`Body.maxInflatedBytes`).

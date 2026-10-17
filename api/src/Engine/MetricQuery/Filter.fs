@@ -1,5 +1,8 @@
 /// A tag filter as a SQL condition on a table with a `host` column and a
-/// `tags` map of value lists: `metrics` and `logs` alike.
+/// `tags` map of value lists: `metrics`, `metrics_1m` and `logs` alike. Raw
+/// `metrics` also keeps some tags as array columns of their own
+/// (Metrics.liftedTags), which it passes as `columns`; the others pass
+/// Set.empty.
 module NinjaCat.Api.Engine.MetricQuery.Filter
 
 open NinjaCat.Api.Engine
@@ -17,11 +20,14 @@ let private isWildcard (value: string) = value.Contains '*'
 ///
 /// Every value of the filter is bound; the text holds only what this
 /// function wrote.
-let rec sql (p: SqlParams) (filter: TagFilter) : string =
+let rec sql (columns: Set<string>) (p: SqlParams) (filter: TagFilter) : string =
     match filter with
     | All -> "1"
     | Tag("host", v) when isWildcard v -> $"""host LIKE {p.Add("p", String(likePattern v))}"""
     | Tag("host", v) -> $"""host = {p.Add("p", String v)}"""
+    // `k` is one of the caller's own column names, so it can be written as is.
+    | Tag(k, v) when columns.Contains k && isWildcard v -> $"""arrayExists(x -> x LIKE {p.Add("p", String(likePattern v))}, {k})"""
+    | Tag(k, v) when columns.Contains k -> $"""has({k}, {p.Add("p", String v)})"""
     | Tag(k, v) when isWildcard v ->
         $"""arrayExists(x -> x LIKE {p.Add("p", String(likePattern v))}, tags[{p.Add("k", String k)}])"""
     | Tag(k, v) -> $"""has(tags[{p.Add("k", String k)}], {p.Add("p", String v)})"""
@@ -37,9 +43,10 @@ let rec sql (p: SqlParams) (filter: TagFilter) : string =
     | In(k, vs) when List.exists isWildcard vs ->
         let exact = vs |> List.filter (isWildcard >> not)
         let parts = [ for v in vs |> List.filter isWildcard -> Tag(k, v) ] @ (if exact.IsEmpty then [] else [ In(k, exact) ])
-        sql p (Or parts)
+        sql columns p (Or parts)
     | In("host", vs) -> $"""has({p.Add("p", StringArray vs)}, host)"""
+    | In(k, vs) when columns.Contains k -> $"""hasAny({k}, {p.Add("p", StringArray vs)})"""
     | In(k, vs) -> $"""hasAny(tags[{p.Add("k", String k)}], {p.Add("p", StringArray vs)})"""
-    | Not f -> $"NOT ({sql p f})"
-    | And fs -> fs |> List.map (fun f -> $"({sql p f})") |> String.concat " AND "
-    | Or fs -> fs |> List.map (fun f -> $"({sql p f})") |> String.concat " OR "
+    | Not f -> $"NOT ({sql columns p f})"
+    | And fs -> fs |> List.map (fun f -> $"({sql columns p f})") |> String.concat " AND "
+    | Or fs -> fs |> List.map (fun f -> $"({sql columns p f})") |> String.concat " OR "

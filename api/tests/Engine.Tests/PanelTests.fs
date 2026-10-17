@@ -217,11 +217,45 @@ let ``log search scopes by tenant first, then tokens, then the phrase`` () =
     Assert.StartsWith("SELECT count() FROM logs WHERE tenant_id = {p0:String}", count.Text)
     Assert.Equal(9, count.Parameters.Length)
 
+let private hourAgo = noon.AddHours -1.0
+
 [<Fact>]
 let ``lookups bound their limits`` () =
-    Assert.Contains(SqlValue.Int64 500L, values (listMetrics tenant "" 0))
-    Assert.Contains(SqlValue.Int64 500L, values (listMetrics tenant "cpu" 5000))
-    Assert.Contains(SqlValue.Int64 50L, values (listMetrics tenant "cpu" 50))
-    Assert.Contains("positionCaseInsensitive(metric, {p1:String}) > 0", (listMetrics tenant "cpu" 50).Text)
-    Assert.Contains(SqlValue.Int64 200L, values (listTagValues tenant "m" "env" "" 0))
+    Assert.Contains(SqlValue.Int64 500L, values (listMetrics tenant hourAgo noon "" 0))
+    Assert.Contains(SqlValue.Int64 500L, values (listMetrics tenant hourAgo noon "cpu" 5000))
+    Assert.Contains(SqlValue.Int64 50L, values (listMetrics tenant hourAgo noon "cpu" 50))
+    let search = listMetrics tenant hourAgo noon "cpu" 50
+    Assert.Contains("positionCaseInsensitive(metric, {p", search.Text)
+    Assert.Contains(SqlValue.String "cpu", values search)
+    Assert.Contains(SqlValue.Int64 200L, values (listTagValues tenant hourAgo noon "m" "env" "" 0))
     Assert.Contains("GROUP BY v ORDER BY c DESC, v LIMIT 50", (logFacet tenant noon noon ByStatus).Text)
+
+[<Fact>]
+let ``metric names and tag keys come from metric_tag_keys, by the hour`` () =
+    for sql in [ listMetrics tenant hourAgo noon "" 0; listTagKeys tenant hourAgo noon "m" ] do
+        Assert.Contains("FROM metric_tag_keys WHERE tenant_id = {p", sql.Text)
+        Assert.Contains("hour >= toStartOfHour(fromUnixTimestamp64Milli({p", sql.Text)
+        Assert.Contains("hour < fromUnixTimestamp64Milli({p", sql.Text)
+        Assert.Contains(SqlValue.Int64(hourAgo.ToUnixTimeMilliseconds()), values sql)
+        Assert.Contains(SqlValue.Int64(noon.ToUnixTimeMilliseconds()), values sql)
+
+    // '' only marks a metric without tags.
+    Assert.Contains("key != ''", (listTagKeys tenant hourAgo noon "").Text)
+
+[<Fact>]
+let ``tag values read a lifted tag's column, any other from the map, within the window`` () =
+    let env = listTagValues tenant hourAgo noon "m" "env" "" 0
+    Assert.Contains("arrayJoin(env) AS v FROM metrics", env.Text)
+    let zone = listTagValues tenant hourAgo noon "m" "zone" "" 0
+    Assert.Contains("arrayJoin(tags[{p", zone.Text)
+    Assert.Contains(SqlValue.String "zone", values zone)
+
+    for sql in [ env; zone ] do
+        Assert.Contains("toStartOfFifteenMinutes(timestamp) >= toStartOfFifteenMinutes(fromUnixTimestamp64Milli({p", sql.Text)
+        Assert.Contains("timestamp < fromUnixTimestamp64Milli({p", sql.Text)
+
+[<Fact>]
+let ``a lookup's key is bound, never inlined`` () =
+    let sql = listTagValues tenant hourAgo noon "m" "x') OR 1 --" "" 0
+    Assert.DoesNotContain("OR 1", sql.Text)
+    Assert.Contains(SqlValue.String "x') OR 1 --", values sql)
