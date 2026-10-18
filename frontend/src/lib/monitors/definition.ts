@@ -14,7 +14,7 @@ import {
 	type ExplorerView
 } from '../metrics/query';
 
-export const METHODS = ['threshold', 'change', 'anomaly', 'outlier', 'forecast'] as const;
+export const METHODS = ['threshold', 'change', 'anomaly', 'outlier', 'forecast', 'check'] as const;
 export type Method = (typeof METHODS)[number];
 
 export const TIME_AGGREGATORS = ['avg', 'sum', 'min', 'max'] as const;
@@ -116,6 +116,16 @@ export type MonitorView = {
 		tolerance: number | null;
 		percentage: number | null;
 	};
+	// A service check: its runs are counted, the queries above are not used.
+	check: {
+		name: string;
+		over: string[];
+		by: string[];
+		last: number | null;
+		ok: number | null;
+		// UNKNOWN runs in a row that put a group in No Data; null: never.
+		unknown: number | null;
+	};
 	comparator: Comparator;
 	critical: number | null;
 	warning: number | null;
@@ -143,7 +153,7 @@ export type MonitorView = {
 
 export type DatadogMonitor = {
 	name: string;
-	type: 'query alert';
+	type: 'query alert' | 'service check';
 	query: string;
 	message: string;
 	tags: string[];
@@ -181,6 +191,8 @@ export function defaultMonitorView(): MonitorView {
 			timezone: ''
 		},
 		outlier: { algorithm: 'dbscan', tolerance: 3, percentage: 20 },
+		// No `by` at first: grouped by host, the cluster-level checks (host '') would be left out.
+		check: { name: '', over: [], by: [], last: null, ok: null, unknown: null },
 		comparator: '>',
 		critical: null,
 		warning: null,
@@ -262,6 +274,7 @@ export function expressionOf(queries: ExplorerQuery[], formulas: ExplorerFormula
 
 /** The `by` keys of the monitored queries: one alert per combination, none for a simple alert. */
 export function groupKeysOf(view: MonitorView): string[] {
+	if (view.method === 'check') return view.check.by;
 	const formula = monitoredFormula(view.formulas);
 	let monitored = view.queries.slice(0, 1);
 	if (formula) {
@@ -355,7 +368,22 @@ function critical(view: MonitorView): number | null {
 	return view.method === 'outlier' ? 0 : view.critical;
 }
 
+const doubleQuoted = (text: string) => `"${text.replace(/"/g, '')}"`;
+
+/** The runs a check counts in when none are given: as many as its largest threshold needs. */
+export const defaultCheckLast = (view: MonitorView) =>
+	Math.max(view.critical ?? 1, view.warning ?? 1, view.check.ok ?? 1, view.check.unknown ?? 1);
+
+/** `"name".over("a","b")[.by("k")].last(N).count_by_status()`. */
+export function checkQuery(view: MonitorView): string {
+	const c = view.check;
+	const list = (items: string[]) => (items.length > 0 ? items.map(doubleQuoted).join(',') : '"*"');
+	const by = c.by.length > 0 ? `.by(${list(c.by)})` : '';
+	return `${doubleQuoted(c.name.trim())}.over(${list(c.over)})${by}.last(${c.last ?? defaultCheckLast(view)}).count_by_status()`;
+}
+
 export function monitorQuery(view: MonitorView): string {
+	if (view.method === 'check') return checkQuery(view);
 	const expression = measured(view, expressionOf(view.queries, view.formulas));
 	return `${head(view)}:${expression} ${effectiveComparator(view)} ${numberText(critical(view))}`;
 }
@@ -384,8 +412,11 @@ function optionsOf(view: MonitorView): Record<string, unknown> {
 	const thresholds: Record<string, number> = {};
 	const value = critical(view);
 	if (value !== null) thresholds.critical = value;
-	if (view.method !== 'outlier') {
-		if (view.warning !== null) thresholds.warning = view.warning;
+	if (view.method !== 'outlier' && view.warning !== null) thresholds.warning = view.warning;
+	if (view.method === 'check') {
+		if (view.check.ok !== null) thresholds.ok = view.check.ok;
+		if (view.check.unknown !== null) thresholds.unknown = view.check.unknown;
+	} else if (view.method !== 'outlier') {
 		if (view.criticalRecovery !== null) thresholds.critical_recovery = view.criticalRecovery;
 		if (view.warningRecovery !== null) thresholds.warning_recovery = view.warningRecovery;
 	}
@@ -407,7 +438,7 @@ function optionsOf(view: MonitorView): Record<string, unknown> {
 
 	if (view.evaluationDelay !== null) options.evaluation_delay = view.evaluationDelay;
 	if (view.newGroupDelay !== null) options.new_group_delay = view.newGroupDelay;
-	if (view.requireFullWindow) options.require_full_window = true;
+	if (view.requireFullWindow && view.method !== 'check') options.require_full_window = true;
 	if (view.timeoutH !== null && view.timeoutH > 0) options.timeout_h = view.timeoutH;
 
 	if (view.renotifyInterval !== null) options.renotify_interval = view.renotifyInterval;
@@ -420,7 +451,7 @@ function optionsOf(view: MonitorView): Record<string, unknown> {
 export function monitorOf(view: MonitorView): DatadogMonitor {
 	return {
 		name: view.name.trim(),
-		type: 'query alert',
+		type: view.method === 'check' ? 'service check' : 'query alert',
 		query: monitorQuery(view),
 		message: view.message,
 		tags: view.tags,
@@ -439,6 +470,16 @@ function numberOr(value: unknown, fallback: number | null): number | null {
 }
 
 const textOr = (value: unknown, fallback: string) => (typeof value === 'string' ? value : fallback);
+
+/** Trimmed, without blanks or repeats. */
+export const uniqueTrimmed = (items: string[]) => [
+	...new Set(items.map((t) => t.trim()).filter(Boolean))
+];
+
+const textList = (value: unknown) =>
+	Array.isArray(value)
+		? uniqueTrimmed(value.filter((t): t is string => typeof t === 'string'))
+		: [];
 
 /** JSON with sorted keys: Postgres hands jsonb back in an order of its own. */
 export function canonicalJson(value: unknown): string {
@@ -502,6 +543,7 @@ export function readMonitorView(raw: unknown): MonitorView {
 	const f = asObject(r.forecast);
 	const o = asObject(r.outlier);
 	const c = asObject(r.change);
+	const k = asObject(r.check);
 
 	const queries = Array.isArray(r.queries) ? r.queries.map(readQuery) : [];
 	view.queries = queries.length > 0 ? queries : view.queries;
@@ -538,6 +580,14 @@ export function readMonitorView(raw: unknown): MonitorView {
 		algorithm: pick(OUTLIER_ALGORITHMS, o.algorithm, view.outlier.algorithm),
 		tolerance: numberOr(o.tolerance, null),
 		percentage: numberOr(o.percentage, null)
+	};
+	view.check = {
+		name: textOr(k.name, ''),
+		over: textList(k.over),
+		by: textList(k.by),
+		last: numberOr(k.last, null),
+		ok: numberOr(k.ok, null),
+		unknown: numberOr(k.unknown, null)
 	};
 	view.comparator = pick(COMPARATORS, r.comparator, view.comparator);
 	view.critical = numberOr(r.critical, null);
@@ -596,13 +646,24 @@ export function switchMethod(view: MonitorView, method: Method) {
 	if (method === 'forecast' && view.comparator !== '>=' && view.comparator !== '<=') {
 		view.comparator = view.comparator.startsWith('<') ? '<=' : '>=';
 	}
+	// A metric's thresholds are values, a check's are counts of runs: neither is the other.
+	if (method === 'check' && view.method !== 'check') {
+		view.critical = 2;
+		view.warning = null;
+		view.criticalRecovery = null;
+		view.warningRecovery = null;
+		if (view.missing !== 'keep' && view.missing !== 'notify') view.missing = 'keep';
+	} else if (method !== 'check' && view.method === 'check') {
+		view.critical = null;
+		view.warning = null;
+	}
 	if (method === 'change' && windowSeconds(view.window) > 2 * 86_400) {
 		view.window = 'last_5m';
 	}
 	view.method = method;
 }
 
-export type Unfilled = 'name' | 'metric' | 'critical' | 'formula' | 'parameters';
+export type Unfilled = 'name' | 'metric' | 'check' | 'critical' | 'formula' | 'parameters';
 
 function parametersUnfilled(view: MonitorView): boolean {
 	switch (view.method) {
@@ -622,6 +683,12 @@ function parametersUnfilled(view: MonitorView): boolean {
 
 export function unfilled(view: MonitorView): Unfilled[] {
 	const missing: Unfilled[] = [];
+	if (view.method === 'check') {
+		if (!view.check.name.trim()) missing.push('check');
+		if (view.critical === null) missing.push('critical');
+		if (!view.name.trim()) missing.push('name');
+		return missing;
+	}
 	if (!expressionOf(view.queries, view.formulas)) missing.push('metric');
 	if (view.queries.length > 1 && !monitoredFormula(view.formulas)) missing.push('formula');
 	if (view.method !== 'outlier' && view.critical === null) missing.push('critical');
@@ -651,6 +718,7 @@ export function chartRequest(view: MonitorView): {
 	queries: { name: string; query: string }[];
 	formulas: string[];
 } {
+	if (view.method === 'check') return { queries: [], formulas: [] };
 	const queries = view.queries
 		.map((q) => ({ name: q.name, query: queryText(q) }))
 		.filter((q) => q.query !== '');

@@ -25,8 +25,9 @@ let toResult (result: ParserResult<'T, unit>) : Result<'T, string> =
     | Success(value, _, _) -> Result.Ok value
     | Failure(message, _, _) -> Result.Error message
 
-let private andOf (filters: TagFilter list) =
+let andOf (filters: TagFilter list) =
     match filters with
+    | [] -> All
     | [ one ] -> one
     | many -> And many
 

@@ -128,7 +128,11 @@ type Thresholds =
     { Critical: float option
       Warning: float option
       CriticalRecovery: float option
-      WarningRecovery: float option }
+      WarningRecovery: float option
+      /// A service check's: consecutive OK runs to resolve.
+      Ok: float option
+      /// A service check's: consecutive UNKNOWN runs that put a group in No Data.
+      Unknown: float option }
 
 /// on_missing_data: what a judged group with no point in the window becomes.
 [<RequireQualifiedAccess>]
@@ -159,3 +163,23 @@ type Options =
 type Definition =
     { Query: MonitorQuery
       Options: Options }
+
+/// `"postgres.can_connect".over("env:prod").by("host").last(3).count_by_status()`, read.
+type CheckQuery =
+    { Check: string
+      /// over() and exclude() as one filter; All for "*".
+      Filter: TagFilter
+      /// The `by` keys, sorted. Empty: one group, `*`; `["*"]`: one group per series.
+      GroupBy: string list
+      Last: int }
+
+type CheckDefinition = { Query: CheckQuery; Options: Options }
+
+type Monitor =
+    | Metric of Definition
+    | ServiceCheck of CheckDefinition
+
+    member m.Options =
+        match m with
+        | Metric d -> d.Options
+        | ServiceCheck c -> c.Options

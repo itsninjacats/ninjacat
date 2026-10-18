@@ -96,6 +96,18 @@ let listMetrics (tenant: TenantId) (from: DateTimeOffset) (until: DateTimeOffset
     { Text = $"SELECT DISTINCT metric FROM metric_tag_keys WHERE {where}{searchFilter} ORDER BY metric LIMIT {bound.Add(boundedLimit limit 500)}"
       Parameters = bound.All }
 
+/// The first 500 service check names seen in a time range.
+let listChecks (tenant: TenantId) (from: DateTimeOffset) (until: DateTimeOffset) : Sql =
+    let bound = SqlParams()
+
+    let where =
+        $"tenant_id = {bound.Add(tenantOf tenant)}"
+        + $" AND timestamp >= fromUnixTimestamp64Milli({bound.Add(SqlValue.Int64(from.ToUnixTimeMilliseconds()))})"
+        + $" AND timestamp < fromUnixTimestamp64Milli({bound.Add(SqlValue.Int64(until.ToUnixTimeMilliseconds()))})"
+
+    { Text = $"SELECT DISTINCT check_name FROM check_runs WHERE {where} ORDER BY check_name LIMIT 500"
+      Parameters = bound.All }
+
 /// Tag keys seen in a time range, optionally on one metric. The key '' only
 /// lists a metric without tags.
 let listTagKeys (tenant: TenantId) (from: DateTimeOffset) (until: DateTimeOffset) (metric: string) : Sql =

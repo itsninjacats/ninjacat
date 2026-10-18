@@ -44,6 +44,19 @@ export function stateClass(state: string | null): string {
 	return (state && BACKGROUNDS[state]) || 'bg-muted-foreground/30';
 }
 
+/** A check run's statuses, by their code; a check monitor's value is its worst. The protocol's names, not translated. */
+export const CHECK_STATUSES = ['OK', 'WARNING', 'CRITICAL', 'UNKNOWN'] as const;
+
+export function checkStatusText(value: number | null): string {
+	return value === null ? '—' : (CHECK_STATUSES[value] ?? String(value));
+}
+
+const CHECK_STATES: Record<string, string> = { OK: 'OK', WARNING: 'Warn', CRITICAL: 'Alert' };
+
+export function checkStatusClass(status: string): string {
+	return stateClass(CHECK_STATES[status] ?? null);
+}
+
 export function methodLabel(method: Method | null): string {
 	switch (method) {
 		case 'threshold':
@@ -56,6 +69,8 @@ export function methodLabel(method: Method | null): string {
 			return m.monitor_method_outlier();
 		case 'forecast':
 			return m.monitor_method_forecast();
+		case 'check':
+			return m.monitor_method_check();
 		default:
 			return m.monitor_method_unknown();
 	}
@@ -71,6 +86,8 @@ export function reasonLabel(reason: string): string {
 			return m.monitor_reason_no_data();
 		case 'no_data_shown':
 			return m.monitor_reason_no_data_shown();
+		case 'unknown_runs':
+			return m.monitor_reason_unknown_runs();
 		case 'timeout':
 			return m.monitor_reason_timeout();
 		case 'expired':

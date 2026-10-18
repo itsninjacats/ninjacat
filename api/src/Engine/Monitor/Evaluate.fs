@@ -25,11 +25,26 @@ type SkipCause =
     /// An outlier monitor with fewer than 3 groups to compare.
     | FewGroups
 
+/// One series of a service check, a host and tag set.
+type Streak =
+    { /// The newest run's status: 0 OK, 1 WARNING, 2 CRITICAL, 3 UNKNOWN.
+      Latest: int
+      /// Runs in a row from the newest, among the newest N that are not UNKNOWN.
+      Critical: int
+      Warning: int
+      Ok: int
+      /// UNKNOWN runs in a row from the newest.
+      Unknown: int
+      /// OK runs in a row from the newest, among the newest N of any status: what resolves a No Data.
+      OkSinceUnknown: int }
+
 type Reading =
     /// The value the thresholds are compared with.
     | Judged of float
     /// The group is in the result, but nothing in this window is judged.
     | Skipped of cause: SkipCause * reason: string
+    /// A check group's live series.
+    | Streaks of Streak list
 
 type GroupResult =
     { /// `host:a,role:web`: the sorted `k:v` pairs; `*` for a simple alert.

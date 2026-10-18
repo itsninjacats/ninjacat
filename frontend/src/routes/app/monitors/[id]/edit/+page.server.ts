@@ -3,7 +3,7 @@ import { viewOf } from '$lib/monitors/definition';
 import { db } from '$lib/server/db';
 import { saveMonitor } from '$lib/server/monitor-save';
 import { findMonitor, monitorId } from '$lib/server/monitors';
-import { fetchMetricNames, reasonOf } from '$lib/server/ninjacat';
+import { fetchCheckNames, fetchMetricNames, reasonOf } from '$lib/server/ninjacat';
 import { m } from '$lib/paraglide/messages';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -15,6 +15,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		error(404, m.monitor_not_found());
 	}
 	const opened = viewOf(found);
+	const checks = opened ? fetchCheckNames() : [];
 	const page = {
 		id: found.id,
 		name: found.name,
@@ -23,9 +24,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		drifted: opened?.drifted ?? false
 	};
 	try {
-		return { ...page, metrics: opened ? await fetchMetricNames() : [], metricsError: null };
+		const metrics = opened ? await fetchMetricNames() : [];
+		return { ...page, metrics, checks: await checks, metricsError: null };
 	} catch (e) {
-		return { ...page, metrics: [] as string[], metricsError: reasonOf(e) };
+		return { ...page, metrics: [] as string[], checks: await checks, metricsError: reasonOf(e) };
 	}
 };
 

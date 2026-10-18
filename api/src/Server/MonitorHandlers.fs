@@ -144,12 +144,29 @@ let evaluations (monitor: int64) : EndpointHandler =
 
             answer evaluation respond sql ctx
 
+/// `GET check-runs?query&from&to`: the newest 100 runs a check monitor's query reads, newest first.
+let checkRuns: EndpointHandler =
+    fun ctx ->
+        match Check.query (queryValue ctx "query"), timeRange ctx with
+        | Error problems, _ -> fail 400 (String.concat "; " problems) ctx
+        | _, Error e -> fail 400 e ctx
+        | Ok q, Ok(from, until) ->
+            let read (r: DbDataReader) =
+                {| at = time r 0
+                   host = r.GetString 1
+                   status = r.GetString 2
+                   message = r.GetString 3
+                   tags = tags r 4 |}
+
+            answer read (fun rows -> {| runs = rows |}) (Check.runs (QueryToken.tenant ctx) q from until) ctx
+
 let endpoints =
     [ subRoute
           "/internal/monitors"
           [ POST [ route "/validate" validate ]
             GET
                 [ route "/status" status
+                  route "/check-runs" checkRuns
                   routef "/{%d}/groups" groups
                   routef "/{%d}/transitions" transitions
                   routef "/{%d}/evaluations" evaluations ] ] ]

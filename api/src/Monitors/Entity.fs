@@ -71,7 +71,7 @@ type MonitorEntity(key: MonitorKey, services: Services) =
 
     let mutable loaded = false
     let mutable row: MonitorRow option = None
-    let mutable definition: Result<Definition, string list> = Error [ "not loaded" ]
+    let mutable definition: Result<Monitor, string list> = Error [ "not loaded" ]
     let mutable groups: Map<string, Group> = Map.empty
     let mutable queryHash: string option = None
     let mutable lastAt: DateTimeOffset option = None
@@ -122,10 +122,16 @@ type MonitorEntity(key: MonitorKey, services: Services) =
         |> List.map (Store.transitionRow key version (defaultArg hash "") (Result.toOption definition) actor)
         |> Array.ofList
 
+    /// A check is evaluated every minute: its streaks are counted again from the stored runs.
+    let frequencyOf (m: Monitor) =
+        match m with
+        | Metric d -> frequency d.Query
+        | ServiceCheck _ -> TimeSpan.FromMinutes 1.0
+
     member private this.Arm() =
         let frequency =
             match definition with
-            | Ok d -> frequency d.Query
+            | Ok d -> frequencyOf d
             | Error _ -> TimeSpan.FromMinutes 1.0
 
         let now = services.Clock()
@@ -210,13 +216,13 @@ type MonitorEntity(key: MonitorKey, services: Services) =
 
     member private this.Apply(r: MonitorRow) =
         row <- Some r
-        definition <- Validate.definition services.Retention (services.Clock()) r.Type r.Query r.Options
+        definition <- Validate.byType services.Retention (services.Clock()) r.Type r.Query r.Options
 
         match definition with
         | Error problems ->
             services.Log.LogWarning("Monitor {Monitor} version {Version} is not valid: {Problems}", key.Text, r.Version, String.concat "; " problems)
         | Ok d ->
-            let hash = Some(State.queryHash d.Query)
+            let hash = Some(State.monitorHash d)
 
             match queryHash with
             | Some previous ->
@@ -242,7 +248,7 @@ type MonitorEntity(key: MonitorKey, services: Services) =
             // Deleted before it was ever read: its open groups were judged by
             // this definition as far as anything says.
             if row.IsNone then
-                definition <- Validate.definition services.Retention (services.Clock()) r.Type r.Query r.Options
+                definition <- Validate.byType services.Retention (services.Clock()) r.Type r.Query r.Options
 
             row <- Some r
             this.Close r.DeletedBy
@@ -263,9 +269,9 @@ type MonitorEntity(key: MonitorKey, services: Services) =
         elif reloadDue && pending.IsNone then
             this.Reload()
 
-    member private this.Evaluate(d: Definition, at: DateTimeOffset) =
+    member private this.Evaluate(d: Monitor, at: DateTimeOffset) =
         busy <- true
-        let wait = services.GateWait(frequency d.Query)
+        let wait = services.GateWait(frequencyOf d)
         let previous = models
 
         Detached.run cancel.Token this.Self (fun e -> Evaluated(at, Error e.Message, previous)) (fun ct ->
@@ -280,14 +286,19 @@ type MonitorEntity(key: MonitorKey, services: Services) =
                     let tenant = TenantId key.Tenant
 
                     try
-                        match! fit execute tenant services.Retention d previous at with
-                        | Error e -> return Evaluated(at, Error e, previous)
-                        | Ok current ->
-                            try
-                                let! result = evaluate execute tenant services.Retention services.MaxGroups current d at
-                                return Evaluated(at, result, current)
-                            with e ->
-                                return Evaluated(at, Error e.Message, current)
+                        match d with
+                        | ServiceCheck c ->
+                            let! result = Check.evaluate execute tenant services.MaxGroups c at
+                            return Evaluated(at, result, None)
+                        | Metric md ->
+                            match! fit execute tenant services.Retention md previous at with
+                            | Error e -> return Evaluated(at, Error e, previous)
+                            | Ok current ->
+                                try
+                                    let! result = evaluate execute tenant services.Retention services.MaxGroups current md at
+                                    return Evaluated(at, result, current)
+                                with e ->
+                                    return Evaluated(at, Error e.Message, current)
                     finally
                         counts.EvaluationTicks.Add(Stopwatch.GetTimestamp() - started)
                         services.Gate.Release() |> ignore
@@ -352,7 +363,8 @@ type MonitorEntity(key: MonitorKey, services: Services) =
                 |> List.choose (fun r ->
                     match r.Reading with
                     | Skipped(cause, _) -> Some cause
-                    | Judged _ -> None)
+                    | Judged _
+                    | Streaks _ -> None)
 
             if not evaluation.Groups.IsEmpty && causes.Length = evaluation.Groups.Length then
                 if List.contains Learning causes then counts.SkippedLearning.Add 1L

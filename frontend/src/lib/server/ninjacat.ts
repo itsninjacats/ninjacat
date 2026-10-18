@@ -115,6 +115,19 @@ export async function fetchMetricNames(search = '', limit = 500): Promise<string
 	return body.metrics ?? [];
 }
 
+/**
+ * Names of the service checks reported in the last day, the first 500. None
+ * on a failure: without its suggestions the check name is still free text.
+ */
+export async function fetchCheckNames(): Promise<string[]> {
+	try {
+		const body = await get<{ checks: string[] }>('/internal/checks/names');
+		return body.checks ?? [];
+	} catch {
+		return [];
+	}
+}
+
 /** Tag keys seen on a metric. */
 export async function fetchMetricTagKeys(metric: string): Promise<string[]> {
 	const q = new URLSearchParams({ metric });
@@ -544,4 +557,21 @@ export async function fetchMonitorEvaluations(id: number, range: MonitorRange) {
 		})),
 		truncated: body.truncated
 	};
+}
+
+/** Tags are `key:value`, or `key` alone when the value is empty. */
+export type CheckRun = {
+	at: string;
+	host: string;
+	status: string;
+	message: string;
+	tags: string[];
+};
+
+/** The newest 100 runs a check monitor's query reads, newest first. */
+export async function fetchCheckRuns(query: string, range: MonitorRange): Promise<CheckRun[]> {
+	const q = rangeQuery(range);
+	q.set('query', query);
+	const body = await get<{ runs: CheckRun[] }>(`/internal/monitors/check-runs?${q}`);
+	return body.runs;
 }

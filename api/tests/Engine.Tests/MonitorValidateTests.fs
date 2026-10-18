@@ -9,14 +9,14 @@ open NinjaCat.Api.Engine.Monitor.Definition
 let private now = DateTimeOffset(2026, 10, 13, 12, 0, 0, TimeSpan.Zero)
 
 let private validateWith (retention: Plan.Retention) (query: string) (options: string) =
-    Validate.definition retention now "query alert" query options
+    Validate.definition retention now query options
 
 let private valid (query: string) (options: string) : Definition =
     match validateWith Plan.defaultRetention query options with
     | Ok d -> d
     | Error problems -> failwith $"refused:\n{String.Join('\n', problems)}"
 
-let private problemsOf (result: Result<Definition, string list>) : string list =
+let private problemsOf (result: Result<'T, string list>) : string list =
     match result with
     | Ok d -> failwith $"expected problems, got {d}"
     | Error problems -> problems
@@ -99,7 +99,7 @@ let ``timeout_h 0 is no timeout`` () =
 [<InlineData("""{"timeout_h":25}""", "timeout_h must be a whole number from 0 to 24")>]
 [<InlineData("""{"no_data_timeframe":0}""", "no_data_timeframe must be a whole number of minutes, at least 1")>]
 [<InlineData("""{"notify_no_data":"yes"}""", "notify_no_data must be true or false")>]
-[<InlineData("""{"thresholds":{"critical":90,"ok":1}}""", "options.thresholds has no 'ok'")>]
+[<InlineData("""{"thresholds":{"critical":90,"ok":1}}""", "options.thresholds.ok is for service check monitors")>]
 [<InlineData("""{"thresholds":{"critical":"90"}}""", "thresholds.critical must be a number")>]
 [<InlineData("""{"thresholds":[]}""", "thresholds must be an object")>]
 [<InlineData("""[1]""", "options must be an object")>]
@@ -150,13 +150,13 @@ let ``several problems are reported together`` () =
 
 [<Fact>]
 let ``metric alert is the older name`` () =
-    Assert.True((Validate.definition Plan.defaultRetention now "metric alert" above90 "").IsOk)
+    Assert.True((Validate.byType Plan.defaultRetention now "metric alert" above90 "").IsOk)
 
 [<Fact>]
 let ``other monitor types are refused`` () =
-    Validate.definition Plan.defaultRetention now "service check" above90 ""
+    Validate.byType Plan.defaultRetention now "log alert" above90 ""
     |> problemsOf
-    |> mentions "'service check' is not supported"
+    |> mentions "'log alert' is not supported"
 
 // --- thresholds -----------------------------------------------------------------------
 

@@ -37,6 +37,15 @@ function reopened(v: MonitorView) {
 	return viewOf({ ...m, editor: JSON.parse(JSON.stringify(v)) });
 }
 
+function checkView(change: (v: MonitorView) => void = () => {}): MonitorView {
+	const v = defaultMonitorView();
+	v.name = 'Postgres';
+	switchMethod(v, 'check');
+	v.check.name = 'postgres.can_connect';
+	change(v);
+	return v;
+}
+
 describe('expressionOf', () => {
 	it('is the first query, with its functions around it', () => {
 		const a = query('a', 'system.cpu.user', ['host']);
@@ -196,6 +205,99 @@ describe('monitorOf', () => {
 	});
 });
 
+describe('a service check', () => {
+	it('is written as a Datadog service check monitor', () => {
+		const m = monitorOf(
+			checkView((v) => {
+				v.check.over = ['env:prod', 'role:db'];
+				v.check.by = ['host', 'kube_namespace'];
+				v.warning = 3;
+				v.check.ok = 1;
+				v.check.unknown = 3;
+				v.missing = 'notify';
+				v.noDataTimeframe = 30;
+				v.criticalRecovery = 1;
+				v.requireFullWindow = true;
+			})
+		);
+		expect(m.type).toBe('service check');
+		expect(m.query).toBe(
+			'"postgres.can_connect".over("env:prod","role:db").by("host","kube_namespace").last(3).count_by_status()'
+		);
+		expect(m.options).toEqual({
+			thresholds: { critical: 2, warning: 3, ok: 1, unknown: 3 },
+			notify_no_data: true,
+			no_data_timeframe: 30
+		});
+	});
+
+	it('counts the largest threshold of runs unless told otherwise, over every run without a scope', () => {
+		const v = checkView();
+		expect(monitorOf(v).query).toBe('"postgres.can_connect".over("*").last(2).count_by_status()');
+		v.check.last = 6;
+		expect(monitorOf(v).query).toBe('"postgres.can_connect".over("*").last(6).count_by_status()');
+		v.check.last = null;
+		v.check.unknown = 4;
+		expect(monitorOf(v).query).toBe('"postgres.can_connect".over("*").last(4).count_by_status()');
+	});
+
+	it('leaves the double quote out of every value', () => {
+		const v = checkView((v) => {
+			v.check.name = 'a"b';
+			v.check.over = ['env:"prod"'];
+			v.check.by = ['ho"st'];
+		});
+		expect(monitorOf(v).query).toBe('"ab".over("env:prod").by("host").last(2).count_by_status()');
+	});
+
+	it('asks for the check and the alert count', () => {
+		const v = checkView((v) => {
+			v.check.name = ' ';
+			v.critical = null;
+			v.name = '';
+		});
+		expect(unfilled(v)).toEqual(['check', 'critical', 'name']);
+		expect(unfilled(checkView())).toEqual([]);
+	});
+
+	it('starts from counts of runs when switched to, and from no thresholds switching back', () => {
+		const v = view((v) => {
+			v.critical = 90;
+			v.warning = 80;
+			v.criticalRecovery = 70;
+			v.missing = 'resolve';
+		});
+		switchMethod(v, 'check');
+		expect(v).toMatchObject({
+			method: 'check',
+			critical: 2,
+			warning: null,
+			criticalRecovery: null,
+			missing: 'keep'
+		});
+		expect(groupKeysOf(v)).toEqual([]);
+		expect(chartRequest(v)).toEqual({ queries: [], formulas: [] });
+		v.warning = 3;
+		switchMethod(v, 'threshold');
+		expect(v).toMatchObject({ method: 'threshold', critical: null, warning: null });
+	});
+
+	it('reads its lists back trimmed, without blanks or repeats', () => {
+		const v = readMonitorView({
+			method: 'check',
+			check: { name: 'ntp.in_sync', over: [' env:prod ', '', 'env:prod', 3], by: 'host', last: '4' }
+		});
+		expect(v.check).toEqual({
+			name: 'ntp.in_sync',
+			over: ['env:prod'],
+			by: [],
+			last: 4,
+			ok: null,
+			unknown: null
+		});
+	});
+});
+
 describe('viewOf', () => {
 	it('reopens what was saved, for every method', () => {
 		const views = [
@@ -239,6 +341,14 @@ describe('viewOf', () => {
 				switchMethod(v, 'outlier');
 				v.critical = 0;
 				v.comparator = '>';
+			}),
+			checkView((v) => {
+				v.check.over = ['env:prod'];
+				v.check.by = ['host'];
+				v.check.last = 5;
+				v.check.unknown = 2;
+				v.missing = 'notify';
+				v.noDataTimeframe = 60;
 			}),
 			view((v) => {
 				v.queries = [

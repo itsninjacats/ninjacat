@@ -108,7 +108,14 @@ test.describe('monitor editor', () => {
 
 	test('each detection method, and a refused save', async ({ page }, testInfo) => {
 		await open(page, '/app/monitors/new');
-		for (const method of ['Change', 'Anomaly', 'Outlier', 'Forecast', 'Threshold']) {
+		for (const method of [
+			'Change',
+			'Anomaly',
+			'Outlier',
+			'Forecast',
+			'Service check',
+			'Threshold'
+		]) {
 			await page.getByRole('button', { name: new RegExp(`^${method}`) }).click();
 			await expect(page.getByRole('button', { name: new RegExp(`^${method}`) })).toHaveAttribute(
 				'aria-pressed',
@@ -131,6 +138,8 @@ test.describe('monitor editor', () => {
 		await page.getByLabel('Name', { exact: true }).fill('   ');
 		await page.getByRole('button', { name: 'Create monitor' }).click();
 		await expect(page.getByRole('alert')).toBeVisible();
+		// The metric's suggestions close a moment after it loses focus.
+		await expect(page.getByText('No matching metrics.')).toBeHidden();
 		await expectNoOverflow(page, testInfo, 'monitor refused');
 		await shoot(page, testInfo, 'monitor-new-refused');
 	});

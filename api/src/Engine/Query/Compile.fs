@@ -100,7 +100,7 @@ let private rollupAggregateSql (step: string) =
 /// no row at all, so it becomes [NULL] first.
 ///
 /// `columns` are the tags the table keeps as array columns of their own.
-let private groupSql (columns: Set<string>) (p: SqlParams) (key: string) =
+let groupSql (columns: Set<string>) (p: SqlParams) (key: string) =
     match key with
     // WARNING(undocumented): a series with an empty host. It joins the N/A
     // group, as a missing tag does.

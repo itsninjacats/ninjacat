@@ -18,7 +18,7 @@ let private windowFrom = at.AddMinutes -5.5
 let private windowTo = at.AddSeconds -30.0
 
 let private definition (query: string) (options: string) : Definition =
-    match Validate.definition Plan.defaultRetention at "query alert" query options with
+    match Validate.definition Plan.defaultRetention at query options with
     | Ok d -> d
     | Error problems -> failwith $"refused:\n{String.Join('\n', problems)}"
 
@@ -86,10 +86,12 @@ let private value (e: Evaluation) (key: string) : float =
     match (e.Groups |> List.find (fun g -> g.Key = key)).Reading with
     | Judged v -> v
     | Skipped(_, reason) -> failwith $"{key} skipped: {reason}"
+    | Streaks _ -> failwith $"{key} is a check's"
 
 let private skipped (e: Evaluation) (key: string) : bool =
     match (e.Groups |> List.find (fun g -> g.Key = key)).Reading with
-    | Judged _ -> false
+    | Judged _
+    | Streaks _ -> false
     | Skipped _ -> true
 
 // --- when ------------------------------------------------------------------------------

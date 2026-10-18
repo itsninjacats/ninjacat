@@ -78,6 +78,10 @@ type Fakes() =
     member val Row = Some(monitorRow 1 cpu critical90) with get, set
     member val History = Store.empty with get, set
     member val Value = 95.0 with get, set
+    /// What Execute answers, from the SQL and Value.
+    member val Answer: Sql -> float -> Compile.Row list = (fun _ _ -> []) with get, set
+    /// The frequency the entity last waited for the gate by.
+    member val Frequency = TimeSpan.Zero with get, set
     member val Clock = t0 with get, set
     /// Inserts that fail before one is stored.
     member val FailingInserts = 0 with get, set
@@ -128,7 +132,7 @@ let private servicesOf (fakes: Fakes) (gate: SemaphoreSlim) (inserts: IActorRef)
                 if fakes.ExecuteFails then
                     failwith "ClickHouse is down"
 
-                return rowsFor sql fakes.Value
+                return fakes.Answer sql fakes.Value
             }
       Insert =
         fun rows _ ->
@@ -143,7 +147,10 @@ let private servicesOf (fakes: Fakes) (gate: SemaphoreSlim) (inserts: IActorRef)
                 Task.CompletedTask
       Record = fun rows -> records.Tell rows
       Gate = gate
-      GateWait = fun _ -> TimeSpan.FromMilliseconds 200.0
+      GateWait =
+        fun frequency ->
+            fakes.Frequency <- frequency
+            TimeSpan.FromMilliseconds 200.0
       Clock = fun () -> fakes.Clock
       Retention = Plan.defaultRetention
       MaxGroups = 1000
@@ -158,7 +165,7 @@ let private single (attempt: Attempt) : MonitorTransitionRow =
 type EntityTests() =
     inherit Akka.TestKit.Xunit.TestKit()
 
-    let fakes = Fakes()
+    let fakes = Fakes(Answer = rowsFor)
     let gate = new SemaphoreSlim(8, 8)
 
     member this.Start(?slots: SemaphoreSlim) : IActorRef * TestProbe * TestProbe =
@@ -199,6 +206,34 @@ type EntityTests() =
 
         this.Sys.Stop entity
         this.AwaitAssert(fun () -> Assert.Equal(0.0, counts.Entities.Value))
+
+    [<Fact>]
+    member this.``a service check monitor counts the runs every minute and stores the counts it crossed``() =
+        let query = "\"kube.check\".over(\"*\").last(2).count_by_status()"
+        let options = """{"thresholds":{"critical":2,"warning":1,"ok":1}}"""
+        fakes.Row <- Some { monitorRow 1 query options with Type = "service check" }
+
+        fakes.Answer <-
+            fun _ _ ->
+                [ for seconds in [ 10.0; 25.0 ] ->
+                      ({ Groups = []
+                         SeriesId = Some 1UL
+                         BucketMs = t0.AddSeconds(-seconds).ToUnixTimeMilliseconds()
+                         Value = 2.0 }
+                      : Compile.Row) ]
+
+        let entity, inserts, _ = this.Start()
+        entity.Tell(Tick t0)
+
+        let row = single (inserts.ExpectMsg<Attempt>(wait))
+        Assert.Equal(("service_check", "*", "Alert", "critical"), (row.MonitorKind, row.GroupKey, row.ToState, row.Crossed))
+        Assert.Equal((Some 2.0, "", Some 2.0, Some 1.0, None), (row.Value, row.Comparator, row.Critical, row.Warning, row.CriticalRecovery))
+        Assert.Equal((t0.UtcDateTime.AddHours -2.0, t0.UtcDateTime), (row.WindowFrom, row.WindowTo))
+        Assert.Equal(TimeSpan.FromMinutes 1.0, fakes.Frequency)
+
+        match Check.definition query options with
+        | Ok c -> Assert.Equal(State.monitorHash (ServiceCheck c), row.QueryHash)
+        | Error problems -> failwith (String.concat "; " problems)
 
     [<Fact>]
     member this.``a group moves only when its state changes``() =

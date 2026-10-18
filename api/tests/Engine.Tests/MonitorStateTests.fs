@@ -13,8 +13,11 @@ open NinjaCat.Api.Engine.Monitor.State
 let private at = DateTimeOffset(2026, 10, 13, 12, 0, 0, TimeSpan.Zero)
 let private period = { From = at.AddMinutes -5.5; To = at.AddSeconds -30.0 }
 
+let private step (d: Definition) = State.step (Metric d)
+let private redefine (previous: string) (d: Definition) = State.redefine previous (Metric d)
+
 let private definition (query: string) (options: string) : Definition =
-    match Validate.definition Plan.defaultRetention at "query alert" query options with
+    match Validate.definition Plan.defaultRetention at query options with
     | Ok d -> d
     | Error problems -> failwith $"refused:\n{String.Join('\n', problems)}"
 
@@ -598,3 +601,151 @@ let ``an anomaly recovers at or below its recovery threshold`` () =
     let d = anomaly """{"thresholds":{"critical":0.5,"critical_recovery":0.1}}"""
     Assert.Equal(Some OK, fractions d Alert 0.3 0.1)
     Assert.Equal(Some Alert, fractions d Alert 0.3 0.15)
+
+// --- service checks ----------------------------------------------------------------------
+
+let private serviceCheck (query: string) (options: string) : Monitor =
+    match Validate.byType Plan.defaultRetention at "service check" query options with
+    | Ok m -> m
+    | Error problems -> failwith $"refused:\n{String.Join('\n', problems)}"
+
+let private byHost options = serviceCheck """"x".over("*").by("host").last(5).count_by_status()""" options
+let private oneGroup options = serviceCheck """"x".over("*").last(5).count_by_status()""" options
+let private counts = """{"thresholds":{"critical":2,"warning":3,"ok":2}}"""
+
+let private series latest critical warning ok =
+    { Latest = latest
+      Critical = critical
+      Warning = warning
+      Ok = ok
+      Unknown = 0
+      OkSinceUnknown = ok }
+
+let private unknownFor (runs: int) = { series 3 0 0 0 with Unknown = runs }
+
+/// The check group `a` stepped on its series from `groups`: its state after, and its transitions.
+let private stepWith (m: Monitor) (groups: Map<string, Group>) (streaks: Streak list) =
+    let result = { Key = a; Tags = [ a ]; Reading = Streaks streaks; Recovery = None; LastPoint = Some period.To }
+    let after, transitions = State.step m groups { Period = period; Groups = [ result ] } at
+    after[a].State, transitions
+
+/// A check group in `state` judged on its series: its state after, and the crossing and value
+/// of the transition, if any.
+let private judgeRuns (m: Monitor) (state: Status option) (streaks: Streak list) =
+    let after, transitions = stepWith m (Map [ a, group a state ]) streaks
+    after, transitions |> List.map (fun t -> t.Crossed, t.Value)
+
+[<Fact>]
+let ``a check group is judged by its streaks, and the worst series decides`` () =
+    let m = byHost counts
+    Assert.Equal((Some Alert, [ Some Critical, Some 2.0 ]), judgeRuns m (Some OK) [ series 2 2 0 0 ])
+    Assert.Equal((Some Warn, [ Some Warning, Some 1.0 ]), judgeRuns m (Some OK) [ series 1 0 3 0 ])
+    Assert.Equal((Some Alert, [ Some Critical, Some 2.0 ]), judgeRuns m (Some OK) [ series 0 0 0 4; series 2 2 0 0 ])
+    Assert.Equal((Some OK, [ Some CriticalRecovery, Some 0.0 ]), judgeRuns m (Some Alert) [ series 0 0 0 2; series 0 0 0 5 ])
+    Assert.Equal((Some Warn, [ Some Warning, Some 1.0 ]), judgeRuns m (Some Alert) [ series 1 0 3 0 ])
+
+[<Fact>]
+let ``a check group with no threshold reached keeps its state`` () =
+    let m = byHost counts
+    Assert.Equal((Some Alert, []), judgeRuns m (Some Alert) [ series 0 0 0 3; series 1 0 1 0 ])
+    // A CRITICAL run is not a WARNING one.
+    Assert.Equal((Some OK, []), judgeRuns m (Some OK) [ series 2 1 0 0 ])
+    Assert.Equal((None, []), judgeRuns m None [ series 1 0 1 0 ])
+
+[<Fact>]
+let ``a series whose counted runs are all UNKNOWN does not hold its group back`` () =
+    let m = byHost counts
+    Assert.Equal((Some OK, [ Some CriticalRecovery, Some 3.0 ]), judgeRuns m (Some Alert) [ series 0 0 0 2; unknownFor 5 ])
+    Assert.Equal((Some Alert, []), judgeRuns m (Some Alert) [ unknownFor 5 ])
+    Assert.Equal((Some OK, []), judgeRuns m (Some OK) [ unknownFor 5 ])
+
+let private withUnknown = """{"thresholds":{"critical":2,"warning":3,"ok":2,"unknown":3}}"""
+
+/// A check group in `state` judged on its series: its state after, and the reasons of the transitions.
+let private reasons (m: Monitor) (state: Status option) (streaks: Streak list) =
+    let after, transitions = stepWith m (Map [ a, group a state ]) streaks
+    after, transitions |> List.map _.Reason
+
+[<Fact>]
+let ``unknown: a series' newest runs all UNKNOWN put the group in No Data, without notify_no_data`` () =
+    let m = byHost withUnknown
+    Assert.Equal((Some NoData, [ Reason.UnknownRuns ]), reasons m (Some OK) [ { series 3 0 0 2 with Unknown = 3 } ])
+    Assert.Equal((Some NoData, [ Reason.UnknownRuns ]), reasons m (Some OK) [ series 0 0 0 5; unknownFor 4 ])
+    Assert.Equal((Some NoData, [ Reason.UnknownRuns ]), reasons (oneGroup withUnknown) None [ unknownFor 3 ])
+    Assert.Equal((Some NoData, []), reasons m (Some NoData) [ unknownFor 5 ])
+    Assert.Equal((Some OK, []), reasons m (Some OK) [ { series 3 0 0 2 with Unknown = 2 } ])
+
+[<Fact>]
+let ``unknown: another series' Alert and Warn come before No Data, the series' own older runs do not`` () =
+    let m = byHost withUnknown
+    Assert.Equal((Some NoData, [ Reason.UnknownRuns ]), reasons m (Some Alert) [ { series 3 2 0 0 with Unknown = 3 } ])
+    Assert.Equal((Some Alert, []), reasons m (Some Alert) [ { series 3 2 0 0 with Unknown = 2 } ])
+    Assert.Equal((Some Alert, []), reasons m (Some Alert) [ series 2 2 0 0; unknownFor 3 ])
+    Assert.Equal((Some Warn, [ Reason.Threshold ]), reasons m (Some NoData) [ series 1 0 3 0; unknownFor 4 ])
+
+[<Fact>]
+let ``unknown: the known runs back resolve the group by the ok threshold`` () =
+    let m = byHost withUnknown
+    Assert.Equal((Some NoData, []), reasons m (Some NoData) [ series 0 0 0 1 ])
+    Assert.Equal((Some OK, [ Reason.Recovery ]), reasons m (Some NoData) [ series 0 0 0 2 ])
+    // OK runs from before the UNKNOWN ones do not count.
+    Assert.Equal((Some NoData, []), reasons m (Some NoData) [ { series 0 0 0 4 with OkSinceUnknown = 1 } ])
+    Assert.Equal((Some OK, []), reasons m (Some OK) [ { series 0 0 0 4 with OkSinceUnknown = 1 } ])
+
+let private absentAt (m: Monitor) (g: Group) =
+    State.step m (Map [ g.Key, g ]) { Period = period; Groups = [] } at
+
+let private stateAfter (m: Monitor) (g: Group) = (fst (absentAt m g) |> Map.find a).State
+
+[<Fact>]
+let ``a silent check group goes to No Data after 24 hours unless told otherwise`` () =
+    let notify = byHost """{"notify_no_data":true}"""
+    let quiet (hours: float) = group a (Some OK) |> silentFor (TimeSpan.FromHours hours)
+    Assert.Equal(Some NoData, stateAfter notify (quiet 24.0))
+    Assert.Equal(Some OK, stateAfter notify (quiet 23.0))
+    Assert.Equal(Some NoData, stateAfter (byHost """{"notify_no_data":true,"no_data_timeframe":30}""") (quiet 1.0))
+
+[<Fact>]
+let ``with notify_no_data a silent check group is kept 48 hours, otherwise 24`` () =
+    let unseen (hours: float) = { group a (Some OK) with LastSeen = at.AddHours -hours } |> silentFor (TimeSpan.FromHours hours)
+
+    let kept, _ = absentAt (byHost """{"notify_no_data":true}""") (unseen 30.0)
+    Assert.True(kept.ContainsKey a)
+
+    let gone, expired = absentAt (byHost """{"notify_no_data":true}""") (unseen 48.0)
+    Assert.False(gone.ContainsKey a)
+    Assert.Equal(Reason.Expired, (Assert.Single expired).Reason)
+
+    let forgotten, _ = absentAt (byHost "") (unseen 24.0)
+    Assert.False(forgotten.ContainsKey a)
+
+[<Fact>]
+let ``new_group_delay holds a new check group only when it has by keys`` () =
+    let fresh (m: Monitor) = stepWith m Map.empty [ series 2 1 0 0 ] |> fst
+
+    Assert.Equal(None, fresh (byHost ""))
+    Assert.Equal(Some Alert, fresh (byHost """{"new_group_delay":0}"""))
+    Assert.Equal(Some Alert, fresh (oneGroup ""))
+
+[<Fact>]
+let ``timeout_h resolves a silent check group`` () =
+    let g = group a (Some Alert) |> silentFor (TimeSpan.FromHours 2.0)
+    let after, transitions = absentAt (byHost """{"timeout_h":1}""") g
+    Assert.Equal(Some OK, after[a].State)
+    Assert.Equal(Reason.Timeout, (Assert.Single transitions).Reason)
+
+[<Fact>]
+let ``a check's hash follows the check, its filter and its groups, not last or the thresholds`` () =
+    let hash (query: string) options = monitorHash (serviceCheck query options)
+    let base' = hash """"x".over("env:prod","role:db").by("host","az").last(3).count_by_status()""" ""
+    Assert.Equal(base', hash """"x".over("role:db","env:prod").by("az","host").last(5).count_by_status()""" counts)
+    Assert.NotEqual<string>(base', hash """"y".over("env:prod","role:db").by("host","az").last(3).count_by_status()""" "")
+    Assert.NotEqual<string>(base', hash """"x".over("env:prod").by("host","az").last(3).count_by_status()""" "")
+    Assert.NotEqual<string>(base', hash """"x".over("env:prod","role:db").by("host").last(3).count_by_status()""" "")
+
+[<Fact>]
+let ``a metric monitor's hash is its query hash`` () =
+    Assert.Equal(
+        "5ddd55ce98d82c97d948f85a3f8dc8a18d6b5369ae3415a03c6adc557c56936e",
+        monitorHash (Metric(definition "avg(last_5m):avg:cpu{env:prod} by {host} > 90" ""))
+    )

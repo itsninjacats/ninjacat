@@ -10,6 +10,7 @@
     <Compile Include="ManagerTests.fs" />
     <Compile Include="DefinitionsTests.fs" />
     <Compile Include="StoreTests.fs" />
+    <Compile Include="CheckTests.fs" />
     <Compile Include="NotifierTests.fs" />
     <Compile Include="ClusterTests.fs" />
   </ItemGroup>

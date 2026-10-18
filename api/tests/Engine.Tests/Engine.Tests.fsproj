@@ -22,6 +22,7 @@
     <Compile Include="MonitorParseTests.fs" />
     <Compile Include="MonitorValidateTests.fs" />
     <Compile Include="MonitorEvaluateTests.fs" />
+    <Compile Include="MonitorCheckTests.fs" />
     <Compile Include="MonitorStateTests.fs" />
     <Compile Include="MonitorReadTests.fs" />
   </ItemGroup>

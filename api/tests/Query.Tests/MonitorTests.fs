@@ -53,6 +53,28 @@ let ``validate answers the problems, or none and the options not acted on`` () =
             Assert.Empty clickhouse.Parameters
         })
 
+[<Fact>]
+let ``a service check monitor validates`` () =
+    withServer config (fun client _ ->
+        task {
+            let! valid =
+                validate
+                    client
+                    """{"type":"service check","query":"\"consul.check\".over(\"*\").by(\"host\").last(3).count_by_status()",
+                        "options":{"thresholds":{"critical":2,"warning":2,"ok":1}}}"""
+
+            Assert.Empty(strings (valid.GetProperty "problems"))
+        })
+
+[<Fact>]
+let ``check runs of a query that is no check query is 400 and asks nothing`` () =
+    withServer config (fun client clickhouse ->
+        task {
+            use! response = get client "/internal/monitors/check-runs?query=avg:cpu%7B*%7D"
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode)
+            Assert.Empty clickhouse.Parameters
+        })
+
 // --- status ids --------------------------------------------------------------------------
 
 [<Theory>]

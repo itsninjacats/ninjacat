@@ -33,8 +33,9 @@
     <Compile Include="Monitor/Definition.fs" />
     <Compile Include="Monitor/Parse.fs" />
     <Compile Include="Monitor/Options.fs" />
-    <Compile Include="Monitor/Validate.fs" />
     <Compile Include="Monitor/Evaluate.fs" />
+    <Compile Include="Monitor/Check.fs" />
+    <Compile Include="Monitor/Validate.fs" />
     <Compile Include="Monitor/State.fs" />
     <Compile Include="Monitor/Read.fs" />
     <Compile Include="Panel.fs" />

@@ -24,8 +24,8 @@ let ``a monitor is read by its key, deleted or not`` () =
             Assert.Equal((None, None, None), (row.UpdatedBy, row.DeletedBy, row.DeletedAt))
 
             // What is read is what the engine takes.
-            match Validate.definition Plan.defaultRetention DateTimeOffset.UtcNow row.Type row.Query row.Options with
-            | Ok d -> Assert.Equal(Some 90.0, d.Options.Thresholds.Critical)
+            match Validate.byType Plan.defaultRetention DateTimeOffset.UtcNow row.Type row.Query row.Options with
+            | Ok m -> Assert.Equal(Some 90.0, m.Options.Thresholds.Critical)
             | Error problems -> Assert.Fail(String.concat "; " problems)
 
         let gone = (byKey db { Tenant = tenant; Id = deleted } CancellationToken.None).Result

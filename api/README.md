@@ -112,7 +112,15 @@ request, and nothing falls back to `default`.
 `ninjacat-monitors` evaluates metric monitors: threshold,
 change, anomaly, forecast and outlier, simple or multi alert. The panel owns
 the definitions (`/app/monitors`); this process only reads them, evaluates,
-and stores what happened.
+and stores what happened. It also evaluates service check monitors
+(`"check".over("env:prod").exclude("role:db").by("host").last(3).count_by_status()`,
+type `service check`) every minute from `check_runs`: each host and tag set counts
+its own consecutive runs among its last N that are not UNKNOWN, the worst decides
+the group, and a group that reaches no threshold keeps its state. With
+`thresholds.unknown` set to U, a host and tag set whose newest U runs are all UNKNOWN
+puts its group in No Data (reason `unknown_runs`) unless another reaches Alert or Warn,
+and the OK threshold, counted from the last UNKNOWN run, resolves it. The choices Datadog leaves open are marked
+`WARNING(undocumented)` in `Engine/Monitor/Check.fs` and `State.fs`.
 
 ```
 panel ──(monitor row + pg_notify, one transaction)──▶ Postgres `monitor`

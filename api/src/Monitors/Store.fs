@@ -6,6 +6,7 @@ open System.Threading
 open System.Threading.Tasks
 open ClickHouse.Driver
 open NinjaCat.Api.Engine
+open NinjaCat.Api.Engine.Monitor
 open NinjaCat.Api.Engine.Monitor.Definition
 open NinjaCat.Api.Engine.Monitor.Evaluate
 open NinjaCat.Api.Engine.Monitor.State
@@ -29,7 +30,7 @@ let transitionRow
     (key: MonitorKey)
     (version: int)
     (queryHash: string)
-    (definition: Definition option)
+    (definition: Monitor option)
     (actor: string option)
     (t: Transition)
     : MonitorTransitionRow =
@@ -37,7 +38,10 @@ let transitionRow
       MonitorID = uint64 key.Id
       MonitorVersion = uint32 version
       QueryHash = queryHash
-      MonitorKind = "metric"
+      MonitorKind =
+        match definition with
+        | Some(ServiceCheck _) -> "service_check"
+        | _ -> "metric"
       GroupKey = t.Key
       GroupTags = Array.ofList t.Tags
       At = t.At.UtcDateTime
@@ -52,8 +56,8 @@ let transitionRow
         | None -> "none"
       Comparator =
         match definition with
-        | Some d -> d.Query.Comparator.Text
-        | None -> ""
+        | Some(Metric d) -> d.Query.Comparator.Text
+        | _ -> ""
       Critical = definition |> Option.bind _.Options.Thresholds.Critical
       Warning = definition |> Option.bind _.Options.Thresholds.Warning
       CriticalRecovery = definition |> Option.bind _.Options.Thresholds.CriticalRecovery
@@ -71,6 +75,7 @@ let evaluationRows (key: MonitorKey) (at: DateTimeOffset) (groups: Map<string, G
                match r.Reading with
                | Judged v -> Some v, "evaluated", ""
                | Skipped(_, reason) -> None, "skipped", reason
+               | Streaks s -> Some(Check.worst s), "evaluated", ""
 
            { TenantID = key.Tenant
              MonitorID = uint64 key.Id
@@ -103,7 +108,7 @@ let time (r: DbDataReader) (i: int) : DateTimeOffset =
 let optionalTime (r: DbDataReader) (i: int) : DateTimeOffset option =
     if r.IsDBNull i then None else Some(time r i)
 
-/// Only the last day: a group unseen longer is dropped at the next evaluation anyway.
+/// Only the last two days: a group unseen longer is dropped at the next evaluation anyway.
 let private lastSeen (client: ClickHouseClient) (key: MonitorKey) (now: DateTimeOffset) (ct: CancellationToken) : Task<Map<string, DateTimeOffset>> =
     task {
         let! rows =
@@ -115,7 +120,7 @@ let private lastSeen (client: ClickHouseClient) (key: MonitorKey) (now: DateTime
                     "SELECT group_key, max(at) FROM monitor_evaluations "
                     + "WHERE tenant_id = {tenant:String} AND monitor_id = {monitor:Int64} AND group_key != '' "
                     + "AND at >= fromUnixTimestamp64Milli({since:Int64}) GROUP BY group_key"
-                  Parameters = keyParameters key @ [ "since", SqlValue.Int64((now.AddDays -1.0).ToUnixTimeMilliseconds()) ] }
+                  Parameters = keyParameters key @ [ "since", SqlValue.Int64((now.AddDays -2.0).ToUnixTimeMilliseconds()) ] }
 
         return Map.ofList rows
     }

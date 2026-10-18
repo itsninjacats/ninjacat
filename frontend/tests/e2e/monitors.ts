@@ -97,6 +97,22 @@ const forecast = view((v) => {
 	v.tags = ['team:e2e-databases'];
 });
 
+const check = view((v) => {
+	v.name =
+		'e2e-a Longhorn filesystem trim cron jobs in the primary production cluster miss their schedule';
+	switchMethod(v, 'check');
+	v.check.name = 'e2e.kubernetes_state.cronjob.on_schedule_check_for_a_very_long_check_name';
+	v.check.over = ['kube_namespace:e2e-longhorn-system'];
+	v.check.by = ['kube_cronjob', 'kube_namespace'];
+	v.critical = 2;
+	v.warning = 2;
+	v.check.ok = 1;
+	v.missing = 'notify';
+	v.noDataTimeframe = 30;
+	v.tags = ['team:e2e-storage', 'env:production'];
+	v.priority = 2;
+});
+
 const other = view((v) => {
 	v.name = 'e2e-b Billing service workers on the bare-metal fleet stopped reporting';
 	v.queries = [query('a', 'e2e.billing.worker.heartbeat', ['host'])];
@@ -111,7 +127,7 @@ export type E2eMonitor = {
 	tenant: TenantKey;
 	view: MonitorView;
 	/**
-	 * State.queryHash of the monitor's query (api/src/Engine/Monitor/State.fs).
+	 * State.monitorHash of the monitor (api/src/Engine/Monitor/State.fs).
 	 * The seeded transitions carry it: under another hash the monitor service
 	 * would take them for a query change and close the groups.
 	 */
@@ -142,6 +158,13 @@ export const monitors = {
 		queryHash: '90aa2613881e2864010b956398258c41821ace6602e106cd6e381e3cb38d6218',
 		groups: 0
 	},
+	check: {
+		id: 990_000_005,
+		tenant: 'a',
+		view: check,
+		queryHash: '51c6cf116e9d45c61e4d8285e0cd5033a410a32142fd969c9f263924d3d3b741',
+		groups: 4
+	},
 	other: {
 		id: 990_000_004,
 		tenant: 'b',
@@ -171,16 +194,24 @@ const groupTags: Record<keyof typeof monitors, (i: number) => string[]> = {
 		['service:e2e-checkout-api', 'service:e2e-checkout-api-canary', 'service:e2e-checkout-web'][i]
 	],
 	forecast: () => [],
+	check: (i) => [
+		`kube_cronjob:e2e-filesystem-trim-daily-${i}`,
+		'kube_namespace:e2e-longhorn-system'
+	],
 	other: () => []
 };
 
 // A few groups in each state; the rest OK.
 const stateOf = (i: number): State => (i < 3 ? 'Alert' : i < 5 ? 'Warn' : i < 7 ? 'No Data' : 'OK');
 
+const VALUES: Partial<Record<keyof typeof monitors, Record<State, number | null>>> = {
+	anomaly: { OK: 0, Warn: 0.5, Alert: 1, 'No Data': null },
+	// The worst status: 0 OK, 1 WARNING, 2 CRITICAL.
+	check: { OK: 0, Warn: 1, Alert: 2, 'No Data': null }
+};
+
 const valueOf = (key: keyof typeof monitors, state: State) =>
-	key === 'anomaly'
-		? { OK: 0, Warn: 0.5, Alert: 1, 'No Data': null }[state]
-		: { OK: 0.5, Warn: 2.5, Alert: 4, 'No Data': null }[state];
+	(VALUES[key] ?? { OK: 0.5, Warn: 2.5, Alert: 4, 'No Data': null })[state];
 
 const HOUR = 3_600_000;
 
@@ -193,7 +224,8 @@ export function historyOf(key: keyof typeof monitors, tenantId: string, base: nu
 	const monitor: E2eMonitor = monitors[key];
 	const m = monitorOf(monitor.view);
 	const thresholds = (m.options.thresholds ?? {}) as Record<string, number | undefined>;
-	const comparator = effectiveComparator(monitor.view);
+	const isCheck = monitor.view.method === 'check';
+	const comparator = isCheck ? '' : effectiveComparator(monitor.view);
 	const iso = (t: number) => new Date(t).toISOString();
 
 	const transitions: Record<string, unknown>[] = [];
@@ -259,7 +291,7 @@ export function historyOf(key: keyof typeof monitors, tenantId: string, base: nu
 				monitor_id: monitor.id,
 				monitor_version: 1,
 				query_hash: monitor.queryHash,
-				monitor_kind: 'metric',
+				monitor_kind: isCheck ? 'service_check' : 'metric',
 				group_key: group,
 				group_tags: tags,
 				at: iso(step.at),
@@ -290,7 +322,7 @@ export function historyOf(key: keyof typeof monitors, tenantId: string, base: nu
 				monitor_id: monitor.id,
 				group_key: group,
 				at: iso(at),
-				value: value === null ? null : value + (i % 10) * 0.01,
+				value: value === null || isCheck ? value : value + (i % 10) * 0.01,
 				state: current,
 				outcome: 'evaluated',
 				detail: ''
@@ -298,4 +330,29 @@ export function historyOf(key: keyof typeof monitors, tenantId: string, base: nu
 		}
 	}
 	return { transitions, evaluations };
+}
+
+/**
+ * The check monitor's runs, three hours before `base`: older than its evaluations read, so the
+ * monitor service does not judge them. Long names and messages, for the runs table's widths.
+ */
+export function checkRunsOf(tenantId: string, base: number) {
+	const statuses = ['CRITICAL', 'CRITICAL', 'OK', 'WARNING', 'UNKNOWN', 'CRITICAL'];
+	return statuses.map((status, i) => ({
+		tenant_id: tenantId,
+		timestamp: new Date(base - 3 * HOUR - i * 60_000).toISOString(),
+		check_name: monitors.check.view.check.name,
+		host: i % 3 === 2 ? '' : `e2e-node-${i % 2}-in-the-primary-production-cluster.example.internal`,
+		status,
+		message:
+			status === 'OK'
+				? ''
+				: 'CronJob e2e-longhorn-system/e2e-filesystem-trim-for-every-volume-of-the-primary-cluster has not been scheduled within its expected window',
+		tags: {
+			kube_namespace: ['e2e-longhorn-system'],
+			kube_cronjob: ['e2e-filesystem-trim-for-every-volume-of-the-primary-cluster'],
+			kube_cluster_name: ['e2e-primary-production-cluster'],
+			env: ['production']
+		}
+	}));
 }

@@ -88,6 +88,14 @@ let metricTagValues: EndpointHandler =
                 (fun found -> {| values = found |})
                 ctx
 
+/// The check names reported in a range, a day unless given.
+let checkNames: EndpointHandler =
+    fun ctx ->
+        match listingRange ctx with
+        | Error e -> fail 400 e ctx
+        | Ok(from, until) ->
+            names (Panel.listChecks (QueryToken.tenant ctx) from until) (fun found -> {| checks = found |}) ctx
+
 /// `from` and `to` of a request: an hour back to now unless given.
 let timeRange (ctx: HttpContext) = timeRangeOr (TimeSpan.FromHours 1.0) ctx
 
@@ -225,4 +233,5 @@ let endpoints =
                   route "/metrics/tag-values" metricTagValues
                   route "/metrics/query" metricQuery
                   route "/logs/search" logSearch
-                  route "/logs/facets" logFacets ] ] ]
+                  route "/logs/facets" logFacets
+                  route "/checks/names" checkNames ] ] ]

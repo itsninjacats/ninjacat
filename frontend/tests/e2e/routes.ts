@@ -82,7 +82,7 @@ export const routes: ViewRoute[] = [
 		path: `/app/monitors/new?${new URLSearchParams({ view: JSON.stringify(metricsView) })}`,
 		as: 'longEmail'
 	},
-	...(['threshold', 'anomaly', 'forecast'] as const).flatMap((kind) => [
+	...(['threshold', 'anomaly', 'forecast', 'check'] as const).flatMap((kind) => [
 		{
 			name: `monitor-${kind}`,
 			path: `/app/monitors/${monitors[kind].id}`,

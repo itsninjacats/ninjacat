@@ -12,7 +12,9 @@ let defaults: Options =
         { Critical = None
           Warning = None
           CriticalRecovery = None
-          WarningRecovery = None }
+          WarningRecovery = None
+          Ok = None
+          Unknown = None }
       TriggerWindow = None
       RecoveryWindow = None
       EvaluationDelay = TimeSpan.Zero
@@ -128,13 +130,15 @@ let private ofObject (root: JsonElement) : Result<Options, string list> =
             Some e
 
     let thresholds =
-        match objectAt "thresholds" [ "critical"; "warning"; "critical_recovery"; "warning_recovery" ] with
+        match objectAt "thresholds" [ "critical"; "warning"; "critical_recovery"; "warning_recovery"; "ok"; "unknown" ] with
         | None -> defaults.Thresholds
         | Some e ->
             { Critical = read "options.thresholds" "critical" number e
               Warning = read "options.thresholds" "warning" number e
               CriticalRecovery = read "options.thresholds" "critical_recovery" number e
-              WarningRecovery = read "options.thresholds" "warning_recovery" number e }
+              WarningRecovery = read "options.thresholds" "warning_recovery" number e
+              Ok = read "options.thresholds" "ok" number e
+              Unknown = read "options.thresholds" "unknown" number e }
 
     let windows = objectAt "threshold_windows" [ "trigger_window"; "recovery_window" ]
     let triggerWindow = windows |> Option.bind (read "options.threshold_windows" "trigger_window" window)

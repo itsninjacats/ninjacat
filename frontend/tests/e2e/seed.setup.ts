@@ -10,7 +10,7 @@ import * as schema from '../../src/lib/server/db/schema';
 import { routes } from './routes';
 import { keyNames, password, people, stateFile, tenants, type PersonKey } from './people';
 import { canonicalJson } from '../../src/lib/monitors/definition';
-import { definitionOf, historyOf, monitors } from './monitors';
+import { checkRunsOf, definitionOf, historyOf, monitors } from './monitors';
 
 // The sign-ins need the seeded people.
 setup.describe.configure({ mode: 'serial' });
@@ -163,21 +163,33 @@ setup('seed the e2e monitors history', async () => {
 		await insertRows('monitor_transitions', transitions);
 		await insertRows('monitor_evaluations', evaluations);
 	}
+	// Runs are not collapsed, so the check monitor's are replaced rather than added to.
+	const tenant = tenants[monitors.check.tenant].id;
+	await clickhouse('DELETE FROM check_runs WHERE tenant_id = {tenant:String}', '', { tenant });
+	await insertRows('check_runs', checkRunsOf(tenant, base));
 });
 
 async function insertRows(table: string, rows: Record<string, unknown>[]) {
 	if (rows.length === 0) return;
+	await clickhouse(
+		`INSERT INTO ${table} FORMAT JSONEachRow`,
+		rows.map((row) => JSON.stringify(row)).join('\n')
+	);
+}
+
+async function clickhouse(query: string, body: string, params: Record<string, string> = {}) {
 	const address = process.env.CLICKHOUSE_HTTP_ADDR ?? 'localhost:8123';
 	const user = process.env.CLICKHOUSE_USER ?? 'ninjacat';
 	const password = process.env.CLICKHOUSE_PASSWORD ?? 'ninjacat';
 	const url = new URL(`http://${address}/`);
 	url.searchParams.set('database', process.env.CLICKHOUSE_DB ?? 'ninjacat');
-	url.searchParams.set('query', `INSERT INTO ${table} FORMAT JSONEachRow`);
+	url.searchParams.set('query', query);
 	url.searchParams.set('date_time_input_format', 'best_effort');
+	for (const [name, value] of Object.entries(params)) url.searchParams.set(`param_${name}`, value);
 	const response = await fetch(url, {
 		method: 'POST',
 		headers: { authorization: `Basic ${btoa(`${user}:${password}`)}` },
-		body: rows.map((row) => JSON.stringify(row)).join('\n')
+		body
 	});
 	expect(response.status, await response.text()).toBe(200);
 }

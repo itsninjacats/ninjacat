@@ -74,6 +74,12 @@ let private thresholdProblems (q: MonitorQuery) (t: Thresholds) : string list =
     | Outlier _, _, _, _ -> critical @ [ "an outlier monitor takes no warning or recovery thresholds" ]
     | _ -> critical @ warningProblems q t @ recoveryProblems q t
 
+let private checkOnlyThresholds (t: Thresholds) : string list =
+    [ if t.Ok.IsSome then
+          "options.thresholds.ok is for service check monitors"
+      if t.Unknown.IsSome then
+          "options.thresholds.unknown is for service check monitors" ]
+
 let private minutes (span: TimeSpan) = span.TotalMinutes.ToString("0.##", CultureInfo.InvariantCulture) + " minutes"
 
 let private anomalyProblems (q: MonitorQuery) (a: AnomalySpec) (o: Options) : string list =
@@ -175,30 +181,13 @@ let private planProblems (retention: Plan.Retention) (now: DateTimeOffset) (q: M
         | Ok _ -> []
         | Error problems -> problems
 
-let private problemsOf (result: Result<'T, string list>) : string list =
-    match result with
-    | Error problems -> problems
-    | Ok _ -> []
-
 /// `now` is the evaluation's time; the engine never reads the clock.
-let definition
-    (retention: Plan.Retention)
-    (now: DateTimeOffset)
-    (monitorType: string)
-    (query: string)
-    (options: string)
-    : Result<Definition, string list> =
-    let typeProblems =
-        // Datadog still accepts the older name.
-        if monitorType = "query alert" || monitorType = "metric alert" then
-            []
-        else
-            [ $"monitor type '{monitorType}' is not supported; a metric monitor is a 'query alert'" ]
-
-    match typeProblems, Parse.query query, Options.parse options with
-    | [], Ok q, Ok o ->
+let definition (retention: Plan.Retention) (now: DateTimeOffset) (query: string) (options: string) : Result<Definition, string list> =
+    match Parse.query query, Options.parse options with
+    | Ok q, Ok o ->
         let problems =
             thresholdProblems q o.Thresholds
+            @ checkOnlyThresholds o.Thresholds
             @ windowProblems q o
             @ missingDataProblems q o
             @ (match q.Detection with
@@ -225,10 +214,19 @@ let definition
                         Thresholds = { o.Thresholds with Critical = Some q.Threshold }
                         NotActedOn = notActedOn } }
         | problems -> Error problems
-    | problems, q, o -> Error(problems @ problemsOf q @ problemsOf o)
+    | q, o -> Error(Check.problemsOf q @ Check.problemsOf o)
+
+/// A metric monitor or a service check monitor, by its type.
+let byType (retention: Plan.Retention) (now: DateTimeOffset) (monitorType: string) (query: string) (options: string) : Result<Monitor, string list> =
+    match monitorType with
+    // Datadog still accepts the older name.
+    | "query alert"
+    | "metric alert" -> definition retention now query options |> Result.map Metric
+    | "service check" -> Check.definition query options |> Result.map ServiceCheck
+    | other -> Error [ $"monitor type '{other}' is not supported; a metric monitor is a 'query alert', a check monitor a 'service check'" ]
 
 /// A monitor as Datadog's API takes it, as JSON; fields other than type, query and options are the panel's.
-let monitor (retention: Plan.Retention) (now: DateTimeOffset) (json: string) : Result<Definition, string list> =
+let monitor (retention: Plan.Retention) (now: DateTimeOffset) (json: string) : Result<Monitor, string list> =
     let text (root: JsonElement) (name: string) =
         match root.TryGetProperty name with
         | true, value when value.ValueKind = JsonValueKind.String -> Ok(value.GetString())
@@ -247,7 +245,7 @@ let monitor (retention: Plan.Retention) (now: DateTimeOffset) (json: string) : R
                 | false, _ -> ""
 
             match text root "type", text root "query" with
-            | Ok monitorType, Ok query -> definition retention now monitorType query options
-            | monitorType, query -> Error(problemsOf monitorType @ problemsOf query)
+            | Ok monitorType, Ok query -> byType retention now monitorType query options
+            | monitorType, query -> Error(Check.problemsOf monitorType @ Check.problemsOf query)
     with :? JsonException as e ->
         Error [ $"the monitor is not valid JSON: {e.Message}" ]

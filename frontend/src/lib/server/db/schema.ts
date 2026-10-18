@@ -81,7 +81,7 @@ export const monitor = pgTable(
 			.references(() => organization.id, { onDelete: 'restrict' }),
 
 		name: text('name').notNull(),
-		// "query alert"; "metric alert" is accepted as the same.
+		// "query alert" ("metric alert" accepted) or "service check".
 		type: text('type').notNull(),
 		query: text('query').notNull(),
 		message: text('message').notNull().default(''),
