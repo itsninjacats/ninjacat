@@ -1,8 +1,9 @@
 # The query side in F# — plan
 
-**Plan, 2026-09-27. No code yet.** What it takes for NinjaCat to stop being a
-(good) Datadog shim and start answering questions: explorers, formulas,
-monitors. Written down so the order of work is decided once.
+**Plan, 2026-09-27. No code yet.** What it takes for NinjaCat to stop being
+only a receiver for what the Datadog Agent sends and start answering
+questions: explorers, formulas, monitors. Written down so the order of work
+is decided once.
 
 Related: [silnik-kwerend.md](silnik-kwerend.md) — the original query engine
 design. Its direction holds; one of its decisions is reversed below.

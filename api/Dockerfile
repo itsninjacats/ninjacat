@@ -54,6 +54,11 @@ USER app
 # ports, and would warn at every start that they override the preset.
 ENV ASPNETCORE_HTTP_PORTS=
 
+# The licences of the copied and ported code ask for their notices to travel
+# with every copy, the image included.
+COPY --from=builder /src/THIRD_PARTY_NOTICES.md /usr/share/doc/ninjacat/
+COPY --from=builder /src/src/Proto/protos /usr/share/doc/ninjacat/protos
+
 FROM runtime AS monitors
 
 COPY --from=publish-monitors /out /app

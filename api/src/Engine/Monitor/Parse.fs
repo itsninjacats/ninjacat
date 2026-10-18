@@ -446,7 +446,7 @@ let private queryProblems (q: MonitorQuery) : string list =
         | Threshold
         | Change _ ->
             [ if q.AsCount && q.Aggregator <> Sum then
-                  "with .as_count() the time aggregation must be sum; Datadog: avg, min and max cannot be used with as_count" ]
+                  "with .as_count() the time aggregation must be sum: avg, min and max cannot be used with .as_count()" ]
 
     // outliers() inside a model is already refused by name.
     let refusedByModel =

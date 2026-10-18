@@ -2,8 +2,8 @@
 
 Spike: jak uruchamiać skrypty użytkownika w JS po stronie serwera.
 
-Odpowiada na pytanie „jak działają te skrypty w JS" w narzędziach typu
-Datadog on-call czy Workflow Automation — jak wstrzykuje się do nich dane
+Odpowiada na pytanie „jak działają te skrypty w JS" w narzędziach
+on-call i automatyzacji workflow — jak wstrzykuje się do nich dane
 i jak przy tym nie dać się zabić.
 
 ```

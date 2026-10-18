@@ -35,7 +35,7 @@
 	--chart-6: oklch(0.74 0.111 234.3);
 	--chart-7: oklch(0.43 0.118 256.5);
 	--chart-8: oklch(0.623 0.164 356.1);
-	/* A monitor group's states, Datadog's colours. */
+	/* A monitor group's states. */
 	--state-ok: oklch(0.627 0.17 149.214);
 	--state-warn: oklch(0.705 0.17 70);
 	--state-alert: oklch(0.577 0.245 27.325);

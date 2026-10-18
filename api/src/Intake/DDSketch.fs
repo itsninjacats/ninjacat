@@ -9,6 +9,9 @@
 /// DDSketch of the paper (and of the sketches libraries): that one derives
 /// gamma differently and has no index offset, so its keys cannot be merged
 /// with the agent's.
+///
+/// Copyright 2016-present Datadog, Inc. Licensed under the Apache License
+/// 2.0; see THIRD_PARTY_NOTICES.md.
 module NinjaCat.Api.Intake.DDSketch
 
 open System

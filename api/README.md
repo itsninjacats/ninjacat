@@ -109,7 +109,7 @@ request, and nothing falls back to `default`.
 
 ## The monitor service
 
-`ninjacat-monitors` evaluates Datadog-style metric monitors: threshold,
+`ninjacat-monitors` evaluates metric monitors: threshold,
 change, anomaly, forecast and outlier, simple or multi alert. The panel owns
 the definitions (`/app/monitors`); this process only reads them, evaluates,
 and stores what happened.
@@ -284,12 +284,13 @@ Datadog documents its query language unevenly. Wherever we had to decide
 behaviour the docs do not pin down, the code says so at that spot:
 
 ```bash
-grep -rn "WARNING(undocumented)" src   # a choice we made; check against Datadog when possible
+grep -rn "WARNING(undocumented)" src   # a choice we made; check against a documented source or a recorded payload
 grep -rn "FIXME(" src                   # a choice we doubt
 ```
 
 Each such comment names the question, then the answer we picked. When one is
-checked against a real Datadog account, replace the warning with the source.
+settled by a public source (documentation, an open-source client, a recorded
+payload), replace the warning with that source.
 
 ## Differences from the Go server
 

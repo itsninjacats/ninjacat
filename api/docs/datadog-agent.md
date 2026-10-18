@@ -435,15 +435,11 @@ dd-sdk-ios/android RUM mobilny
 datadog-operator   operator k8s
 ```
 
-**Zamknięta jest cała platforma**: przyjmowanie danych, magazyn, silnik zapytań,
-UI, alerty, implementacje wykrywania anomalii.
-
-Powód nie jest ideowy: kod agenta działa na cudzych maszynach, w bankach
-i szpitalach, z dostępem do produkcji i eBPF. Zamknięta binarka nie przeszłaby
-audytu. Otwartość jest warunkiem sprzedaży.
+Backend (przyjmowanie danych, magazyn, zapytania, UI, alerty) nie jest
+publikowany jako open source.
 
 Stąd asymetria widoczna w całym tym dokumencie: **kod otwarty, protokół
-nieudokumentowany**. Otwierają to, co muszą, nie to, co ułatwiłoby konkurencję.
+nieudokumentowany**.
 
 *(Licencję agenta sprawdziliśmy w obrazie. Lista pozostałych repozytoriów
 pochodzi z wiedzy, nie z weryfikacji — warto zerknąć do repo, gdyby miało
@@ -547,10 +543,10 @@ którym lecą zmiany konfiguracji. Komentarz w proto potwierdza wprost:
 Pola audytowe: `action_id`, `timestamp` oraz `requested_by` (e-mail zlecającego,
 wymagany „for audit trail").
 
-**Konsekwencja bezpieczeństwa:** weryfikacja tego e-maila odbywa się po stronie
-Datadoga. Agent w klastrze dostaje protobuf z polem tekstowym i wykonuje.
-Kto przejmie konto albo wejdzie w ten kanał, może kasować pody i cofać deploymenty.
-Dlatego `DD_REMOTE_CONFIGURATION_ENABLED=false` w §4 jest istotne.
+**Autoryzacja:** odbywa się po stronie backendu. Agent w klastrze
+dostaje już zautoryzowaną akcję (protobuf z polem tekstowym) i ją wykonuje; ten
+kanał może kasować pody i cofać deploymenty. Dlatego
+`DD_REMOTE_CONFIGURATION_ENABLED=false` w §4 jest istotne.
 
 ### Autoskalowanie — backend decyduje, ile replik
 

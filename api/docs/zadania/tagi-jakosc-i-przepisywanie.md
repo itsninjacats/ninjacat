@@ -38,8 +38,7 @@ tabelach. Da się więc **policzyć**, że tag nie niesie informacji:
 - wartość z krótkiej listy generyków (`api`, `app`, `web`, `backend`)
 - kardynalność bliska jedynki tam, gdzie powinna być większa
 
-To jest zapytanie po istniejących tabelach, nie nowy podsystem. I nikt z
-konkurencji tego nie robi, bo wymaga korelacji między sygnałami.
+To jest zapytanie po istniejących tabelach, nie nowy podsystem.
 
 ### 2. Przepisywanie — droższe i z pułapką
 

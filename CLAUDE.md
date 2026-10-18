@@ -4,11 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-NinjaCat is an open-source, drop-in replacement for Datadog: it speaks the Datadog Agent's
-wire protocol, so an existing agent can be pointed at it by changing `DD_SITE`/`DD_*_DD_URL`
-and nothing else. Telemetry lands in ClickHouse; the panel is a SvelteKit app.
+NinjaCat is an open-source, self-hosted observability backend that accepts what the Datadog
+Agent sends: it speaks the agent's wire protocol, so an existing agent can be pointed at it by
+changing `DD_SITE`/`DD_*_DD_URL` and nothing else. Telemetry lands in ClickHouse; the panel
+is a SvelteKit app.
 
 Licence: **AGPL-3.0** (`LICENSE` at the root). The repo is public.
+
+**Naming Datadog.** Name it only to say what NinjaCat is compatible with, the way LibreOffice
+names "Microsoft Office formats": the Datadog Agent, `datadog-agent`, `DD_*` variables,
+`X-Datadog-*` headers, the agent's protocol and query API. Never present NinjaCat as
+Datadog's replacement, alternative, clone or shim, never describe the panel as Datadog's
+("Datadog's monitors", "Datadog's colours"), and keep guesses about Datadog's motives,
+pricing or security out of the repo. Code taken from Datadog's open-source repositories keeps
+its copyright line and is listed in `api/THIRD_PARTY_NOTICES.md`.
 
 ## Language policy
 

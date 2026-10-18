@@ -3,6 +3,9 @@
 /// is encoded, then the message.
 ///
 /// Ported from github.com/DataDog/agent-payload, process/message.go.
+///
+/// Copyright (c) 2017, Datadog, Inc. Licensed under the BSD 3-Clause
+/// License; see THIRD_PARTY_NOTICES.md.
 namespace NinjaCat.Api.Intake
 
 open System

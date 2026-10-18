@@ -79,7 +79,7 @@ since 0.2.2); locally `compose.self.yaml` copies it in. The code depends on noth
 - **`Datadog.Trace.Bundle` in the images** would buy tracing wherever NinjaCat runs (compose,
   a cluster without the admission controller, a plain VM), at a version pinned in the repo
   and tested in CI. It costs every user larger images and puts a Datadog library in the
-  dependencies of a project meant as the way out of Datadog (Apache 2.0, so allowed by
+  dependencies of a project meant to keep telemetry vendor-neutral (Apache 2.0, so allowed by
   AGPL; a question of principle, not law). It still needs switching on
   (`CORECLR_ENABLE_PROFILING` and the path to its native library).
 - **`Datadog.Trace` for our own spans**: no. Code would depend on one vendor's API.

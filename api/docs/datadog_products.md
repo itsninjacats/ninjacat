@@ -299,8 +299,7 @@ http-synthetics     testy syntetyczne
 softinv-intake      inwentarz oprogramowania
 sds-intake          Sensitive Data Scanner
 ```
-Produkty, za które u Datadoga płaci się osobno i które mają sens przy skali,
-gdzie ich cennik jest tańszy niż własny zespół.
+Osobne produkty z własnymi intake'ami; na razie poza zakresem NinjaCat.
 
 ## Co da się przekierować, a czego nie
 

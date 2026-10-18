@@ -821,7 +821,7 @@ let anomaliesArgs (rest: Arg<string> list) : Result<AnomalyAlgorithm * float, st
             | Some "basic" -> Ok(Basic, bounds)
             | Some "robust" -> seasonality named |> Result.map (fun s -> Robust s, bounds)
             | Some "agile" -> seasonality named |> Result.map (fun s -> Agile s, bounds)
-            | Some "adaptive" -> Error "anomalies() 'adaptive' is Datadog's legacy algorithm and is not supported; use 'agile' or 'robust'"
+            | Some "adaptive" -> Error "anomalies() 'adaptive' is a legacy algorithm and is not supported; use 'agile' or 'robust'"
             | _ -> Error "anomalies() algorithm must be 'basic', 'agile' or 'robust'"
         | _ -> Error "anomalies() takes a query, an algorithm and bounds above 0: anomalies(query, 'basic', 2)"
 

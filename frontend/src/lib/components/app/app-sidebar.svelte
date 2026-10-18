@@ -50,9 +50,9 @@
 	]);
 </script>
 
-<!-- collapsible="icon" is the Datadog-shaped part: the rail shrinks to icons
-     rather than disappearing, so navigation stays one click away while a wide
-     chart or log table takes the screen. -->
+<!-- collapsible="icon": the rail shrinks to icons rather than disappearing, so
+     navigation stays one click away while a wide chart or log table takes the
+     screen. -->
 <Sidebar.Root bind:ref collapsible="icon" {...restProps}>
 	<Sidebar.Header>
 		<TenantSwitcher {tenant} {tenants} />

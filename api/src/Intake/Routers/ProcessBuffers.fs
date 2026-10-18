@@ -4,6 +4,9 @@
 /// tags_v2.go, dns_v1.go and dns_v2.go: the readers only, and only what the
 /// handler uses. A buffer the Go reader would run off the end of gives no
 /// tags, or an Error for DNS names, instead of failing the request.
+///
+/// Copyright (c) 2017, Datadog, Inc. Licensed under the BSD 3-Clause
+/// License; see THIRD_PARTY_NOTICES.md.
 module NinjaCat.Api.Intake.Routers.ProcessBuffers
 
 open System

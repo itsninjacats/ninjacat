@@ -1,8 +1,9 @@
 # Datadog's protobuf definitions
 
-The `.proto` files the Datadog Agent's payloads are defined by, copied
-unmodified from Datadog's and Google's repositories, each under its own
-licence (the `LICENSE` file beside it):
+The `.proto` files the Datadog Agent's payloads are defined by, copied from
+Datadog's and Google's repositories with the one edit below, each under its
+own licence (the `LICENSE` file beside it, and the upstream `NOTICE` where the
+project has one; `api/THIRD_PARTY_NOTICES.md` lists them all):
 
 | directory        | source                                                 | version                              | licence      |
 |------------------|--------------------------------------------------------|--------------------------------------|--------------|

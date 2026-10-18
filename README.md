@@ -5,7 +5,7 @@ wire protocol. Point an agent you already run at NinjaCat, change nothing else, 
 your telemetry lands in your own ClickHouse instead of someone else's cloud.
 
 > **Status: early.** The ingest path works end to end for the signals listed below,
-> and a panel renders them. Roughly forty Datadog endpoints are still unhandled, and
+> and a panel renders them. Roughly forty endpoints the agent calls are still unhandled, and
 > nothing here has been run in anger yet. Treat it as a working prototype, not a
 > product.
 
@@ -28,11 +28,12 @@ changes.
 - **Containers** — lifecycle events (starts, stops, OOM kills, with the exit code
   kept distinguishable from "none reported") and the image inventory, keyed by
   digest.
-- **API keys** — Datadog-shaped, created in the panel, enforced at intake.
+- **API keys** — in the format the agent expects (32 hex characters), created in the
+  panel, enforced at intake.
 - **Query API + panel** — metric search, per-host series, charts over an arbitrary range.
-- **Monitors** — Datadog-style metric monitors (threshold, change, anomaly, forecast,
-  outlier), defined in the panel and evaluated by a service of their own. Notifications
-  are a stub so far.
+- **Monitors** — metric monitors (threshold, change, anomaly, forecast, outlier),
+  defined in the panel and evaluated by a service of their own. Notifications are a
+  stub so far.
 - **Self-monitoring** — NinjaCat reports its own metrics through its own pipeline.
 - **Capture lab** — a sealed network that records exactly what a real agent sends, which
   is how the protocol is being worked out endpoint by endpoint.
@@ -76,7 +77,7 @@ The first account on an empty database is the instance admin and owner of the te
 `--tenant <id|slug>` (repeatable) and `--role owner|admin|member` (default `member`).
 
 Create an API key in the panel under Settings, then send an agent at it. The intake
-routes on the hostname, as Datadog does, so each product needs its Datadog-shaped name
+routes on the hostname, as Datadog does, so each product needs its own hostname
 (`app.`, `trace.agent.`, `process.`, …) resolving to NinjaCat:
 
 ```bash
@@ -172,3 +173,6 @@ and protocol findings are welcome in the meantime.
 NinjaCat is not affiliated with, endorsed by, or sponsored by Datadog, Inc.
 Datadog is a trademark of Datadog, Inc. The name is used here only to describe protocol
 compatibility.
+
+Code and protobuf definitions taken from Datadog's and other open-source repositories
+keep their own licences; see `api/THIRD_PARTY_NOTICES.md`.

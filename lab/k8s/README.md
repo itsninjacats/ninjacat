@@ -98,11 +98,11 @@ OpenMetrics v2 spelling; it parses, loads without complaint, and filters
 nothing.
 
 Why filter in the agent at all, rather than in NinjaCat's writer: because
-dropping or rewriting what an agent sent would make NinjaCat a lossy
-approximation of Datadog rather than a replacement for it. The operator asked
-for that data by configuring the check. Datadog puts the same knob in the same
-place. See `docs/decisions/0001-tags-are-a-multiset.md` for the same principle
-applied to tags.
+dropping or rewriting what an agent sent would make NinjaCat lose data the
+operator asked for by configuring the check; an intake's job is to store what
+arrives. Datadog puts the same knob in the same place. See
+`docs/decisions/0001-tags-are-a-multiset.md` for the same principle applied to
+tags.
 
 ## Upgrading the release
 

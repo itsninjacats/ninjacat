@@ -295,7 +295,7 @@ Jedno POST `/api/v0.1/configurations` przenosi **wszystkie** produkty; nazwa pro
 
 ## 3. LOCAL — serwery, które Agent wystawia
 
-Nic z tej sekcji nie dociera do backendu Datadoga. Odbiornik zastępujący Datadoga tego **nie potrzebuje**; potrzebuje tego reimplementacja Agenta.
+Nic z tej sekcji nie opuszcza maszyny agenta. Serwer przyjmujący to, co wysyła Agent, **nie potrzebuje** niczego z niej; potrzebuje tego reimplementacja Agenta.
 
 ### 3.1 trace-agent receiver (domyślnie `127.0.0.1:8126`, `apm_config.receiver_port`; też UDS i named pipe)
 
