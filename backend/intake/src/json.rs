@@ -510,6 +510,25 @@ pub mod proto {
             serde_json::to_string(&values.iter().map(write).collect::<Vec<_>>()).unwrap()
         }
     }
+
+    /// A map of messages as a JSON object, keys in their order (prost's map does not keep the
+    /// wire's); "" for an empty map.
+    pub fn message_map<K: ToString + Ord, T: prost::Message + prost::Name>(
+        entries: &std::collections::HashMap<K, T>,
+    ) -> String {
+        if entries.is_empty() {
+            return String::new();
+        }
+        let mut sorted: Vec<_> = entries.iter().collect();
+        sorted.sort_by(|a, b| a.0.cmp(b.0));
+        let members: Vec<String> = sorted
+            .into_iter()
+            .map(|(key, value)| {
+                format!("{}:{}", quoted(&key.to_string()), serde_json::to_string(&write(value)).unwrap())
+            })
+            .collect();
+        format!("{{{}}}", members.join(","))
+    }
 }
 
 #[cfg(test)]

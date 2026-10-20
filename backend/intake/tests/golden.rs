@@ -16,7 +16,7 @@ use http_body_util::BodyExt;
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::keys::{self, Key, Store};
 use ninjapaws_intake::routers::{
-    api, app, config, containers, dbm, evp, kubeops, logs, misc, ndm, profiling, rum, security, trace,
+    api, app, config, containers, dbm, evp, kubeops, logs, misc, ndm, process, profiling, rum, security, trace,
 };
 use ninjapaws_intake::server::{Intake, Routes, router};
 use ninjapaws_storage::Sink;
@@ -99,6 +99,7 @@ fn route_set(name: &str) -> Option<Process> {
         "routeDebugger" => process(agent, profiling::mount_debugger),
         "routeSourcemap" => process(agent, profiling::mount_sourcemap),
         "routeRUM" => browser(),
+        "routeProcess" => process(agent, process::mount),
         "routeKubeops" => process(agent, kubeops::mount),
         "routeContainers" => process(agent, containers::mount),
         "routeConfig" => process(agent, config::mount),
@@ -151,6 +152,9 @@ fn host_process(host: &str) -> Option<Process> {
     }
     if host.starts_with("browser-intake.") {
         return browser();
+    }
+    if host.starts_with("process.") {
+        return process(agent, process::mount);
     }
     if host.starts_with("orchestrator.") || host.starts_with("kubeops-intake.") {
         return process(agent, kubeops::mount);

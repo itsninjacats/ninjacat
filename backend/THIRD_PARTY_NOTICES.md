@@ -7,7 +7,7 @@ licences, listed here.
 | component | upstream | version | licence | copyright | our files |
 |-----------|----------|---------|---------|-----------|-----------|
 | datadog-agent | github.com/DataDog/datadog-agent | `pkg/proto` v0.83.2; `sds_result.proto` from tag 7.84.0 | Apache-2.0 | Copyright 2016-present Datadog, Inc. | `backend/proto/protos/datadog-agent/` (copied); `backend/intake/src/ddsketch.rs` (ported from `pkg/util/quantile/config.go`) |
-| agent-payload | github.com/DataDog/agent-payload | v5.0.207 | BSD-3-Clause | Copyright (c) 2017, Datadog, Inc. | `backend/proto/protos/agent-payload/` (copied, one edit, see `backend/proto/protos/README.md`); `backend/intake/src/process_frame.rs` (ported from `process/message.go`) |
+| agent-payload | github.com/DataDog/agent-payload | v5.0.207 | BSD-3-Clause | Copyright (c) 2017, Datadog, Inc. | `backend/proto/protos/agent-payload/` (copied, one edit, see `backend/proto/protos/README.md`); `backend/intake/src/process_frame.rs` (ported from `process/message.go`); `backend/intake/src/routers/process_buffers.rs` (ported from `process/tags.go`, `tags_v2.go`, `dns_v1.go`, `dns_v2.go`) |
 | sketches-go | github.com/DataDog/sketches-go | v1.4.8 | Apache-2.0 | Copyright 2021 Datadog, Inc. | `backend/proto/protos/sketches-go/` (copied) |
 | pprof | github.com/google/pprof | v0.0.0-20260906184651-6331bc6350fe | Apache-2.0 | Copyright 2016 Google Inc. | `backend/proto/protos/pprof/` (copied) |
 

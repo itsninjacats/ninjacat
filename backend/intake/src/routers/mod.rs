@@ -14,6 +14,8 @@ pub mod logs;
 pub mod misc;
 pub mod ndm;
 pub mod pprof;
+pub mod process;
+pub mod process_buffers;
 pub mod profiling;
 pub mod rum;
 pub mod security;

@@ -15,6 +15,7 @@ pub mod k8s;
 pub mod logs;
 pub mod metrics;
 pub mod ndm;
+pub mod process;
 pub mod profiling;
 pub mod raw;
 pub mod rum;
