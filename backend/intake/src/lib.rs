@@ -11,6 +11,7 @@ pub mod ddsketch;
 pub mod fields;
 pub mod json;
 pub mod keys;
+pub mod msgpack;
 pub mod raw;
 pub mod routers;
 pub mod self_metrics;

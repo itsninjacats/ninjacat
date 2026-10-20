@@ -200,6 +200,13 @@ pub mod time {
     }
 }
 
+/// A protobuf enum value under the name the .proto gives it (`as_str_name` of the generated
+/// enum). Names, never numbers: a renumbering upstream must not rewrite stored history. A value
+/// the schema does not have is its number.
+pub fn enum_name<E: TryFrom<i32>>(number: i32, name: fn(&E) -> &'static str) -> String {
+    E::try_from(number).map_or_else(|_| number.to_string(), |value| name(&value).to_string())
+}
+
 /// A metric type number as its name. Zero is UNSPECIFIED and not rare: Datadog's own
 /// documentation example sends it. It is stored as sent; resolving it is a decision for query
 /// time.

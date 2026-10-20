@@ -15,7 +15,7 @@ use base64::Engine;
 use http_body_util::BodyExt;
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::keys::{self, Key, Store};
-use ninjapaws_intake::routers::{api, app};
+use ninjapaws_intake::routers::{api, app, misc, trace};
 use ninjapaws_intake::server::{Intake, Routes, router};
 use ninjapaws_storage::Sink;
 use serde_json::Value;
@@ -72,6 +72,9 @@ fn route_set(name: &str) -> Option<Process> {
     match name {
         "routeAPI" => process(agent, api::metrics_and_checks),
         "routeApp" => process(agent, app::metrics_v3),
+        "routeTrace" => process(agent, trace::mount),
+        "routeTelemetry" => process(agent, misc::telemetry),
+        "routeResources" => process(agent, misc::resources),
         _ => None,
     }
 }
@@ -84,6 +87,15 @@ fn host_process(host: &str) -> Option<Process> {
     }
     if host.starts_with("api.") || host.contains("-flare.agent.") {
         return process(agent, api::mount);
+    }
+    if host.starts_with("trace.agent.") {
+        return process(agent, trace::mount);
+    }
+    if host.starts_with("instrumentation-telemetry-intake.") {
+        return process(agent, misc::telemetry);
+    }
+    if host.starts_with("resources-intake.") {
+        return process(agent, misc::resources);
     }
     None
 }
@@ -110,6 +122,22 @@ fn process_for(fixture: &Value) -> Option<Process> {
     // The intake made of the named route sets, guarded as the first one is.
     let sets: Vec<Process> = routes.iter().map(|name| route_set(name)).collect::<Option<_>>()?;
     Some(Process { scheme: sets[0].scheme, mounts: sets.into_iter().flat_map(|set| set.mounts).collect() })
+}
+
+/// Every fixture file: those recorded by the Go server's own tests (`go/`), and those recorded
+/// from the requests in `trace/recorded_requests_test.go.txt` (`trace/`), payloads its tests never
+/// sent through HTTP: the idx wire format, real sketches, every msgp error, unknown Data Streams
+/// fields.
+fn fixture_paths(root: &Path) -> Vec<PathBuf> {
+    ["go", "trace"]
+        .iter()
+        .flat_map(|set| std::fs::read_dir(root.join(set)).unwrap())
+        .map(|dir| dir.unwrap().path())
+        .filter(|dir| dir.is_dir())
+        .flat_map(|dir| std::fs::read_dir(dir).unwrap())
+        .map(|f| f.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|e| e == "json"))
+        .collect()
 }
 
 struct Answer {
@@ -318,12 +346,7 @@ async fn run(id: &str, fixture: &Value, process: &Process, overrides: &Value) ->
 async fn every_fixture_of_a_ported_host_is_answered_and_stored_as_it_says() {
     let root = fixtures_root();
     let overrides: Value = serde_json::from_slice(&std::fs::read(root.join("overrides.json")).unwrap()).unwrap();
-    let mut paths: Vec<PathBuf> = std::fs::read_dir(root.join("go"))
-        .unwrap()
-        .flat_map(|dir| std::fs::read_dir(dir.unwrap().path()).unwrap())
-        .map(|f| f.unwrap().path())
-        .filter(|p| p.extension().is_some_and(|e| e == "json"))
-        .collect();
+    let mut paths = fixture_paths(&root);
     paths.sort();
 
     let mut replayed = 0;
@@ -364,16 +387,14 @@ async fn every_fixture_row_goes_into_its_clickhouse_table() {
     let root = fixtures_root();
     let mut expected: std::collections::BTreeMap<&str, u64> = std::collections::BTreeMap::new();
     let sink = Sink::clickhouse(client.clone());
-    for dir in std::fs::read_dir(root.join("go")).unwrap() {
-        for file in std::fs::read_dir(dir.unwrap().path()).unwrap() {
-            let fixture: Value = serde_json::from_slice(&std::fs::read(file.unwrap().path()).unwrap()).unwrap();
-            let Some(process) = process_for(&fixture) else { continue };
-            let (_, writes) = send(&fixture, &process).await;
-            for write in writes {
-                *expected.entry(write.table).or_default() += write.rows.len() as u64;
-            }
-            router_of(&process, sink.clone()).dispatch(request_of(&fixture)).await;
+    for path in fixture_paths(&root) {
+        let fixture: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        let Some(process) = process_for(&fixture) else { continue };
+        let (_, writes) = send(&fixture, &process).await;
+        for write in writes {
+            *expected.entry(write.table).or_default() += write.rows.len() as u64;
         }
+        router_of(&process, sink.clone()).dispatch(request_of(&fixture)).await;
     }
     sink.stop().await;
     server.query(&format!("DROP DATABASE {database}")).execute().await.unwrap();
@@ -392,4 +413,3 @@ async fn every_fixture_row_goes_into_its_clickhouse_table() {
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
-

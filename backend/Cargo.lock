@@ -1616,6 +1616,7 @@ dependencies = [
  "pbjson-types",
  "prost",
  "regex",
+ "rmp",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -2285,6 +2286,15 @@ checksum = "f8dd2a808d456c4a54e300a23e9f5a67e122c3024119acbfd73e3bf664491cb2"
 dependencies = [
  "hmac 0.12.1",
  "subtle",
+]
+
+[[package]]
+name = "rmp"
+version = "0.8.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ba8be72d372b2c9b35542551678538b562e7cf86c3315773cae48dfbfe7790c"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]

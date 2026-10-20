@@ -342,6 +342,31 @@ pub fn try_parse_array(body: &[u8]) -> Result<Vec<Value>, String> {
     }
 }
 
+/// The elements of a JSON list, each as the bytes it had on the wire: for bodies whose elements
+/// are stored as they were sent. `null` is no elements.
+pub fn try_parse_element_bytes(body: &[u8]) -> Result<Vec<Vec<u8>>, String> {
+    // The parser reads text. A byte that is not UTF-8 is read as '?', one for one, so the text has
+    // the body's offsets and each element is cut from the body as it was sent.
+    let mut text = String::with_capacity(body.len());
+    for chunk in body.utf8_chunks() {
+        text.push_str(chunk.valid());
+        text.extend(std::iter::repeat_n('?', chunk.invalid().len()));
+    }
+    let whole: &serde_json::value::RawValue = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    match whole.get().as_bytes()[0] {
+        b'[' => {
+            let elements: Vec<&serde_json::value::RawValue> =
+                serde_json::from_str(whole.get()).map_err(|e| e.to_string())?;
+            Ok(elements.iter().map(|element| body[text.substr_range(element.get()).unwrap()].to_vec()).collect())
+        }
+        b'n' => Ok(Vec::new()),
+        b'{' => Err("expected a list, got object".into()),
+        b'"' => Err("expected a list, got string".into()),
+        b't' | b'f' => Err("expected a list, got bool".into()),
+        _ => Err("expected a list, got number".into()),
+    }
+}
+
 /// The object's property names, sorted and comma-separated, for a log line or a note that says
 /// what was there.
 pub fn keys(object: &Value) -> String {

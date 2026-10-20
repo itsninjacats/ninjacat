@@ -13,14 +13,13 @@ COPY . .
 COPY --from=migrations . /api/schema/migrations/
 
 # Cache mounts keep the registry and the build between builds, so a change rebuilds only what
-# it touches. The target directory is a mount, so the binaries are copied out in the same step;
-# a program added to `api` is added to the list here.
+# it touches. The target directory is a mount, so the programs are copied out in the same step,
+# every `ninjapaws_*` of the build.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     cargo build --release --locked -p api --bins \
     && mkdir /out \
-    && cp target/release/ninjapaws_api target/release/ninjapaws_app target/release/ninjapaws_internal \
-          target/release/ninjapaws_migrate target/release/ninjapaws_monitors /out/
+    && find target/release -maxdepth 1 -type f -executable -name 'ninjapaws_*' -exec cp {} /out/ \;
 
 # cc: glibc and libgcc, all a Rust binary links against; nonroot: uid 65532.
 FROM gcr.io/distroless/cc-debian13:nonroot

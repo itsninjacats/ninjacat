@@ -62,6 +62,39 @@ pub mod millis {
     }
 }
 
+/// `DateTime64(9, 'UTC')`: nanoseconds since the epoch, written as the number they are. The
+/// field is that number, as the wire gives it: an i64 spans 1677 to 2262, inside the column's
+/// range.
+pub mod nanos {
+    use super::*;
+
+    fn time(nanos: i64) -> DateTime<Utc> {
+        DateTime::from_timestamp_nanos(nanos)
+    }
+
+    pub fn serialize<S: Serializer>(nanos: &i64, serializer: S) -> Result<S::Ok, S::Error> {
+        if serializer.is_human_readable() {
+            return serializer.serialize_str(&rfc3339(&time(*nanos)));
+        }
+        serializer.serialize_i64(*nanos)
+    }
+
+    /// `Array(DateTime64(9, 'UTC'))`.
+    pub mod list {
+        use super::*;
+
+        pub fn serialize<S: Serializer>(list: &[i64], serializer: S) -> Result<S::Ok, S::Error> {
+            struct Nanos(i64);
+            impl Serialize for Nanos {
+                fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                    super::serialize(&self.0, serializer)
+                }
+            }
+            serializer.collect_seq(list.iter().map(|n| Nanos(*n)))
+        }
+    }
+}
+
 /// A `String` column that holds bytes: a body, an archive. As JSON it is its text when it is
 /// UTF-8, else `{"$b64": …}`.
 #[derive(Clone, Debug, Default, PartialEq)]
