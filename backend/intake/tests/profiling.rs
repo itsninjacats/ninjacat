@@ -153,24 +153,25 @@ fn a_profile_row_without_an_event_part_still_lists_the_attachments() {
     assert_eq!(row.attach_parsed, [0]);
 }
 
-/// start and end are kept as the text on the wire next to the parsed time. The shared JSON reader
-/// holds a number as a float, so `1.0e3` and `1.50` come back as the float writes them; the F#
-/// server kept the literal.
+/// start and end are kept as the text on the wire next to the parsed time.
 #[test]
 fn start_is_kept_as_the_text_it_had_on_the_wire() {
     let cases = [
         ("1758623400", "1758623400"),
+        ("1.0e3", "1.0e3"),
         ("\"2025-09-23T10:30:00Z\"", "2025-09-23T10:30:00Z"),
         ("true", "true"),
         ("null", ""),
         // Anything else is kept as JSON, keys sorted.
-        (r#"{"b":[1,"x",null,true,{"k":1.25}],"a":"s"}"#, r#"{"a":"s","b":[1,"x",null,true,{"k":1.25}]}"#),
+        (r#"{"b":[1,"x",null,true,{"k":1.50}],"a":"s"}"#, r#"{"a":"s","b":[1,"x",null,true,{"k":1.50}]}"#),
         ("[]", "[]"),
         ("{}", "{}"),
     ];
     for (start, expected) in cases {
-        let event = json::try_parse(format!("{{\"start\": {start}}}").as_bytes()).unwrap();
-        let row = profiling::profile_row("t", "profile", "", "", &BTreeMap::new(), Some(&event), &BTreeMap::new());
+        let text = format!("{{\"start\": {start}}}");
+        let event = json::try_parse(text.as_bytes()).unwrap();
+        let parts = BTreeMap::from([("event".to_string(), Bytes::from(text))]);
+        let row = profiling::profile_row("t", "profile", "", "", &parts, Some(&event), &BTreeMap::new());
         assert_eq!(row.start_raw, expected, "{start}");
     }
 }
@@ -544,8 +545,17 @@ fn a_profile_event_with_broken_text_is_still_read() {
 #[test]
 fn json_nested_deeply_is_still_read() {
     let deep = format!("{}{}", "[".repeat(100), "]".repeat(100));
-    let event = json::try_parse(format!("{{\"family\": \"go\", \"start\": {deep}}}").as_bytes()).unwrap();
-    let row = profiling::profile_row("t", "profile", "", "", &BTreeMap::new(), Some(&event), &BTreeMap::new());
+    let text = format!("{{\"family\": \"go\", \"start\": {deep}}}");
+    let event = json::try_parse(text.as_bytes()).unwrap();
+    let row = profiling::profile_row(
+        "t",
+        "profile",
+        "",
+        "",
+        &parts_of(&[("event", text.as_bytes())]),
+        Some(&event),
+        &BTreeMap::new(),
+    );
 
     assert_eq!(row.family, "go");
     assert_eq!(row.start_raw, deep);

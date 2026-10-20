@@ -919,18 +919,16 @@ async fn an_envelope_without_spans_and_a_span_that_is_not_an_object_are_kept_raw
     assert_eq!(rows[0]["envelope_extra"], r#"{"new_key":{"x":1}}"#);
 }
 
-/// The shared JSON reader holds a number as a float, so `1.50` comes back as `1.5`; the F# server
-/// kept the literal.
 #[test]
 fn a_spans_meta_keeps_numbers_booleans_and_arrays_as_text_and_its_metrics_keep_only_numbers() {
-    let span = r#"{"trace_id":9007199254740993,"error":300,"meta":{"num":1.25,"yes":true,"arr":[1,"a"],"empty":{},"device":{"deep":{"er":"x"}}},"metrics":{"a":1,"b":2.5,"c":"x","d":null}}"#;
+    let span = r#"{"trace_id":9007199254740993,"error":300,"meta":{"num":1.50,"yes":true,"arr":[1,"a"],"empty":{},"device":{"deep":{"er":"x"}}},"metrics":{"a":1,"b":2.5,"c":"x","d":null}}"#;
     let row = rum::span_row(&sender(), "", "", &value(span), span);
 
     assert_eq!(row.trace_id, "9007199254740993");
     // Go's int8 conversion wraps.
     assert_eq!(row.error, 44);
     let meta: Vec<(&str, &str)> = row.meta.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
-    assert_eq!(meta, [("arr", r#"[1,"a"]"#), ("device.deep.er", "x"), ("num", "1.25"), ("yes", "true")]);
+    assert_eq!(meta, [("arr", r#"[1,"a"]"#), ("device.deep.er", "x"), ("num", "1.50"), ("yes", "true")]);
     let metrics: Vec<(&str, f64)> = row.metrics.iter().map(|(k, v)| (k.as_str(), *v)).collect();
     assert_eq!(metrics, [("a", 1.0), ("b", 2.5)]);
 }

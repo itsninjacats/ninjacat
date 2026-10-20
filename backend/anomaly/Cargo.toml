@@ -9,4 +9,4 @@ argmin-math = { version = "0.5.1", default-features = false, features = ["vec"] 
 stlrs = "0.4.0"
 
 [dev-dependencies]
-serde_json = "1"
+serde_json.workspace = true

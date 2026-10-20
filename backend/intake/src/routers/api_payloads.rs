@@ -71,7 +71,8 @@ fn placed<'a>(list: impl IntoIterator<Item = &'a Value>) -> Vec<(usize, &'a Valu
 #[derive(Clone, Debug)]
 pub struct SeriesPoint {
     pub pair: Vec<Option<f64>>,
-    pub raw: Value,
+    /// The point's text as sent.
+    pub raw: String,
 }
 
 #[derive(Clone, Debug)]
@@ -87,24 +88,33 @@ pub struct SeriesV1 {
     pub additional: BTreeMap<String, Value>,
 }
 
-fn series_points_of(list: &Value) -> Option<Vec<SeriesPoint>> {
-    let pair = |item: &Value| -> Option<SeriesPoint> {
+/// The points of a series; `texts` are their texts as sent, in the same order.
+fn series_points_of(list: &Value, texts: &[&str]) -> Option<Vec<SeriesPoint>> {
+    let pair = |(item, text): (&Value, &str)| -> Option<SeriesPoint> {
+        let raw = text.to_string();
         match item {
-            Value::Null => Some(SeriesPoint { pair: Vec::new(), raw: item.clone() }),
+            Value::Null => Some(SeriesPoint { pair: Vec::new(), raw }),
             Value::Array(numbers) => {
                 let pair = numbers
                     .iter()
                     .map(|number| if number.is_null() { Some(None) } else { json::float_of(number).map(Some) })
                     .collect::<Option<Vec<_>>>()?;
-                Some(SeriesPoint { pair, raw: item.clone() })
+                Some(SeriesPoint { pair, raw })
             }
             _ => None,
         }
     };
-    list.as_array()?.iter().map(pair).collect()
+    list.as_array()?.iter().zip(texts.iter().copied().chain(std::iter::repeat(""))).map(pair).collect()
 }
 
-pub fn decode_series_v1(path: &str, item: &Value) -> Result<SeriesV1, String> {
+/// The texts of a member's elements, as sent.
+fn element_texts<'t>(name: &str, text: &'t str) -> Vec<&'t str> {
+    json::raw::member(name, text).map(json::raw::elements).unwrap_or_default()
+}
+
+/// `text` is the item as it was sent.
+pub fn decode_series_v1(path: &str, item: &Value, text: &str) -> Result<SeriesV1, String> {
+    let point_texts = element_texts("points", text);
     read_item(path, item, |fields| {
         fields.require("metric");
         fields.require("points");
@@ -112,7 +122,9 @@ pub fn decode_series_v1(path: &str, item: &Value) -> Result<SeriesV1, String> {
             host: fields.string("host"),
             interval: fields.optional_int64("interval"),
             metric: fields.string("metric"),
-            points: fields.read("points", "a list of [timestamp, value] pairs", Vec::new(), series_points_of),
+            points: fields.read("points", "a list of [timestamp, value] pairs", Vec::new(), |list| {
+                series_points_of(list, &point_texts)
+            }),
             tags: fields.strings("tags"),
             kind: fields.string("type"),
             additional: additional(&["host", "interval", "metric", "points", "tags", "type"], item),
@@ -134,7 +146,8 @@ pub enum DistributionItem {
 #[derive(Clone, Debug)]
 pub struct DistributionPoint {
     pub items: Vec<DistributionItem>,
-    pub raw: Value,
+    /// The point's text as sent.
+    pub raw: String,
 }
 
 #[derive(Clone, Debug)]
@@ -147,7 +160,7 @@ pub struct DistributionSeries {
     pub kind: String,
     pub additional: BTreeMap<String, Value>,
     /// The series as it arrived.
-    pub raw: Value,
+    pub raw: String,
 }
 
 fn distribution_item_of(item: &Value) -> DistributionItem {
@@ -158,29 +171,34 @@ fn distribution_item_of(item: &Value) -> DistributionItem {
     }
 }
 
-fn distribution_points_of(list: &Value) -> Option<Vec<DistributionPoint>> {
-    let point = |item: &Value| match item {
-        Value::Null => Some(DistributionPoint { items: Vec::new(), raw: item.clone() }),
+/// The points of a series; `texts` are their texts as sent, in the same order.
+fn distribution_points_of(list: &Value, texts: &[&str]) -> Option<Vec<DistributionPoint>> {
+    let point = |(item, text): (&Value, &str)| match item {
+        Value::Null => Some(DistributionPoint { items: Vec::new(), raw: text.into() }),
         Value::Array(elements) => {
-            Some(DistributionPoint { items: elements.iter().map(distribution_item_of).collect(), raw: item.clone() })
+            Some(DistributionPoint { items: elements.iter().map(distribution_item_of).collect(), raw: text.into() })
         }
         _ => None,
     };
-    list.as_array()?.iter().map(point).collect()
+    list.as_array()?.iter().zip(texts.iter().copied().chain(std::iter::repeat(""))).map(point).collect()
 }
 
-pub fn decode_distribution_series(path: &str, item: &Value) -> Result<DistributionSeries, String> {
+/// `text` is the item as it was sent.
+pub fn decode_distribution_series(path: &str, item: &Value, text: &str) -> Result<DistributionSeries, String> {
+    let point_texts = element_texts("points", text);
     read_item(path, item, |fields| {
         fields.require("metric");
         fields.require("points");
         DistributionSeries {
             host: fields.string("host"),
             metric: fields.string("metric"),
-            points: fields.read("points", "a list of [timestamp, [values]] pairs", Vec::new(), distribution_points_of),
+            points: fields.read("points", "a list of [timestamp, [values]] pairs", Vec::new(), |list| {
+                distribution_points_of(list, &point_texts)
+            }),
             tags: fields.strings("tags"),
             kind: fields.string("type"),
             additional: additional(&["host", "metric", "points", "tags", "type"], item),
-            raw: item.clone(),
+            raw: text.into(),
         }
     })
 }
@@ -191,15 +209,16 @@ pub struct SeriesPayload<S> {
     pub series: Vec<S>,
     /// Where each of series stood in the list as sent.
     pub positions: Vec<usize>,
-    /// The elements of the list that did not fit, each with its place and what was wrong with it.
-    pub rejected: Vec<(usize, Value, String)>,
+    /// The elements of the list that did not fit, each with its place, its text as sent and what
+    /// was wrong with it.
+    pub rejected: Vec<(usize, String, String)>,
     pub additional: BTreeMap<String, Value>,
 }
 
 /// Item by item, so one element that does not fit does not cost the series beside it.
 fn parse_payload<S>(
     label: &str,
-    decode: impl Fn(&str, &Value) -> Result<S, String>,
+    decode: impl Fn(&str, &Value, &str) -> Result<S, String>,
     body: &[u8],
 ) -> Result<SeriesPayload<S>, String> {
     let root = json::try_parse(body).map_err(|e| format!("{label}: {e}"))?;
@@ -215,13 +234,16 @@ fn parse_payload<S>(
         rejected: Vec::new(),
         additional: additional(&["series"], &root),
     };
+    let text = json::raw::text(body);
+    let texts = element_texts("series", &text);
     for (i, item) in placed(list) {
-        match decode(&format!("series[{i}]"), item) {
+        let item_text = texts.get(i).copied().unwrap_or_default();
+        match decode(&format!("series[{i}]"), item, item_text) {
             Ok(series) => {
                 payload.series.push(series);
                 payload.positions.push(i);
             }
-            Err(why) => payload.rejected.push((i, item.clone(), why)),
+            Err(why) => payload.rejected.push((i, item_text.into(), why)),
         }
     }
     Ok(payload)
@@ -249,8 +271,8 @@ pub struct ServiceCheck {
 #[derive(Clone, Debug, Default)]
 pub struct CheckRuns {
     pub runs: Vec<ServiceCheck>,
-    /// The items that did not fit, each with its place and what was wrong.
-    pub rejected: Vec<(usize, Value, String)>,
+    /// The items that did not fit, each with its place, its text as sent and what was wrong.
+    pub rejected: Vec<(usize, String, String)>,
 }
 
 /// Decodes one check. Datadog's OpenAPI spec calls `tags` required; the agent disagrees and sends
@@ -292,10 +314,12 @@ pub fn parse_check_runs(body: &[u8]) -> Result<CheckRuns, String> {
         Value::Null => Ok(CheckRuns::default()),
         Value::Array(items) => {
             let mut checks = CheckRuns::default();
+            let text = json::raw::text(body);
+            let texts = json::raw::elements(&text);
             for (i, item) in placed(items) {
                 match decode_service_check(true, &format!("[{i}]"), item) {
                     Ok(run) => checks.runs.push(run),
-                    Err(why) => checks.rejected.push((i, item.clone(), why)),
+                    Err(why) => checks.rejected.push((i, texts.get(i).copied().unwrap_or_default().into(), why)),
                 }
             }
             Ok(checks)

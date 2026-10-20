@@ -13,7 +13,7 @@ ninjapaws-intake.workspace = true
 ninjapaws-proto.workspace = true
 ninjapaws-storage.workspace = true
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json.workspace = true
 tako-rs = "2.5.0"
 tokio = { version = "1.54.0", features = ["full"] }
 tokio-postgres = "0.7"

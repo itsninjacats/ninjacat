@@ -115,6 +115,9 @@ pub fn profile_row(
     let not_pprof = Summary::default();
     let shapes: Vec<&Summary> = parsed.iter().map(|p| p.unwrap_or(&not_pprof)).collect();
     let field = |name| json::child(name, event);
+    // start and end are also kept as written: the event part's text.
+    let event_text = parts.get("event").map(|e| json::raw::text(e)).unwrap_or_default();
+    let as_written = |name| json::raw::text_of(json::raw::member(name, &event_text));
 
     Profile {
         tenant_id: tenant.into(),
@@ -123,9 +126,9 @@ pub fn profile_row(
         dd_evp_origin: origin.into(),
         dd_evp_origin_version: origin_version.into(),
         event: Blob(parts.get("event").map(|e| e.to_vec()).unwrap_or_default()),
-        start_raw: json::text(field("start")),
+        start_raw: as_written("start"),
         start_parsed: parse_timestamp(field("start")),
-        end_raw: json::text(field("end")),
+        end_raw: as_written("end"),
         end_parsed: parse_timestamp(field("end")),
         family: json::lenient_string(field("family")),
         version: json::lenient_string(field("version")),

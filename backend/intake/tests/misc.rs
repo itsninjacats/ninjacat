@@ -110,6 +110,21 @@ async fn a_null_batch_entry_is_still_an_entry_with_nothing_in_it() {
     assert_eq!(column("parent_request_type"), vec!["", "message-batch", "message-batch"]);
 }
 
+/// What is stored as JSON is the text the tracer sent, digits and spaces included.
+#[tokio::test]
+async fn the_payload_debug_times_and_extra_keep_the_text_as_sent() {
+    let found = telemetry(
+        r#"{"request_type":"message-batch","tracer_time": 1.50 ,"debug":{ "x" : 1.0e3 },"future":[ 1.50 ],
+            "payload":[ {"request_type":"logs","payload":{ "n" : 1.50 }} ]}"#,
+    )
+    .await;
+    assert_eq!(found[0]["tracer_time_raw"], "1.50");
+    assert_eq!(found[0]["debug"], r#"{ "x" : 1.0e3 }"#);
+    assert_eq!(found[0]["extra"], serde_json::json!({ "future": "[ 1.50 ]" }));
+    assert_eq!(found[0]["payload"], r#"[ {"request_type":"logs","payload":{ "n" : 1.50 }} ]"#);
+    assert_eq!(found[1]["payload"], r#"{ "n" : 1.50 }"#);
+}
+
 #[tokio::test]
 async fn a_null_body_is_an_empty_envelope_and_still_a_row() {
     let found = telemetry("null").await;

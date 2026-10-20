@@ -23,7 +23,8 @@ prost-reflect = { version = "0.16.5", features = ["serde"] }
 regex = "1"
 rmp = "0.8"
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
+serde-value = "0.7"
+serde_json.workspace = true
 sha2 = "0.10"
 tako-rs = { version = "2.5.0", features = ["plugins"] }
 tokio = { version = "1.54.0", features = ["full"] }

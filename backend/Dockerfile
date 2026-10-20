@@ -6,7 +6,11 @@
 #
 #   docker build --build-context migrations=../api/schema/migrations -t ninjapaws .
 #   docker run ninjapaws ninjapaws_internal
+#
+# PROFILE is the Cargo profile: `dist` (the default) for an image that is deployed, `dev` for the
+# dev stack, which rebuilds on every change and does not need the optimiser's time.
 FROM rust:1.99.1-slim-trixie AS build
+ARG PROFILE=dist
 WORKDIR /src
 COPY . .
 # Where `storage` looks for them: ../../api/schema/migrations from its own directory.
@@ -17,9 +21,9 @@ COPY --from=migrations . /api/schema/migrations/
 # every `ninjapaws_*` of the build.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
-    cargo build --release --locked -p api --bins \
+    cargo build --profile "$PROFILE" --locked -p api --bins \
     && mkdir /out \
-    && find target/release -maxdepth 1 -type f -executable -name 'ninjapaws_*' -exec cp {} /out/ \;
+    && find "target/$([ "$PROFILE" = dev ] && echo debug || echo "$PROFILE")" -maxdepth 1 -type f -executable -name 'ninjapaws_*' -exec cp {} /out/ \;
 
 # cc: glibc and libgcc, all a Rust binary links against; nonroot: uid 65532.
 FROM gcr.io/distroless/cc-debian13:nonroot

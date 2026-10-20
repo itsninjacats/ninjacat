@@ -738,11 +738,11 @@ mod tests {
 
     #[test]
     fn an_additional_fields_value_is_json_text_a_string_keeps_its_quotes_an_object_is_compact_with_sorted_keys() {
-        // serde_json keeps an integer's digits; a float is written back as the float it read.
+        // Re-written compact with sorted keys, every number with its digits as sent.
         let rows = flows(r#"[{"note":"hello","nested":{ "b" : 1.50, "a" : [1000, null] }}]"#);
         assert_eq!(
             rows[0].additional_fields,
-            texts(&[("nested", r#"{"a":[1000,null],"b":1.5}"#), ("note", "\"hello\"")])
+            texts(&[("nested", r#"{"a":[1000,null],"b":1.50}"#), ("note", "\"hello\"")])
         );
     }
 

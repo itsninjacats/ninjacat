@@ -127,6 +127,20 @@ fn extra_encoded(skip: &[&str], values: &BTreeMap<String, Value>) -> Extra {
         .collect()
 }
 
+/// The members of an object as the texts they were sent as, by name.
+type Sent<'t> = BTreeMap<String, &'t str>;
+
+/// A member's text as sent, "" when it was not sent.
+fn sent_text(sent: &Sent, name: &str) -> String {
+    sent.get(name).map(|t| t.to_string()).unwrap_or_default()
+}
+
+/// For an `extra` column of a document kept as it came: the members not in `skip`, each as the
+/// text it was sent as.
+fn extra_sent(skip: &[&str], text: &str) -> Extra {
+    json::raw::other_members(&skip.iter().copied().collect(), text)
+}
+
 /// Folds a nested object's extras into the outer ones under a prefix, so two levels of one
 /// document share a column without colliding.
 pub(crate) fn merge_extra(mut outer: Extra, prefix: &str, nested: Extra) -> Extra {
@@ -235,7 +249,7 @@ pub async fn handle_series_v1(ctx: Ctx, body: Bytes) -> Response {
                 );
             }
             for (_, item, why) in &payload.rejected {
-                ctx.raw("series", "unexpected_shape", why, &json::raw_bytes(item));
+                ctx.raw("series", "unexpected_shape", why, item.as_bytes());
             }
 
             let mut points = Vec::new();
@@ -272,7 +286,7 @@ pub async fn handle_series_v1(ctx: Ctx, body: Bytes) -> Response {
                             "series",
                             "unexpected_shape",
                             &format!("series[{at}].points[{j}]: expected a [timestamp, value] pair of numbers"),
-                            &json::raw_bytes(&point.raw),
+                            point.raw.as_bytes(),
                         ),
                     }
                 }
@@ -402,7 +416,7 @@ pub async fn handle_distribution_points(ctx: Ctx, body: Bytes) -> Response {
                 );
             }
             for (_, item, why) in &payload.rejected {
-                ctx.raw("distribution_points", "unexpected_shape", why, &json::raw_bytes(item));
+                ctx.raw("distribution_points", "unexpected_shape", why, item.as_bytes());
             }
 
             let mut rows = Vec::new();
@@ -414,7 +428,7 @@ pub async fn handle_distribution_points(ctx: Ctx, body: Bytes) -> Response {
                         "distribution_points",
                         "unexpected_shape",
                         &format!("series[{at}].type: expected \"distribution\", got \"{}\"", series.kind),
-                        &json::raw_bytes(&series.raw),
+                        series.raw.as_bytes(),
                     );
                 }
                 let extra = extra_encoded(&[], &series.additional);
@@ -446,7 +460,7 @@ pub async fn handle_distribution_points(ctx: Ctx, body: Bytes) -> Response {
                             "distribution_points",
                             "unexpected_shape",
                             &format!("series[{at}].points[{j}]: expected a [timestamp, [values]] pair"),
-                            &json::raw_bytes(&point.raw),
+                            point.raw.as_bytes(),
                         ),
                     }
                 }
@@ -471,7 +485,7 @@ pub async fn handle_check_run(ctx: Ctx, body: Bytes) -> Response {
         Err(error) => ctx.raw("check_run", "decode_error", &error, &body),
         Ok(checks) => {
             for (_, item, why) in &checks.rejected {
-                ctx.raw("check_run", "unexpected_shape", why, &json::raw_bytes(item));
+                ctx.raw("check_run", "unexpected_shape", why, item.as_bytes());
             }
             let rows = checks
                 .runs
@@ -669,10 +683,10 @@ fn events_by_source(events: &Value) -> Result<BTreeMap<String, Vec<Value>>, Stri
 
 /// The events variant: {"events": {<source>: [...]}, "internalHostname"}. The rows go to the same
 /// table as /api/v1/events.
-fn intake_events(ctx: &Ctx, envelope: &BTreeMap<String, Value>) {
+fn intake_events(ctx: &Ctx, envelope: &BTreeMap<String, Value>, sent: &Sent) {
     let events = &envelope["events"];
     match events_by_source(events) {
-        Err(error) => ctx.raw("intake", "unexpected_shape", &error, &json::raw_bytes(events)),
+        Err(error) => ctx.raw("intake", "unexpected_shape", &error, sent_text(sent, "events").as_bytes()),
         Ok(by_source) => {
             let host = json::lenient_string(envelope.get("internalHostname"));
             // By source in sorted order, so two replays of one payload give the same rows.
@@ -720,7 +734,10 @@ pub fn agent_check_row(
 /// The agent_checks variant (the V5 collector's payload): check statuses as positional arrays,
 /// and external_host_tags, [[hostname, {source: [tags]}]]: tags for hosts the agent is NOT
 /// running on, which is why they get a table of their own.
-fn intake_agent_checks(ctx: &Ctx, envelope: &BTreeMap<String, Value>) {
+fn intake_agent_checks(ctx: &Ctx, envelope: &BTreeMap<String, Value>, sent: &Sent) {
+    let elements = |name: &str| sent.get(name).map(|t| json::raw::elements(t)).unwrap_or_default();
+    let check_texts = elements("agent_checks");
+    let tag_texts = elements("external_host_tags");
     let checks = json::lenient_items(envelope.get("agent_checks"));
     let external_tags: Vec<Option<(String, Tags)>> = json::lenient_items(envelope.get("external_host_tags"))
         .iter()
@@ -734,7 +751,7 @@ fn intake_agent_checks(ctx: &Ctx, envelope: &BTreeMap<String, Value>) {
                     "intake",
                     "unexpected_shape",
                     &format!("external_host_tags[{i}] is not a [hostname, tags] pair"),
-                    &json::raw_bytes(entry),
+                    tag_texts.get(i).copied().unwrap_or_default().as_bytes(),
                 );
                 None
             }
@@ -745,7 +762,7 @@ fn intake_agent_checks(ctx: &Ctx, envelope: &BTreeMap<String, Value>) {
     let host = json::lenient_string(envelope.get("internalHostname"));
     let version = json::lenient_string(envelope.get("agentVersion"));
     let uuid = json::lenient_string(envelope.get("uuid"));
-    let meta = json::raw_or_empty(envelope.get("meta"));
+    let meta = sent_text(sent, "meta");
     let mut check_rows = Vec::new();
     for (i, check) in checks.iter().enumerate() {
         match check.as_array() {
@@ -756,7 +773,7 @@ fn intake_agent_checks(ctx: &Ctx, envelope: &BTreeMap<String, Value>) {
                 "intake",
                 "unexpected_shape",
                 &format!("agent_checks[{i}] is not a positional array"),
-                &json::raw_bytes(check),
+                check_texts.get(i).copied().unwrap_or_default().as_bytes(),
             ),
         }
     }
@@ -819,7 +836,7 @@ const GOHAI_KNOWN_SECTIONS: [&str; 4] = ["platform", "cpu", "memory", "filesyste
 ///                                        "system" source also fills tags
 ///   meta, network, logs, otlp, resources their JSON text, as sent
 ///   systemStats, install-method, proxy-info, container-meta
-///                                        flat maps, values JSON-encoded
+///                                        flat maps, each value its JSON text as sent
 ///   apiKey                               the real key: never stored
 ///   anything else                        intake_extra
 #[allow(clippy::too_many_arguments)]
@@ -830,13 +847,17 @@ pub fn host_row(
     os_name: &str,
     seen_at: DateTime<Utc>,
     envelope: &BTreeMap<String, Value>,
+    envelope_text: &str,
     gohai: &BTreeMap<String, Value>,
+    gohai_text: &str,
     host_tags: BTreeMap<String, Vec<String>>,
 ) -> Host {
     // gohai reports every value as a string, even numbers. A section that is absent or shaped
     // differently is left empty rather than failing the row.
     let section = |name: &str| gohai.get(name).and_then(json::string_map_of).unwrap_or_default();
-    let object_map = |name: &str| extra_encoded(&[], &json::lenient_members(envelope.get(name)));
+    let sent = json::raw::members(envelope_text);
+    let gohai_sent = json::raw::members(gohai_text);
+    let object_map = |name: &str| sent.get(name).map(|t| extra_sent(&[], t)).unwrap_or_default();
     Host {
         tenant_id: tenant.into(),
         host: hostname.into(),
@@ -850,11 +871,11 @@ pub fn host_row(
         uuid: json::lenient_string(envelope.get("uuid")),
         agent_flavor: json::lenient_string(envelope.get("agent-flavor")),
         python_version: json::lenient_string(envelope.get("python")),
-        meta: json::raw_or_empty(envelope.get("meta")),
-        network: json::raw_or_empty(envelope.get("network")),
-        filesystem: json::raw_or_empty(gohai.get("filesystem")),
-        logs: json::raw_or_empty(envelope.get("logs")),
-        otlp: json::raw_or_empty(envelope.get("otlp")),
+        meta: sent_text(&sent, "meta"),
+        network: sent_text(&sent, "network"),
+        filesystem: sent_text(&gohai_sent, "filesystem"),
+        logs: sent_text(&sent, "logs"),
+        otlp: sent_text(&sent, "otlp"),
         system_stats: object_map("systemStats"),
         install_method: object_map("install-method"),
         proxy_info: object_map("proxy-info"),
@@ -862,20 +883,22 @@ pub fn host_row(
         fips_mode: json::flag(envelope.get("fips_mode")),
         fips_proxy_enabled: json::flag(envelope.get("fips_proxy_enabled")),
         host_tags,
-        gohai_extra: extra_encoded(&GOHAI_KNOWN_SECTIONS, gohai),
-        intake_extra: extra_encoded(&HOST_KNOWN_KEYS, envelope),
-        resources: json::raw_or_empty(envelope.get("resources")),
+        gohai_extra: extra_sent(&GOHAI_KNOWN_SECTIONS, gohai_text),
+        intake_extra: extra_sent(&HOST_KNOWN_KEYS, envelope_text),
+        resources: sent_text(&sent, "resources"),
     }
 }
 
 /// The host metadata variant. The payload is loose and shifts between agent versions, so fields
 /// are read by name.
-fn intake_host(ctx: &Ctx, envelope: &BTreeMap<String, Value>) {
+fn intake_host(ctx: &Ctx, envelope: &BTreeMap<String, Value>, envelope_text: &str) {
     let hostname = json::lenient_string(envelope.get("internalHostname"));
     if hostname.is_empty() {
         return;
     }
-    let gohai = match json::lenient_string(envelope.get("gohai")).as_str() {
+    // The text of gohai's own document, which the envelope carries as a string.
+    let gohai_text = json::lenient_string(envelope.get("gohai"));
+    let gohai = match gohai_text.as_str() {
         "" => BTreeMap::new(),
         inner => json::try_parse(inner.as_bytes()).map(|sections| json::members(&sections)).unwrap_or_default(),
     };
@@ -886,7 +909,9 @@ fn intake_host(ctx: &Ctx, envelope: &BTreeMap<String, Value>) {
         &json::lenient_string(envelope.get("os")),
         Utc::now(),
         envelope,
+        envelope_text,
         &gohai,
+        &gohai_text,
         json::lenient_string_lists(envelope.get("host-tags")),
     );
     ctx.write(vec![row]);
@@ -974,12 +999,14 @@ fn decode_intake(ctx: &Ctx, body: &[u8]) {
         Ok(root) => root,
     };
     let envelope = json::members(&root);
+    let text = json::raw::text(body);
+    let sent = json::raw::members(&text);
     if envelope.contains_key("events") {
-        intake_events(ctx, &envelope);
+        intake_events(ctx, &envelope, &sent);
     } else if envelope.contains_key("agent_checks") {
-        intake_agent_checks(ctx, &envelope);
+        intake_agent_checks(ctx, &envelope, &sent);
     } else if envelope.contains_key("gohai") || envelope.contains_key("systemStats") {
-        intake_host(ctx, &envelope);
+        intake_host(ctx, &envelope, &text);
     } else if envelope.contains_key("resources") && envelope.len() == 1 {
         intake_resources(ctx, body, &envelope["resources"]);
     } else {
@@ -1051,7 +1078,9 @@ fn store_metadata(ctx: &Ctx, body: &[u8]) {
     // Every key that is neither the shared envelope nor a variant of this request:
     // clustercheck_status and its sibling among them.
     let skip: Vec<&str> = METADATA_ENVELOPE_KEYS.iter().copied().chain(found.iter().copied()).collect();
-    let extra = extra_encoded(&skip, &envelope);
+    let text = json::raw::text(body);
+    let sent = json::raw::members(&text);
+    let extra = extra_sent(&skip, &text);
 
     // One row per variant key present: `variant` stays a real filter.
     let rows = found
@@ -1065,7 +1094,7 @@ fn store_metadata(ctx: &Ctx, body: &[u8]) {
             cluster_id: json::lenient_string(json::field("cluster_id", &root)),
             timestamp: (timestamp > 0).then(|| time::from_unix_seconds(timestamp)),
             uuid: json::lenient_string(json::field("uuid", &root)),
-            payload: json::raw_or_empty(envelope.get(*variant)),
+            payload: sent_text(&sent, variant),
             envelope_extra: extra.clone(),
         })
         .collect();
@@ -1146,11 +1175,18 @@ pub async fn handle_query(ctx: Ctx, _: Bytes) -> Response {
 struct JsonApiResource {
     id: String,
     attributes: BTreeMap<String, Value>,
+    /// The attributes object as it was sent, "" for none.
+    attributes_text: String,
 }
 
 impl JsonApiResource {
     fn text(&self, name: &str) -> String {
         json::lenient_string(self.attributes.get(name))
+    }
+
+    /// An attribute's JSON text as sent; "" when it was not sent.
+    fn sent(&self, name: &str) -> String {
+        json::raw::member(name, &self.attributes_text).unwrap_or_default().into()
     }
 }
 
@@ -1159,9 +1195,12 @@ fn try_json_api(body: &[u8]) -> Option<JsonApiResource> {
     let root = json::try_parse_object(body)?;
     let data = root.get("data").filter(|d| d.is_object() || d.is_null())?;
     let fields = json::members(data);
+    let text = json::raw::text(body);
+    let data_text = json::raw::member("data", &text).unwrap_or_default();
     Some(JsonApiResource {
         id: json::lenient_string(fields.get("id")),
         attributes: json::lenient_members(fields.get("attributes")),
+        attributes_text: json::raw::member("attributes", data_text).unwrap_or_default().into(),
     })
 }
 
@@ -1277,6 +1316,7 @@ pub async fn handle_runner_dequeue(ctx: Ctx, body: Bytes) -> Response {
 pub async fn handle_runner_task_update(ctx: Ctx, body: Bytes) -> Response {
     if let Some(resource) = decode_json_api(&ctx, &body, "par", "task-update: not a JSON:API document") {
         let payload = json::lenient_members(resource.attributes.get("payload"));
+        let payload_text = resource.sent("payload");
         // A numeric enum on the runner's side, and a succeeded task sends none: absent must not
         // become a 0 that reads as an error code.
         let error_code = match payload.get("error_code") {
@@ -1291,16 +1331,16 @@ pub async fn handle_runner_task_update(ctx: Ctx, body: Bytes) -> Response {
             task_id: resource.text("task_id"),
             action_fqn: resource.text("action_fqn"),
             job_id: resource.text("job_id"),
-            client: json::raw_or_empty(resource.attributes.get("client")),
+            client: resource.sent("client"),
             branch: json::lenient_string(payload.get("branch")),
-            outputs: json::raw_or_empty(payload.get("outputs")),
+            outputs: json::raw::member("outputs", &payload_text).unwrap_or_default().into(),
             error_code,
             error_details: json::lenient_string(payload.get("error_details")),
             api_error: json::lenient_string(payload.get("api_error")),
             extra: merge_extra(
-                extra_encoded(&["task_id", "client", "action_fqn", "job_id", "payload"], &resource.attributes),
+                extra_sent(&["task_id", "client", "action_fqn", "job_id", "payload"], &resource.attributes_text),
                 "payload.",
-                extra_encoded(&["branch", "outputs", "error_code", "error_details", "api_error"], &payload),
+                extra_sent(&["branch", "outputs", "error_code", "error_details", "api_error"], &payload_text),
             ),
         }]);
     }
@@ -1318,7 +1358,7 @@ pub async fn handle_runner_heartbeat(ctx: Ctx, body: Bytes) -> Response {
             task_id: resource.text("task_id"),
             action_fqn: resource.text("action_fqn"),
             job_id: resource.text("job_id"),
-            client: json::raw_or_empty(resource.attributes.get("client")),
+            client: resource.sent("client"),
         }]);
     }
     json(StatusCode::OK, &json!({}))
@@ -1339,6 +1379,7 @@ pub async fn handle_runner_health_check(_: Ctx, _: Bytes) -> Response {
 pub async fn handle_action_connections(ctx: Ctx, body: Bytes) -> Response {
     if let Some(resource) = decode_json_api(&ctx, &body, "par", "connections: not a JSON:API document") {
         let integration = json::lenient_members(resource.attributes.get("integration"));
+        let integration_text = resource.sent("integration");
         let connection_tags = json::lenient_strings(resource.attributes.get("tags")).unwrap_or_default();
         ctx.write(vec![ActionConnection {
             tenant_id: ctx.tenant().into(),
@@ -1347,11 +1388,11 @@ pub async fn handle_action_connections(ctx: Ctx, body: Bytes) -> Response {
             runner_id: resource.text("runner_id"),
             tags: tags::to_multi_map(&connection_tags),
             integration_type: json::lenient_string(integration.get("type")),
-            credentials: json::raw_or_empty(integration.get("credentials")),
+            credentials: json::raw::member("credentials", &integration_text).unwrap_or_default().into(),
             extra: merge_extra(
-                extra_encoded(&["name", "runner_id", "tags", "integration"], &resource.attributes),
+                extra_sent(&["name", "runner_id", "tags", "integration"], &resource.attributes_text),
                 "integration.",
-                extra_encoded(&["type", "credentials"], &integration),
+                extra_sent(&["type", "credentials"], &integration_text),
             ),
         }]);
     }

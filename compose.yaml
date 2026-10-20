@@ -163,8 +163,15 @@ services:
   # loopback alone; the panel's container reaches it over the compose network.
   # `docker compose up --build internal` rebuilds it after a change.
   internal:
-    build:
+    build: &ninjapaws-build
       context: ./backend
+      # The ClickHouse migrations the programs embed live outside backend/.
+      additional_contexts:
+        migrations: ./api/schema/migrations
+      # Unoptimised: the dev stack rebuilds on every change, and the optimiser's time is for
+      # the images that are deployed.
+      args:
+        PROFILE: dev
     image: ninjapaws:dev
     container_name: ninjacat-internal
     command: ["ninjapaws_internal"]
@@ -187,8 +194,7 @@ services:
   # advisory locks; here there is one. The intake creates the tables and has no healthcheck to
   # wait on, so a table not there yet is read again later.
   monitors:
-    build:
-      context: ./backend
+    build: *ninjapaws-build
     image: ninjapaws:dev
     container_name: ninjacat-monitors
     command: ["ninjapaws_monitors"]

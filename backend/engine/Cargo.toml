@@ -10,7 +10,7 @@ futures = "0.3"
 ninjapaws-anomaly.workspace = true
 regex = "1"
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["preserve_order"] }
+serde_json.workspace = true
 sha2 = "0.10"
 winnow = "0.7"
 

@@ -202,8 +202,8 @@ async fn one_bad_action_in_a_batch_is_kept_raw_while_the_rest_become_rows() {
     let raw = rows(&answer, "storage_raw_payloads")[0];
     assert_eq!((raw["intake"].as_str(), raw["reason"].as_str()), (Some("kubeactions"), Some("decode_error")));
     assert_eq!(raw["note"], "[1].action_id: expected a string, got number");
-    // The element's own JSON, written again compact: the parser does not keep its spacing.
-    assert_eq!(raw["body"], r#"{"action_id":5}"#);
+    // The element's own JSON, as it was sent.
+    assert_eq!(raw["body"], r#"{"action_id": 5}"#);
     let ids: Vec<&Value> = rows(&answer, "storage_k8s_actions").iter().map(|r| &r["action_id"]).collect();
     assert_eq!(ids, ["a-1", "a-3"]);
 }
@@ -228,7 +228,8 @@ async fn a_lifecycle_body_with_a_mistyped_field_is_kept_raw_not_stored_as_an_eve
         "/../../api/tests/Intake.Tests/Fixtures/go/TestPortProbeContainers__images_on_lifecycle/001.json"
     );
     let fixture: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
-    let body = base64::engine::general_purpose::STANDARD.decode(fixture["request"]["body_b64"].as_str().unwrap()).unwrap();
+    let body =
+        base64::engine::general_purpose::STANDARD.decode(fixture["request"]["body_b64"].as_str().unwrap()).unwrap();
     let answer = post(containers::mount, "/api/v2/contlcycle", body).await;
     assert_eq!(answer.status, 202);
     assert_eq!(writers(&answer), vec!["storage_raw_payloads"]);

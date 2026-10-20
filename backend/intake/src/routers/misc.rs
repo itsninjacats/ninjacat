@@ -6,7 +6,7 @@
 //!   config: none for resources (an event platform track); telemetry is switched off wholesale
 //!           with DD_TELEMETRY_ENABLED.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use bytes::Bytes;
 use chrono::{DateTime, TimeDelta, Utc};
@@ -119,18 +119,16 @@ pub struct Host {
     pub extra: BTreeMap<String, String>,
 }
 
-/// The `host` block; None under the same rule as `application`.
-pub fn host(value: Option<&Value>) -> Option<Host> {
+/// The `host` block; None under the same rule as `application`. `text` is the block as it was
+/// sent, which its other keys are kept from.
+pub fn host(value: Option<&Value>, text: Option<&str>) -> Option<Host> {
     let fields = block(value)?;
+    let known = BTreeSet::from(["hostname", "os", "architecture"]);
     Some(Host {
         hostname: json::text(fields.get("hostname")),
         os: json::text(fields.get("os")),
         architecture: json::text(fields.get("architecture")),
-        extra: fields
-            .iter()
-            .filter(|(name, _)| !["hostname", "os", "architecture"].contains(&name.as_str()))
-            .map(|(name, extra)| (name.clone(), json::compact(extra)))
-            .collect(),
+        extra: text.map(|t| json::raw::other_members(&known, t)).unwrap_or_default(),
     })
 }
 
@@ -149,12 +147,9 @@ const ENVELOPE_KEYS: [&str; 11] = [
     "origin",
 ];
 
-pub fn extra_keys(envelope: &BTreeMap<String, Value>) -> Extra {
-    envelope
-        .iter()
-        .filter(|(name, _)| !ENVELOPE_KEYS.contains(&name.as_str()))
-        .map(|(name, value)| (name.clone(), json::compact(value)))
-        .collect()
+/// The envelope's keys without a column of their own, each as the text it was sent as.
+pub fn extra_keys(text: &str) -> Extra {
+    json::raw::other_members(&BTreeSet::from(ENVELOPE_KEYS), text)
 }
 
 /// Names the producer from request_type, falling back to the envelope keys that only one producer
@@ -183,21 +178,24 @@ pub fn producer(envelope: &BTreeMap<String, Value>, request_type: &str) -> &'sta
     }
 }
 
-/// The row of the request itself, whoever sent it.
-fn request_row(ctx: &Ctx, envelope: &BTreeMap<String, Value>, request_type: &str) -> ApmTelemetry {
+/// The row of the request itself, whoever sent it. `text` is the envelope as it was sent: what
+/// is stored as JSON is stored as that text.
+fn request_row(ctx: &Ctx, envelope: &BTreeMap<String, Value>, text: &str, request_type: &str) -> ApmTelemetry {
     let member = |name: &str| envelope.get(name);
+    let sent = json::raw::members(text);
+    let as_sent = |name: &str| sent.get(name).map(|t| t.to_string()).unwrap_or_default();
     let app = application(member("application"));
-    let sender = host(member("host"));
+    let sender = host(member("host"), sent.get("host").copied());
 
     // `application` and `host` are known keys, so they are not in `extra`. A block that did not
     // read as an object has no column to go to either, so its text is put back under its own
     // name.
-    let mut extra = extra_keys(envelope);
+    let mut extra = extra_keys(text);
     if app.is_none() {
-        extra.insert("application".into(), json::raw_or_empty(member("application")));
+        extra.insert("application".into(), as_sent("application"));
     }
     if sender.is_none() {
-        extra.insert("host".into(), json::raw_or_empty(member("host")));
+        extra.insert("host".into(), as_sent("host"));
     }
     let app = app.unwrap_or_default();
     let sender = sender.unwrap_or_default();
@@ -211,9 +209,9 @@ fn request_row(ctx: &Ctx, envelope: &BTreeMap<String, Value>, request_type: &str
         runtime_id: json::text(member("runtime_id")),
         seq_id: seq_id(member("seq_id")),
         tracer_time: unix_time(member("tracer_time")),
-        tracer_time_raw: json::raw_or_empty(member("tracer_time")),
+        tracer_time_raw: as_sent("tracer_time"),
         event_time: unix_time(member("event_time")),
-        event_time_raw: json::raw_or_empty(member("event_time")),
+        event_time_raw: as_sent("event_time"),
         service_name: app.service_name,
         service_version: app.service_version,
         env: app.env,
@@ -224,8 +222,8 @@ fn request_row(ctx: &Ctx, envelope: &BTreeMap<String, Value>, request_type: &str
         host_os: sender.os,
         host_architecture: sender.architecture,
         host_extra: sender.extra,
-        payload: json::raw_or_empty(member("payload")),
-        debug: json::raw_or_empty(member("debug")),
+        payload: as_sent("payload"),
+        debug: as_sent("debug"),
         origin: json::text(member("origin")),
         via: ctx.header("Via").into(),
         dd_agent_hostname: ctx.header("DD-Agent-Hostname").into(),
@@ -262,8 +260,9 @@ pub async fn handle_telemetry(ctx: Ctx, body: Bytes) -> Response {
         }
         Ok(root) => {
             let envelope = json::members(&root);
+            let text = json::raw::text(&body);
             let request_type = json::text(envelope.get("request_type"));
-            let parent = request_row(&ctx, &envelope, &request_type);
+            let parent = request_row(&ctx, &envelope, &text, &request_type);
             let mut found = Vec::new();
             if request_type == "message-batch" {
                 match batch_entries(envelope.get("payload")) {
@@ -272,12 +271,14 @@ pub async fn handle_telemetry(ctx: Ctx, body: Bytes) -> Response {
                     ),
                     // Entries carry no envelope of their own: they inherit the request's identity.
                     Some(entries) => {
+                        let sent = json::raw::member("payload", &text).map(json::raw::elements).unwrap_or_default();
                         for (i, entry) in entries.iter().enumerate() {
                             let entry_type = json::text(entry.get("request_type"));
+                            let payload = sent.get(i).and_then(|e| json::raw::member("payload", e));
                             found.push(ApmTelemetry {
                                 producer: producer(&envelope, &entry_type).into(),
                                 request_type: entry_type,
-                                payload: json::raw_or_empty(entry.get("payload")),
+                                payload: payload.unwrap_or_default().into(),
                                 batch_index: Some(i as u32),
                                 parent_request_type: request_type.clone(),
                                 ..parent.clone()
@@ -350,33 +351,33 @@ mod tests {
     #[test]
     fn an_absent_application_or_host_block_is_empty_not_malformed() {
         assert_eq!(application(None), Some(Application::default()));
-        assert_eq!(host(None), Some(Host::default()));
+        assert_eq!(host(None, None), Some(Host::default()));
     }
 
     #[test]
     fn an_application_or_host_block_that_is_not_an_object_is_malformed() {
         assert_eq!(application(Some(&value("\"not-an-object\""))), None);
-        assert_eq!(host(Some(&value("42"))), None);
+        assert_eq!(host(Some(&value("42")), Some("42")), None);
     }
 
     #[test]
     fn the_host_blocks_undeclared_keys_are_kept_by_name() {
-        let block = value(
-            r#"{"hostname": "h1", "os": "linux", "architecture": "amd64", "kernel_version": "5.15.0", "cpu_cores": 8}"#,
-        );
-        let found = host(Some(&block)).unwrap();
+        let text = r#"{"hostname": "h1", "os": "linux", "architecture": "amd64", "kernel_version": "5.15.0", "load": [ 1.50, 2 ]}"#;
+        let found = host(Some(&value(text)), Some(text)).unwrap();
         assert_eq!((found.hostname.as_str(), found.os.as_str(), found.architecture.as_str()), ("h1", "linux", "amd64"));
+        // As sent, spaces and digits included.
         assert_eq!(
             found.extra,
-            BTreeMap::from([("cpu_cores".into(), "8".into()), ("kernel_version".into(), "\"5.15.0\"".into())])
+            BTreeMap::from([("kernel_version".into(), "\"5.15.0\"".into()), ("load".into(), "[ 1.50, 2 ]".into())])
         );
     }
 
     #[test]
     fn the_envelopes_undeclared_keys_are_kept_by_name() {
-        let envelope = json::members(&value(
-            r#"{"request_type": "app-started", "api_version": "v2", "future_field": "surprise"}"#,
-        ));
-        assert_eq!(extra_keys(&envelope), BTreeMap::from([("future_field".into(), "\"surprise\"".into())]));
+        let text = r#"{"request_type": "app-started", "api_version": "v2", "future_field": "surprise", "n": 1.50}"#;
+        assert_eq!(
+            extra_keys(text),
+            BTreeMap::from([("future_field".into(), "\"surprise\"".into()), ("n".into(), "1.50".into())])
+        );
     }
 }

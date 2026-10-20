@@ -161,11 +161,6 @@ pub fn compact(value: &Value) -> String {
     serde_json::to_string(value).unwrap()
 }
 
-/// The bytes of a value, compact.
-pub fn raw_bytes(value: &Value) -> Vec<u8> {
-    compact(value).into_bytes()
-}
-
 /// The text as a JSON string literal.
 pub fn quoted(text: &str) -> String {
     serde_json::to_string(text).unwrap()
@@ -296,11 +291,6 @@ pub fn tag_list(value: Option<&Value>) -> Vec<String> {
     }
 }
 
-/// The JSON text of a value, compact, `null` included; "" when the member was not sent at all.
-pub fn raw_or_empty(value: Option<&Value>) -> String {
-    value.map(compact).unwrap_or_default()
-}
-
 /// Members as the texts of a Map(String, String) column, each value as the JSON `write` gives
 /// it. A null member is the text `null`: an empty string is a value too, and not the one that
 /// was sent.
@@ -389,6 +379,8 @@ pub fn keys(object: &Value) -> String {
 pub mod raw {
     use std::collections::{BTreeMap, BTreeSet};
 
+    use serde_json::Value;
+
     use serde_json::value::RawValue;
 
     /// The body repaired, as text: repairing leaves only UTF-8.
@@ -421,6 +413,17 @@ pub mod raw {
     /// A member's text, `null` included; None when the object has no such member.
     pub fn member<'a>(name: &str, text: &'a str) -> Option<&'a str> {
         members(text).remove(name)
+    }
+
+    /// What [`super::text`] gives, read from a value's text as sent: a number keeps the spelling
+    /// it was sent in (`1.0e3`, which a parsed number writes back as `1.0e+3`).
+    pub fn text_of(sent: Option<&str>) -> String {
+        let Some(sent) = sent else { return String::new() };
+        match serde_json::from_str::<Value>(sent) {
+            Ok(Value::Number(_)) => sent.trim().to_string(),
+            Ok(value) => super::text(Some(&value)),
+            Err(_) => String::new(),
+        }
     }
 
     /// The members that have no column of their own, those not in `known`, each as its text.
@@ -457,13 +460,35 @@ pub mod proto {
     /// it or in lowerCamelCase, an enum by name or by number, null as the field's default, and
     /// keys the schema does not have are passed over.
     pub fn try_parse<T: prost::Message + prost::Name + Default>(body: &[u8]) -> Result<T, String> {
-        let repaired = repair(body);
-        let mut deserializer = serde_json::Deserializer::from_slice(&repaired);
+        let parsed = super::try_parse(body)?;
         let options = DeserializeOptions::new().deny_unknown_fields(false);
-        let dynamic = DynamicMessage::deserialize_with_options(descriptor::<T>(), &mut deserializer, &options)
-            .and_then(|message| deserializer.end().map(|_| message))
+        let deserializer = serde_value::ValueDeserializer::<serde_value::DeserializerError>::new(plain(parsed));
+        let dynamic = DynamicMessage::deserialize_with_options(descriptor::<T>(), deserializer, &options)
             .map_err(|e| e.to_string())?;
         dynamic.transcode_to().map_err(|e| e.to_string())
+    }
+
+    /// The document with its numbers as the numbers serde has. serde_json keeps a number's
+    /// digits (arbitrary precision) by handing it to a reader as a map of its own, which
+    /// prost-reflect does not take; a field's number is what protobuf reads anyway.
+    fn plain(value: Value) -> serde_value::Value {
+        use serde_value::Value as Plain;
+        match value {
+            Value::Null => Plain::Unit,
+            Value::Bool(b) => Plain::Bool(b),
+            Value::Number(n) => match (n.as_u64(), n.as_i64(), n.as_f64()) {
+                (Some(u), _, _) => Plain::U64(u),
+                (_, Some(i), _) => Plain::I64(i),
+                (_, _, Some(f)) => Plain::F64(f),
+                // Past f64's range: protobuf reads it as infinity.
+                _ => Plain::F64(if n.to_string().starts_with('-') { f64::NEG_INFINITY } else { f64::INFINITY }),
+            },
+            Value::String(text) => Plain::String(text),
+            Value::Array(items) => Plain::Seq(items.into_iter().map(plain).collect()),
+            Value::Object(members) => {
+                Plain::Map(members.into_iter().map(|(k, v)| (Plain::String(k), plain(v))).collect())
+            }
+        }
     }
 
     /// A message as JSON, written as protobuf's own printers write it: NaN and infinity as the

@@ -807,6 +807,16 @@ impl Formatter for DotNet {
         writer.write_all(dotnet_number(value).as_bytes())
     }
 
+    /// With serde_json's arbitrary precision every number reaches the writer as its text. A
+    /// fraction or an exponent makes it the double the F# service wrote; digits alone are an
+    /// integer, written as they are.
+    fn write_number_str<W: ?Sized + io::Write>(&mut self, writer: &mut W, value: &str) -> io::Result<()> {
+        match value.parse::<f64>() {
+            Ok(double) if value.contains(['.', 'e', 'E']) => self.write_f64(writer, double),
+            _ => writer.write_all(value.as_bytes()),
+        }
+    }
+
     fn write_string_fragment<W: ?Sized + io::Write>(&mut self, writer: &mut W, fragment: &str) -> io::Result<()> {
         for c in fragment.chars() {
             if written_as_is(c) {

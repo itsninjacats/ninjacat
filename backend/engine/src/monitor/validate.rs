@@ -478,11 +478,10 @@ mod tests {
         }
     }
 
-    /// serde_json refuses a number out of f64's range as a whole, where System.Text.Json read it
-    /// as infinity, which the F# refused as "options.thresholds.critical is too large a number".
+    /// The number reads (serde_json keeps its digits) and is refused as the F# refused it.
     #[test]
     fn a_number_too_large_is_refused() {
-        refused(ABOVE_90, r#"{"thresholds":{"critical":1e999}}"#, "options are not valid JSON: number out of range");
+        refused(ABOVE_90, r#"{"thresholds":{"critical":1e999}}"#, "options.thresholds.critical is too large a number");
     }
 
     #[test]

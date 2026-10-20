@@ -1523,13 +1523,17 @@ pub async fn handle_actions(ctx: Ctx, body: Bytes) -> Response {
     match json::try_parse_array(&body) {
         Err(e) => ctx.raw("kubeactions", "decode_error", &e, &body),
         Ok(items) => {
+            let text = json::raw::text(&body);
+            let sent = json::raw::elements(&text);
             let mut events = Vec::new();
             for (i, raw) in items.iter().enumerate() {
                 match decode_action(&format!("[{i}]"), raw) {
                     Ok(event) => events.push(event),
-                    // One bad element must not cost the batch, nor itself: its own JSON is kept
-                    // while the rest become rows.
-                    Err(e) => ctx.raw("kubeactions", "decode_error", &e, &json::raw_bytes(raw)),
+                    // One bad element must not cost the batch, nor itself: its own JSON is kept,
+                    // as it was sent, while the rest become rows.
+                    Err(e) => {
+                        ctx.raw("kubeactions", "decode_error", &e, sent.get(i).copied().unwrap_or_default().as_bytes())
+                    }
                 }
             }
             let arrival = Utc::now();

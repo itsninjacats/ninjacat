@@ -149,11 +149,6 @@ impl<'b, 'a> Fields<'b, 'a> {
         self.read(name, "a list of numbers", Vec::new(), json::floats_of)
     }
 
-    /// The member's text, `null` included; "" when it was not sent.
-    pub fn raw(&self, name: &str) -> String {
-        json::raw_or_empty(self.value.get(name))
-    }
-
     /// The elements of a list member, each still to be read.
     pub fn items(&self, name: &str) -> Vec<&'a Value> {
         self.read(name, "a list", Vec::new(), |v| v.as_array().map(|items| items.iter().collect()))
