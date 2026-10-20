@@ -36,9 +36,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = fs::remove_dir_all(&out);
     fs::create_dir_all(&out)?;
     // The well-known types from pbjson-types, which have the JSON mapping prost-types lacks.
+    // Type names let a message be found among the descriptors, which is how it is written as
+    // JSON by reflection (`descriptors.bin`, read by prost-reflect).
     prost_build::Config::new()
         .out_dir(&out)
         .include_file("mod.rs")
+        .enable_type_names()
         .compile_well_known_types()
         .extern_path(".google.protobuf", "::pbjson_types")
         .compile_fds(fds)?;
@@ -68,6 +71,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             fs::write(&path, code)?;
         }
     }
+
+    fs::write(out.join("descriptors.bin"), &descriptors)?;
 
     println!("generated {}", out.canonicalize()?.display());
     Ok(())

@@ -20,12 +20,32 @@ pub struct ScanStats {
         i64,
     >,
 }
+impl ::prost::Name for ScanStats {
+    const NAME: &'static str = "ScanStats";
+    const PACKAGE: &'static str = "datadog.sds";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.sds.ScanStats".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.sds.ScanStats".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ScannerMetadata {
     #[prost(string, optional, tag = "1")]
     pub version: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(string, optional, tag = "2")]
     pub region: ::core::option::Option<::prost::alloc::string::String>,
+}
+impl ::prost::Name for ScannerMetadata {
+    const NAME: &'static str = "ScannerMetadata";
+    const PACKAGE: &'static str = "datadog.sds";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.sds.ScannerMetadata".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.sds.ScannerMetadata".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ScanningSource {
@@ -41,10 +61,30 @@ pub mod scanning_source {
         #[prost(string, tag = "2")]
         pub region: ::prost::alloc::string::String,
     }
+    impl ::prost::Name for Agentless {
+        const NAME: &'static str = "Agentless";
+        const PACKAGE: &'static str = "datadog.sds";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.sds.ScanningSource.Agentless".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.sds.ScanningSource.Agentless".into()
+        }
+    }
     #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
     pub struct DatadogCrawler {
         #[prost(string, tag = "1")]
         pub service_name: ::prost::alloc::string::String,
+    }
+    impl ::prost::Name for DatadogCrawler {
+        const NAME: &'static str = "DatadogCrawler";
+        const PACKAGE: &'static str = "datadog.sds";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.sds.ScanningSource.DatadogCrawler".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.sds.ScanningSource.DatadogCrawler".into()
+        }
     }
     #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
     pub struct Agent {
@@ -52,6 +92,16 @@ pub mod scanning_source {
         pub hostname: ::prost::alloc::string::String,
         #[prost(string, tag = "2")]
         pub version: ::prost::alloc::string::String,
+    }
+    impl ::prost::Name for Agent {
+        const NAME: &'static str = "Agent";
+        const PACKAGE: &'static str = "datadog.sds";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.sds.ScanningSource.Agent".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.sds.ScanningSource.Agent".into()
+        }
     }
     #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
     pub enum Source {
@@ -61,6 +111,16 @@ pub mod scanning_source {
         DatadogCrawler(DatadogCrawler),
         #[prost(message, tag = "3")]
         Agent(Agent),
+    }
+}
+impl ::prost::Name for ScanningSource {
+    const NAME: &'static str = "ScanningSource";
+    const PACKAGE: &'static str = "datadog.sds";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.sds.ScanningSource".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.sds.ScanningSource".into()
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -97,6 +157,16 @@ pub mod sds_result_payload {
         pub r#type: ::prost::alloc::string::String,
         #[prost(string, tag = "2")]
         pub name: ::prost::alloc::string::String,
+    }
+    impl ::prost::Name for Resource {
+        const NAME: &'static str = "Resource";
+        const PACKAGE: &'static str = "datadog.sds";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.sds.SdsResultPayload.Resource".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.sds.SdsResultPayload.Resource".into()
+        }
     }
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct ScanLocation {
@@ -142,6 +212,16 @@ pub mod sds_result_payload {
             PostgresTable(super::PostgresTable),
         }
     }
+    impl ::prost::Name for ScanLocation {
+        const NAME: &'static str = "ScanLocation";
+        const PACKAGE: &'static str = "datadog.sds";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.sds.SdsResultPayload.ScanLocation".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.sds.SdsResultPayload.ScanLocation".into()
+        }
+    }
     #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
     pub struct RdsTable {
         #[prost(string, tag = "1")]
@@ -158,6 +238,16 @@ pub mod sds_result_payload {
         pub table_row_count: ::core::option::Option<i64>,
         #[prost(int64, optional, tag = "7")]
         pub scanned_row_count: ::core::option::Option<i64>,
+    }
+    impl ::prost::Name for RdsTable {
+        const NAME: &'static str = "RdsTable";
+        const PACKAGE: &'static str = "datadog.sds";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.sds.SdsResultPayload.RdsTable".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.sds.SdsResultPayload.RdsTable".into()
+        }
     }
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct SnowflakeTable {
@@ -188,6 +278,26 @@ pub mod sds_result_payload {
             pub name: ::prost::alloc::string::String,
             #[prost(string, tag = "2")]
             pub data_type: ::prost::alloc::string::String,
+        }
+        impl ::prost::Name for ScannedColumn {
+            const NAME: &'static str = "ScannedColumn";
+            const PACKAGE: &'static str = "datadog.sds";
+            fn full_name() -> ::prost::alloc::string::String {
+                "datadog.sds.SdsResultPayload.SnowflakeTable.ScannedColumn".into()
+            }
+            fn type_url() -> ::prost::alloc::string::String {
+                "/datadog.sds.SdsResultPayload.SnowflakeTable.ScannedColumn".into()
+            }
+        }
+    }
+    impl ::prost::Name for SnowflakeTable {
+        const NAME: &'static str = "SnowflakeTable";
+        const PACKAGE: &'static str = "datadog.sds";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.sds.SdsResultPayload.SnowflakeTable".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.sds.SdsResultPayload.SnowflakeTable".into()
         }
     }
     #[derive(Clone, PartialEq, ::prost::Message)]
@@ -220,6 +330,26 @@ pub mod sds_result_payload {
             #[prost(string, tag = "2")]
             pub data_type: ::prost::alloc::string::String,
         }
+        impl ::prost::Name for ScannedColumn {
+            const NAME: &'static str = "ScannedColumn";
+            const PACKAGE: &'static str = "datadog.sds";
+            fn full_name() -> ::prost::alloc::string::String {
+                "datadog.sds.SdsResultPayload.PostgresTable.ScannedColumn".into()
+            }
+            fn type_url() -> ::prost::alloc::string::String {
+                "/datadog.sds.SdsResultPayload.PostgresTable.ScannedColumn".into()
+            }
+        }
+    }
+    impl ::prost::Name for PostgresTable {
+        const NAME: &'static str = "PostgresTable";
+        const PACKAGE: &'static str = "datadog.sds";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.sds.SdsResultPayload.PostgresTable".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.sds.SdsResultPayload.PostgresTable".into()
+        }
     }
     #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
     pub struct S3File {
@@ -231,6 +361,16 @@ pub mod sds_result_payload {
         pub compressed_size_in_bytes: i64,
         #[prost(int64, tag = "4")]
         pub uncompressed_size_in_bytes: i64,
+    }
+    impl ::prost::Name for S3File {
+        const NAME: &'static str = "S3File";
+        const PACKAGE: &'static str = "datadog.sds";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.sds.SdsResultPayload.S3File".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.sds.SdsResultPayload.S3File".into()
+        }
     }
     #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
     pub struct RuleInfo {
@@ -244,6 +384,16 @@ pub mod sds_result_payload {
         pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
         #[prost(string, repeated, tag = "5")]
         pub labels: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    }
+    impl ::prost::Name for RuleInfo {
+        const NAME: &'static str = "RuleInfo";
+        const PACKAGE: &'static str = "datadog.sds";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.sds.SdsResultPayload.RuleInfo".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.sds.SdsResultPayload.RuleInfo".into()
+        }
     }
     #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
     pub struct ScanMatch {
@@ -274,6 +424,16 @@ pub mod sds_result_payload {
         #[prost(string, optional, tag = "13")]
         pub match_status: ::core::option::Option<::prost::alloc::string::String>,
     }
+    impl ::prost::Name for ScanMatch {
+        const NAME: &'static str = "ScanMatch";
+        const PACKAGE: &'static str = "datadog.sds";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.sds.SdsResultPayload.ScanMatch".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.sds.SdsResultPayload.ScanMatch".into()
+        }
+    }
     #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
     pub struct TableMatch {
         #[prost(string, tag = "1")]
@@ -288,6 +448,16 @@ pub mod sds_result_payload {
         pub count_total_rows: i64,
         #[prost(int64, tag = "5")]
         pub count_matches: i64,
+    }
+    impl ::prost::Name for TableMatch {
+        const NAME: &'static str = "TableMatch";
+        const PACKAGE: &'static str = "datadog.sds";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.sds.SdsResultPayload.TableMatch".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.sds.SdsResultPayload.TableMatch".into()
+        }
     }
     #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
     pub struct ScanMetadata {
@@ -354,6 +524,26 @@ pub mod sds_result_payload {
                 }
             }
         }
+        impl ::prost::Name for ScanTaskMetadata {
+            const NAME: &'static str = "ScanTaskMetadata";
+            const PACKAGE: &'static str = "datadog.sds";
+            fn full_name() -> ::prost::alloc::string::String {
+                "datadog.sds.SdsResultPayload.ScanMetadata.ScanTaskMetadata".into()
+            }
+            fn type_url() -> ::prost::alloc::string::String {
+                "/datadog.sds.SdsResultPayload.ScanMetadata.ScanTaskMetadata".into()
+            }
+        }
+    }
+    impl ::prost::Name for ScanMetadata {
+        const NAME: &'static str = "ScanMetadata";
+        const PACKAGE: &'static str = "datadog.sds";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.sds.SdsResultPayload.ScanMetadata".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.sds.SdsResultPayload.ScanMetadata".into()
+        }
     }
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct ScanResult {
@@ -367,6 +557,16 @@ pub mod sds_result_payload {
         pub table_matches: ::prost::alloc::vec::Vec<TableMatch>,
         #[prost(message, optional, tag = "5")]
         pub scan_metadata: ::core::option::Option<ScanMetadata>,
+    }
+    impl ::prost::Name for ScanResult {
+        const NAME: &'static str = "ScanResult";
+        const PACKAGE: &'static str = "datadog.sds";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.sds.SdsResultPayload.ScanResult".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.sds.SdsResultPayload.ScanResult".into()
+        }
     }
     #[derive(
         Clone,
@@ -403,6 +603,16 @@ pub mod sds_result_payload {
                 _ => None,
             }
         }
+    }
+}
+impl ::prost::Name for SdsResultPayload {
+    const NAME: &'static str = "SdsResultPayload";
+    const PACKAGE: &'static str = "datadog.sds";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.sds.SdsResultPayload".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.sds.SdsResultPayload".into()
     }
 }
 include!("datadog.sds.serde.rs");

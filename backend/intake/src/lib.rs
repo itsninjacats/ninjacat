@@ -12,6 +12,7 @@ pub mod fields;
 pub mod json;
 pub mod keys;
 pub mod msgpack;
+pub mod process_frame;
 pub mod raw;
 pub mod routers;
 pub mod self_metrics;

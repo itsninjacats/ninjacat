@@ -4,7 +4,10 @@
 pub mod api;
 pub mod api_payloads;
 pub mod app;
+pub mod config;
+pub mod containers;
 pub mod flare;
+pub mod kubeops;
 pub mod logs;
 pub mod misc;
 pub mod pprof;

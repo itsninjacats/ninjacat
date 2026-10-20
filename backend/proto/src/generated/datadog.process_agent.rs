@@ -18,6 +18,26 @@ pub mod res_collector {
         #[prost(int32, tag = "4")]
         pub r#type: i32,
     }
+    impl ::prost::Name for Header {
+        const NAME: &'static str = "Header";
+        const PACKAGE: &'static str = "datadog.process_agent";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.process_agent.ResCollector.Header".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.process_agent.ResCollector.Header".into()
+        }
+    }
+}
+impl ::prost::Name for ResCollector {
+    const NAME: &'static str = "ResCollector";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ResCollector".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ResCollector".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorProc {
@@ -50,6 +70,16 @@ pub mod collector_proc {
         HintMask(i32),
     }
 }
+impl ::prost::Name for CollectorProc {
+    const NAME: &'static str = "CollectorProc";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorProc".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorProc".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorProcDiscovery {
     #[prost(string, tag = "1")]
@@ -62,6 +92,16 @@ pub struct CollectorProcDiscovery {
     pub process_discoveries: ::prost::alloc::vec::Vec<ProcessDiscovery>,
     #[prost(message, optional, tag = "5")]
     pub host: ::core::option::Option<Host>,
+}
+impl ::prost::Name for CollectorProcDiscovery {
+    const NAME: &'static str = "CollectorProcDiscovery";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorProcDiscovery".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorProcDiscovery".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorRealTime {
@@ -87,6 +127,16 @@ pub struct CollectorRealTime {
     #[prost(enumeration = "ContainerHostType", tag = "11")]
     pub container_host_type: i32,
 }
+impl ::prost::Name for CollectorRealTime {
+    const NAME: &'static str = "CollectorRealTime";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorRealTime".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorRealTime".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorContainer {
     #[prost(string, tag = "1")]
@@ -106,6 +156,16 @@ pub struct CollectorContainer {
     pub host: ::core::option::Option<Host>,
     #[prost(enumeration = "ContainerHostType", tag = "9")]
     pub container_host_type: i32,
+}
+impl ::prost::Name for CollectorContainer {
+    const NAME: &'static str = "CollectorContainer";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorContainer".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorContainer".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorContainerRealTime {
@@ -128,10 +188,30 @@ pub struct CollectorContainerRealTime {
     #[prost(enumeration = "ContainerHostType", tag = "8")]
     pub container_host_type: i32,
 }
+impl ::prost::Name for CollectorContainerRealTime {
+    const NAME: &'static str = "CollectorContainerRealTime";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorContainerRealTime".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorContainerRealTime".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CollectorReqStatus {
     #[prost(string, tag = "2")]
     pub host_name: ::prost::alloc::string::String,
+}
+impl ::prost::Name for CollectorReqStatus {
+    const NAME: &'static str = "CollectorReqStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorReqStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorReqStatus".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorEcsTask {
@@ -160,6 +240,16 @@ pub struct CollectorEcsTask {
     pub info: ::core::option::Option<SystemInfo>,
     #[prost(message, optional, tag = "12")]
     pub agent_version: ::core::option::Option<AgentVersion>,
+}
+impl ::prost::Name for CollectorEcsTask {
+    const NAME: &'static str = "CollectorECSTask";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorECSTask".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorECSTask".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcsTask {
@@ -215,6 +305,16 @@ pub struct EcsTask {
     #[prost(string, tag = "22")]
     pub daemon_name: ::prost::alloc::string::String,
 }
+impl ::prost::Name for EcsTask {
+    const NAME: &'static str = "ECSTask";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ECSTask".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ECSTask".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcsContainer {
     #[prost(string, tag = "1")]
@@ -265,6 +365,16 @@ pub struct EcsContainer {
     #[prost(string, tag = "22")]
     pub snapshotter: ::prost::alloc::string::String,
 }
+impl ::prost::Name for EcsContainer {
+    const NAME: &'static str = "ECSContainer";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ECSContainer".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ECSContainer".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct EcsContainerNetwork {
     #[prost(string, tag = "1")]
@@ -273,6 +383,16 @@ pub struct EcsContainerNetwork {
     pub ipv4_addresses: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(string, repeated, tag = "3")]
     pub ipv6_addresses: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for EcsContainerNetwork {
+    const NAME: &'static str = "ECSContainerNetwork";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ECSContainerNetwork".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ECSContainerNetwork".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct EcsContainerPort {
@@ -285,6 +405,16 @@ pub struct EcsContainerPort {
     #[prost(int32, tag = "4")]
     pub host_port: i32,
 }
+impl ::prost::Name for EcsContainerPort {
+    const NAME: &'static str = "ECSContainerPort";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ECSContainerPort".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ECSContainerPort".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct EcsContainerVolume {
     #[prost(string, tag = "1")]
@@ -293,6 +423,16 @@ pub struct EcsContainerVolume {
     pub source: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub destination: ::prost::alloc::string::String,
+}
+impl ::prost::Name for EcsContainerVolume {
+    const NAME: &'static str = "ECSContainerVolume";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ECSContainerVolume".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ECSContainerVolume".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct EcsContainerHealth {
@@ -305,10 +445,30 @@ pub struct EcsContainerHealth {
     #[prost(string, tag = "4")]
     pub output: ::prost::alloc::string::String,
 }
+impl ::prost::Name for EcsContainerHealth {
+    const NAME: &'static str = "ECSContainerHealth";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ECSContainerHealth".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ECSContainerHealth".into()
+    }
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct EcsContainerExitCode {
     #[prost(int32, tag = "3")]
     pub exit_code: i32,
+}
+impl ::prost::Name for EcsContainerExitCode {
+    const NAME: &'static str = "ECSContainerExitCode";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ECSContainerExitCode".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ECSContainerExitCode".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorPod {
@@ -336,6 +496,16 @@ pub struct CollectorPod {
     #[prost(message, optional, tag = "11")]
     pub agent_version: ::core::option::Option<AgentVersion>,
 }
+impl ::prost::Name for CollectorPod {
+    const NAME: &'static str = "CollectorPod";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorPod".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorPod".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorPodDisruptionBudget {
     #[prost(string, tag = "1")]
@@ -352,6 +522,16 @@ pub struct CollectorPodDisruptionBudget {
     pub group_size: i32,
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
+}
+impl ::prost::Name for CollectorPodDisruptionBudget {
+    const NAME: &'static str = "CollectorPodDisruptionBudget";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorPodDisruptionBudget".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorPodDisruptionBudget".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorReplicaSet {
@@ -370,6 +550,16 @@ pub struct CollectorReplicaSet {
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
 }
+impl ::prost::Name for CollectorReplicaSet {
+    const NAME: &'static str = "CollectorReplicaSet";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorReplicaSet".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorReplicaSet".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorDeployment {
     #[prost(string, tag = "1")]
@@ -387,6 +577,16 @@ pub struct CollectorDeployment {
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
 }
+impl ::prost::Name for CollectorDeployment {
+    const NAME: &'static str = "CollectorDeployment";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorDeployment".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorDeployment".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorService {
     #[prost(string, tag = "1")]
@@ -403,6 +603,16 @@ pub struct CollectorService {
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
+}
+impl ::prost::Name for CollectorService {
+    const NAME: &'static str = "CollectorService";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorService".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorService".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorNode {
@@ -426,6 +636,16 @@ pub struct CollectorNode {
     #[prost(message, optional, tag = "8")]
     pub agent_version: ::core::option::Option<AgentVersion>,
 }
+impl ::prost::Name for CollectorNode {
+    const NAME: &'static str = "CollectorNode";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorNode".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorNode".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorCluster {
     #[prost(string, tag = "1")]
@@ -442,6 +662,16 @@ pub struct CollectorCluster {
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
+}
+impl ::prost::Name for CollectorCluster {
+    const NAME: &'static str = "CollectorCluster";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorCluster".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorCluster".into()
+    }
 }
 /// CollectorManifest is the dedicated payload/pipeline for the yaml collection
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -467,6 +697,16 @@ pub struct CollectorManifest {
     #[prost(message, optional, tag = "10")]
     pub system_info: ::core::option::Option<SystemInfo>,
 }
+impl ::prost::Name for CollectorManifest {
+    const NAME: &'static str = "CollectorManifest";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorManifest".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorManifest".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorManifestCrd {
     #[prost(message, optional, tag = "1")]
@@ -474,12 +714,32 @@ pub struct CollectorManifestCrd {
     #[prost(string, repeated, tag = "2")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for CollectorManifestCrd {
+    const NAME: &'static str = "CollectorManifestCRD";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorManifestCRD".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorManifestCRD".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorManifestCr {
     #[prost(message, optional, tag = "1")]
     pub manifest: ::core::option::Option<CollectorManifest>,
     #[prost(string, repeated, tag = "2")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for CollectorManifestCr {
+    const NAME: &'static str = "CollectorManifestCR";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorManifestCR".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorManifestCR".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorNamespace {
@@ -498,6 +758,16 @@ pub struct CollectorNamespace {
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
 }
+impl ::prost::Name for CollectorNamespace {
+    const NAME: &'static str = "CollectorNamespace";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorNamespace".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorNamespace".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorJob {
     #[prost(string, tag = "1")]
@@ -514,6 +784,16 @@ pub struct CollectorJob {
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
+}
+impl ::prost::Name for CollectorJob {
+    const NAME: &'static str = "CollectorJob";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorJob".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorJob".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorCronJob {
@@ -532,6 +812,16 @@ pub struct CollectorCronJob {
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
 }
+impl ::prost::Name for CollectorCronJob {
+    const NAME: &'static str = "CollectorCronJob";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorCronJob".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorCronJob".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorDaemonSet {
     #[prost(string, tag = "1")]
@@ -548,6 +838,16 @@ pub struct CollectorDaemonSet {
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
+}
+impl ::prost::Name for CollectorDaemonSet {
+    const NAME: &'static str = "CollectorDaemonSet";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorDaemonSet".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorDaemonSet".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorStatefulSet {
@@ -566,6 +866,16 @@ pub struct CollectorStatefulSet {
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
 }
+impl ::prost::Name for CollectorStatefulSet {
+    const NAME: &'static str = "CollectorStatefulSet";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorStatefulSet".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorStatefulSet".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorPersistentVolume {
     #[prost(string, tag = "1")]
@@ -582,6 +892,16 @@ pub struct CollectorPersistentVolume {
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
+}
+impl ::prost::Name for CollectorPersistentVolume {
+    const NAME: &'static str = "CollectorPersistentVolume";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorPersistentVolume".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorPersistentVolume".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorPersistentVolumeClaim {
@@ -600,6 +920,16 @@ pub struct CollectorPersistentVolumeClaim {
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
 }
+impl ::prost::Name for CollectorPersistentVolumeClaim {
+    const NAME: &'static str = "CollectorPersistentVolumeClaim";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorPersistentVolumeClaim".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorPersistentVolumeClaim".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorRole {
     #[prost(string, tag = "1")]
@@ -616,6 +946,16 @@ pub struct CollectorRole {
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
+}
+impl ::prost::Name for CollectorRole {
+    const NAME: &'static str = "CollectorRole";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorRole".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorRole".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorRoleBinding {
@@ -634,6 +974,16 @@ pub struct CollectorRoleBinding {
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
 }
+impl ::prost::Name for CollectorRoleBinding {
+    const NAME: &'static str = "CollectorRoleBinding";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorRoleBinding".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorRoleBinding".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorClusterRole {
     #[prost(string, tag = "1")]
@@ -650,6 +1000,16 @@ pub struct CollectorClusterRole {
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
+}
+impl ::prost::Name for CollectorClusterRole {
+    const NAME: &'static str = "CollectorClusterRole";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorClusterRole".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorClusterRole".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorClusterRoleBinding {
@@ -668,6 +1028,16 @@ pub struct CollectorClusterRoleBinding {
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
 }
+impl ::prost::Name for CollectorClusterRoleBinding {
+    const NAME: &'static str = "CollectorClusterRoleBinding";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorClusterRoleBinding".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorClusterRoleBinding".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorServiceAccount {
     #[prost(string, tag = "1")]
@@ -684,6 +1054,16 @@ pub struct CollectorServiceAccount {
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
+}
+impl ::prost::Name for CollectorServiceAccount {
+    const NAME: &'static str = "CollectorServiceAccount";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorServiceAccount".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorServiceAccount".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorIngress {
@@ -702,6 +1082,16 @@ pub struct CollectorIngress {
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
 }
+impl ::prost::Name for CollectorIngress {
+    const NAME: &'static str = "CollectorIngress";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorIngress".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorIngress".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorVerticalPodAutoscaler {
     #[prost(string, tag = "1")]
@@ -718,6 +1108,16 @@ pub struct CollectorVerticalPodAutoscaler {
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
+}
+impl ::prost::Name for CollectorVerticalPodAutoscaler {
+    const NAME: &'static str = "CollectorVerticalPodAutoscaler";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorVerticalPodAutoscaler".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorVerticalPodAutoscaler".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorHorizontalPodAutoscaler {
@@ -736,6 +1136,16 @@ pub struct CollectorHorizontalPodAutoscaler {
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
 }
+impl ::prost::Name for CollectorHorizontalPodAutoscaler {
+    const NAME: &'static str = "CollectorHorizontalPodAutoscaler";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorHorizontalPodAutoscaler".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorHorizontalPodAutoscaler".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorNetworkPolicy {
     #[prost(string, tag = "1")]
@@ -752,6 +1162,16 @@ pub struct CollectorNetworkPolicy {
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
+}
+impl ::prost::Name for CollectorNetworkPolicy {
+    const NAME: &'static str = "CollectorNetworkPolicy";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorNetworkPolicy".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorNetworkPolicy".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorLimitRange {
@@ -770,6 +1190,16 @@ pub struct CollectorLimitRange {
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
 }
+impl ::prost::Name for CollectorLimitRange {
+    const NAME: &'static str = "CollectorLimitRange";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorLimitRange".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorLimitRange".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectorStorageClass {
     #[prost(string, tag = "1")]
@@ -787,6 +1217,16 @@ pub struct CollectorStorageClass {
     #[prost(message, optional, tag = "7")]
     pub agent_version: ::core::option::Option<AgentVersion>,
 }
+impl ::prost::Name for CollectorStorageClass {
+    const NAME: &'static str = "CollectorStorageClass";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorStorageClass".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorStorageClass".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentVersion {
     #[prost(int64, tag = "1")]
@@ -802,12 +1242,32 @@ pub struct AgentVersion {
     #[prost(string, tag = "6")]
     pub commit: ::prost::alloc::string::String,
 }
+impl ::prost::Name for AgentVersion {
+    const NAME: &'static str = "AgentVersion";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.AgentVersion".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.AgentVersion".into()
+    }
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CollectorStatus {
     #[prost(int32, tag = "1")]
     pub active_clients: i32,
     #[prost(int32, tag = "2")]
     pub interval: i32,
+}
+impl ::prost::Name for CollectorStatus {
+    const NAME: &'static str = "CollectorStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorStatus".into()
+    }
 }
 /// Selected fields from TracerMetadata as defined in
 /// <https://github.com/DataDog/libdatadog/blob/99056cf717cfe9/ddcommon/src/tracer_metadata.rs#L7-L29>
@@ -818,12 +1278,32 @@ pub struct TracerMetadata {
     #[prost(string, tag = "2")]
     pub service_name: ::prost::alloc::string::String,
 }
+impl ::prost::Name for TracerMetadata {
+    const NAME: &'static str = "TracerMetadata";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.TracerMetadata".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.TracerMetadata".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PortInfo {
     #[prost(int32, repeated, tag = "1")]
     pub tcp: ::prost::alloc::vec::Vec<i32>,
     #[prost(int32, repeated, tag = "2")]
     pub udp: ::prost::alloc::vec::Vec<i32>,
+}
+impl ::prost::Name for PortInfo {
+    const NAME: &'static str = "PortInfo";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PortInfo".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PortInfo".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Process {
@@ -887,6 +1367,16 @@ pub struct Process {
     #[prost(bool, tag = "30")]
     pub has_zombie_aggregation: bool,
 }
+impl ::prost::Name for Process {
+    const NAME: &'static str = "Process";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Process".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Process".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ServiceDiscovery {
     #[prost(message, optional, tag = "1")]
@@ -902,6 +1392,16 @@ pub struct ServiceDiscovery {
     #[prost(message, repeated, tag = "6")]
     pub resources: ::prost::alloc::vec::Vec<Resource>,
 }
+impl ::prost::Name for ServiceDiscovery {
+    const NAME: &'static str = "ServiceDiscovery";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ServiceDiscovery".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ServiceDiscovery".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Resource {
     #[prost(oneof = "resource::Resource", tags = "1")]
@@ -915,10 +1415,30 @@ pub mod resource {
         Logs(super::LogResource),
     }
 }
+impl ::prost::Name for Resource {
+    const NAME: &'static str = "Resource";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Resource".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Resource".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct LogResource {
     #[prost(string, tag = "1")]
     pub path: ::prost::alloc::string::String,
+}
+impl ::prost::Name for LogResource {
+    const NAME: &'static str = "LogResource";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.LogResource".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.LogResource".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ServiceName {
@@ -926,6 +1446,16 @@ pub struct ServiceName {
     pub name: ::prost::alloc::string::String,
     #[prost(enumeration = "ServiceNameSource", tag = "2")]
     pub source: i32,
+}
+impl ::prost::Name for ServiceName {
+    const NAME: &'static str = "ServiceName";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ServiceName".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ServiceName".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ProcessDiscovery {
@@ -943,6 +1473,16 @@ pub struct ProcessDiscovery {
     pub create_time: i64,
     #[prost(bytes = "vec", tag = "7")]
     pub byte_key: ::prost::alloc::vec::Vec<u8>,
+}
+impl ::prost::Name for ProcessDiscovery {
+    const NAME: &'static str = "ProcessDiscovery";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ProcessDiscovery".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ProcessDiscovery".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Command {
@@ -963,6 +1503,16 @@ pub struct Command {
     #[prost(string, tag = "9")]
     pub comm: ::prost::alloc::string::String,
 }
+impl ::prost::Name for Command {
+    const NAME: &'static str = "Command";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Command".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Command".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ProcessUser {
     #[prost(string, tag = "1")]
@@ -980,6 +1530,16 @@ pub struct ProcessUser {
     #[prost(int32, tag = "7")]
     pub sgid: i32,
 }
+impl ::prost::Name for ProcessUser {
+    const NAME: &'static str = "ProcessUser";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ProcessUser".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ProcessUser".into()
+    }
+}
 /// ProcessNetworks is a structure that holds network related metrics for processes
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct ProcessNetworks {
@@ -987,6 +1547,16 @@ pub struct ProcessNetworks {
     pub connection_rate: f32,
     #[prost(float, tag = "2")]
     pub bytes_rate: f32,
+}
+impl ::prost::Name for ProcessNetworks {
+    const NAME: &'static str = "ProcessNetworks";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ProcessNetworks".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ProcessNetworks".into()
+    }
 }
 /// ContainerAddr records the IPs, Ports and Protocols for each container
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -997,6 +1567,16 @@ pub struct ContainerAddr {
     pub port: i32,
     #[prost(enumeration = "ConnectionType", tag = "3")]
     pub protocol: i32,
+}
+impl ::prost::Name for ContainerAddr {
+    const NAME: &'static str = "ContainerAddr";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ContainerAddr".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ContainerAddr".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Container {
@@ -1073,6 +1653,16 @@ pub struct Container {
     #[prost(string, tag = "35")]
     pub repo_digest: ::prost::alloc::string::String,
 }
+impl ::prost::Name for Container {
+    const NAME: &'static str = "Container";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Container".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Container".into()
+    }
+}
 /// ProcessStat is used for real-time process messages. It should only contain
 /// data that can change for a running process (and relevant information to
 /// generate a key). We will send a lot of these in the real-time messages so
@@ -1137,6 +1727,16 @@ pub struct ProcessStat {
     #[prost(bytes = "vec", tag = "27")]
     pub container_byte_key: ::prost::alloc::vec::Vec<u8>,
 }
+impl ::prost::Name for ProcessStat {
+    const NAME: &'static str = "ProcessStat";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ProcessStat".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ProcessStat".into()
+    }
+}
 /// ProcStatsWithPerm is holding attributes for processes that requires extra permission to collect.
 /// It is used to pass data between system-probe and process-agent
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1152,11 +1752,31 @@ pub struct ProcStatsWithPerm {
     #[prost(int64, tag = "5")]
     pub write_bytes: i64,
 }
+impl ::prost::Name for ProcStatsWithPerm {
+    const NAME: &'static str = "ProcStatsWithPerm";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ProcStatsWithPerm".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ProcStatsWithPerm".into()
+    }
+}
 /// ProcStatsWithPermByPID stores ProcStatsWithPerm in a map with key as PIDs
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ProcStatsWithPermByPid {
     #[prost(map = "int32, message", tag = "1")]
     pub stats_by_pid: ::std::collections::HashMap<i32, ProcStatsWithPerm>,
+}
+impl ::prost::Name for ProcStatsWithPermByPid {
+    const NAME: &'static str = "ProcStatsWithPermByPID";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ProcStatsWithPermByPID".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ProcStatsWithPermByPID".into()
+    }
 }
 /// ContainerStat is used for real-time container messages. It should only contain
 /// data that can change for a running container (and relevant information to
@@ -1218,6 +1838,16 @@ pub struct ContainerStat {
     #[prost(uint64, tag = "26")]
     pub memory_request: u64,
 }
+impl ::prost::Name for ContainerStat {
+    const NAME: &'static str = "ContainerStat";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ContainerStat".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ContainerStat".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SystemInfo {
     #[prost(string, tag = "1")]
@@ -1228,6 +1858,16 @@ pub struct SystemInfo {
     pub cpus: ::prost::alloc::vec::Vec<CpuInfo>,
     #[prost(int64, tag = "5")]
     pub total_memory: i64,
+}
+impl ::prost::Name for SystemInfo {
+    const NAME: &'static str = "SystemInfo";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.SystemInfo".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.SystemInfo".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct OsInfo {
@@ -1242,6 +1882,16 @@ pub struct OsInfo {
     #[prost(string, tag = "5")]
     pub kernel_version: ::prost::alloc::string::String,
 }
+impl ::prost::Name for OsInfo {
+    const NAME: &'static str = "OSInfo";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.OSInfo".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.OSInfo".into()
+    }
+}
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct IoStat {
     #[prost(float, tag = "1")]
@@ -1252,6 +1902,16 @@ pub struct IoStat {
     pub read_bytes_rate: f32,
     #[prost(float, tag = "4")]
     pub write_bytes_rate: f32,
+}
+impl ::prost::Name for IoStat {
+    const NAME: &'static str = "IOStat";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.IOStat".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.IOStat".into()
+    }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct MemoryStat {
@@ -1271,6 +1931,16 @@ pub struct MemoryStat {
     pub data: u64,
     #[prost(uint64, tag = "8")]
     pub dirty: u64,
+}
+impl ::prost::Name for MemoryStat {
+    const NAME: &'static str = "MemoryStat";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.MemoryStat".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.MemoryStat".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CpuStat {
@@ -1293,12 +1963,32 @@ pub struct CpuStat {
     #[prost(int64, tag = "9")]
     pub system_time: i64,
 }
+impl ::prost::Name for CpuStat {
+    const NAME: &'static str = "CPUStat";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CPUStat".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CPUStat".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SingleCpuStat {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
     #[prost(float, tag = "2")]
     pub total_pct: f32,
+}
+impl ::prost::Name for SingleCpuStat {
+    const NAME: &'static str = "SingleCPUStat";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.SingleCPUStat".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.SingleCPUStat".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CpuInfo {
@@ -1321,6 +2011,16 @@ pub struct CpuInfo {
     #[prost(int32, tag = "9")]
     pub cache_size: i32,
 }
+impl ::prost::Name for CpuInfo {
+    const NAME: &'static str = "CPUInfo";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CPUInfo".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CPUInfo".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Host {
     #[prost(int64, tag = "1")]
@@ -1339,6 +2039,16 @@ pub struct Host {
     pub tag_index: i32,
     #[prost(int64, tag = "10")]
     pub tags_modified: i64,
+}
+impl ::prost::Name for Host {
+    const NAME: &'static str = "Host";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Host".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Host".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Cluster {
@@ -1390,6 +2100,16 @@ pub struct Cluster {
     #[prost(message, repeated, tag = "16")]
     pub nodes_info: ::prost::alloc::vec::Vec<ClusterNodeInfo>,
 }
+impl ::prost::Name for Cluster {
+    const NAME: &'static str = "Cluster";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Cluster".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Cluster".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClusterNodeInfo {
     #[prost(string, tag = "1")]
@@ -1421,6 +2141,16 @@ pub struct ClusterNodeInfo {
         ::prost::alloc::string::String,
     >,
 }
+impl ::prost::Name for ClusterNodeInfo {
+    const NAME: &'static str = "ClusterNodeInfo";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ClusterNodeInfo".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ClusterNodeInfo".into()
+    }
+}
 /// reference <https://github.com/kubernetes/apimachinery/blob/2373d029717c4d169463414a6127cd1d0d12680e/pkg/apis/meta/v1/generated.proto#L521>
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Metadata {
@@ -1447,6 +2177,16 @@ pub struct Metadata {
     #[prost(int64, tag = "11")]
     pub deletion_grace_period_seconds: i64,
 }
+impl ::prost::Name for Metadata {
+    const NAME: &'static str = "Metadata";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Metadata".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Metadata".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct OwnerReference {
     #[prost(string, tag = "1")]
@@ -1455,6 +2195,16 @@ pub struct OwnerReference {
     pub uid: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub kind: ::prost::alloc::string::String,
+}
+impl ::prost::Name for OwnerReference {
+    const NAME: &'static str = "OwnerReference";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.OwnerReference".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.OwnerReference".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/pkg/apis/core/types.go#L4317>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1474,6 +2224,16 @@ pub struct ObjectReference {
     #[prost(string, tag = "7")]
     pub field_path: ::prost::alloc::string::String,
 }
+impl ::prost::Name for ObjectReference {
+    const NAME: &'static str = "ObjectReference";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ObjectReference".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ObjectReference".into()
+    }
+}
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/core/v1/generated.proto#L4571>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ServicePort {
@@ -1489,11 +2249,31 @@ pub struct ServicePort {
     #[prost(int32, tag = "5")]
     pub node_port: i32,
 }
+impl ::prost::Name for ServicePort {
+    const NAME: &'static str = "ServicePort";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ServicePort".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ServicePort".into()
+    }
+}
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/core/v1/generated.proto#L4756>
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ServiceSessionAffinityConfig {
     #[prost(int32, tag = "1")]
     pub client_ip_timeout_seconds: i32,
+}
+impl ::prost::Name for ServiceSessionAffinityConfig {
+    const NAME: &'static str = "ServiceSessionAffinityConfig";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ServiceSessionAffinityConfig".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ServiceSessionAffinityConfig".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/core/v1/generated.proto#L2107>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1527,6 +2307,16 @@ pub struct Node {
     pub host: ::core::option::Option<Host>,
     #[prost(message, optional, tag = "12")]
     pub metrics: ::core::option::Option<ResourceMetrics>,
+}
+impl ::prost::Name for Node {
+    const NAME: &'static str = "Node";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Node".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Node".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/core/v1/generated.proto#L2348>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1569,6 +2359,16 @@ pub struct NodeStatus {
     #[prost(string, tag = "13")]
     pub container_runtime_version: ::prost::alloc::string::String,
 }
+impl ::prost::Name for NodeStatus {
+    const NAME: &'static str = "NodeStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.NodeStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.NodeStatus".into()
+    }
+}
 /// reference: <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/core/v1/generated.proto#L2158>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct NodeCondition {
@@ -1583,6 +2383,16 @@ pub struct NodeCondition {
     #[prost(string, tag = "5")]
     pub message: ::prost::alloc::string::String,
 }
+impl ::prost::Name for NodeCondition {
+    const NAME: &'static str = "NodeCondition";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.NodeCondition".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.NodeCondition".into()
+    }
+}
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/core/v1/generated.proto#L777>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ContainerImage {
@@ -1590,6 +2400,16 @@ pub struct ContainerImage {
     pub names: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(int64, tag = "2")]
     pub size_bytes: i64,
+}
+impl ::prost::Name for ContainerImage {
+    const NAME: &'static str = "ContainerImage";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ContainerImage".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ContainerImage".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/core/v1/generated.proto#L4849>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1602,6 +2422,16 @@ pub struct Taint {
     pub effect: ::prost::alloc::string::String,
     #[prost(int64, tag = "4")]
     pub time_added: i64,
+}
+impl ::prost::Name for Taint {
+    const NAME: &'static str = "Taint";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Taint".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Taint".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/core/v1/generated.proto#L4620>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1637,11 +2467,31 @@ pub struct ServiceSpec {
     #[prost(string, tag = "14")]
     pub ip_family: ::prost::alloc::string::String,
 }
+impl ::prost::Name for ServiceSpec {
+    const NAME: &'static str = "ServiceSpec";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ServiceSpec".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ServiceSpec".into()
+    }
+}
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/core/v1/generated.proto#L4748>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ServiceStatus {
     #[prost(string, repeated, tag = "17")]
     pub load_balancer_ingress: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for ServiceStatus {
+    const NAME: &'static str = "ServiceStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ServiceStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ServiceStatus".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/release-1.19/staging/src/k8s.io/api/core/v1/generated.proto>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1661,6 +2511,16 @@ pub struct Service {
     #[prost(message, optional, tag = "6")]
     pub metrics: ::core::option::Option<ResourceMetrics>,
 }
+impl ::prost::Name for Service {
+    const NAME: &'static str = "Service";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Service".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Service".into()
+    }
+}
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/apps/v1/generated.proto#L236>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DeploymentCondition {
@@ -1676,6 +2536,16 @@ pub struct DeploymentCondition {
     pub reason: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub message: ::prost::alloc::string::String,
+}
+impl ::prost::Name for DeploymentCondition {
+    const NAME: &'static str = "DeploymentCondition";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.DeploymentCondition".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.DeploymentCondition".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/apps/v1/generated.proto#L221>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1723,6 +2593,16 @@ pub struct Deployment {
     #[prost(message, repeated, tag = "18")]
     pub conditions: ::prost::alloc::vec::Vec<DeploymentCondition>,
 }
+impl ::prost::Name for Deployment {
+    const NAME: &'static str = "Deployment";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Deployment".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Deployment".into()
+    }
+}
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/apps/v1/generated.proto#L388>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ReplicaSetCondition {
@@ -1736,6 +2616,16 @@ pub struct ReplicaSetCondition {
     pub reason: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub message: ::prost::alloc::string::String,
+}
+impl ::prost::Name for ReplicaSetCondition {
+    const NAME: &'static str = "ReplicaSetCondition";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ReplicaSetCondition".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ReplicaSetCondition".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/apps/v1/generated.proto#L366>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1769,6 +2659,16 @@ pub struct ReplicaSet {
     #[prost(message, repeated, tag = "12")]
     pub conditions: ::prost::alloc::vec::Vec<ReplicaSetCondition>,
 }
+impl ::prost::Name for ReplicaSet {
+    const NAME: &'static str = "ReplicaSet";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ReplicaSet".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ReplicaSet".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct LabelSelectorRequirement {
     #[prost(string, tag = "1")]
@@ -1778,6 +2678,16 @@ pub struct LabelSelectorRequirement {
     pub operator: ::prost::alloc::string::String,
     #[prost(string, repeated, tag = "3")]
     pub values: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for LabelSelectorRequirement {
+    const NAME: &'static str = "LabelSelectorRequirement";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.LabelSelectorRequirement".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.LabelSelectorRequirement".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/9ffc095f88c74c0f5b69b1c4a645836f0b7c83fc/staging/src/k8s.io/api/policy/v1/generated.proto#L46>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1791,6 +2701,16 @@ pub struct PodDisruptionBudget {
     #[prost(string, repeated, tag = "4")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for PodDisruptionBudget {
+    const NAME: &'static str = "PodDisruptionBudget";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PodDisruptionBudget".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PodDisruptionBudget".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodDisruptionBudgetSpec {
     #[prost(message, optional, tag = "1")]
@@ -1801,6 +2721,16 @@ pub struct PodDisruptionBudgetSpec {
     pub max_unavailable: ::core::option::Option<IntOrString>,
     #[prost(string, tag = "4")]
     pub unhealthy_pod_eviction_policy: ::prost::alloc::string::String,
+}
+impl ::prost::Name for PodDisruptionBudgetSpec {
+    const NAME: &'static str = "PodDisruptionBudgetSpec";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PodDisruptionBudgetSpec".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PodDisruptionBudgetSpec".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodDisruptionBudgetStatus {
@@ -1816,6 +2746,16 @@ pub struct PodDisruptionBudgetStatus {
     pub expected_pods: i32,
     #[prost(message, repeated, tag = "6")]
     pub conditions: ::prost::alloc::vec::Vec<Condition>,
+}
+impl ::prost::Name for PodDisruptionBudgetStatus {
+    const NAME: &'static str = "PodDisruptionBudgetStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PodDisruptionBudgetStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PodDisruptionBudgetStatus".into()
+    }
 }
 /// <https://github.com/kubernetes/apimachinery/blob/a8f449e276fe566efddb149992049c78f0088492/pkg/util/intstr/intstr.go#L41>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1866,6 +2806,16 @@ pub mod int_or_string {
         }
     }
 }
+impl ::prost::Name for IntOrString {
+    const NAME: &'static str = "IntOrString";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.IntOrString".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.IntOrString".into()
+    }
+}
 /// reference <https://github.com/kubernetes/apimachinery/blob/ea28d546a962e50982945e357ad9869cee15f291/pkg/apis/meta/v1/generated.proto#L171>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Condition {
@@ -1879,6 +2829,16 @@ pub struct Condition {
     pub reason: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub message: ::prost::alloc::string::String,
+}
+impl ::prost::Name for Condition {
+    const NAME: &'static str = "Condition";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Condition".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Condition".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/core/v1/generated.proto>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1931,6 +2891,16 @@ pub struct Pod {
     #[prost(message, optional, tag = "21")]
     pub node_affinity: ::core::option::Option<NodeAffinity>,
 }
+impl ::prost::Name for Pod {
+    const NAME: &'static str = "Pod";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Pod".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Pod".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PodCondition {
     #[prost(string, tag = "1")]
@@ -1945,6 +2915,16 @@ pub struct PodCondition {
     pub reason: ::prost::alloc::string::String,
     #[prost(string, tag = "6")]
     pub message: ::prost::alloc::string::String,
+}
+impl ::prost::Name for PodCondition {
+    const NAME: &'static str = "PodCondition";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PodCondition".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PodCondition".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ContainerStatus {
@@ -1965,6 +2945,16 @@ pub struct ContainerStatus {
     #[prost(string, tag = "8")]
     pub image_id: ::prost::alloc::string::String,
 }
+impl ::prost::Name for ContainerStatus {
+    const NAME: &'static str = "ContainerStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ContainerStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ContainerStatus".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeAffinity {
     #[prost(message, optional, tag = "1")]
@@ -1976,10 +2966,30 @@ pub struct NodeAffinity {
         PreferredSchedulingTerm,
     >,
 }
+impl ::prost::Name for NodeAffinity {
+    const NAME: &'static str = "NodeAffinity";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.NodeAffinity".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.NodeAffinity".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeSelector {
     #[prost(message, repeated, tag = "1")]
     pub node_selector_terms: ::prost::alloc::vec::Vec<NodeSelectorTerm>,
+}
+impl ::prost::Name for NodeSelector {
+    const NAME: &'static str = "NodeSelector";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.NodeSelector".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.NodeSelector".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PreferredSchedulingTerm {
@@ -1987,6 +2997,16 @@ pub struct PreferredSchedulingTerm {
     pub weight: i32,
     #[prost(message, optional, tag = "2")]
     pub preference: ::core::option::Option<NodeSelectorTerm>,
+}
+impl ::prost::Name for PreferredSchedulingTerm {
+    const NAME: &'static str = "PreferredSchedulingTerm";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PreferredSchedulingTerm".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PreferredSchedulingTerm".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Manifest {
@@ -2021,6 +3041,16 @@ pub struct Manifest {
         ::prost::alloc::string::String,
     >,
 }
+impl ::prost::Name for Manifest {
+    const NAME: &'static str = "Manifest";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Manifest".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Manifest".into()
+    }
+}
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/core/v1/generated.proto#L2054>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct NamespaceCondition {
@@ -2034,6 +3064,16 @@ pub struct NamespaceCondition {
     pub reason: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub message: ::prost::alloc::string::String,
+}
+impl ::prost::Name for NamespaceCondition {
+    const NAME: &'static str = "NamespaceCondition";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.NamespaceCondition".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.NamespaceCondition".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/core/v1/generated.proto#L2036>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2055,6 +3095,16 @@ pub struct Namespace {
     #[prost(message, repeated, tag = "6")]
     pub conditions: ::prost::alloc::vec::Vec<NamespaceCondition>,
 }
+impl ::prost::Name for Namespace {
+    const NAME: &'static str = "Namespace";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Namespace".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Namespace".into()
+    }
+}
 /// <https://github.com/kubernetes/kubernetes/blob/4112d8db20c5550cc27d30d3cee2723db0f8e1c4/staging/src/k8s.io/api/core/v1/types.go#L2097>
 /// Using smallest possible quantity levels.
 /// For memory it is bytes, for CPU it is millicore.
@@ -2075,11 +3125,31 @@ pub struct ResourceRequirements {
     #[prost(enumeration = "ResourceRequirementsType", tag = "4")]
     pub r#type: i32,
 }
+impl ::prost::Name for ResourceRequirements {
+    const NAME: &'static str = "ResourceRequirements";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ResourceRequirements".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ResourceRequirements".into()
+    }
+}
 /// ResourceMetrics is used in backend enrichment.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResourceMetrics {
     #[prost(map = "string, double", tag = "1")]
     pub metric_values: ::std::collections::HashMap<::prost::alloc::string::String, f64>,
+}
+impl ::prost::Name for ResourceMetrics {
+    const NAME: &'static str = "ResourceMetrics";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ResourceMetrics".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ResourceMetrics".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/batch/v1/types.go#L61>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2099,6 +3169,16 @@ pub struct JobSpec {
     #[prost(message, repeated, tag = "7")]
     pub resource_requirements: ::prost::alloc::vec::Vec<ResourceRequirements>,
 }
+impl ::prost::Name for JobSpec {
+    const NAME: &'static str = "JobSpec";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.JobSpec".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.JobSpec".into()
+    }
+}
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/batch/v1/types.go#L132>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct JobStatus {
@@ -2115,6 +3195,16 @@ pub struct JobStatus {
     #[prost(int32, tag = "6")]
     pub failed: i32,
 }
+impl ::prost::Name for JobStatus {
+    const NAME: &'static str = "JobStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.JobStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.JobStatus".into()
+    }
+}
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/batch/v1/generated.proto#L51>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct JobCondition {
@@ -2130,6 +3220,16 @@ pub struct JobCondition {
     pub reason: ::prost::alloc::string::String,
     #[prost(string, tag = "6")]
     pub message: ::prost::alloc::string::String,
+}
+impl ::prost::Name for JobCondition {
+    const NAME: &'static str = "JobCondition";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.JobCondition".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.JobCondition".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/batch/v1/types.go#L28>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2148,6 +3248,16 @@ pub struct Job {
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(message, repeated, tag = "6")]
     pub conditions: ::prost::alloc::vec::Vec<JobCondition>,
+}
+impl ::prost::Name for Job {
+    const NAME: &'static str = "Job";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Job".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Job".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/batch/v1beta1/types.go#L92>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2169,6 +3279,16 @@ pub struct CronJobSpec {
     #[prost(string, tag = "8")]
     pub time_zone: ::prost::alloc::string::String,
 }
+impl ::prost::Name for CronJobSpec {
+    const NAME: &'static str = "CronJobSpec";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CronJobSpec".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CronJobSpec".into()
+    }
+}
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/batch/v1beta1/types.go#L150>
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CronJobStatus {
@@ -2178,6 +3298,16 @@ pub struct CronJobStatus {
     pub last_schedule_time: i64,
     #[prost(int64, tag = "3")]
     pub last_successful_time: i64,
+}
+impl ::prost::Name for CronJobStatus {
+    const NAME: &'static str = "CronJobStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CronJobStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CronJobStatus".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/batch/v1beta1/types.go#L58>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2195,6 +3325,16 @@ pub struct CronJob {
     #[prost(string, repeated, tag = "5")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for CronJob {
+    const NAME: &'static str = "CronJob";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CronJob".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CronJob".into()
+    }
+}
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/apps/v1/generated.proto#L119>
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DaemonSetSpec {
@@ -2211,6 +3351,16 @@ pub struct DaemonSetSpec {
     pub revision_history_limit: i32,
     #[prost(message, repeated, tag = "6")]
     pub resource_requirements: ::prost::alloc::vec::Vec<ResourceRequirements>,
+}
+impl ::prost::Name for DaemonSetSpec {
+    const NAME: &'static str = "DaemonSetSpec";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.DaemonSetSpec".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.DaemonSetSpec".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/apps/v1/generated.proto#L152>
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2230,6 +3380,16 @@ pub struct DaemonSetStatus {
     #[prost(int32, tag = "8")]
     pub number_unavailable: i32,
 }
+impl ::prost::Name for DaemonSetStatus {
+    const NAME: &'static str = "DaemonSetStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.DaemonSetStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.DaemonSetStatus".into()
+    }
+}
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/apps/v1/generated.proto#L87>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DaemonSetCondition {
@@ -2243,6 +3403,16 @@ pub struct DaemonSetCondition {
     pub reason: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub message: ::prost::alloc::string::String,
+}
+impl ::prost::Name for DaemonSetCondition {
+    const NAME: &'static str = "DaemonSetCondition";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.DaemonSetCondition".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.DaemonSetCondition".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/apps/v1/generated.proto#L66>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2264,6 +3434,16 @@ pub struct DaemonSet {
     #[prost(message, repeated, tag = "7")]
     pub conditions: ::prost::alloc::vec::Vec<DaemonSetCondition>,
 }
+impl ::prost::Name for DaemonSet {
+    const NAME: &'static str = "DaemonSet";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.DaemonSet".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.DaemonSet".into()
+    }
+}
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/apps/v1/generated.proto#L586>
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StatefulSetSpec {
@@ -2282,6 +3462,16 @@ pub struct StatefulSetSpec {
     #[prost(message, repeated, tag = "7")]
     pub resource_requirements: ::prost::alloc::vec::Vec<ResourceRequirements>,
 }
+impl ::prost::Name for StatefulSetSpec {
+    const NAME: &'static str = "StatefulSetSpec";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.StatefulSetSpec".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.StatefulSetSpec".into()
+    }
+}
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/apps/v1/generated.proto#L647>
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StatefulSetStatus {
@@ -2296,6 +3486,16 @@ pub struct StatefulSetStatus {
     #[prost(int32, tag = "4")]
     pub updated_replicas: i32,
 }
+impl ::prost::Name for StatefulSetStatus {
+    const NAME: &'static str = "StatefulSetStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.StatefulSetStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.StatefulSetStatus".into()
+    }
+}
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/apps/v1/generated.proto#L557>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StatefulSetCondition {
@@ -2309,6 +3509,16 @@ pub struct StatefulSetCondition {
     pub reason: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub message: ::prost::alloc::string::String,
+}
+impl ::prost::Name for StatefulSetCondition {
+    const NAME: &'static str = "StatefulSetCondition";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.StatefulSetCondition".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.StatefulSetCondition".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/apps/v1/generated.proto#L542>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2330,6 +3540,16 @@ pub struct StatefulSet {
     #[prost(message, repeated, tag = "7")]
     pub conditions: ::prost::alloc::vec::Vec<StatefulSetCondition>,
 }
+impl ::prost::Name for StatefulSet {
+    const NAME: &'static str = "StatefulSet";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.StatefulSet".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.StatefulSet".into()
+    }
+}
 /// reference <https://github.com/kubernetes/api/blob/4bdcbc60ffeee2c04231f11ff114314c1a93ce65/core/v1/generated.proto#L2576>
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PersistentVolume {
@@ -2345,6 +3565,16 @@ pub struct PersistentVolume {
     pub yaml: ::prost::alloc::vec::Vec<u8>,
     #[prost(string, repeated, tag = "5")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for PersistentVolume {
+    const NAME: &'static str = "PersistentVolume";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PersistentVolume".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PersistentVolume".into()
+    }
 }
 /// reference <https://github.com/kubernetes/api/blob/4bdcbc60ffeee2c04231f11ff114314c1a93ce65/core/v1/generated.proto#L2889>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2373,6 +3603,16 @@ pub struct PersistentVolumeSpec {
     #[prost(message, optional, tag = "10")]
     pub persistent_volume_source: ::core::option::Option<PersistentVolumeSource>,
 }
+impl ::prost::Name for PersistentVolumeSpec {
+    const NAME: &'static str = "PersistentVolumeSpec";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PersistentVolumeSpec".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PersistentVolumeSpec".into()
+    }
+}
 /// reference <https://github.com/kubernetes/api/blob/release-1.27/core/v1/generated.proto#L1722>
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PersistentVolumeSource {
@@ -2389,6 +3629,16 @@ pub struct PersistentVolumeSource {
     #[prost(message, optional, tag = "5")]
     pub csi: ::core::option::Option<CsiVolumeSource>,
 }
+impl ::prost::Name for PersistentVolumeSource {
+    const NAME: &'static str = "PersistentVolumeSource";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PersistentVolumeSource".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PersistentVolumeSource".into()
+    }
+}
 /// reference <https://github.com/kubernetes/api/blob/4bdcbc60ffeee2c04231f11ff114314c1a93ce65/core/v1/generated.proto#L1616>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GcePersistentDiskVolumeSource {
@@ -2400,6 +3650,16 @@ pub struct GcePersistentDiskVolumeSource {
     pub partition: i32,
     #[prost(bool, tag = "4")]
     pub read_only: bool,
+}
+impl ::prost::Name for GcePersistentDiskVolumeSource {
+    const NAME: &'static str = "GCEPersistentDiskVolumeSource";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.GCEPersistentDiskVolumeSource".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.GCEPersistentDiskVolumeSource".into()
+    }
 }
 /// reference <https://github.com/kubernetes/api/blob/release-1.27/core/v1/generated.proto#L39>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2413,6 +3673,16 @@ pub struct AwsElasticBlockStoreVolumeSource {
     #[prost(bool, tag = "4")]
     pub read_only: bool,
 }
+impl ::prost::Name for AwsElasticBlockStoreVolumeSource {
+    const NAME: &'static str = "AWSElasticBlockStoreVolumeSource";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.AWSElasticBlockStoreVolumeSource".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.AWSElasticBlockStoreVolumeSource".into()
+    }
+}
 /// reference <https://github.com/kubernetes/api/blob/release-1.27/core/v1/generated.proto#L127>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AzureFilePersistentVolumeSource {
@@ -2424,6 +3694,16 @@ pub struct AzureFilePersistentVolumeSource {
     pub read_only: bool,
     #[prost(string, tag = "4")]
     pub secret_namespace: ::prost::alloc::string::String,
+}
+impl ::prost::Name for AzureFilePersistentVolumeSource {
+    const NAME: &'static str = "AzureFilePersistentVolumeSource";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.AzureFilePersistentVolumeSource".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.AzureFilePersistentVolumeSource".into()
+    }
 }
 /// reference <https://github.com/kubernetes/api/blob/release-1.27/core/v1/generated.proto#L100>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2440,6 +3720,16 @@ pub struct AzureDiskVolumeSource {
     pub read_only: bool,
     #[prost(string, tag = "6")]
     pub kind: ::prost::alloc::string::String,
+}
+impl ::prost::Name for AzureDiskVolumeSource {
+    const NAME: &'static str = "AzureDiskVolumeSource";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.AzureDiskVolumeSource".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.AzureDiskVolumeSource".into()
+    }
 }
 /// reference <https://github.com/kubernetes/api/blob/release-1.27/core/v1/generated.proto#L172>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2468,6 +3758,16 @@ pub struct CsiVolumeSource {
     #[prost(message, optional, tag = "10")]
     pub node_expand_secret_ref: ::core::option::Option<SecretReference>,
 }
+impl ::prost::Name for CsiVolumeSource {
+    const NAME: &'static str = "CSIVolumeSource";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CSIVolumeSource".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CSIVolumeSource".into()
+    }
+}
 /// reference <https://github.com/kubernetes/api/blob/4bdcbc60ffeee2c04231f11ff114314c1a93ce65/core/v1/generated.proto#L4553>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SecretReference {
@@ -2475,6 +3775,16 @@ pub struct SecretReference {
     pub name: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub namespace: ::prost::alloc::string::String,
+}
+impl ::prost::Name for SecretReference {
+    const NAME: &'static str = "SecretReference";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.SecretReference".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.SecretReference".into()
+    }
 }
 /// reference <https://github.com/kubernetes/api/blob/4bdcbc60ffeee2c04231f11ff114314c1a93ce65/core/v1/generated.proto#L2940>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2486,12 +3796,32 @@ pub struct PersistentVolumeStatus {
     #[prost(string, tag = "3")]
     pub reason: ::prost::alloc::string::String,
 }
+impl ::prost::Name for PersistentVolumeStatus {
+    const NAME: &'static str = "PersistentVolumeStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PersistentVolumeStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PersistentVolumeStatus".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeSelectorTerm {
     #[prost(message, repeated, tag = "1")]
     pub match_expressions: ::prost::alloc::vec::Vec<LabelSelectorRequirement>,
     #[prost(message, repeated, tag = "2")]
     pub match_fields: ::prost::alloc::vec::Vec<LabelSelectorRequirement>,
+}
+impl ::prost::Name for NodeSelectorTerm {
+    const NAME: &'static str = "NodeSelectorTerm";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.NodeSelectorTerm".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.NodeSelectorTerm".into()
+    }
 }
 /// reference <https://github.com/kubernetes/api/blob/4bdcbc60ffeee2c04231f11ff114314c1a93ce65/core/v1/generated.proto#L2597>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2509,6 +3839,16 @@ pub struct PersistentVolumeClaim {
     #[prost(string, repeated, tag = "5")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for PersistentVolumeClaim {
+    const NAME: &'static str = "PersistentVolumeClaim";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PersistentVolumeClaim".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PersistentVolumeClaim".into()
+    }
+}
 /// reference <https://github.com/kubernetes/api/blob/4bdcbc60ffeee2c04231f11ff114314c1a93ce65/core/v1/generated.proto#L2715>
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PersistentVolumeClaimStatus {
@@ -2520,6 +3860,16 @@ pub struct PersistentVolumeClaimStatus {
     pub capacity: ::std::collections::HashMap<::prost::alloc::string::String, i64>,
     #[prost(message, repeated, tag = "4")]
     pub conditions: ::prost::alloc::vec::Vec<PersistentVolumeClaimCondition>,
+}
+impl ::prost::Name for PersistentVolumeClaimStatus {
+    const NAME: &'static str = "PersistentVolumeClaimStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PersistentVolumeClaimStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PersistentVolumeClaimStatus".into()
+    }
 }
 /// reference <https://github.com/kubernetes/api/blob/4bdcbc60ffeee2c04231f11ff114314c1a93ce65/core/v1/generated.proto#L2654>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2539,6 +3889,16 @@ pub struct PersistentVolumeClaimSpec {
     #[prost(message, optional, tag = "7")]
     pub data_source: ::core::option::Option<TypedLocalObjectReference>,
 }
+impl ::prost::Name for PersistentVolumeClaimSpec {
+    const NAME: &'static str = "PersistentVolumeClaimSpec";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PersistentVolumeClaimSpec".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PersistentVolumeClaimSpec".into()
+    }
+}
 /// reference <https://github.com/kubernetes/api/blob/4bdcbc60ffeee2c04231f11ff114314c1a93ce65/core/v1/generated.proto#L5327>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TypedLocalObjectReference {
@@ -2548,6 +3908,16 @@ pub struct TypedLocalObjectReference {
     pub kind: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub name: ::prost::alloc::string::String,
+}
+impl ::prost::Name for TypedLocalObjectReference {
+    const NAME: &'static str = "TypedLocalObjectReference";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.TypedLocalObjectReference".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.TypedLocalObjectReference".into()
+    }
 }
 /// reference <https://github.com/kubernetes/api/blob/4bdcbc60ffeee2c04231f11ff114314c1a93ce65/core/v1/generated.proto#L2616>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2565,6 +3935,16 @@ pub struct PersistentVolumeClaimCondition {
     #[prost(string, tag = "6")]
     pub message: ::prost::alloc::string::String,
 }
+impl ::prost::Name for PersistentVolumeClaimCondition {
+    const NAME: &'static str = "PersistentVolumeClaimCondition";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PersistentVolumeClaimCondition".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PersistentVolumeClaimCondition".into()
+    }
+}
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/rbac/v1/generated.proto#L94>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PolicyRule {
@@ -2579,6 +3959,16 @@ pub struct PolicyRule {
     #[prost(string, repeated, tag = "5")]
     pub non_resource_ur_ls: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for PolicyRule {
+    const NAME: &'static str = "PolicyRule";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PolicyRule".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PolicyRule".into()
+    }
+}
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/rbac/v1/generated.proto#L180>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Subject {
@@ -2590,6 +3980,16 @@ pub struct Subject {
     pub name: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub namespace: ::prost::alloc::string::String,
+}
+impl ::prost::Name for Subject {
+    const NAME: &'static str = "Subject";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Subject".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Subject".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/rbac/v1/generated.proto#L119>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2604,6 +4004,16 @@ pub struct Role {
     pub yaml: ::prost::alloc::vec::Vec<u8>,
     #[prost(string, repeated, tag = "4")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for Role {
+    const NAME: &'static str = "Role";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Role".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Role".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/rbac/v1/generated.proto#L132>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2620,6 +4030,16 @@ pub struct RoleBinding {
     pub yaml: ::prost::alloc::vec::Vec<u8>,
     #[prost(string, repeated, tag = "5")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for RoleBinding {
+    const NAME: &'static str = "RoleBinding";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.RoleBinding".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.RoleBinding".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/rbac/v1/generated.proto#L40>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2639,6 +4059,16 @@ pub struct ClusterRole {
     #[prost(message, optional, tag = "6")]
     pub metrics: ::core::option::Option<ResourceMetrics>,
 }
+impl ::prost::Name for ClusterRole {
+    const NAME: &'static str = "ClusterRole";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ClusterRole".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ClusterRole".into()
+    }
+}
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/rbac/v1/generated.proto#L58>
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClusterRoleBinding {
@@ -2654,6 +4084,16 @@ pub struct ClusterRoleBinding {
     pub yaml: ::prost::alloc::vec::Vec<u8>,
     #[prost(string, repeated, tag = "5")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for ClusterRoleBinding {
+    const NAME: &'static str = "ClusterRoleBinding";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ClusterRoleBinding".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ClusterRoleBinding".into()
+    }
 }
 /// reference <https://github.com/kubernetes/kubernetes/blob/cb19b56831d54d1d31249949318ef0b07bf00df9/staging/src/k8s.io/api/core/v1/generated.proto#L4495>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2673,6 +4113,16 @@ pub struct ServiceAccount {
     #[prost(string, repeated, tag = "6")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for ServiceAccount {
+    const NAME: &'static str = "ServiceAccount";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ServiceAccount".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ServiceAccount".into()
+    }
+}
 /// reference <https://github.com/kubernetes/api/blob/v0.21.5/networking/v1/generated.proto#L259>
 /// Note: ServiceBackendPort (contains port name and number) is flattened.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2684,6 +4134,16 @@ pub struct IngressServiceBackend {
     #[prost(int32, tag = "3")]
     pub port_number: i32,
 }
+impl ::prost::Name for IngressServiceBackend {
+    const NAME: &'static str = "IngressServiceBackend";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.IngressServiceBackend".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.IngressServiceBackend".into()
+    }
+}
 /// reference <https://github.com/kubernetes/api/blob/v0.21.5/networking/v1/generated.proto#L112>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct IngressBackend {
@@ -2692,6 +4152,16 @@ pub struct IngressBackend {
     #[prost(message, optional, tag = "2")]
     pub resource: ::core::option::Option<TypedLocalObjectReference>,
 }
+impl ::prost::Name for IngressBackend {
+    const NAME: &'static str = "IngressBackend";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.IngressBackend".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.IngressBackend".into()
+    }
+}
 /// reference <https://github.com/kubernetes/api/blob/v0.21.5/networking/v1/generated.proto#L315>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct IngressTls {
@@ -2699,6 +4169,16 @@ pub struct IngressTls {
     pub hosts: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(string, tag = "2")]
     pub secret_name: ::prost::alloc::string::String,
+}
+impl ::prost::Name for IngressTls {
+    const NAME: &'static str = "IngressTLS";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.IngressTLS".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.IngressTLS".into()
+    }
 }
 /// reference <https://github.com/kubernetes/api/blob/v0.21.5/networking/v1/generated.proto#L35>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2710,6 +4190,16 @@ pub struct HttpIngressPath {
     #[prost(message, optional, tag = "2")]
     pub backend: ::core::option::Option<IngressBackend>,
 }
+impl ::prost::Name for HttpIngressPath {
+    const NAME: &'static str = "HTTPIngressPath";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.HTTPIngressPath".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.HTTPIngressPath".into()
+    }
+}
 /// reference <https://github.com/kubernetes/api/blob/v0.21.5/networking/v1/generated.proto#L214>
 /// Note: IngressRuleValue and HTTPIngressRuleValue are flattened
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2718,6 +4208,16 @@ pub struct IngressRule {
     pub host: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "2")]
     pub http_paths: ::prost::alloc::vec::Vec<HttpIngressPath>,
+}
+impl ::prost::Name for IngressRule {
+    const NAME: &'static str = "IngressRule";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.IngressRule".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.IngressRule".into()
+    }
 }
 /// reference <https://github.com/kubernetes/api/blob/v0.21.5/networking/v1/generated.proto#L270>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2731,6 +4231,16 @@ pub struct IngressSpec {
     #[prost(string, tag = "4")]
     pub ingress_class_name: ::prost::alloc::string::String,
 }
+impl ::prost::Name for IngressSpec {
+    const NAME: &'static str = "IngressSpec";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.IngressSpec".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.IngressSpec".into()
+    }
+}
 /// reference <https://github.com/kubernetes/api/blob/v0.21.5/core/v1/generated.proto#L3781>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PortStatus {
@@ -2740,6 +4250,16 @@ pub struct PortStatus {
     pub protocol: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub error: ::prost::alloc::string::String,
+}
+impl ::prost::Name for PortStatus {
+    const NAME: &'static str = "PortStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PortStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PortStatus".into()
+    }
 }
 /// reference <https://github.com/kubernetes/api/blob/v0.21.5/core/v1/generated.proto#L2024>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2751,12 +4271,32 @@ pub struct LoadBalancerIngress {
     #[prost(message, repeated, tag = "4")]
     pub ports: ::prost::alloc::vec::Vec<PortStatus>,
 }
+impl ::prost::Name for LoadBalancerIngress {
+    const NAME: &'static str = "LoadBalancerIngress";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.LoadBalancerIngress".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.LoadBalancerIngress".into()
+    }
+}
 /// reference <https://github.com/kubernetes/api/blob/v0.21.5/networking/v1/generated.proto#L308>
 /// LoadBalancerStatus is flattened
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressStatus {
     #[prost(message, repeated, tag = "1")]
     pub ingress: ::prost::alloc::vec::Vec<LoadBalancerIngress>,
+}
+impl ::prost::Name for IngressStatus {
+    const NAME: &'static str = "IngressStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.IngressStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.IngressStatus".into()
+    }
 }
 /// reference <https://github.com/kubernetes/api/blob/v0.21.5/networking/v1/generated.proto#L94>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2773,6 +4313,16 @@ pub struct Ingress {
     pub yaml: ::prost::alloc::vec::Vec<u8>,
     #[prost(string, repeated, tag = "5")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for Ingress {
+    const NAME: &'static str = "Ingress";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Ingress".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Ingress".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct KafkaStats {
@@ -2793,6 +4343,16 @@ pub struct KafkaStats {
     #[prost(double, tag = "3")]
     pub first_latency_sample: f64,
 }
+impl ::prost::Name for KafkaStats {
+    const NAME: &'static str = "KafkaStats";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.KafkaStats".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.KafkaStats".into()
+    }
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct KafkaRequestHeader {
     /// this is Kafka api key value from the protocol
@@ -2800,6 +4360,16 @@ pub struct KafkaRequestHeader {
     pub request_type: u32,
     #[prost(uint32, tag = "2")]
     pub request_version: u32,
+}
+impl ::prost::Name for KafkaRequestHeader {
+    const NAME: &'static str = "KafkaRequestHeader";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.KafkaRequestHeader".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.KafkaRequestHeader".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct KafkaAggregation {
@@ -2816,10 +4386,30 @@ pub struct KafkaAggregation {
     #[prost(uint32, tag = "3")]
     pub count: u32,
 }
+impl ::prost::Name for KafkaAggregation {
+    const NAME: &'static str = "KafkaAggregation";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.KafkaAggregation".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.KafkaAggregation".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DataStreamsAggregations {
     #[prost(message, repeated, tag = "3")]
     pub kafka_aggregations: ::prost::alloc::vec::Vec<KafkaAggregation>,
+}
+impl ::prost::Name for DataStreamsAggregations {
+    const NAME: &'static str = "DataStreamsAggregations";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.DataStreamsAggregations".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.DataStreamsAggregations".into()
+    }
 }
 /// Represents the statistics for a single Postgres operation.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2840,6 +4430,16 @@ pub struct PostgresStats {
     #[prost(uint32, tag = "5")]
     pub count: u32,
 }
+impl ::prost::Name for PostgresStats {
+    const NAME: &'static str = "PostgresStats";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PostgresStats".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PostgresStats".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RedisStats {
     /// The command for the redis cache.
@@ -2855,6 +4455,16 @@ pub struct RedisStats {
     #[prost(map = "int32, message", tag = "4")]
     pub error_to_stats: ::std::collections::HashMap<i32, RedisStatsEntry>,
 }
+impl ::prost::Name for RedisStats {
+    const NAME: &'static str = "RedisStats";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.RedisStats".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.RedisStats".into()
+    }
+}
 /// Represents the statistics for a single Redis transaction.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RedisStatsEntry {
@@ -2867,6 +4477,16 @@ pub struct RedisStatsEntry {
     /// The number of samples in the latencies sketch.
     #[prost(uint32, tag = "3")]
     pub count: u32,
+}
+impl ::prost::Name for RedisStatsEntry {
+    const NAME: &'static str = "RedisStatsEntry";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.RedisStatsEntry".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.RedisStatsEntry".into()
+    }
 }
 /// Represents the statistics for a single Database operation.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2888,6 +4508,16 @@ pub mod database_stats {
         Redis(super::RedisStats),
     }
 }
+impl ::prost::Name for DatabaseStats {
+    const NAME: &'static str = "DatabaseStats";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.DatabaseStats".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.DatabaseStats".into()
+    }
+}
 /// Represents a list of database aggregations. Each entry in the list can be from a different database (postgres,
 /// mysql, etc). The agent will only populate the fields for the database it is configured to monitor.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2895,10 +4525,30 @@ pub struct DatabaseAggregations {
     #[prost(message, repeated, tag = "1")]
     pub aggregations: ::prost::alloc::vec::Vec<DatabaseStats>,
 }
+impl ::prost::Name for DatabaseAggregations {
+    const NAME: &'static str = "DatabaseAggregations";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.DatabaseAggregations".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.DatabaseAggregations".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HttpAggregations {
     #[prost(message, repeated, tag = "2")]
     pub endpoint_aggregations: ::prost::alloc::vec::Vec<HttpStats>,
+}
+impl ::prost::Name for HttpAggregations {
+    const NAME: &'static str = "HTTPAggregations";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.HTTPAggregations".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.HTTPAggregations".into()
+    }
 }
 /// The current state of HTTP2Aggregations is identical to that of HTTPAggregations.
 /// However, there is a possibility that additional fields might be added to it in the future.
@@ -2906,6 +4556,16 @@ pub struct HttpAggregations {
 pub struct Http2Aggregations {
     #[prost(message, repeated, tag = "1")]
     pub endpoint_aggregations: ::prost::alloc::vec::Vec<HttpStats>,
+}
+impl ::prost::Name for Http2Aggregations {
+    const NAME: &'static str = "HTTP2Aggregations";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.HTTP2Aggregations".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.HTTP2Aggregations".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HttpStats {
@@ -2956,6 +4616,26 @@ pub mod http_stats {
         #[prost(double, tag = "5")]
         pub latency_sum: f64,
     }
+    impl ::prost::Name for Data {
+        const NAME: &'static str = "Data";
+        const PACKAGE: &'static str = "datadog.process_agent";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.process_agent.HTTPStats.Data".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.process_agent.HTTPStats.Data".into()
+        }
+    }
+}
+impl ::prost::Name for HttpStats {
+    const NAME: &'static str = "HTTPStats";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.HTTPStats".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.HTTPStats".into()
+    }
 }
 /// replaces DNSEntry.  Is a list of DNS names that a given IP resolved to.
 /// List of offsets into the EncodedDomainDatabase.
@@ -2964,12 +4644,32 @@ pub struct DnsDatabaseEntry {
     #[prost(int32, repeated, packed = "false", tag = "1")]
     pub name_offsets: ::prost::alloc::vec::Vec<i32>,
 }
+impl ::prost::Name for DnsDatabaseEntry {
+    const NAME: &'static str = "DNSDatabaseEntry";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.DNSDatabaseEntry".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.DNSDatabaseEntry".into()
+    }
+}
 /// ResourceList is a set of (resource name, quantity) pairs
 /// <https://pkg.go.dev/k8s.io/api/core/v1#ResourceList>
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResourceList {
     #[prost(map = "string, double", tag = "1")]
     pub metric_values: ::std::collections::HashMap<::prost::alloc::string::String, f64>,
+}
+impl ::prost::Name for ResourceList {
+    const NAME: &'static str = "ResourceList";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ResourceList".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ResourceList".into()
+    }
 }
 /// <https://github.com/kubernetes/autoscaler/blob/master/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1/types.go>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2989,6 +4689,16 @@ pub struct VerticalPodAutoscaler {
     #[prost(message, repeated, tag = "6")]
     pub conditions: ::prost::alloc::vec::Vec<VerticalPodAutoscalerCondition>,
 }
+impl ::prost::Name for VerticalPodAutoscaler {
+    const NAME: &'static str = "VerticalPodAutoscaler";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.VerticalPodAutoscaler".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.VerticalPodAutoscaler".into()
+    }
+}
 /// reference <https://github.com/kubernetes/autoscaler/blob/master/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1/types.go#L295>
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct VerticalPodAutoscalerCondition {
@@ -3003,6 +4713,16 @@ pub struct VerticalPodAutoscalerCondition {
     #[prost(string, tag = "5")]
     pub message: ::prost::alloc::string::String,
 }
+impl ::prost::Name for VerticalPodAutoscalerCondition {
+    const NAME: &'static str = "VerticalPodAutoscalerCondition";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.VerticalPodAutoscalerCondition".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.VerticalPodAutoscalerCondition".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VerticalPodAutoscalerSpec {
     #[prost(message, optional, tag = "1")]
@@ -3013,12 +4733,32 @@ pub struct VerticalPodAutoscalerSpec {
     #[prost(message, repeated, tag = "3")]
     pub resource_policies: ::prost::alloc::vec::Vec<ContainerResourcePolicy>,
 }
+impl ::prost::Name for VerticalPodAutoscalerSpec {
+    const NAME: &'static str = "VerticalPodAutoscalerSpec";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.VerticalPodAutoscalerSpec".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.VerticalPodAutoscalerSpec".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct VerticalPodAutoscalerTarget {
     #[prost(string, tag = "1")]
     pub kind: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub name: ::prost::alloc::string::String,
+}
+impl ::prost::Name for VerticalPodAutoscalerTarget {
+    const NAME: &'static str = "VerticalPodAutoscalerTarget";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.VerticalPodAutoscalerTarget".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.VerticalPodAutoscalerTarget".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ContainerResourcePolicy {
@@ -3035,6 +4775,16 @@ pub struct ContainerResourcePolicy {
     #[prost(string, tag = "6")]
     pub controlled_values: ::prost::alloc::string::String,
 }
+impl ::prost::Name for ContainerResourcePolicy {
+    const NAME: &'static str = "ContainerResourcePolicy";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ContainerResourcePolicy".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ContainerResourcePolicy".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VerticalPodAutoscalerStatus {
     /// Extracted from Condition=RecommendationProvided AND Status=true
@@ -3044,6 +4794,16 @@ pub struct VerticalPodAutoscalerStatus {
     pub recommendations: ::prost::alloc::vec::Vec<ContainerRecommendation>,
     #[prost(message, repeated, tag = "3")]
     pub conditions: ::prost::alloc::vec::Vec<VpaCondition>,
+}
+impl ::prost::Name for VerticalPodAutoscalerStatus {
+    const NAME: &'static str = "VerticalPodAutoscalerStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.VerticalPodAutoscalerStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.VerticalPodAutoscalerStatus".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ContainerRecommendation {
@@ -3058,6 +4818,16 @@ pub struct ContainerRecommendation {
     #[prost(message, optional, tag = "5")]
     pub uncapped_target: ::core::option::Option<ResourceList>,
 }
+impl ::prost::Name for ContainerRecommendation {
+    const NAME: &'static str = "ContainerRecommendation";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ContainerRecommendation".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ContainerRecommendation".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct VpaCondition {
     #[prost(string, tag = "1")]
@@ -3070,6 +4840,16 @@ pub struct VpaCondition {
     pub reason: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub message: ::prost::alloc::string::String,
+}
+impl ::prost::Name for VpaCondition {
+    const NAME: &'static str = "VPACondition";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.VPACondition".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.VPACondition".into()
+    }
 }
 /// <https://github.com/kubernetes/api/blob/v0.23.15/autoscaling/v2/types.go>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -3088,6 +4868,16 @@ pub struct HorizontalPodAutoscaler {
     #[prost(message, repeated, tag = "6")]
     pub conditions: ::prost::alloc::vec::Vec<HorizontalPodAutoscalerCondition>,
 }
+impl ::prost::Name for HorizontalPodAutoscaler {
+    const NAME: &'static str = "HorizontalPodAutoscaler";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.HorizontalPodAutoscaler".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.HorizontalPodAutoscaler".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HorizontalPodAutoscalerSpec {
     #[prost(message, optional, tag = "1")]
@@ -3101,12 +4891,32 @@ pub struct HorizontalPodAutoscalerSpec {
     #[prost(message, optional, tag = "5")]
     pub behavior: ::core::option::Option<HorizontalPodAutoscalerBehavior>,
 }
+impl ::prost::Name for HorizontalPodAutoscalerSpec {
+    const NAME: &'static str = "HorizontalPodAutoscalerSpec";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.HorizontalPodAutoscalerSpec".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.HorizontalPodAutoscalerSpec".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct HorizontalPodAutoscalerTarget {
     #[prost(string, tag = "1")]
     pub kind: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub name: ::prost::alloc::string::String,
+}
+impl ::prost::Name for HorizontalPodAutoscalerTarget {
+    const NAME: &'static str = "HorizontalPodAutoscalerTarget";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.HorizontalPodAutoscalerTarget".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.HorizontalPodAutoscalerTarget".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HorizontalPodAutoscalerMetricSpec {
@@ -3123,6 +4933,16 @@ pub struct HorizontalPodAutoscalerMetricSpec {
     #[prost(message, optional, tag = "6")]
     pub external: ::core::option::Option<ExternalMetricSource>,
 }
+impl ::prost::Name for HorizontalPodAutoscalerMetricSpec {
+    const NAME: &'static str = "HorizontalPodAutoscalerMetricSpec";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.HorizontalPodAutoscalerMetricSpec".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.HorizontalPodAutoscalerMetricSpec".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ObjectMetricSource {
     #[prost(message, optional, tag = "1")]
@@ -3132,12 +4952,32 @@ pub struct ObjectMetricSource {
     #[prost(message, optional, tag = "3")]
     pub metric: ::core::option::Option<MetricIdentifier>,
 }
+impl ::prost::Name for ObjectMetricSource {
+    const NAME: &'static str = "ObjectMetricSource";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ObjectMetricSource".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ObjectMetricSource".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct MetricTarget {
     #[prost(string, tag = "1")]
     pub r#type: ::prost::alloc::string::String,
     #[prost(int64, tag = "2")]
     pub value: i64,
+}
+impl ::prost::Name for MetricTarget {
+    const NAME: &'static str = "MetricTarget";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.MetricTarget".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.MetricTarget".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MetricIdentifier {
@@ -3146,6 +4986,16 @@ pub struct MetricIdentifier {
     #[prost(message, repeated, tag = "2")]
     pub label_selector: ::prost::alloc::vec::Vec<LabelSelectorRequirement>,
 }
+impl ::prost::Name for MetricIdentifier {
+    const NAME: &'static str = "MetricIdentifier";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.MetricIdentifier".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.MetricIdentifier".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodsMetricSource {
     #[prost(message, optional, tag = "1")]
@@ -3153,12 +5003,32 @@ pub struct PodsMetricSource {
     #[prost(message, optional, tag = "2")]
     pub target: ::core::option::Option<MetricTarget>,
 }
+impl ::prost::Name for PodsMetricSource {
+    const NAME: &'static str = "PodsMetricSource";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PodsMetricSource".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PodsMetricSource".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ResourceMetricSource {
     #[prost(string, tag = "1")]
     pub resource_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub target: ::core::option::Option<MetricTarget>,
+}
+impl ::prost::Name for ResourceMetricSource {
+    const NAME: &'static str = "ResourceMetricSource";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ResourceMetricSource".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ResourceMetricSource".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ContainerResourceMetricSource {
@@ -3169,6 +5039,16 @@ pub struct ContainerResourceMetricSource {
     #[prost(string, tag = "3")]
     pub container: ::prost::alloc::string::String,
 }
+impl ::prost::Name for ContainerResourceMetricSource {
+    const NAME: &'static str = "ContainerResourceMetricSource";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ContainerResourceMetricSource".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ContainerResourceMetricSource".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExternalMetricSource {
     #[prost(message, optional, tag = "1")]
@@ -3176,12 +5056,32 @@ pub struct ExternalMetricSource {
     #[prost(message, optional, tag = "2")]
     pub target: ::core::option::Option<MetricTarget>,
 }
+impl ::prost::Name for ExternalMetricSource {
+    const NAME: &'static str = "ExternalMetricSource";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ExternalMetricSource".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ExternalMetricSource".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HorizontalPodAutoscalerBehavior {
     #[prost(message, optional, tag = "1")]
     pub scale_up: ::core::option::Option<HpaScalingRules>,
     #[prost(message, optional, tag = "2")]
     pub scale_down: ::core::option::Option<HpaScalingRules>,
+}
+impl ::prost::Name for HorizontalPodAutoscalerBehavior {
+    const NAME: &'static str = "HorizontalPodAutoscalerBehavior";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.HorizontalPodAutoscalerBehavior".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.HorizontalPodAutoscalerBehavior".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HpaScalingRules {
@@ -3192,6 +5092,16 @@ pub struct HpaScalingRules {
     #[prost(message, repeated, tag = "3")]
     pub policies: ::prost::alloc::vec::Vec<HpaScalingPolicy>,
 }
+impl ::prost::Name for HpaScalingRules {
+    const NAME: &'static str = "HPAScalingRules";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.HPAScalingRules".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.HPAScalingRules".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct HpaScalingPolicy {
     #[prost(string, tag = "1")]
@@ -3200,6 +5110,16 @@ pub struct HpaScalingPolicy {
     pub value: i32,
     #[prost(int32, tag = "3")]
     pub period_seconds: i32,
+}
+impl ::prost::Name for HpaScalingPolicy {
+    const NAME: &'static str = "HPAScalingPolicy";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.HPAScalingPolicy".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.HPAScalingPolicy".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HorizontalPodAutoscalerStatus {
@@ -3214,6 +5134,16 @@ pub struct HorizontalPodAutoscalerStatus {
     #[prost(message, repeated, tag = "5")]
     pub current_metrics: ::prost::alloc::vec::Vec<HorizontalPodAutoscalerMetricStatus>,
 }
+impl ::prost::Name for HorizontalPodAutoscalerStatus {
+    const NAME: &'static str = "HorizontalPodAutoscalerStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.HorizontalPodAutoscalerStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.HorizontalPodAutoscalerStatus".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct HorizontalPodAutoscalerCondition {
     #[prost(string, tag = "1")]
@@ -3226,6 +5156,16 @@ pub struct HorizontalPodAutoscalerCondition {
     pub reason: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub message: ::prost::alloc::string::String,
+}
+impl ::prost::Name for HorizontalPodAutoscalerCondition {
+    const NAME: &'static str = "HorizontalPodAutoscalerCondition";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.HorizontalPodAutoscalerCondition".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.HorizontalPodAutoscalerCondition".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HorizontalPodAutoscalerMetricStatus {
@@ -3242,6 +5182,16 @@ pub struct HorizontalPodAutoscalerMetricStatus {
     #[prost(message, optional, tag = "6")]
     pub external: ::core::option::Option<ExternalMetricStatus>,
 }
+impl ::prost::Name for HorizontalPodAutoscalerMetricStatus {
+    const NAME: &'static str = "HorizontalPodAutoscalerMetricStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.HorizontalPodAutoscalerMetricStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.HorizontalPodAutoscalerMetricStatus".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ObjectMetricStatus {
     #[prost(message, optional, tag = "1")]
@@ -3251,6 +5201,16 @@ pub struct ObjectMetricStatus {
     #[prost(message, optional, tag = "3")]
     pub metric: ::core::option::Option<MetricIdentifier>,
 }
+impl ::prost::Name for ObjectMetricStatus {
+    const NAME: &'static str = "ObjectMetricStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ObjectMetricStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ObjectMetricStatus".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodsMetricStatus {
     #[prost(message, optional, tag = "1")]
@@ -3258,12 +5218,32 @@ pub struct PodsMetricStatus {
     #[prost(int64, tag = "2")]
     pub current: i64,
 }
+impl ::prost::Name for PodsMetricStatus {
+    const NAME: &'static str = "PodsMetricStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PodsMetricStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PodsMetricStatus".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ResourceMetricStatus {
     #[prost(string, tag = "1")]
     pub resource_name: ::prost::alloc::string::String,
     #[prost(int64, tag = "2")]
     pub current: i64,
+}
+impl ::prost::Name for ResourceMetricStatus {
+    const NAME: &'static str = "ResourceMetricStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ResourceMetricStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ResourceMetricStatus".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ContainerResourceMetricStatus {
@@ -3274,12 +5254,32 @@ pub struct ContainerResourceMetricStatus {
     #[prost(string, tag = "3")]
     pub container: ::prost::alloc::string::String,
 }
+impl ::prost::Name for ContainerResourceMetricStatus {
+    const NAME: &'static str = "ContainerResourceMetricStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ContainerResourceMetricStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ContainerResourceMetricStatus".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExternalMetricStatus {
     #[prost(message, optional, tag = "1")]
     pub metric: ::core::option::Option<MetricIdentifier>,
     #[prost(int64, tag = "2")]
     pub current: i64,
+}
+impl ::prost::Name for ExternalMetricStatus {
+    const NAME: &'static str = "ExternalMetricStatus";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ExternalMetricStatus".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ExternalMetricStatus".into()
+    }
 }
 /// <https://github.com/kubernetes/api/blob/v0.23.15/networking/v1/generated.proto>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -3294,6 +5294,16 @@ pub struct NetworkPolicy {
     #[prost(string, repeated, tag = "4")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for NetworkPolicy {
+    const NAME: &'static str = "NetworkPolicy";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.NetworkPolicy".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.NetworkPolicy".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NetworkPolicySpec {
     #[prost(message, repeated, tag = "1")]
@@ -3305,12 +5315,32 @@ pub struct NetworkPolicySpec {
     #[prost(string, repeated, tag = "4")]
     pub policy_types: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for NetworkPolicySpec {
+    const NAME: &'static str = "NetworkPolicySpec";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.NetworkPolicySpec".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.NetworkPolicySpec".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct NetworkPolicyIpBlock {
     #[prost(string, tag = "1")]
     pub cidr: ::prost::alloc::string::String,
     #[prost(string, repeated, tag = "2")]
     pub except: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for NetworkPolicyIpBlock {
+    const NAME: &'static str = "NetworkPolicyIPBlock";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.NetworkPolicyIPBlock".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.NetworkPolicyIPBlock".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NetworkPolicyIngressRule {
@@ -3319,12 +5349,32 @@ pub struct NetworkPolicyIngressRule {
     #[prost(message, repeated, tag = "2")]
     pub from: ::prost::alloc::vec::Vec<NetworkPolicyPeer>,
 }
+impl ::prost::Name for NetworkPolicyIngressRule {
+    const NAME: &'static str = "NetworkPolicyIngressRule";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.NetworkPolicyIngressRule".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.NetworkPolicyIngressRule".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NetworkPolicyEgressRule {
     #[prost(message, repeated, tag = "1")]
     pub ports: ::prost::alloc::vec::Vec<NetworkPolicyPort>,
     #[prost(message, repeated, tag = "2")]
     pub to: ::prost::alloc::vec::Vec<NetworkPolicyPeer>,
+}
+impl ::prost::Name for NetworkPolicyEgressRule {
+    const NAME: &'static str = "NetworkPolicyEgressRule";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.NetworkPolicyEgressRule".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.NetworkPolicyEgressRule".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NetworkPolicyPeer {
@@ -3339,6 +5389,16 @@ pub struct NetworkPolicyPeer {
     #[prost(bool, tag = "5")]
     pub has_namespace_selector: bool,
 }
+impl ::prost::Name for NetworkPolicyPeer {
+    const NAME: &'static str = "NetworkPolicyPeer";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.NetworkPolicyPeer".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.NetworkPolicyPeer".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct NetworkPolicyPort {
     #[prost(string, tag = "1")]
@@ -3347,6 +5407,16 @@ pub struct NetworkPolicyPort {
     pub port: i32,
     #[prost(int32, tag = "3")]
     pub end_port: i32,
+}
+impl ::prost::Name for NetworkPolicyPort {
+    const NAME: &'static str = "NetworkPolicyPort";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.NetworkPolicyPort".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.NetworkPolicyPort".into()
+    }
 }
 /// <https://github.com/kubernetes/api/blob/v0.23.15/core/v1/types.go#L5800>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -3360,10 +5430,30 @@ pub struct LimitRange {
     #[prost(string, repeated, tag = "4")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for LimitRange {
+    const NAME: &'static str = "LimitRange";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.LimitRange".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.LimitRange".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LimitRangeSpec {
     #[prost(message, repeated, tag = "1")]
     pub limits: ::prost::alloc::vec::Vec<LimitRangeItem>,
+}
+impl ::prost::Name for LimitRangeSpec {
+    const NAME: &'static str = "LimitRangeSpec";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.LimitRangeSpec".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.LimitRangeSpec".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LimitRangeItem {
@@ -3385,6 +5475,16 @@ pub struct LimitRangeItem {
         ::prost::alloc::string::String,
         i64,
     >,
+}
+impl ::prost::Name for LimitRangeItem {
+    const NAME: &'static str = "LimitRangeItem";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.LimitRangeItem".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.LimitRangeItem".into()
+    }
 }
 /// <https://github.com/kubernetes/api/blob/v0.23.15/storage/v1/types.go#L33>
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -3411,10 +5511,30 @@ pub struct StorageClass {
     #[prost(string, repeated, tag = "9")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for StorageClass {
+    const NAME: &'static str = "StorageClass";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.StorageClass".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.StorageClass".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StorageClassTopologies {
     #[prost(message, repeated, tag = "1")]
     pub label_selectors: ::prost::alloc::vec::Vec<TopologyLabelSelector>,
+}
+impl ::prost::Name for StorageClassTopologies {
+    const NAME: &'static str = "StorageClassTopologies";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.StorageClassTopologies".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.StorageClassTopologies".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TopologyLabelSelector {
@@ -3422,6 +5542,16 @@ pub struct TopologyLabelSelector {
     pub key: ::prost::alloc::string::String,
     #[prost(string, repeated, tag = "2")]
     pub values: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for TopologyLabelSelector {
+    const NAME: &'static str = "TopologyLabelSelector";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.TopologyLabelSelector".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.TopologyLabelSelector".into()
+    }
 }
 /// ContainerHostType is a enum that represents the type of host detected for container collection.
 /// Sometimes containers are running on host-less environment, we'll need additional information to identify them
@@ -4228,6 +6358,16 @@ pub struct CollectorProcEvent {
     #[prost(int32, tag = "6")]
     pub group_size: i32,
 }
+impl ::prost::Name for CollectorProcEvent {
+    const NAME: &'static str = "CollectorProcEvent";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorProcEvent".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorProcEvent".into()
+    }
+}
 /// ProcessEvent holds information about a process lifeycle event
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ProcessEvent {
@@ -4259,6 +6399,16 @@ pub mod process_event {
         Exit(super::ProcessExit),
     }
 }
+impl ::prost::Name for ProcessEvent {
+    const NAME: &'static str = "ProcessEvent";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ProcessEvent".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ProcessEvent".into()
+    }
+}
 /// ProcessExec holds information specific to exec events
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ProcessExec {
@@ -4266,6 +6416,16 @@ pub struct ProcessExec {
     pub fork_time: i64,
     #[prost(int64, tag = "2")]
     pub exec_time: i64,
+}
+impl ::prost::Name for ProcessExec {
+    const NAME: &'static str = "ProcessExec";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ProcessExec".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ProcessExec".into()
+    }
 }
 /// ProcessExit holds information specific to exit events
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -4276,6 +6436,16 @@ pub struct ProcessExit {
     pub exit_time: i64,
     #[prost(int32, tag = "3")]
     pub exit_code: i32,
+}
+impl ::prost::Name for ProcessExit {
+    const NAME: &'static str = "ProcessExit";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ProcessExit".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ProcessExit".into()
+    }
 }
 /// ProcEventType is a type of process lifecycle event collected by the process-agent
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -4440,6 +6610,16 @@ pub struct CollectorConnections {
     #[prost(string, repeated, tag = "48")]
     pub resolv_confs: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for CollectorConnections {
+    const NAME: &'static str = "CollectorConnections";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorConnections".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorConnections".into()
+    }
+}
 /// Connections is only used to communicate between the process agent and system-probe.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Connections {
@@ -4479,6 +6659,16 @@ pub struct Connections {
     pub prebuilt_ebpf_assets: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(string, repeated, tag = "13")]
     pub resolv_confs: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for Connections {
+    const NAME: &'static str = "Connections";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Connections".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Connections".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Connection {
@@ -4630,6 +6820,16 @@ pub struct Connection {
     #[prost(int32, tag = "64")]
     pub remote_service_tags_idx: i32,
 }
+impl ::prost::Name for Connection {
+    const NAME: &'static str = "Connection";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Connection".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Connection".into()
+    }
+}
 /// ResourceMetadata only holds enough information to identify a resource in connection data
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ResourceMetadata {
@@ -4652,6 +6852,16 @@ pub struct ResourceMetadata {
     /// if tags have been decoded for a given (byteKey, tagsModified) tuple, that set of tags will not change.
     #[prost(int64, tag = "6")]
     pub tags_modified: i64,
+}
+impl ::prost::Name for ResourceMetadata {
+    const NAME: &'static str = "ResourceMetadata";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ResourceMetadata".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ResourceMetadata".into()
+    }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ConnectionsTelemetry {
@@ -4678,6 +6888,16 @@ pub struct ConnectionsTelemetry {
     #[prost(int64, tag = "11")]
     pub dns_stats_dropped: i64,
 }
+impl ::prost::Name for ConnectionsTelemetry {
+    const NAME: &'static str = "ConnectionsTelemetry";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ConnectionsTelemetry".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ConnectionsTelemetry".into()
+    }
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CollectorConnectionsTelemetry {
     #[prost(int64, tag = "1")]
@@ -4703,6 +6923,16 @@ pub struct CollectorConnectionsTelemetry {
     #[prost(int64, tag = "11")]
     pub dns_stats_dropped: i64,
 }
+impl ::prost::Name for CollectorConnectionsTelemetry {
+    const NAME: &'static str = "CollectorConnectionsTelemetry";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.CollectorConnectionsTelemetry".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.CollectorConnectionsTelemetry".into()
+    }
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RuntimeCompilationTelemetry {
     #[prost(bool, tag = "1")]
@@ -4714,6 +6944,16 @@ pub struct RuntimeCompilationTelemetry {
     /// Field below was deprecated in agent 7.41
     #[prost(enumeration = "KernelHeaderFetchResult", tag = "4")]
     pub kernel_header_fetch_result: i32,
+}
+impl ::prost::Name for RuntimeCompilationTelemetry {
+    const NAME: &'static str = "RuntimeCompilationTelemetry";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.RuntimeCompilationTelemetry".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.RuntimeCompilationTelemetry".into()
+    }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentConfiguration {
@@ -4732,6 +6972,16 @@ pub struct AgentConfiguration {
     #[prost(bool, tag = "7")]
     pub discovery_service_map_enabled: bool,
 }
+impl ::prost::Name for AgentConfiguration {
+    const NAME: &'static str = "AgentConfiguration";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.AgentConfiguration".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.AgentConfiguration".into()
+    }
+}
 /// Route refers to a route out of a host (think `ip route get`).
 /// this is used primarily in AWS where we discover the subnet a
 /// that a connection was associated with
@@ -4742,15 +6992,45 @@ pub struct Route {
     #[prost(message, optional, tag = "2")]
     pub interface: ::core::option::Option<Interface>,
 }
+impl ::prost::Name for Route {
+    const NAME: &'static str = "Route";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Route".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Route".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Interface {
     #[prost(string, tag = "1")]
     pub hardware_addr: ::prost::alloc::string::String,
 }
+impl ::prost::Name for Interface {
+    const NAME: &'static str = "Interface";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Interface".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Interface".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Subnet {
     #[prost(string, tag = "1")]
     pub alias: ::prost::alloc::string::String,
+}
+impl ::prost::Name for Subnet {
+    const NAME: &'static str = "Subnet";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Subnet".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Subnet".into()
+    }
 }
 /// RouteMetadata
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -4767,6 +7047,16 @@ pub struct RouteMetadata {
     #[prost(string, repeated, tag = "4")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for RouteMetadata {
+    const NAME: &'static str = "RouteMetadata";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.RouteMetadata".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.RouteMetadata".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct IpTranslation {
     #[prost(string, tag = "1")]
@@ -4777,6 +7067,16 @@ pub struct IpTranslation {
     pub repl_src_port: i32,
     #[prost(int32, tag = "4")]
     pub repl_dst_port: i32,
+}
+impl ::prost::Name for IpTranslation {
+    const NAME: &'static str = "IPTranslation";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.IPTranslation".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.IPTranslation".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Addr {
@@ -4800,15 +7100,45 @@ pub struct Addr {
     #[prost(string, tag = "7")]
     pub host_name: ::prost::alloc::string::String,
 }
+impl ::prost::Name for Addr {
+    const NAME: &'static str = "Addr";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.Addr".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.Addr".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ProtocolStack {
     #[prost(enumeration = "ProtocolType", repeated, packed = "false", tag = "1")]
     pub stack: ::prost::alloc::vec::Vec<i32>,
 }
+impl ::prost::Name for ProtocolStack {
+    const NAME: &'static str = "ProtocolStack";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.ProtocolStack".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.ProtocolStack".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DnsEntry {
     #[prost(string, repeated, tag = "1")]
     pub names: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for DnsEntry {
+    const NAME: &'static str = "DNSEntry";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.DNSEntry".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.DNSEntry".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DnsStats {
@@ -4821,10 +7151,30 @@ pub struct DnsStats {
     #[prost(map = "uint32, uint32", tag = "4")]
     pub dns_count_by_rcode: ::std::collections::HashMap<u32, u32>,
 }
+impl ::prost::Name for DnsStats {
+    const NAME: &'static str = "DNSStats";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.DNSStats".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.DNSStats".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DnsStatsByQueryType {
     #[prost(map = "int32, message", tag = "1")]
     pub dns_stats_by_query_type: ::std::collections::HashMap<i32, DnsStats>,
+}
+impl ::prost::Name for DnsStatsByQueryType {
+    const NAME: &'static str = "DNSStatsByQueryType";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.DNSStatsByQueryType".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.DNSStatsByQueryType".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PublicIpMetadata {
@@ -4836,6 +7186,16 @@ pub struct PublicIpMetadata {
     pub region: ::prost::alloc::string::String,
     #[prost(string, repeated, tag = "4")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for PublicIpMetadata {
+    const NAME: &'static str = "PublicIpMetadata";
+    const PACKAGE: &'static str = "datadog.process_agent";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.process_agent.PublicIpMetadata".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.process_agent.PublicIpMetadata".into()
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

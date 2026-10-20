@@ -5,3 +5,6 @@
 #![allow(clippy::all)]
 
 include!("generated/mod.rs");
+
+/// Every message above as a `FileDescriptorSet`, for code that reads or writes them by reflection.
+pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!("generated/descriptors.bin");

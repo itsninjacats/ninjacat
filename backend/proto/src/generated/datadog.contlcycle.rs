@@ -13,6 +13,16 @@ pub struct ConditionValue {
     #[prost(string, optional, tag = "4")]
     pub message: ::core::option::Option<::prost::alloc::string::String>,
 }
+impl ::prost::Name for ConditionValue {
+    const NAME: &'static str = "ConditionValue";
+    const PACKAGE: &'static str = "datadog.contlcycle";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.contlcycle.ConditionValue".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.contlcycle.ConditionValue".into()
+    }
+}
 /// ContainerStateValue represents the value of a Kubernetes container state
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ContainerStateValue {
@@ -27,6 +37,16 @@ pub struct ContainerStateValue {
     /// TERMINATED only
     #[prost(int32, optional, tag = "4")]
     pub signal: ::core::option::Option<i32>,
+}
+impl ::prost::Name for ContainerStateValue {
+    const NAME: &'static str = "ContainerStateValue";
+    const PACKAGE: &'static str = "datadog.contlcycle";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.contlcycle.ContainerStateValue".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.contlcycle.ContainerStateValue".into()
+    }
 }
 /// PodStatusValue represents the value of a Kubernetes pod-level status field
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -46,6 +66,16 @@ pub mod pod_status_value {
         Condition(super::ConditionValue),
     }
 }
+impl ::prost::Name for PodStatusValue {
+    const NAME: &'static str = "PodStatusValue";
+    const PACKAGE: &'static str = "datadog.contlcycle";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.contlcycle.PodStatusValue".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.contlcycle.PodStatusValue".into()
+    }
+}
 /// PodStateTransition represents a Kubernetes pod-level status transition (phase or condition)
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PodStateTransition {
@@ -62,6 +92,16 @@ pub struct PodStateTransition {
     #[prost(enumeration = "MissedIntermediate", tag = "6")]
     pub missed_intermediate: i32,
 }
+impl ::prost::Name for PodStateTransition {
+    const NAME: &'static str = "PodStateTransition";
+    const PACKAGE: &'static str = "datadog.contlcycle";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.contlcycle.PodStateTransition".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.contlcycle.PodStateTransition".into()
+    }
+}
 /// ContainerStateTransition represents a Kubernetes container-level state transition
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ContainerStateTransition {
@@ -77,6 +117,16 @@ pub struct ContainerStateTransition {
     pub precision: i32,
     #[prost(enumeration = "MissedIntermediate", tag = "6")]
     pub missed_intermediate: i32,
+}
+impl ::prost::Name for ContainerStateTransition {
+    const NAME: &'static str = "ContainerStateTransition";
+    const PACKAGE: &'static str = "datadog.contlcycle";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.contlcycle.ContainerStateTransition".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.contlcycle.ContainerStateTransition".into()
+    }
 }
 /// PodStatusField identifies the Kubernetes pod status field that changed
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -251,6 +301,16 @@ pub struct EventsPayload {
     #[prost(string, tag = "5")]
     pub cluster_id: ::prost::alloc::string::String,
 }
+impl ::prost::Name for EventsPayload {
+    const NAME: &'static str = "EventsPayload";
+    const PACKAGE: &'static str = "datadog.contlcycle";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.contlcycle.EventsPayload".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.contlcycle.EventsPayload".into()
+    }
+}
 /// Event contains the details about a container lifecycle event
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Event {
@@ -314,6 +374,16 @@ pub mod event {
         Task(super::TaskEvent),
     }
 }
+impl ::prost::Name for Event {
+    const NAME: &'static str = "Event";
+    const PACKAGE: &'static str = "datadog.contlcycle";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.contlcycle.Event".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.contlcycle.Event".into()
+    }
+}
 /// ContainerEvent contains container event metadata
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ContainerEvent {
@@ -353,6 +423,16 @@ pub mod container_event {
         #[prost(string, tag = "2")]
         pub owner_uid: ::prost::alloc::string::String,
     }
+    impl ::prost::Name for Owner {
+        const NAME: &'static str = "Owner";
+        const PACKAGE: &'static str = "datadog.contlcycle";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.contlcycle.ContainerEvent.Owner".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.contlcycle.ContainerEvent.Owner".into()
+        }
+    }
     #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Oneof)]
     pub enum OptionalExitCode {
         /// exitCode contains the exit code of the container
@@ -370,6 +450,16 @@ pub mod container_event {
         /// creationTimestamp contains the creation timestamp of the container
         #[prost(int64, tag = "8")]
         CreationTimestamp(i64),
+    }
+}
+impl ::prost::Name for ContainerEvent {
+    const NAME: &'static str = "ContainerEvent";
+    const PACKAGE: &'static str = "datadog.contlcycle";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.contlcycle.ContainerEvent".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.contlcycle.ContainerEvent".into()
     }
 }
 /// PodEvent contains pod event metadata
@@ -390,6 +480,16 @@ pub struct PodEvent {
     #[prost(message, optional, tag = "5")]
     pub transition: ::core::option::Option<PodStateTransition>,
 }
+impl ::prost::Name for PodEvent {
+    const NAME: &'static str = "PodEvent";
+    const PACKAGE: &'static str = "datadog.contlcycle";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.contlcycle.PodEvent".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.contlcycle.PodEvent".into()
+    }
+}
 /// TaskEvent contains task event metadata
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TaskEvent {
@@ -402,6 +502,16 @@ pub struct TaskEvent {
     /// exitTimestamp contains the exit timestamp of the task
     #[prost(int64, optional, tag = "3")]
     pub exit_timestamp: ::core::option::Option<i64>,
+}
+impl ::prost::Name for TaskEvent {
+    const NAME: &'static str = "TaskEvent";
+    const PACKAGE: &'static str = "datadog.contlcycle";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.contlcycle.TaskEvent".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.contlcycle.TaskEvent".into()
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

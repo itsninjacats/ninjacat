@@ -5,6 +5,16 @@ pub struct KubeActionsList {
     #[prost(message, repeated, tag = "1")]
     pub actions: ::prost::alloc::vec::Vec<KubeAction>,
 }
+impl ::prost::Name for KubeActionsList {
+    const NAME: &'static str = "KubeActionsList";
+    const PACKAGE: &'static str = "datadog.kubeactions";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.kubeactions.KubeActionsList".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.kubeactions.KubeActionsList".into()
+    }
+}
 /// KubeAction represents a single Kubernetes action to execute.
 /// Uses oneof to enforce that exactly one action type with its specific parameters is provided.
 /// This design ensures strict parameter validation per action type while remaining extensible.
@@ -52,6 +62,16 @@ pub mod kube_action {
         PatchStatefulset(super::PatchStatefulSetParams),
     }
 }
+impl ::prost::Name for KubeAction {
+    const NAME: &'static str = "KubeAction";
+    const PACKAGE: &'static str = "datadog.kubeactions";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.kubeactions.KubeAction".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.kubeactions.KubeAction".into()
+    }
+}
 /// DeletePodParams contains parameters for the delete_pod action.
 /// Deletes a pod from the cluster with an optional grace period.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -62,10 +82,30 @@ pub struct DeletePodParams {
     #[prost(int64, optional, tag = "1")]
     pub grace_period_seconds: ::core::option::Option<i64>,
 }
+impl ::prost::Name for DeletePodParams {
+    const NAME: &'static str = "DeletePodParams";
+    const PACKAGE: &'static str = "datadog.kubeactions";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.kubeactions.DeletePodParams".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.kubeactions.DeletePodParams".into()
+    }
+}
 /// RestartDeploymentParams contains parameters for the restart_deployment action.
 /// Restarts a deployment by updating the restart annotation on the pod template.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RestartDeploymentParams {}
+impl ::prost::Name for RestartDeploymentParams {
+    const NAME: &'static str = "RestartDeploymentParams";
+    const PACKAGE: &'static str = "datadog.kubeactions";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.kubeactions.RestartDeploymentParams".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.kubeactions.RestartDeploymentParams".into()
+    }
+}
 /// PatchDeploymentParams contains parameters for the patch_deployment action.
 /// Applies a patch to a deployment using the specified strategy.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -84,6 +124,16 @@ pub struct PatchDeploymentParams {
     /// If not specified, defaults to "strategic-merge".
     #[prost(string, tag = "2")]
     pub patch_strategy: ::prost::alloc::string::String,
+}
+impl ::prost::Name for PatchDeploymentParams {
+    const NAME: &'static str = "PatchDeploymentParams";
+    const PACKAGE: &'static str = "datadog.kubeactions";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.kubeactions.PatchDeploymentParams".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.kubeactions.PatchDeploymentParams".into()
+    }
 }
 /// PatchDaemonSetParams contains parameters for the patch_daemonset action.
 /// Applies a patch to a daemonset using the specified strategy.
@@ -104,6 +154,16 @@ pub struct PatchDaemonSetParams {
     #[prost(string, tag = "2")]
     pub patch_strategy: ::prost::alloc::string::String,
 }
+impl ::prost::Name for PatchDaemonSetParams {
+    const NAME: &'static str = "PatchDaemonSetParams";
+    const PACKAGE: &'static str = "datadog.kubeactions";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.kubeactions.PatchDaemonSetParams".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.kubeactions.PatchDaemonSetParams".into()
+    }
+}
 /// PatchStatefulSetParams contains parameters for the patch_statefulset action.
 /// Applies a patch to a statefulset using the specified strategy.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -123,9 +183,29 @@ pub struct PatchStatefulSetParams {
     #[prost(string, tag = "2")]
     pub patch_strategy: ::prost::alloc::string::String,
 }
+impl ::prost::Name for PatchStatefulSetParams {
+    const NAME: &'static str = "PatchStatefulSetParams";
+    const PACKAGE: &'static str = "datadog.kubeactions";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.kubeactions.PatchStatefulSetParams".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.kubeactions.PatchStatefulSetParams".into()
+    }
+}
 /// GetResourceParams contains parameters for a get_resource action.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetResourceParams {}
+impl ::prost::Name for GetResourceParams {
+    const NAME: &'static str = "GetResourceParams";
+    const PACKAGE: &'static str = "datadog.kubeactions";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.kubeactions.GetResourceParams".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.kubeactions.GetResourceParams".into()
+    }
+}
 /// RollbackDeploymentParams contains parameters for the rollback_deployment action.
 /// Rolls back a deployment by reverting to a previous replicaset.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -134,6 +214,16 @@ pub struct RollbackDeploymentParams {
     /// If not specified, rolls back to the previous revision.
     #[prost(int64, optional, tag = "1")]
     pub target_revision: ::core::option::Option<i64>,
+}
+impl ::prost::Name for RollbackDeploymentParams {
+    const NAME: &'static str = "RollbackDeploymentParams";
+    const PACKAGE: &'static str = "datadog.kubeactions";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.kubeactions.RollbackDeploymentParams".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.kubeactions.RollbackDeploymentParams".into()
+    }
 }
 /// KubeResource represents a Kubernetes resource to act on
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -153,6 +243,16 @@ pub struct KubeResource {
     /// ResourceID is the orchestrator resource ID - used for UID safety check
     #[prost(string, tag = "5")]
     pub resource_id: ::prost::alloc::string::String,
+}
+impl ::prost::Name for KubeResource {
+    const NAME: &'static str = "KubeResource";
+    const PACKAGE: &'static str = "datadog.kubeactions";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.kubeactions.KubeResource".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.kubeactions.KubeResource".into()
+    }
 }
 /// KubeActionResult represents the result of executing a Kubernetes action
 /// This is used for reporting back to the backend via Event Platform
@@ -176,5 +276,15 @@ pub struct KubeActionResult {
     /// ExecutedAt is when the action was executed
     #[prost(message, optional, tag = "6")]
     pub executed_at: ::core::option::Option<::pbjson_types::Timestamp>,
+}
+impl ::prost::Name for KubeActionResult {
+    const NAME: &'static str = "KubeActionResult";
+    const PACKAGE: &'static str = "datadog.kubeactions";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.kubeactions.KubeActionResult".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.kubeactions.KubeActionResult".into()
+    }
 }
 include!("datadog.kubeactions.serde.rs");

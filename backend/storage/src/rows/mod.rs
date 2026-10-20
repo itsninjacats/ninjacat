@@ -4,9 +4,12 @@
 pub mod agent;
 pub mod apm_telemetry;
 pub mod checks;
+pub mod containers;
+pub mod ecs;
 pub mod events;
 pub mod flares;
 pub mod hosts;
+pub mod k8s;
 pub mod logs;
 pub mod metrics;
 pub mod profiling;

@@ -6,6 +6,16 @@ pub struct Payload {
     #[prost(message, optional, tag = "3")]
     pub metric_data: ::core::option::Option<MetricData>,
 }
+impl ::prost::Name for Payload {
+    const NAME: &'static str = "Payload";
+    const PACKAGE: &'static str = "datadoghq.api.metrics.v3";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadoghq.api.metrics.v3.Payload".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadoghq.api.metrics.v3.Payload".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Metadata {
     #[prost(string, repeated, tag = "1")]
@@ -13,6 +23,16 @@ pub struct Metadata {
     /// even number of elements, \[Type, Name\] pairs
     #[prost(string, repeated, tag = "2")]
     pub resources: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for Metadata {
+    const NAME: &'static str = "Metadata";
+    const PACKAGE: &'static str = "datadoghq.api.metrics.v3";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadoghq.api.metrics.v3.Metadata".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadoghq.api.metrics.v3.Metadata".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MetricData {
@@ -101,10 +121,30 @@ pub struct MetricData {
     #[prost(uint32, repeated, tag = "22")]
     pub sketch_bin_cnts: ::prost::alloc::vec::Vec<u32>,
 }
+impl ::prost::Name for MetricData {
+    const NAME: &'static str = "MetricData";
+    const PACKAGE: &'static str = "datadoghq.api.metrics.v3";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadoghq.api.metrics.v3.MetricData".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadoghq.api.metrics.v3.MetricData".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Response {
     #[prost(string, tag = "1")]
     pub error: ::prost::alloc::string::String,
+}
+impl ::prost::Name for Response {
+    const NAME: &'static str = "Response";
+    const PACKAGE: &'static str = "datadoghq.api.metrics.v3";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadoghq.api.metrics.v3.Response".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadoghq.api.metrics.v3.Response".into()
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

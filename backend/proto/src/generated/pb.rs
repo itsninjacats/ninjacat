@@ -20,4 +20,14 @@ pub struct Log {
     #[prost(string, repeated, tag = "7")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for Log {
+    const NAME: &'static str = "Log";
+    const PACKAGE: &'static str = "pb";
+    fn full_name() -> ::prost::alloc::string::String {
+        "pb.Log".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/pb.Log".into()
+    }
+}
 include!("pb.serde.rs");

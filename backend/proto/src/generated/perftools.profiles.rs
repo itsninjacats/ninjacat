@@ -76,6 +76,16 @@ pub struct Profile {
     #[prost(int64, tag = "15")]
     pub doc_url: i64,
 }
+impl ::prost::Name for Profile {
+    const NAME: &'static str = "Profile";
+    const PACKAGE: &'static str = "perftools.profiles";
+    fn full_name() -> ::prost::alloc::string::String {
+        "perftools.profiles.Profile".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/perftools.profiles.Profile".into()
+    }
+}
 /// ValueType describes the semantics and measurement units of a value.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ValueType {
@@ -85,6 +95,16 @@ pub struct ValueType {
     /// Index into string table.
     #[prost(int64, tag = "2")]
     pub unit: i64,
+}
+impl ::prost::Name for ValueType {
+    const NAME: &'static str = "ValueType";
+    const PACKAGE: &'static str = "perftools.profiles";
+    fn full_name() -> ::prost::alloc::string::String {
+        "perftools.profiles.ValueType".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/perftools.profiles.ValueType".into()
+    }
 }
 /// Each Sample records values encountered in some program
 /// context. The program context is typically a stack trace, perhaps
@@ -115,6 +135,16 @@ pub struct Sample {
     #[prost(message, repeated, tag = "3")]
     pub label: ::prost::alloc::vec::Vec<Label>,
 }
+impl ::prost::Name for Sample {
+    const NAME: &'static str = "Sample";
+    const PACKAGE: &'static str = "perftools.profiles";
+    fn full_name() -> ::prost::alloc::string::String {
+        "perftools.profiles.Sample".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/perftools.profiles.Sample".into()
+    }
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Label {
     /// Index into string table. An annotation for a sample (e.g.
@@ -140,6 +170,16 @@ pub struct Label {
     /// Index into string table
     #[prost(int64, tag = "4")]
     pub num_unit: i64,
+}
+impl ::prost::Name for Label {
+    const NAME: &'static str = "Label";
+    const PACKAGE: &'static str = "perftools.profiles";
+    fn full_name() -> ::prost::alloc::string::String {
+        "perftools.profiles.Label".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/perftools.profiles.Label".into()
+    }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Mapping {
@@ -179,6 +219,16 @@ pub struct Mapping {
     #[prost(bool, tag = "10")]
     pub has_inline_frames: bool,
 }
+impl ::prost::Name for Mapping {
+    const NAME: &'static str = "Mapping";
+    const PACKAGE: &'static str = "perftools.profiles";
+    fn full_name() -> ::prost::alloc::string::String {
+        "perftools.profiles.Mapping".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/perftools.profiles.Mapping".into()
+    }
+}
 /// Describes function and line table debug information.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Location {
@@ -215,6 +265,16 @@ pub struct Location {
     #[prost(bool, tag = "5")]
     pub is_folded: bool,
 }
+impl ::prost::Name for Location {
+    const NAME: &'static str = "Location";
+    const PACKAGE: &'static str = "perftools.profiles";
+    fn full_name() -> ::prost::alloc::string::String {
+        "perftools.profiles.Location".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/perftools.profiles.Location".into()
+    }
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Line {
     /// The id of the corresponding profile.Function for this line.
@@ -226,6 +286,16 @@ pub struct Line {
     /// Column number in source code.
     #[prost(int64, tag = "3")]
     pub column: i64,
+}
+impl ::prost::Name for Line {
+    const NAME: &'static str = "Line";
+    const PACKAGE: &'static str = "perftools.profiles";
+    fn full_name() -> ::prost::alloc::string::String {
+        "perftools.profiles.Line".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/perftools.profiles.Line".into()
+    }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Function {
@@ -251,5 +321,15 @@ pub struct Function {
     /// Line number in source file.
     #[prost(int64, tag = "5")]
     pub start_line: i64,
+}
+impl ::prost::Name for Function {
+    const NAME: &'static str = "Function";
+    const PACKAGE: &'static str = "perftools.profiles";
+    fn full_name() -> ::prost::alloc::string::String {
+        "perftools.profiles.Function".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/perftools.profiles.Function".into()
+    }
 }
 include!("perftools.profiles.serde.rs");

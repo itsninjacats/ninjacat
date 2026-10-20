@@ -14,6 +14,16 @@ pub struct SecDump {
     #[prost(message, repeated, tag = "6")]
     pub tree: ::prost::alloc::vec::Vec<ProcessActivityNode>,
 }
+impl ::prost::Name for SecDump {
+    const NAME: &'static str = "SecDump";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.SecDump".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.SecDump".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Metadata {
     #[prost(string, tag = "1")]
@@ -49,12 +59,32 @@ pub struct Metadata {
     #[prost(string, tag = "16")]
     pub cgroup_manager: ::prost::alloc::string::String,
 }
+impl ::prost::Name for Metadata {
+    const NAME: &'static str = "Metadata";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.Metadata".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.Metadata".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ProfileSelector {
     #[prost(string, tag = "1")]
     pub image_name: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub image_tag: ::prost::alloc::string::String,
+}
+impl ::prost::Name for ProfileSelector {
+    const NAME: &'static str = "ProfileSelector";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.ProfileSelector".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.ProfileSelector".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ProfileContext {
@@ -69,6 +99,16 @@ pub struct ProfileContext {
     #[prost(string, repeated, tag = "5")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for ProfileContext {
+    const NAME: &'static str = "ProfileContext";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.ProfileContext".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.ProfileContext".into()
+    }
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ImageTagTimes {
     #[prost(uint64, tag = "1")]
@@ -76,10 +116,30 @@ pub struct ImageTagTimes {
     #[prost(uint64, tag = "2")]
     pub last_seen: u64,
 }
+impl ::prost::Name for ImageTagTimes {
+    const NAME: &'static str = "ImageTagTimes";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.ImageTagTimes".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.ImageTagTimes".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeBase {
     #[prost(map = "string, message", tag = "1")]
     pub seen: ::std::collections::HashMap<::prost::alloc::string::String, ImageTagTimes>,
+}
+impl ::prost::Name for NodeBase {
+    const NAME: &'static str = "NodeBase";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.NodeBase".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.NodeBase".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SecurityProfile {
@@ -108,6 +168,16 @@ pub struct SecurityProfile {
     pub selector: ::core::option::Option<ProfileSelector>,
     #[prost(bool, tag = "9")]
     pub disabled: bool,
+}
+impl ::prost::Name for SecurityProfile {
+    const NAME: &'static str = "SecurityProfile";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.SecurityProfile".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.SecurityProfile".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ProcessActivityNode {
@@ -141,6 +211,16 @@ pub struct ProcessActivityNode {
     pub network_devices: ::prost::alloc::vec::Vec<NetworkDeviceNode>,
     #[prost(message, repeated, tag = "15")]
     pub capability_nodes: ::prost::alloc::vec::Vec<CapabilityNode>,
+}
+impl ::prost::Name for ProcessActivityNode {
+    const NAME: &'static str = "ProcessActivityNode";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.ProcessActivityNode".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.ProcessActivityNode".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ProcessInfo {
@@ -192,6 +272,16 @@ pub struct ProcessInfo {
     #[prost(uint64, tag = "22")]
     pub cookie64: u64,
 }
+impl ::prost::Name for ProcessInfo {
+    const NAME: &'static str = "ProcessInfo";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.ProcessInfo".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.ProcessInfo".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FileActivityNode {
     #[prost(message, repeated, tag = "9")]
@@ -216,6 +306,16 @@ pub struct FileActivityNode {
     #[prost(message, repeated, tag = "6")]
     pub children: ::prost::alloc::vec::Vec<FileActivityNode>,
 }
+impl ::prost::Name for FileActivityNode {
+    const NAME: &'static str = "FileActivityNode";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.FileActivityNode".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.FileActivityNode".into()
+    }
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct OpenNode {
     #[prost(sint64, tag = "1")]
@@ -224,6 +324,16 @@ pub struct OpenNode {
     pub flags: u32,
     #[prost(uint32, tag = "3")]
     pub mode: u32,
+}
+impl ::prost::Name for OpenNode {
+    const NAME: &'static str = "OpenNode";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.OpenNode".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.OpenNode".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DnsNode {
@@ -236,6 +346,16 @@ pub struct DnsNode {
     pub node_base: ::core::option::Option<NodeBase>,
     #[prost(message, repeated, tag = "1")]
     pub requests: ::prost::alloc::vec::Vec<DnsInfo>,
+}
+impl ::prost::Name for DnsNode {
+    const NAME: &'static str = "DNSNode";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.DNSNode".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.DNSNode".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DnsInfo {
@@ -250,6 +370,16 @@ pub struct DnsInfo {
     #[prost(uint32, tag = "5")]
     pub count: u32,
 }
+impl ::prost::Name for DnsInfo {
+    const NAME: &'static str = "DNSInfo";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.DNSInfo".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.DNSInfo".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SyscallNode {
     #[deprecated]
@@ -260,6 +390,16 @@ pub struct SyscallNode {
     #[prost(int32, tag = "2")]
     pub syscall: i32,
 }
+impl ::prost::Name for SyscallNode {
+    const NAME: &'static str = "SyscallNode";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.SyscallNode".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.SyscallNode".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CapabilityNode {
     #[prost(message, optional, tag = "1")]
@@ -268,6 +408,16 @@ pub struct CapabilityNode {
     pub capability: u64,
     #[prost(bool, tag = "3")]
     pub is_capable: bool,
+}
+impl ::prost::Name for CapabilityNode {
+    const NAME: &'static str = "CapabilityNode";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.CapabilityNode".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.CapabilityNode".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ImdsNode {
@@ -280,6 +430,16 @@ pub struct ImdsNode {
     pub node_base: ::core::option::Option<NodeBase>,
     #[prost(message, optional, tag = "3")]
     pub event: ::core::option::Option<ImdsEvent>,
+}
+impl ::prost::Name for ImdsNode {
+    const NAME: &'static str = "IMDSNode";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.IMDSNode".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.IMDSNode".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ImdsEvent {
@@ -298,12 +458,32 @@ pub struct ImdsEvent {
     #[prost(message, optional, tag = "7")]
     pub aws: ::core::option::Option<AwsimdsEvent>,
 }
+impl ::prost::Name for ImdsEvent {
+    const NAME: &'static str = "IMDSEvent";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.IMDSEvent".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.IMDSEvent".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AwsimdsEvent {
     #[prost(bool, tag = "1")]
     pub is_imds_v2: bool,
     #[prost(message, optional, tag = "2")]
     pub security_credentials: ::core::option::Option<AwsSecurityCredentials>,
+}
+impl ::prost::Name for AwsimdsEvent {
+    const NAME: &'static str = "AWSIMDSEvent";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.AWSIMDSEvent".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.AWSIMDSEvent".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AwsSecurityCredentials {
@@ -317,6 +497,16 @@ pub struct AwsSecurityCredentials {
     pub last_updated: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub expiration_raw: ::prost::alloc::string::String,
+}
+impl ::prost::Name for AwsSecurityCredentials {
+    const NAME: &'static str = "AWSSecurityCredentials";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.AWSSecurityCredentials".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.AWSSecurityCredentials".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FileInfo {
@@ -366,6 +556,16 @@ pub struct FileInfo {
     #[prost(enumeration = "HashState", tag = "18")]
     pub hash_state: i32,
 }
+impl ::prost::Name for FileInfo {
+    const NAME: &'static str = "FileInfo";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.FileInfo".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.FileInfo".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Credentials {
     #[prost(uint32, tag = "1")]
@@ -397,12 +597,32 @@ pub struct Credentials {
     #[prost(uint64, tag = "14")]
     pub cap_permitted: u64,
 }
+impl ::prost::Name for Credentials {
+    const NAME: &'static str = "Credentials";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.Credentials".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.Credentials".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SocketNode {
     #[prost(string, tag = "1")]
     pub family: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "2")]
     pub bind: ::prost::alloc::vec::Vec<BindNode>,
+}
+impl ::prost::Name for SocketNode {
+    const NAME: &'static str = "SocketNode";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.SocketNode".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.SocketNode".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BindNode {
@@ -420,6 +640,16 @@ pub struct BindNode {
     #[prost(uint32, tag = "5")]
     pub protocol: u32,
 }
+impl ::prost::Name for BindNode {
+    const NAME: &'static str = "BindNode";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.BindNode".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.BindNode".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NetworkDeviceNode {
     #[prost(message, repeated, tag = "1")]
@@ -432,6 +662,16 @@ pub struct NetworkDeviceNode {
     pub ifname: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "5")]
     pub flow_nodes: ::prost::alloc::vec::Vec<FlowNode>,
+}
+impl ::prost::Name for NetworkDeviceNode {
+    const NAME: &'static str = "NetworkDeviceNode";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.NetworkDeviceNode".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.NetworkDeviceNode".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FlowNode {
@@ -453,6 +693,16 @@ pub struct FlowNode {
     #[prost(message, optional, tag = "7")]
     pub egress: ::core::option::Option<NetworkStats>,
 }
+impl ::prost::Name for FlowNode {
+    const NAME: &'static str = "FlowNode";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.FlowNode".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.FlowNode".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct IpPortContext {
     #[prost(string, tag = "1")]
@@ -460,12 +710,32 @@ pub struct IpPortContext {
     #[prost(uint32, tag = "2")]
     pub port: u32,
 }
+impl ::prost::Name for IpPortContext {
+    const NAME: &'static str = "IPPortContext";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.IPPortContext".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.IPPortContext".into()
+    }
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct NetworkStats {
     #[prost(uint64, tag = "1")]
     pub data_size: u64,
     #[prost(uint64, tag = "2")]
     pub packet_count: u64,
+}
+impl ::prost::Name for NetworkStats {
+    const NAME: &'static str = "NetworkStats";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.NetworkStats".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.NetworkStats".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MatchedRule {
@@ -483,12 +753,32 @@ pub struct MatchedRule {
         ::prost::alloc::string::String,
     >,
 }
+impl ::prost::Name for MatchedRule {
+    const NAME: &'static str = "MatchedRule";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.MatchedRule".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.MatchedRule".into()
+    }
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct EventTypeState {
     #[prost(uint64, tag = "1")]
     pub last_anomaly_nano: u64,
     #[prost(enumeration = "EventProfileState", tag = "2")]
     pub event_profile_state: i32,
+}
+impl ::prost::Name for EventTypeState {
+    const NAME: &'static str = "event_type_state";
+    const PACKAGE: &'static str = "datadog.cws.dumpsv1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.cws.dumpsv1.event_type_state".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.cws.dumpsv1.event_type_state".into()
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

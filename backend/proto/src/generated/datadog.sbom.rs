@@ -14,6 +14,16 @@ pub struct SbomPayload {
     #[prost(string, optional, tag = "5")]
     pub dd_env: ::core::option::Option<::prost::alloc::string::String>,
 }
+impl ::prost::Name for SbomPayload {
+    const NAME: &'static str = "SBOMPayload";
+    const PACKAGE: &'static str = "datadog.sbom";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.sbom.SBOMPayload".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.sbom.SBOMPayload".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SbomEntity {
     #[prost(enumeration = "SbomSourceType", tag = "1")]
@@ -64,6 +74,16 @@ pub mod sbom_entity {
         /// spdx.SBOM      spdx      = 13; // SPDX can be added later as any other format.
         #[prost(string, tag = "12")]
         Error(::prost::alloc::string::String),
+    }
+}
+impl ::prost::Name for SbomEntity {
+    const NAME: &'static str = "SBOMEntity";
+    const PACKAGE: &'static str = "datadog.sbom";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.sbom.SBOMEntity".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.sbom.SBOMEntity".into()
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]

@@ -15,6 +15,16 @@ pub struct ContainerImagePayload {
     #[prost(message, repeated, tag = "3")]
     pub images: ::prost::alloc::vec::Vec<ContainerImage>,
 }
+impl ::prost::Name for ContainerImagePayload {
+    const NAME: &'static str = "ContainerImagePayload";
+    const PACKAGE: &'static str = "datadog.contimage";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.contimage.ContainerImagePayload".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.contimage.ContainerImagePayload".into()
+    }
+}
 /// ContainerImage contains the details of a container image
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ContainerImage {
@@ -57,6 +67,16 @@ pub mod container_image {
         #[prost(string, tag = "3")]
         pub architecture: ::prost::alloc::string::String,
     }
+    impl ::prost::Name for OperatingSystem {
+        const NAME: &'static str = "OperatingSystem";
+        const PACKAGE: &'static str = "datadog.contimage";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.contimage.ContainerImage.OperatingSystem".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.contimage.ContainerImage.OperatingSystem".into()
+        }
+    }
     #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
     pub struct ContainerImageLayer {
         #[prost(string, repeated, tag = "1")]
@@ -85,6 +105,36 @@ pub mod container_image {
             #[prost(bool, tag = "5")]
             pub empty_layer: bool,
         }
+        impl ::prost::Name for History {
+            const NAME: &'static str = "History";
+            const PACKAGE: &'static str = "datadog.contimage";
+            fn full_name() -> ::prost::alloc::string::String {
+                "datadog.contimage.ContainerImage.ContainerImageLayer.History".into()
+            }
+            fn type_url() -> ::prost::alloc::string::String {
+                "/datadog.contimage.ContainerImage.ContainerImageLayer.History".into()
+            }
+        }
+    }
+    impl ::prost::Name for ContainerImageLayer {
+        const NAME: &'static str = "ContainerImageLayer";
+        const PACKAGE: &'static str = "datadog.contimage";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.contimage.ContainerImage.ContainerImageLayer".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.contimage.ContainerImage.ContainerImageLayer".into()
+        }
+    }
+}
+impl ::prost::Name for ContainerImage {
+    const NAME: &'static str = "ContainerImage";
+    const PACKAGE: &'static str = "datadog.contimage";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.contimage.ContainerImage".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.contimage.ContainerImage".into()
     }
 }
 include!("datadog.contimage.serde.rs");

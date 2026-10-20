@@ -32,6 +32,31 @@ pub mod secs {
         let inside = clamp(time, DateTime::UNIX_EPOCH, utc(2105, 12, 31, 23, 59, 59));
         serializer.serialize_u32(inside.timestamp() as u32)
     }
+
+    struct Secs<'a>(&'a DateTime<Utc>);
+    impl Serialize for Secs<'_> {
+        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            serialize(self.0, serializer)
+        }
+    }
+
+    /// `Nullable(DateTime('UTC'))`.
+    pub mod option {
+        use super::*;
+
+        pub fn serialize<S: Serializer>(time: &Option<DateTime<Utc>>, serializer: S) -> Result<S::Ok, S::Error> {
+            time.as_ref().map(Secs).serialize(serializer)
+        }
+    }
+
+    /// `Array(Nullable(DateTime('UTC')))`.
+    pub mod options {
+        use super::*;
+
+        pub fn serialize<S: Serializer>(times: &[Option<DateTime<Utc>>], serializer: S) -> Result<S::Ok, S::Error> {
+            serializer.collect_seq(times.iter().map(|time| time.as_ref().map(Secs)))
+        }
+    }
 }
 
 /// `DateTime64(3, 'UTC')`: milliseconds, 1900 to 2262.
@@ -46,19 +71,56 @@ pub mod millis {
         serializer.serialize_i64(inside.timestamp_millis())
     }
 
+    struct Millis<'a>(&'a DateTime<Utc>);
+    impl Serialize for Millis<'_> {
+        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            serialize(self.0, serializer)
+        }
+    }
+
     /// `Nullable(DateTime64(3, 'UTC'))`.
     pub mod option {
         use super::*;
 
         pub fn serialize<S: Serializer>(time: &Option<DateTime<Utc>>, serializer: S) -> Result<S::Ok, S::Error> {
-            struct Millis<'a>(&'a DateTime<Utc>);
-            impl Serialize for Millis<'_> {
-                fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-                    super::serialize(self.0, serializer)
-                }
-            }
             time.as_ref().map(Millis).serialize(serializer)
         }
+    }
+
+    /// `Array(Nullable(DateTime64(3, 'UTC')))`.
+    pub mod options {
+        use super::*;
+
+        pub fn serialize<S: Serializer>(times: &[Option<DateTime<Utc>>], serializer: S) -> Result<S::Ok, S::Error> {
+            serializer.collect_seq(times.iter().map(|time| time.as_ref().map(Millis)))
+        }
+    }
+}
+
+/// `Map(String, Float64)`. JSON has no NaN or infinity, so as JSON those are the text `NaN`,
+/// `+Inf` and `-Inf`.
+pub mod float_map {
+    use std::collections::BTreeMap;
+
+    use super::*;
+
+    struct Float(f64);
+    impl Serialize for Float {
+        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            match self.0 {
+                v if v.is_nan() => serializer.serialize_str("NaN"),
+                v if v == f64::INFINITY => serializer.serialize_str("+Inf"),
+                v if v == f64::NEG_INFINITY => serializer.serialize_str("-Inf"),
+                v => serializer.serialize_f64(v),
+            }
+        }
+    }
+
+    pub fn serialize<S: Serializer>(values: &BTreeMap<String, f64>, serializer: S) -> Result<S::Ok, S::Error> {
+        if !serializer.is_human_readable() {
+            return values.serialize(serializer);
+        }
+        serializer.collect_map(values.iter().map(|(k, v)| (k, Float(*v))))
     }
 }
 

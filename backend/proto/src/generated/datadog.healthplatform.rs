@@ -46,6 +46,16 @@ pub struct Issue {
     #[prost(string, tag = "14")]
     pub issue_type: ::prost::alloc::string::String,
 }
+impl ::prost::Name for Issue {
+    const NAME: &'static str = "Issue";
+    const PACKAGE: &'static str = "datadog.healthplatform";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.healthplatform.Issue".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.healthplatform.Issue".into()
+    }
+}
 /// Remediation represents remediation steps for an issue
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Remediation {
@@ -59,6 +69,16 @@ pub struct Remediation {
     #[prost(message, optional, tag = "3")]
     pub script: ::core::option::Option<Script>,
 }
+impl ::prost::Name for Remediation {
+    const NAME: &'static str = "Remediation";
+    const PACKAGE: &'static str = "datadog.healthplatform";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.healthplatform.Remediation".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.healthplatform.Remediation".into()
+    }
+}
 /// RemediationStep represents a single remediation step
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RemediationStep {
@@ -68,6 +88,16 @@ pub struct RemediationStep {
     /// Text is the description of what to do
     #[prost(string, tag = "2")]
     pub text: ::prost::alloc::string::String,
+}
+impl ::prost::Name for RemediationStep {
+    const NAME: &'static str = "RemediationStep";
+    const PACKAGE: &'static str = "datadog.healthplatform";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.healthplatform.RemediationStep".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.healthplatform.RemediationStep".into()
+    }
 }
 /// Script represents a remediation script
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -88,6 +118,16 @@ pub struct Script {
     #[prost(string, tag = "5")]
     pub content: ::prost::alloc::string::String,
 }
+impl ::prost::Name for Script {
+    const NAME: &'static str = "Script";
+    const PACKAGE: &'static str = "datadog.healthplatform";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.healthplatform.Script".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.healthplatform.Script".into()
+    }
+}
 /// HostInfo represents the host information in the health report
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct HostInfo {
@@ -100,6 +140,16 @@ pub struct HostInfo {
     /// ParIDs are the partition/organization IDs
     #[prost(string, repeated, tag = "3")]
     pub par_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for HostInfo {
+    const NAME: &'static str = "HostInfo";
+    const PACKAGE: &'static str = "datadog.healthplatform";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.healthplatform.HostInfo".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.healthplatform.HostInfo".into()
+    }
 }
 /// HealthReport represents the formatted health report structure sent to Datadog intake
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -123,6 +173,16 @@ pub struct HealthReport {
     #[prost(string, tag = "6")]
     pub service: ::prost::alloc::string::String,
 }
+impl ::prost::Name for HealthReport {
+    const NAME: &'static str = "HealthReport";
+    const PACKAGE: &'static str = "datadog.healthplatform";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.healthplatform.HealthReport".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.healthplatform.HealthReport".into()
+    }
+}
 /// JSONAPIMeta represents metadata in JSON:API format
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct JsonapiMeta {
@@ -136,6 +196,16 @@ pub struct JsonapiMeta {
     #[prost(string, tag = "3")]
     pub emitted_at: ::prost::alloc::string::String,
 }
+impl ::prost::Name for JsonapiMeta {
+    const NAME: &'static str = "JSONAPIMeta";
+    const PACKAGE: &'static str = "datadog.healthplatform";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.healthplatform.JSONAPIMeta".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.healthplatform.JSONAPIMeta".into()
+    }
+}
 /// JSONAPIResponse represents the JSON:API wrapper for health reports
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct JsonapiResponse {
@@ -145,6 +215,16 @@ pub struct JsonapiResponse {
     /// Meta contains optional metadata
     #[prost(message, optional, tag = "2")]
     pub meta: ::core::option::Option<JsonapiMeta>,
+}
+impl ::prost::Name for JsonapiResponse {
+    const NAME: &'static str = "JSONAPIResponse";
+    const PACKAGE: &'static str = "datadog.healthplatform";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.healthplatform.JSONAPIResponse".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.healthplatform.JSONAPIResponse".into()
+    }
 }
 /// IssueReport represents a lightweight issue report from an integration
 /// The health platform fills in all metadata and remediation based on the issue ID
@@ -166,6 +246,16 @@ pub struct IssueReport {
     #[prost(string, repeated, tag = "3")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for IssueReport {
+    const NAME: &'static str = "IssueReport";
+    const PACKAGE: &'static str = "datadog.healthplatform";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.healthplatform.IssueReport".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.healthplatform.IssueReport".into()
+    }
+}
 /// PersistedIssue tracks the lifecycle state of a single issue
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PersistedIssue {
@@ -181,6 +271,16 @@ pub struct PersistedIssue {
     /// ResolvedAt is the timestamp when the issue was resolved
     #[prost(string, optional, tag = "4")]
     pub resolved_at: ::core::option::Option<::prost::alloc::string::String>,
+}
+impl ::prost::Name for PersistedIssue {
+    const NAME: &'static str = "PersistedIssue";
+    const PACKAGE: &'static str = "datadog.healthplatform";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.healthplatform.PersistedIssue".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.healthplatform.PersistedIssue".into()
+    }
 }
 /// IssueSeverity represents the severity/impact level of an issue
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]

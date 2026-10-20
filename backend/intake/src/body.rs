@@ -11,7 +11,7 @@ use bytes::Bytes;
 pub const MAX_INFLATED_BYTES: usize = 64 * 1024 * 1024;
 
 /// Everything a decoder gives, up to that limit; past it the read fails.
-fn read_inflated(decoder: impl Read) -> std::io::Result<Vec<u8>> {
+pub fn read_inflated(decoder: impl Read) -> std::io::Result<Vec<u8>> {
     let mut out = Vec::new();
     decoder.take(MAX_INFLATED_BYTES as u64 + 1).read_to_end(&mut out)?;
     if out.len() > MAX_INFLATED_BYTES {

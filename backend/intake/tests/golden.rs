@@ -15,7 +15,7 @@ use base64::Engine;
 use http_body_util::BodyExt;
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::keys::{self, Key, Store};
-use ninjapaws_intake::routers::{api, app, logs, misc, profiling, rum, trace};
+use ninjapaws_intake::routers::{api, app, config, containers, kubeops, logs, misc, profiling, rum, trace};
 use ninjapaws_intake::server::{Intake, Routes, router};
 use ninjapaws_storage::Sink;
 use serde_json::Value;
@@ -97,6 +97,9 @@ fn route_set(name: &str) -> Option<Process> {
         "routeDebugger" => process(agent, profiling::mount_debugger),
         "routeSourcemap" => process(agent, profiling::mount_sourcemap),
         "routeRUM" => browser(),
+        "routeKubeops" => process(agent, kubeops::mount),
+        "routeContainers" => process(agent, containers::mount),
+        "routeConfig" => process(agent, config::mount),
         _ => None,
     }
 }
@@ -133,6 +136,15 @@ fn host_process(host: &str) -> Option<Process> {
     }
     if host.starts_with("browser-intake.") {
         return browser();
+    }
+    if host.starts_with("orchestrator.") || host.starts_with("kubeops-intake.") {
+        return process(agent, kubeops::mount);
+    }
+    if host.starts_with("contlcycle-intake.") || host.starts_with("contimage-intake.") {
+        return process(agent, containers::mount);
+    }
+    if host.starts_with("config.") {
+        return process(agent, config::mount);
     }
     None
 }
@@ -361,8 +373,13 @@ async fn run(id: &str, fixture: &Value, process: &Process, overrides: &Value) ->
 
     // --- what was sent to storage ---
 
-    // Null means the Go test ran without a capturing node: nothing to compare.
+    // Null means the Go test ran without a capturing node: nothing to compare. An override that
+    // ignores "/sends" says this intake stores something else on purpose; a test of its own pins
+    // what.
     let Some(sends) = fixture["sends"].as_array() else { return found };
+    if ignored.contains("/sends") {
+        return found;
+    }
     if sends.len() != writes.len() {
         let go: Vec<&str> = sends.iter().filter_map(|s| s["to"].as_str()).collect();
         let rust: Vec<&str> = writes.iter().map(|w| w.writer).collect();

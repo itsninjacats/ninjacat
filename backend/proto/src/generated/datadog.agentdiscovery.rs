@@ -6,6 +6,16 @@ pub struct AgentDiscoveryPayloadBatch {
     #[prost(string, tag = "2")]
     pub host_id: ::prost::alloc::string::String,
 }
+impl ::prost::Name for AgentDiscoveryPayloadBatch {
+    const NAME: &'static str = "AgentDiscoveryPayloadBatch";
+    const PACKAGE: &'static str = "datadog.agentdiscovery";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.agentdiscovery.AgentDiscoveryPayloadBatch".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.agentdiscovery.AgentDiscoveryPayloadBatch".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentDiscoveryPayload {
     #[prost(string, tag = "1")]
@@ -21,6 +31,16 @@ pub struct AgentDiscoveryPayload {
     #[prost(message, optional, tag = "6")]
     pub ingestion_timestamp: ::core::option::Option<::pbjson_types::Timestamp>,
 }
+impl ::prost::Name for AgentDiscoveryPayload {
+    const NAME: &'static str = "AgentDiscoveryPayload";
+    const PACKAGE: &'static str = "datadog.agentdiscovery";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.agentdiscovery.AgentDiscoveryPayload".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.agentdiscovery.AgentDiscoveryPayload".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentDiscoveryConfigFile {
     #[prost(string, tag = "1")]
@@ -32,12 +52,32 @@ pub struct AgentDiscoveryConfigFile {
     #[prost(enumeration = "AgentDiscoveryConfigFilePayloadFormat", tag = "4")]
     pub payload_format: i32,
 }
+impl ::prost::Name for AgentDiscoveryConfigFile {
+    const NAME: &'static str = "AgentDiscoveryConfigFile";
+    const PACKAGE: &'static str = "datadog.agentdiscovery";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.agentdiscovery.AgentDiscoveryConfigFile".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.agentdiscovery.AgentDiscoveryConfigFile".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentDiscoveryEnvVar {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub value: ::prost::alloc::string::String,
+}
+impl ::prost::Name for AgentDiscoveryEnvVar {
+    const NAME: &'static str = "AgentDiscoveryEnvVar";
+    const PACKAGE: &'static str = "datadog.agentdiscovery";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.agentdiscovery.AgentDiscoveryEnvVar".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.agentdiscovery.AgentDiscoveryEnvVar".into()
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

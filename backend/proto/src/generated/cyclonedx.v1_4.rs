@@ -12,6 +12,16 @@ pub struct AttachedText {
     #[prost(string, tag = "3")]
     pub value: ::prost::alloc::string::String,
 }
+impl ::prost::Name for AttachedText {
+    const NAME: &'static str = "AttachedText";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.AttachedText".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.AttachedText".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Bom {
     /// The version of the CycloneDX specification a BOM is written to (starting at version 1.3)
@@ -45,6 +55,16 @@ pub struct Bom {
     #[prost(message, repeated, tag = "10")]
     pub vulnerabilities: ::prost::alloc::vec::Vec<Vulnerability>,
 }
+impl ::prost::Name for Bom {
+    const NAME: &'static str = "Bom";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Bom".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Bom".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Commit {
     /// A unique identifier of the commit. This may be version control specific. For example, Subversion uses revision numbers whereas git uses commit hashes.
@@ -62,6 +82,16 @@ pub struct Commit {
     /// The text description of the contents of the commit
     #[prost(string, optional, tag = "5")]
     pub message: ::core::option::Option<::prost::alloc::string::String>,
+}
+impl ::prost::Name for Commit {
+    const NAME: &'static str = "Commit";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Commit".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Commit".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Component {
@@ -136,6 +166,16 @@ pub struct Component {
     #[prost(message, optional, tag = "24")]
     pub release_notes: ::core::option::Option<ReleaseNotes>,
 }
+impl ::prost::Name for Component {
+    const NAME: &'static str = "Component";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Component".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Component".into()
+    }
+}
 /// Specifies the data classification.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DataClassification {
@@ -146,6 +186,16 @@ pub struct DataClassification {
     #[prost(string, tag = "2")]
     pub value: ::prost::alloc::string::String,
 }
+impl ::prost::Name for DataClassification {
+    const NAME: &'static str = "DataClassification";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.DataClassification".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.DataClassification".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Dependency {
     /// References a component or service by the its bom-ref attribute
@@ -153,6 +203,16 @@ pub struct Dependency {
     pub r#ref: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "2")]
     pub dependencies: ::prost::alloc::vec::Vec<Dependency>,
+}
+impl ::prost::Name for Dependency {
+    const NAME: &'static str = "Dependency";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Dependency".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Dependency".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Diff {
@@ -162,6 +222,16 @@ pub struct Diff {
     /// Specifies the URL to the diff
     #[prost(string, optional, tag = "2")]
     pub url: ::core::option::Option<::prost::alloc::string::String>,
+}
+impl ::prost::Name for Diff {
+    const NAME: &'static str = "Diff";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Diff".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Diff".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExternalReference {
@@ -178,6 +248,16 @@ pub struct ExternalReference {
     #[prost(message, repeated, tag = "4")]
     pub hashes: ::prost::alloc::vec::Vec<Hash>,
 }
+impl ::prost::Name for ExternalReference {
+    const NAME: &'static str = "ExternalReference";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.ExternalReference".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.ExternalReference".into()
+    }
+}
 /// Specifies the file hash of the component
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Hash {
@@ -187,6 +267,16 @@ pub struct Hash {
     /// SimpleContent value of element
     #[prost(string, tag = "2")]
     pub value: ::prost::alloc::string::String,
+}
+impl ::prost::Name for Hash {
+    const NAME: &'static str = "Hash";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Hash".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Hash".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct IdentifiableAction {
@@ -199,6 +289,16 @@ pub struct IdentifiableAction {
     /// The email address of the individual who performed the action
     #[prost(string, optional, tag = "3")]
     pub email: ::core::option::Option<::prost::alloc::string::String>,
+}
+impl ::prost::Name for IdentifiableAction {
+    const NAME: &'static str = "IdentifiableAction";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.IdentifiableAction".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.IdentifiableAction".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Issue {
@@ -219,6 +319,16 @@ pub struct Issue {
     #[prost(string, repeated, tag = "6")]
     pub references: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for Issue {
+    const NAME: &'static str = "Issue";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Issue".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Issue".into()
+    }
+}
 /// The source of the issue where it is documented.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Source {
@@ -228,6 +338,16 @@ pub struct Source {
     /// The url of the issue documentation as provided by the source
     #[prost(string, optional, tag = "2")]
     pub url: ::core::option::Option<::prost::alloc::string::String>,
+}
+impl ::prost::Name for Source {
+    const NAME: &'static str = "Source";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Source".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Source".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct LicenseChoice {
@@ -242,6 +362,16 @@ pub mod license_choice {
         License(super::License),
         #[prost(string, tag = "2")]
         Expression(::prost::alloc::string::String),
+    }
+}
+impl ::prost::Name for LicenseChoice {
+    const NAME: &'static str = "LicenseChoice";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.LicenseChoice".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.LicenseChoice".into()
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -265,6 +395,16 @@ pub mod license {
         /// If SPDX does not define the license used, this field may be used to provide the license name
         #[prost(string, tag = "2")]
         Name(::prost::alloc::string::String),
+    }
+}
+impl ::prost::Name for License {
+    const NAME: &'static str = "License";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.License".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.License".into()
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -294,6 +434,16 @@ pub struct Metadata {
     #[prost(message, repeated, tag = "8")]
     pub properties: ::prost::alloc::vec::Vec<Property>,
 }
+impl ::prost::Name for Metadata {
+    const NAME: &'static str = "Metadata";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Metadata".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Metadata".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct OrganizationalContact {
     /// The name of the contact
@@ -305,6 +455,16 @@ pub struct OrganizationalContact {
     /// The phone number of the contact.
     #[prost(string, optional, tag = "3")]
     pub phone: ::core::option::Option<::prost::alloc::string::String>,
+}
+impl ::prost::Name for OrganizationalContact {
+    const NAME: &'static str = "OrganizationalContact";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.OrganizationalContact".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.OrganizationalContact".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct OrganizationalEntity {
@@ -318,6 +478,16 @@ pub struct OrganizationalEntity {
     #[prost(message, repeated, tag = "3")]
     pub contact: ::prost::alloc::vec::Vec<OrganizationalContact>,
 }
+impl ::prost::Name for OrganizationalEntity {
+    const NAME: &'static str = "OrganizationalEntity";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.OrganizationalEntity".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.OrganizationalEntity".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Patch {
     /// Specifies the purpose for the patch including the resolution of defects, security issues, or new behavior or functionality
@@ -328,6 +498,16 @@ pub struct Patch {
     pub diff: ::core::option::Option<Diff>,
     #[prost(message, repeated, tag = "3")]
     pub resolves: ::prost::alloc::vec::Vec<Issue>,
+}
+impl ::prost::Name for Patch {
+    const NAME: &'static str = "Patch";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Patch".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Patch".into()
+    }
 }
 /// Component pedigree is a way to document complex supply chain scenarios where components are created, distributed, modified, redistributed, combined with other components, etc. Pedigree supports viewing this complex chain from the beginning, the end, or anywhere in the middle. It also provides a way to document variants where the exact relation may not be known.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -350,6 +530,16 @@ pub struct Pedigree {
     /// Notes, observations, and other non-structured commentary describing the components pedigree.
     #[prost(string, optional, tag = "6")]
     pub notes: ::core::option::Option<::prost::alloc::string::String>,
+}
+impl ::prost::Name for Pedigree {
+    const NAME: &'static str = "Pedigree";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Pedigree".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Pedigree".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Service {
@@ -396,6 +586,16 @@ pub struct Service {
     #[prost(message, optional, tag = "15")]
     pub release_notes: ::core::option::Option<ReleaseNotes>,
 }
+impl ::prost::Name for Service {
+    const NAME: &'static str = "Service";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Service".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Service".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Swid {
     /// Maps to the tagId of a SoftwareIdentity.
@@ -420,6 +620,16 @@ pub struct Swid {
     #[prost(string, optional, tag = "7")]
     pub url: ::core::option::Option<::prost::alloc::string::String>,
 }
+impl ::prost::Name for Swid {
+    const NAME: &'static str = "Swid";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Swid".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Swid".into()
+    }
+}
 /// Specifies a tool (manual or automated).
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Tool {
@@ -438,6 +648,16 @@ pub struct Tool {
     #[prost(message, repeated, tag = "5")]
     pub external_references: ::prost::alloc::vec::Vec<ExternalReference>,
 }
+impl ::prost::Name for Tool {
+    const NAME: &'static str = "Tool";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Tool".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Tool".into()
+    }
+}
 /// Specifies a property
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Property {
@@ -445,6 +665,16 @@ pub struct Property {
     pub name: ::prost::alloc::string::String,
     #[prost(string, optional, tag = "2")]
     pub value: ::core::option::Option<::prost::alloc::string::String>,
+}
+impl ::prost::Name for Property {
+    const NAME: &'static str = "Property";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Property".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Property".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Composition {
@@ -458,11 +688,31 @@ pub struct Composition {
     #[prost(string, repeated, tag = "3")]
     pub dependencies: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for Composition {
+    const NAME: &'static str = "Composition";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Composition".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Composition".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct EvidenceCopyright {
     /// Copyright text
     #[prost(string, tag = "1")]
     pub text: ::prost::alloc::string::String,
+}
+impl ::prost::Name for EvidenceCopyright {
+    const NAME: &'static str = "EvidenceCopyright";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.EvidenceCopyright".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.EvidenceCopyright".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Evidence {
@@ -470,6 +720,16 @@ pub struct Evidence {
     pub licenses: ::prost::alloc::vec::Vec<LicenseChoice>,
     #[prost(message, repeated, tag = "2")]
     pub copyright: ::prost::alloc::vec::Vec<EvidenceCopyright>,
+}
+impl ::prost::Name for Evidence {
+    const NAME: &'static str = "Evidence";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Evidence".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Evidence".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Note {
@@ -479,6 +739,16 @@ pub struct Note {
     /// Specifies the full content of the release note.
     #[prost(message, optional, tag = "2")]
     pub text: ::core::option::Option<AttachedText>,
+}
+impl ::prost::Name for Note {
+    const NAME: &'static str = "Note";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Note".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Note".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReleaseNotes {
@@ -515,6 +785,16 @@ pub struct ReleaseNotes {
     /// Specifies optional, custom, properties
     #[prost(message, repeated, tag = "11")]
     pub properties: ::prost::alloc::vec::Vec<Property>,
+}
+impl ::prost::Name for ReleaseNotes {
+    const NAME: &'static str = "ReleaseNotes";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.ReleaseNotes".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.ReleaseNotes".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Vulnerability {
@@ -573,6 +853,16 @@ pub struct Vulnerability {
     #[prost(message, repeated, tag = "18")]
     pub properties: ::prost::alloc::vec::Vec<Property>,
 }
+impl ::prost::Name for Vulnerability {
+    const NAME: &'static str = "Vulnerability";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Vulnerability".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Vulnerability".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct VulnerabilityReference {
     /// An identifier that uniquely identifies the vulnerability.
@@ -581,6 +871,16 @@ pub struct VulnerabilityReference {
     /// The source that published the vulnerability.
     #[prost(message, optional, tag = "2")]
     pub source: ::core::option::Option<Source>,
+}
+impl ::prost::Name for VulnerabilityReference {
+    const NAME: &'static str = "VulnerabilityReference";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.VulnerabilityReference".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.VulnerabilityReference".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VulnerabilityRating {
@@ -603,6 +903,16 @@ pub struct VulnerabilityRating {
     #[prost(string, optional, tag = "6")]
     pub justification: ::core::option::Option<::prost::alloc::string::String>,
 }
+impl ::prost::Name for VulnerabilityRating {
+    const NAME: &'static str = "VulnerabilityRating";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.VulnerabilityRating".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.VulnerabilityRating".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Advisory {
     /// An optional name of the advisory.
@@ -612,6 +922,16 @@ pub struct Advisory {
     #[prost(string, tag = "2")]
     pub url: ::prost::alloc::string::String,
 }
+impl ::prost::Name for Advisory {
+    const NAME: &'static str = "Advisory";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.Advisory".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.Advisory".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VulnerabilityCredits {
     /// The organizations credited with vulnerability discovery.
@@ -620,6 +940,16 @@ pub struct VulnerabilityCredits {
     /// The individuals, not associated with organizations, that are credited with vulnerability discovery.
     #[prost(message, repeated, tag = "2")]
     pub individuals: ::prost::alloc::vec::Vec<OrganizationalContact>,
+}
+impl ::prost::Name for VulnerabilityCredits {
+    const NAME: &'static str = "VulnerabilityCredits";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.VulnerabilityCredits".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.VulnerabilityCredits".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct VulnerabilityAnalysis {
@@ -636,6 +966,16 @@ pub struct VulnerabilityAnalysis {
     #[prost(string, optional, tag = "4")]
     pub detail: ::core::option::Option<::prost::alloc::string::String>,
 }
+impl ::prost::Name for VulnerabilityAnalysis {
+    const NAME: &'static str = "VulnerabilityAnalysis";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.VulnerabilityAnalysis".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.VulnerabilityAnalysis".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VulnerabilityAffects {
     /// References a component or service by the objects bom-ref
@@ -644,6 +984,16 @@ pub struct VulnerabilityAffects {
     /// Zero or more individual versions or range of versions.
     #[prost(message, repeated, tag = "2")]
     pub versions: ::prost::alloc::vec::Vec<VulnerabilityAffectedVersions>,
+}
+impl ::prost::Name for VulnerabilityAffects {
+    const NAME: &'static str = "VulnerabilityAffects";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.VulnerabilityAffects".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.VulnerabilityAffects".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct VulnerabilityAffectedVersions {
@@ -663,6 +1013,16 @@ pub mod vulnerability_affected_versions {
         /// A version range specified in Package URL Version Range syntax (vers) which is defined at <https://github.com/package-url/purl-spec/VERSION-RANGE-SPEC.rst>
         #[prost(string, tag = "2")]
         Range(::prost::alloc::string::String),
+    }
+}
+impl ::prost::Name for VulnerabilityAffectedVersions {
+    const NAME: &'static str = "VulnerabilityAffectedVersions";
+    const PACKAGE: &'static str = "cyclonedx.v1_4";
+    fn full_name() -> ::prost::alloc::string::String {
+        "cyclonedx.v1_4.VulnerabilityAffectedVersions".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/cyclonedx.v1_4.VulnerabilityAffectedVersions".into()
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]

@@ -35,6 +35,16 @@ pub struct SpanLink {
     #[prost(uint32, tag = "6")]
     pub flags: u32,
 }
+impl ::prost::Name for SpanLink {
+    const NAME: &'static str = "SpanLink";
+    const PACKAGE: &'static str = "datadog.trace";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.SpanLink".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.SpanLink".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SpanEvent {
     /// @gotags: json:"time_unix_nano" msg:"time_unix_nano"
@@ -57,6 +67,16 @@ pub struct SpanEvent {
         ::prost::alloc::string::String,
         AttributeAnyValue,
     >,
+}
+impl ::prost::Name for SpanEvent {
+    const NAME: &'static str = "SpanEvent";
+    const PACKAGE: &'static str = "datadog.trace";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.SpanEvent".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.SpanEvent".into()
+    }
 }
 /// AttributeAnyValue is used to represent any type of attribute value. AttributeAnyValue may contain a
 /// primitive value such as a string or integer or it may contain an arbitrary nested
@@ -134,6 +154,16 @@ pub mod attribute_any_value {
         }
     }
 }
+impl ::prost::Name for AttributeAnyValue {
+    const NAME: &'static str = "AttributeAnyValue";
+    const PACKAGE: &'static str = "datadog.trace";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.AttributeAnyValue".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.AttributeAnyValue".into()
+    }
+}
 /// AttributeArray is a list of AttributeArrayValue messages. We need this as a message since `oneof` in AttributeAnyValue does not allow repeated fields.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AttributeArray {
@@ -141,6 +171,16 @@ pub struct AttributeArray {
     /// @gotags: json:"values" msg:"values"
     #[prost(message, repeated, tag = "1")]
     pub values: ::prost::alloc::vec::Vec<AttributeArrayValue>,
+}
+impl ::prost::Name for AttributeArray {
+    const NAME: &'static str = "AttributeArray";
+    const PACKAGE: &'static str = "datadog.trace";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.AttributeArray".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.AttributeArray".into()
+    }
 }
 /// An element in the homogeneous AttributeArray.
 /// Compared to AttributeAnyValue, it only supports scalar values.
@@ -209,6 +249,16 @@ pub mod attribute_array_value {
                 _ => None,
             }
         }
+    }
+}
+impl ::prost::Name for AttributeArrayValue {
+    const NAME: &'static str = "AttributeArrayValue";
+    const PACKAGE: &'static str = "datadog.trace";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.AttributeArrayValue".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.AttributeArrayValue".into()
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -280,6 +330,16 @@ pub struct Span {
     #[prost(message, repeated, tag = "15")]
     pub span_events: ::prost::alloc::vec::Vec<SpanEvent>,
 }
+impl ::prost::Name for Span {
+    const NAME: &'static str = "Span";
+    const PACKAGE: &'static str = "datadog.trace";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.Span".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.Span".into()
+    }
+}
 /// TraceChunk represents a list of spans with the same trace ID. In other words, a chunk of a trace.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TraceChunk {
@@ -306,6 +366,16 @@ pub struct TraceChunk {
     /// @gotags: json:"dropped_trace" msg:"dropped_trace"
     #[prost(bool, tag = "5")]
     pub dropped_trace: bool,
+}
+impl ::prost::Name for TraceChunk {
+    const NAME: &'static str = "TraceChunk";
+    const PACKAGE: &'static str = "datadog.trace";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.TraceChunk".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.TraceChunk".into()
+    }
 }
 /// TracerPayload represents a payload the trace agent receives from tracers.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -358,6 +428,16 @@ pub struct TracerPayload {
     #[prost(message, optional, tag = "11")]
     pub container_debug: ::core::option::Option<ContainerDebug>,
 }
+impl ::prost::Name for TracerPayload {
+    const NAME: &'static str = "TracerPayload";
+    const PACKAGE: &'static str = "datadog.trace";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.TracerPayload".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.TracerPayload".into()
+    }
+}
 /// ContainerDebug holds debug information about the container tags resolution process.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ContainerDebug {
@@ -382,6 +462,16 @@ pub struct ContainerDebug {
     #[prost(string, tag = "5")]
     pub buffer_eviction_reason: ::prost::alloc::string::String,
 }
+impl ::prost::Name for ContainerDebug {
+    const NAME: &'static str = "ContainerDebug";
+    const PACKAGE: &'static str = "datadog.trace";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.ContainerDebug".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.ContainerDebug".into()
+    }
+}
 /// StatsPayload is the payload used to send stats from the agent to the backend.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StatsPayload {
@@ -400,6 +490,16 @@ pub struct StatsPayload {
     /// This field can be used in the backend to signal if re-aggregation is necessary.
     #[prost(bool, tag = "6")]
     pub split_payload: bool,
+}
+impl ::prost::Name for StatsPayload {
+    const NAME: &'static str = "StatsPayload";
+    const PACKAGE: &'static str = "datadog.trace";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.StatsPayload".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.StatsPayload".into()
+    }
 }
 /// ClientStatsPayload is the first layer of span stats aggregation. It is also
 /// the payload sent by tracers to the agent when stats in tracer are enabled.
@@ -459,6 +559,16 @@ pub struct ClientStatsPayload {
     #[prost(string, tag = "16")]
     pub process_tags: ::prost::alloc::string::String,
 }
+impl ::prost::Name for ClientStatsPayload {
+    const NAME: &'static str = "ClientStatsPayload";
+    const PACKAGE: &'static str = "datadog.trace";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.ClientStatsPayload".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.ClientStatsPayload".into()
+    }
+}
 /// ClientStatsBucket is a time bucket containing aggregated stats.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClientStatsBucket {
@@ -475,6 +585,16 @@ pub struct ClientStatsBucket {
     /// when the received bucket start is outside of the agent aggregation window
     #[prost(int64, tag = "4")]
     pub agent_time_shift: i64,
+}
+impl ::prost::Name for ClientStatsBucket {
+    const NAME: &'static str = "ClientStatsBucket";
+    const PACKAGE: &'static str = "datadog.trace";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.ClientStatsBucket".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.ClientStatsBucket".into()
+    }
 }
 /// ClientGroupedStats aggregate stats on spans grouped by service, name, resource, status_code, type
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -543,6 +663,16 @@ pub struct ClientGroupedStats {
     /// additional_metric_tags are tags sent by tracers to be used as additional dimensions for stats aggregation
     #[prost(string, repeated, tag = "23")]
     pub additional_metric_tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for ClientGroupedStats {
+    const NAME: &'static str = "ClientGroupedStats";
+    const PACKAGE: &'static str = "datadog.trace";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.ClientGroupedStats".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.ClientGroupedStats".into()
+    }
 }
 /// Trilean is an expanded boolean type that is meant to differentiate between being unset and false.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -637,5 +767,15 @@ pub struct AgentPayload {
     /// @gotags: msg:"-"
     #[prost(message, repeated, tag = "11")]
     pub idx_tracer_payloads: ::prost::alloc::vec::Vec<idx::TracerPayload>,
+}
+impl ::prost::Name for AgentPayload {
+    const NAME: &'static str = "AgentPayload";
+    const PACKAGE: &'static str = "datadog.trace";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.AgentPayload".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.AgentPayload".into()
+    }
 }
 include!("datadog.trace.serde.rs");

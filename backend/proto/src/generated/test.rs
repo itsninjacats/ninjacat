@@ -19,6 +19,16 @@ pub struct DdSketch {
     #[prost(double, tag = "4")]
     pub zero_count: f64,
 }
+impl ::prost::Name for DdSketch {
+    const NAME: &'static str = "DDSketch";
+    const PACKAGE: &'static str = "test";
+    fn full_name() -> ::prost::alloc::string::String {
+        "test.DDSketch".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/test.DDSketch".into()
+    }
+}
 /// How to map positive values to the bins they belong to.
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct IndexMapping {
@@ -82,6 +92,16 @@ pub mod index_mapping {
         }
     }
 }
+impl ::prost::Name for IndexMapping {
+    const NAME: &'static str = "IndexMapping";
+    const PACKAGE: &'static str = "test";
+    fn full_name() -> ::prost::alloc::string::String {
+        "test.IndexMapping".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/test.IndexMapping".into()
+    }
+}
 /// A Store maps bin indexes to their respective counts.
 /// Counts can be encoded sparsely using binCounts, but also in a contiguous way using contiguousBinCounts and
 /// contiguousBinIndexOffset. Given that non-empty bins are in practice usually contiguous or close to one another, the
@@ -99,5 +119,15 @@ pub struct Store {
     pub contiguous_bin_counts: ::prost::alloc::vec::Vec<f64>,
     #[prost(sint32, tag = "3")]
     pub contiguous_bin_index_offset: i32,
+}
+impl ::prost::Name for Store {
+    const NAME: &'static str = "Store";
+    const PACKAGE: &'static str = "test";
+    fn full_name() -> ::prost::alloc::string::String {
+        "test.Store".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/test.Store".into()
+    }
 }
 include!("test.serde.rs");

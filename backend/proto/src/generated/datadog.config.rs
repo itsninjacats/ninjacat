@@ -12,6 +12,16 @@ pub struct ConfigMetas {
     #[prost(message, repeated, tag = "5")]
     pub delegated_targets: ::prost::alloc::vec::Vec<DelegatedMeta>,
 }
+impl ::prost::Name for ConfigMetas {
+    const NAME: &'static str = "ConfigMetas";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.ConfigMetas".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.ConfigMetas".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DirectorMetas {
     #[prost(message, repeated, tag = "1")]
@@ -23,6 +33,16 @@ pub struct DirectorMetas {
     #[prost(message, optional, tag = "4")]
     pub targets: ::core::option::Option<TopMeta>,
 }
+impl ::prost::Name for DirectorMetas {
+    const NAME: &'static str = "DirectorMetas";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.DirectorMetas".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.DirectorMetas".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DelegatedMeta {
     #[prost(uint64, tag = "1")]
@@ -32,6 +52,16 @@ pub struct DelegatedMeta {
     #[prost(bytes = "vec", tag = "3")]
     pub raw: ::prost::alloc::vec::Vec<u8>,
 }
+impl ::prost::Name for DelegatedMeta {
+    const NAME: &'static str = "DelegatedMeta";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.DelegatedMeta".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.DelegatedMeta".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TopMeta {
     #[prost(uint64, tag = "1")]
@@ -39,12 +69,32 @@ pub struct TopMeta {
     #[prost(bytes = "vec", tag = "2")]
     pub raw: ::prost::alloc::vec::Vec<u8>,
 }
+impl ::prost::Name for TopMeta {
+    const NAME: &'static str = "TopMeta";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.TopMeta".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.TopMeta".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct File {
     #[prost(string, tag = "1")]
     pub path: ::prost::alloc::string::String,
     #[prost(bytes = "vec", tag = "2")]
     pub raw: ::prost::alloc::vec::Vec<u8>,
+}
+impl ::prost::Name for File {
+    const NAME: &'static str = "File";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.File".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.File".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LatestConfigsRequest {
@@ -80,6 +130,16 @@ pub struct LatestConfigsRequest {
     #[prost(string, tag = "16")]
     pub agent_uuid: ::prost::alloc::string::String,
 }
+impl ::prost::Name for LatestConfigsRequest {
+    const NAME: &'static str = "LatestConfigsRequest";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.LatestConfigsRequest".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.LatestConfigsRequest".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LatestConfigsResponse {
     #[prost(message, optional, tag = "1")]
@@ -89,10 +149,30 @@ pub struct LatestConfigsResponse {
     #[prost(message, repeated, tag = "3")]
     pub target_files: ::prost::alloc::vec::Vec<File>,
 }
+impl ::prost::Name for LatestConfigsResponse {
+    const NAME: &'static str = "LatestConfigsResponse";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.LatestConfigsResponse".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.LatestConfigsResponse".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct OrgDataResponse {
     #[prost(string, tag = "1")]
     pub uuid: ::prost::alloc::string::String,
+}
+impl ::prost::Name for OrgDataResponse {
+    const NAME: &'static str = "OrgDataResponse";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.OrgDataResponse".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.OrgDataResponse".into()
+    }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct OrgStatusResponse {
@@ -100,6 +180,16 @@ pub struct OrgStatusResponse {
     pub enabled: bool,
     #[prost(bool, tag = "2")]
     pub authorized: bool,
+}
+impl ::prost::Name for OrgStatusResponse {
+    const NAME: &'static str = "OrgStatusResponse";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.OrgStatusResponse".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.OrgStatusResponse".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Client {
@@ -126,6 +216,16 @@ pub struct Client {
     #[prost(message, optional, tag = "15")]
     pub client_updater: ::core::option::Option<ClientUpdater>,
 }
+impl ::prost::Name for Client {
+    const NAME: &'static str = "Client";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.Client".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.Client".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ClientTracer {
     #[prost(string, tag = "1")]
@@ -149,6 +249,16 @@ pub struct ClientTracer {
     #[prost(string, repeated, tag = "10")]
     pub container_tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for ClientTracer {
+    const NAME: &'static str = "ClientTracer";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.ClientTracer".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.ClientTracer".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ClientAgent {
     #[prost(string, tag = "1")]
@@ -162,6 +272,16 @@ pub struct ClientAgent {
     #[prost(string, repeated, tag = "5")]
     pub cws_workloads: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+impl ::prost::Name for ClientAgent {
+    const NAME: &'static str = "ClientAgent";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.ClientAgent".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.ClientAgent".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClientUpdater {
     #[prost(string, repeated, tag = "1")]
@@ -172,6 +292,16 @@ pub struct ClientUpdater {
     pub available_disk_space: u64,
     #[prost(string, tag = "4")]
     pub secrets_pub_key: ::prost::alloc::string::String,
+}
+impl ::prost::Name for ClientUpdater {
+    const NAME: &'static str = "ClientUpdater";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.ClientUpdater".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.ClientUpdater".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PackageState {
@@ -201,6 +331,16 @@ pub struct PackageState {
         ::prost::alloc::string::String,
     >,
 }
+impl ::prost::Name for PackageState {
+    const NAME: &'static str = "PackageState";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.PackageState".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.PackageState".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PackageStateTask {
     #[prost(string, tag = "1")]
@@ -210,12 +350,32 @@ pub struct PackageStateTask {
     #[prost(message, optional, tag = "3")]
     pub error: ::core::option::Option<TaskError>,
 }
+impl ::prost::Name for PackageStateTask {
+    const NAME: &'static str = "PackageStateTask";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.PackageStateTask".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.PackageStateTask".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TaskError {
     #[prost(uint64, tag = "1")]
     pub code: u64,
     #[prost(string, tag = "2")]
     pub message: ::prost::alloc::string::String,
+}
+impl ::prost::Name for TaskError {
+    const NAME: &'static str = "TaskError";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.TaskError".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.TaskError".into()
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ConfigState {
@@ -229,6 +389,16 @@ pub struct ConfigState {
     pub apply_state: u64,
     #[prost(string, tag = "5")]
     pub apply_error: ::prost::alloc::string::String,
+}
+impl ::prost::Name for ConfigState {
+    const NAME: &'static str = "ConfigState";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.ConfigState".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.ConfigState".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClientState {
@@ -245,12 +415,32 @@ pub struct ClientState {
     #[prost(bytes = "vec", tag = "6")]
     pub backend_client_state: ::prost::alloc::vec::Vec<u8>,
 }
+impl ::prost::Name for ClientState {
+    const NAME: &'static str = "ClientState";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.ClientState".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.ClientState".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TargetFileHash {
     #[prost(string, tag = "1")]
     pub algorithm: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub hash: ::prost::alloc::string::String,
+}
+impl ::prost::Name for TargetFileHash {
+    const NAME: &'static str = "TargetFileHash";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.TargetFileHash".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.TargetFileHash".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TargetFileMeta {
@@ -260,6 +450,16 @@ pub struct TargetFileMeta {
     pub length: i64,
     #[prost(message, repeated, tag = "3")]
     pub hashes: ::prost::alloc::vec::Vec<TargetFileHash>,
+}
+impl ::prost::Name for TargetFileMeta {
+    const NAME: &'static str = "TargetFileMeta";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.TargetFileMeta".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.TargetFileMeta".into()
+    }
 }
 /// ConfigSubscriptionRequest is used to manage the state of the stream created
 /// using CreateConfigSubscription.
@@ -319,6 +519,16 @@ pub mod config_subscription_request {
         }
     }
 }
+impl ::prost::Name for ConfigSubscriptionRequest {
+    const NAME: &'static str = "ConfigSubscriptionRequest";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.ConfigSubscriptionRequest".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.ConfigSubscriptionRequest".into()
+    }
+}
 /// ConfigSubscriptionResponse is streamed from CreateConfigSubscription with
 /// updates for matching clients and products.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -337,12 +547,32 @@ pub struct ConfigSubscriptionResponse {
     #[prost(message, repeated, tag = "3")]
     pub target_files: ::prost::alloc::vec::Vec<File>,
 }
+impl ::prost::Name for ConfigSubscriptionResponse {
+    const NAME: &'static str = "ConfigSubscriptionResponse";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.ConfigSubscriptionResponse".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.ConfigSubscriptionResponse".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClientGetConfigsRequest {
     #[prost(message, optional, tag = "1")]
     pub client: ::core::option::Option<Client>,
     #[prost(message, repeated, tag = "2")]
     pub cached_target_files: ::prost::alloc::vec::Vec<TargetFileMeta>,
+}
+impl ::prost::Name for ClientGetConfigsRequest {
+    const NAME: &'static str = "ClientGetConfigsRequest";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.ClientGetConfigsRequest".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.ClientGetConfigsRequest".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClientGetConfigsResponse {
@@ -357,12 +587,32 @@ pub struct ClientGetConfigsResponse {
     #[prost(enumeration = "ConfigStatus", tag = "5")]
     pub config_status: i32,
 }
+impl ::prost::Name for ClientGetConfigsResponse {
+    const NAME: &'static str = "ClientGetConfigsResponse";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.ClientGetConfigsResponse".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.ClientGetConfigsResponse".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FileMetaState {
     #[prost(uint64, tag = "1")]
     pub version: u64,
     #[prost(string, tag = "2")]
     pub hash: ::prost::alloc::string::String,
+}
+impl ::prost::Name for FileMetaState {
+    const NAME: &'static str = "FileMetaState";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.FileMetaState".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.FileMetaState".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetStateConfigResponse {
@@ -385,6 +635,16 @@ pub struct GetStateConfigResponse {
     pub active_clients: ::prost::alloc::vec::Vec<Client>,
     #[prost(message, repeated, tag = "5")]
     pub config_subscription_states: ::prost::alloc::vec::Vec<ConfigSubscriptionState>,
+}
+impl ::prost::Name for GetStateConfigResponse {
+    const NAME: &'static str = "GetStateConfigResponse";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.GetStateConfigResponse".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.GetStateConfigResponse".into()
+    }
 }
 /// ConfigSubscriptionState describes the state of a config subscription.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -410,9 +670,39 @@ pub mod config_subscription_state {
         #[prost(enumeration = "super::ConfigSubscriptionProducts", tag = "3")]
         pub products: i32,
     }
+    impl ::prost::Name for TrackedClient {
+        const NAME: &'static str = "TrackedClient";
+        const PACKAGE: &'static str = "datadog.config";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.config.ConfigSubscriptionState.TrackedClient".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.config.ConfigSubscriptionState.TrackedClient".into()
+        }
+    }
+}
+impl ::prost::Name for ConfigSubscriptionState {
+    const NAME: &'static str = "ConfigSubscriptionState";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.ConfigSubscriptionState".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.ConfigSubscriptionState".into()
+    }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ResetStateConfigResponse {}
+impl ::prost::Name for ResetStateConfigResponse {
+    const NAME: &'static str = "ResetStateConfigResponse";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.ResetStateConfigResponse".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.ResetStateConfigResponse".into()
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TracerPredicateV1 {
     #[prost(string, tag = "1")]
@@ -430,10 +720,30 @@ pub struct TracerPredicateV1 {
     #[prost(string, tag = "7")]
     pub runtime_id: ::prost::alloc::string::String,
 }
+impl ::prost::Name for TracerPredicateV1 {
+    const NAME: &'static str = "TracerPredicateV1";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.TracerPredicateV1".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.TracerPredicateV1".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TracerPredicates {
     #[prost(message, repeated, tag = "1")]
     pub tracer_predicates_v1: ::prost::alloc::vec::Vec<TracerPredicateV1>,
+}
+impl ::prost::Name for TracerPredicates {
+    const NAME: &'static str = "TracerPredicates";
+    const PACKAGE: &'static str = "datadog.config";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.config.TracerPredicates".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.config.TracerPredicates".into()
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

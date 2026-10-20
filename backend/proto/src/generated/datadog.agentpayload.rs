@@ -14,6 +14,16 @@ pub struct CommonMetadata {
     #[prost(string, tag = "6")]
     pub api_key: ::prost::alloc::string::String,
 }
+impl ::prost::Name for CommonMetadata {
+    const NAME: &'static str = "CommonMetadata";
+    const PACKAGE: &'static str = "datadog.agentpayload";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.agentpayload.CommonMetadata".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.agentpayload.CommonMetadata".into()
+    }
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Origin {
     #[prost(uint32, tag = "4")]
@@ -23,11 +33,31 @@ pub struct Origin {
     #[prost(uint32, tag = "6")]
     pub origin_service: u32,
 }
+impl ::prost::Name for Origin {
+    const NAME: &'static str = "Origin";
+    const PACKAGE: &'static str = "datadog.agentpayload";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.agentpayload.Origin".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.agentpayload.Origin".into()
+    }
+}
 /// Metadata is used in both the MetricSeries and Sketch messages defined below.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Metadata {
     #[prost(message, optional, tag = "1")]
     pub origin: ::core::option::Option<Origin>,
+}
+impl ::prost::Name for Metadata {
+    const NAME: &'static str = "Metadata";
+    const PACKAGE: &'static str = "datadog.agentpayload";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.agentpayload.Metadata".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.agentpayload.Metadata".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MetricPayload {
@@ -45,12 +75,32 @@ pub mod metric_payload {
         #[prost(int64, tag = "2")]
         pub timestamp: i64,
     }
+    impl ::prost::Name for MetricPoint {
+        const NAME: &'static str = "MetricPoint";
+        const PACKAGE: &'static str = "datadog.agentpayload";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.agentpayload.MetricPayload.MetricPoint".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.agentpayload.MetricPayload.MetricPoint".into()
+        }
+    }
     #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
     pub struct Resource {
         #[prost(string, tag = "1")]
         pub r#type: ::prost::alloc::string::String,
         #[prost(string, tag = "2")]
         pub name: ::prost::alloc::string::String,
+    }
+    impl ::prost::Name for Resource {
+        const NAME: &'static str = "Resource";
+        const PACKAGE: &'static str = "datadog.agentpayload";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.agentpayload.MetricPayload.Resource".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.agentpayload.MetricPayload.Resource".into()
+        }
     }
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct MetricSeries {
@@ -82,6 +132,16 @@ pub mod metric_payload {
         /// Metrics origin metadata
         #[prost(message, optional, tag = "9")]
         pub metadata: ::core::option::Option<super::Metadata>,
+    }
+    impl ::prost::Name for MetricSeries {
+        const NAME: &'static str = "MetricSeries";
+        const PACKAGE: &'static str = "datadog.agentpayload";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.agentpayload.MetricPayload.MetricSeries".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.agentpayload.MetricPayload.MetricSeries".into()
+        }
     }
     #[derive(
         Clone,
@@ -126,6 +186,16 @@ pub mod metric_payload {
         }
     }
 }
+impl ::prost::Name for MetricPayload {
+    const NAME: &'static str = "MetricPayload";
+    const PACKAGE: &'static str = "datadog.agentpayload";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.agentpayload.MetricPayload".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.agentpayload.MetricPayload".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EventsPayload {
     #[prost(message, repeated, tag = "1")]
@@ -155,6 +225,26 @@ pub mod events_payload {
         pub aggregation_key: ::prost::alloc::string::String,
         #[prost(string, tag = "9")]
         pub source_type_name: ::prost::alloc::string::String,
+    }
+    impl ::prost::Name for Event {
+        const NAME: &'static str = "Event";
+        const PACKAGE: &'static str = "datadog.agentpayload";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.agentpayload.EventsPayload.Event".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.agentpayload.EventsPayload.Event".into()
+        }
+    }
+}
+impl ::prost::Name for EventsPayload {
+    const NAME: &'static str = "EventsPayload";
+    const PACKAGE: &'static str = "datadog.agentpayload";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.agentpayload.EventsPayload".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.agentpayload.EventsPayload".into()
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -206,6 +296,16 @@ pub mod sketch_payload {
             #[prost(double, repeated, tag = "10")]
             pub buf: ::prost::alloc::vec::Vec<f64>,
         }
+        impl ::prost::Name for Distribution {
+            const NAME: &'static str = "Distribution";
+            const PACKAGE: &'static str = "datadog.agentpayload";
+            fn full_name() -> ::prost::alloc::string::String {
+                "datadog.agentpayload.SketchPayload.Sketch.Distribution".into()
+            }
+            fn type_url() -> ::prost::alloc::string::String {
+                "/datadog.agentpayload.SketchPayload.Sketch.Distribution".into()
+            }
+        }
         #[derive(Clone, PartialEq, ::prost::Message)]
         pub struct Dogsketch {
             #[prost(int64, tag = "1")]
@@ -225,6 +325,36 @@ pub mod sketch_payload {
             #[prost(uint32, repeated, tag = "8")]
             pub n: ::prost::alloc::vec::Vec<u32>,
         }
+        impl ::prost::Name for Dogsketch {
+            const NAME: &'static str = "Dogsketch";
+            const PACKAGE: &'static str = "datadog.agentpayload";
+            fn full_name() -> ::prost::alloc::string::String {
+                "datadog.agentpayload.SketchPayload.Sketch.Dogsketch".into()
+            }
+            fn type_url() -> ::prost::alloc::string::String {
+                "/datadog.agentpayload.SketchPayload.Sketch.Dogsketch".into()
+            }
+        }
+    }
+    impl ::prost::Name for Sketch {
+        const NAME: &'static str = "Sketch";
+        const PACKAGE: &'static str = "datadog.agentpayload";
+        fn full_name() -> ::prost::alloc::string::String {
+            "datadog.agentpayload.SketchPayload.Sketch".into()
+        }
+        fn type_url() -> ::prost::alloc::string::String {
+            "/datadog.agentpayload.SketchPayload.Sketch".into()
+        }
+    }
+}
+impl ::prost::Name for SketchPayload {
+    const NAME: &'static str = "SketchPayload";
+    const PACKAGE: &'static str = "datadog.agentpayload";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.agentpayload.SketchPayload".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.agentpayload.SketchPayload".into()
     }
 }
 include!("datadog.agentpayload.serde.rs");

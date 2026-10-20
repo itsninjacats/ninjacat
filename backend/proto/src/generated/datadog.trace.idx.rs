@@ -32,6 +32,16 @@ pub mod any_value {
         KeyValueList(super::KeyValueList),
     }
 }
+impl ::prost::Name for AnyValue {
+    const NAME: &'static str = "AnyValue";
+    const PACKAGE: &'static str = "datadog.trace.idx";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.idx.AnyValue".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.idx.AnyValue".into()
+    }
+}
 /// KeyValue is a key-value pair where key is a string table ref and value is an AnyValue.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct KeyValue {
@@ -42,6 +52,16 @@ pub struct KeyValue {
     #[prost(message, optional, tag = "2")]
     pub value: ::core::option::Option<AnyValue>,
 }
+impl ::prost::Name for KeyValue {
+    const NAME: &'static str = "KeyValue";
+    const PACKAGE: &'static str = "datadog.trace.idx";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.idx.KeyValue".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.idx.KeyValue".into()
+    }
+}
 /// ArrayValue is a repeated list of AnyValue that is needed since `oneof` in AnyValue
 /// cannot be `repeated`
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -50,6 +70,16 @@ pub struct ArrayValue {
     #[prost(message, repeated, tag = "1")]
     pub values: ::prost::alloc::vec::Vec<AnyValue>,
 }
+impl ::prost::Name for ArrayValue {
+    const NAME: &'static str = "ArrayValue";
+    const PACKAGE: &'static str = "datadog.trace.idx";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.idx.ArrayValue".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.idx.ArrayValue".into()
+    }
+}
 /// KeyValueList is a repeated list of KeyValue messages that is needed since `oneof`
 /// in AnyValue cannot be `repeated` or `map`
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -57,6 +87,16 @@ pub struct KeyValueList {
     /// keyValues specifies a repeated list of KeyValue.
     #[prost(message, repeated, tag = "1")]
     pub key_values: ::prost::alloc::vec::Vec<KeyValue>,
+}
+impl ::prost::Name for KeyValueList {
+    const NAME: &'static str = "KeyValueList";
+    const PACKAGE: &'static str = "datadog.trace.idx";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.idx.KeyValueList".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.idx.KeyValueList".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SpanLink {
@@ -76,6 +116,16 @@ pub struct SpanLink {
     #[prost(uint32, tag = "5")]
     pub flags: u32,
 }
+impl ::prost::Name for SpanLink {
+    const NAME: &'static str = "SpanLink";
+    const PACKAGE: &'static str = "datadog.trace.idx";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.idx.SpanLink".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.idx.SpanLink".into()
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SpanEvent {
     /// time is the number of nanoseconds between the Unix epoch and this event.
@@ -87,6 +137,16 @@ pub struct SpanEvent {
     /// attributes is a mapping from attribute key string ref to any value.
     #[prost(map = "uint32, message", tag = "3")]
     pub attributes: ::std::collections::HashMap<u32, AnyValue>,
+}
+impl ::prost::Name for SpanEvent {
+    const NAME: &'static str = "SpanEvent";
+    const PACKAGE: &'static str = "datadog.trace.idx";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.idx.SpanEvent".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.idx.SpanEvent".into()
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Span {
@@ -138,6 +198,16 @@ pub struct Span {
     /// kind is the SpanKind of this span as defined in the OTEL Specification.
     #[prost(enumeration = "SpanKind", tag = "16")]
     pub kind: i32,
+}
+impl ::prost::Name for Span {
+    const NAME: &'static str = "Span";
+    const PACKAGE: &'static str = "datadog.trace.idx";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.idx.Span".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.idx.Span".into()
+    }
 }
 /// SpanKind is the type of span. Can be used to specify additional relationships between spans
 /// in addition to a parent/child relationship.
@@ -218,6 +288,16 @@ pub struct TraceChunk {
     #[prost(uint32, tag = "7")]
     pub sampling_mechanism: u32,
 }
+impl ::prost::Name for TraceChunk {
+    const NAME: &'static str = "TraceChunk";
+    const PACKAGE: &'static str = "datadog.trace.idx";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.idx.TraceChunk".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.idx.TraceChunk".into()
+    }
+}
 /// TracerPayload represents a payload the trace agent receives from tracers.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TracerPayload {
@@ -258,6 +338,16 @@ pub struct TracerPayload {
     #[prost(message, optional, tag = "12")]
     pub container_debug: ::core::option::Option<ContainerDebug>,
 }
+impl ::prost::Name for TracerPayload {
+    const NAME: &'static str = "TracerPayload";
+    const PACKAGE: &'static str = "datadog.trace.idx";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.idx.TracerPayload".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.idx.TracerPayload".into()
+    }
+}
 /// ContainerDebug holds debug information about the container tags resolution process.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ContainerDebug {
@@ -276,5 +366,15 @@ pub struct ContainerDebug {
     /// bufferEvictionReasonRef specifies the string table ref of why the payload was evicted from the buffer.
     #[prost(uint32, tag = "5")]
     pub buffer_eviction_reason_ref: u32,
+}
+impl ::prost::Name for ContainerDebug {
+    const NAME: &'static str = "ContainerDebug";
+    const PACKAGE: &'static str = "datadog.trace.idx";
+    fn full_name() -> ::prost::alloc::string::String {
+        "datadog.trace.idx.ContainerDebug".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/datadog.trace.idx.ContainerDebug".into()
+    }
 }
 include!("datadog.trace.idx.serde.rs");

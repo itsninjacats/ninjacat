@@ -5,8 +5,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::LazyLock;
 
 use regex::Regex;
-use serde::Serialize;
-use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
 use crate::wire::tags;
@@ -387,24 +385,55 @@ pub fn keys(object: &Value) -> String {
 
 /// Protobuf messages as JSON text, written and read in proto3's JSON mapping: lowerCamelCase
 /// names, 64-bit integers as strings, enums by name, fields at their default left out.
+//
+// Both go through the message's descriptor, as protobuf's own parsers and printers do, rather
+// than through the serde code generated beside the messages: that code refuses null for a bytes
+// field, which proto3 allows for any field, and cannot write an enum value the schema does not
+// have (a newer sender's), which protobuf writes as its number.
 pub mod proto {
+    use prost_reflect::{DescriptorPool, DeserializeOptions, DynamicMessage};
+
     use super::*;
 
+    /// The descriptors of every message the proto crate holds.
+    static POOL: LazyLock<DescriptorPool> =
+        LazyLock::new(|| DescriptorPool::decode(ninjapaws_proto::FILE_DESCRIPTOR_SET).unwrap());
+
+    fn descriptor<T: prost::Name>() -> prost_reflect::MessageDescriptor {
+        POOL.get_message_by_name(&T::full_name()).unwrap()
+    }
+
     /// A JSON body as the message of its shape. A field is taken under the name the schema gives
-    /// it or in lowerCamelCase, an enum by name or by number, and keys the schema does not have
-    /// are passed over.
-    pub fn try_parse<T: DeserializeOwned>(body: &[u8]) -> Result<T, String> {
-        serde_json::from_slice(&repair(body)).map_err(|e| e.to_string())
+    /// it or in lowerCamelCase, an enum by name or by number, null as the field's default, and
+    /// keys the schema does not have are passed over.
+    pub fn try_parse<T: prost::Message + prost::Name + Default>(body: &[u8]) -> Result<T, String> {
+        let repaired = repair(body);
+        let mut deserializer = serde_json::Deserializer::from_slice(&repaired);
+        let options = DeserializeOptions::new().deny_unknown_fields(false);
+        let dynamic = DynamicMessage::deserialize_with_options(descriptor::<T>(), &mut deserializer, &options)
+            .and_then(|message| deserializer.end().map(|_| message))
+            .map_err(|e| e.to_string())?;
+        dynamic.transcode_to().map_err(|e| e.to_string())
+    }
+
+    /// A message as JSON, written as protobuf's own printers write it: NaN and infinity as the
+    /// text "NaN", "Infinity" and "-Infinity", which serde_json has no number for.
+    fn write<T: prost::Message + prost::Name>(message: &T) -> DynamicMessage {
+        DynamicMessage::decode(descriptor::<T>(), message.encode_to_vec().as_slice()).unwrap()
     }
 
     /// "" for a message that is absent.
-    pub fn message<T: Serialize>(value: Option<&T>) -> String {
-        value.map(|m| serde_json::to_string(m).unwrap()).unwrap_or_default()
+    pub fn message<T: prost::Message + prost::Name>(value: Option<&T>) -> String {
+        value.map(|m| serde_json::to_string(&write(m)).unwrap()).unwrap_or_default()
     }
 
     /// A list of messages as a JSON array; "" for an empty list.
-    pub fn messages<T: Serialize>(values: &[T]) -> String {
-        if values.is_empty() { String::new() } else { serde_json::to_string(values).unwrap() }
+    pub fn messages<T: prost::Message + prost::Name>(values: &[T]) -> String {
+        if values.is_empty() {
+            String::new()
+        } else {
+            serde_json::to_string(&values.iter().map(write).collect::<Vec<_>>()).unwrap()
+        }
     }
 }
 

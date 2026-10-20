@@ -183,14 +183,16 @@ pub mod time {
         if millis <= 0 { Utc::now() } else { from_unix_millis(millis) }
     }
 
-    /// A protobuf Timestamp as a time. None when it is absent or not a valid Timestamp: seconds
-    /// outside the years 1 to 9999, or nanos outside one second.
+    /// A protobuf Timestamp as a time, cut to 100 ns as every time here is. None when it is
+    /// absent or not a valid Timestamp: seconds outside the years 1 to 9999, or nanos outside one
+    /// second.
     pub fn of_timestamp(timestamp: Option<&pbjson_types::Timestamp>) -> Option<DateTime<Utc>> {
         let t = timestamp?;
         if !(0..1_000_000_000).contains(&t.nanos) {
             return None;
         }
-        let time = Utc.timestamp_opt(t.seconds, t.nanos as u32).single()?;
+        // Cut before the range is checked: the last nanosecond of 9999 is still 9999.
+        let time = Utc.timestamp_opt(t.seconds, (t.nanos / 100 * 100) as u32).single()?;
         (min_time()..=max_time()).contains(&time).then_some(time)
     }
 

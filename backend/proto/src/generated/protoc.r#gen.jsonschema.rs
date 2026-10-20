@@ -18,6 +18,16 @@ pub struct FieldOptions {
     #[prost(string, tag = "5")]
     pub pattern: ::prost::alloc::string::String,
 }
+impl ::prost::Name for FieldOptions {
+    const NAME: &'static str = "FieldOptions";
+    const PACKAGE: &'static str = "protoc.gen.jsonschema";
+    fn full_name() -> ::prost::alloc::string::String {
+        "protoc.gen.jsonschema.FieldOptions".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/protoc.gen.jsonschema.FieldOptions".into()
+    }
+}
 /// Custom FileOptions
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FileOptions {
@@ -27,6 +37,16 @@ pub struct FileOptions {
     /// Override the default file extension for schemas generated from this file
     #[prost(string, tag = "2")]
     pub extension: ::prost::alloc::string::String,
+}
+impl ::prost::Name for FileOptions {
+    const NAME: &'static str = "FileOptions";
+    const PACKAGE: &'static str = "protoc.gen.jsonschema";
+    fn full_name() -> ::prost::alloc::string::String {
+        "protoc.gen.jsonschema.FileOptions".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/protoc.gen.jsonschema.FileOptions".into()
+    }
 }
 /// Custom MessageOptions
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -47,6 +67,16 @@ pub struct MessageOptions {
     #[prost(bool, tag = "5")]
     pub enums_as_constants: bool,
 }
+impl ::prost::Name for MessageOptions {
+    const NAME: &'static str = "MessageOptions";
+    const PACKAGE: &'static str = "protoc.gen.jsonschema";
+    fn full_name() -> ::prost::alloc::string::String {
+        "protoc.gen.jsonschema.MessageOptions".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/protoc.gen.jsonschema.MessageOptions".into()
+    }
+}
 /// Custom EnumOptions
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct EnumOptions {
@@ -62,5 +92,15 @@ pub struct EnumOptions {
     /// Enums tagged with this will not be processed
     #[prost(bool, tag = "4")]
     pub ignore: bool,
+}
+impl ::prost::Name for EnumOptions {
+    const NAME: &'static str = "EnumOptions";
+    const PACKAGE: &'static str = "protoc.gen.jsonschema";
+    fn full_name() -> ::prost::alloc::string::String {
+        "protoc.gen.jsonschema.EnumOptions".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/protoc.gen.jsonschema.EnumOptions".into()
+    }
 }
 include!("protoc.gen.jsonschema.serde.rs");
