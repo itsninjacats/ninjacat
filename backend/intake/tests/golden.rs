@@ -15,7 +15,9 @@ use base64::Engine;
 use http_body_util::BodyExt;
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::keys::{self, Key, Store};
-use ninjapaws_intake::routers::{api, app, config, containers, kubeops, logs, misc, profiling, rum, trace};
+use ninjapaws_intake::routers::{
+    api, app, config, containers, dbm, evp, kubeops, logs, misc, ndm, profiling, rum, security, trace,
+};
 use ninjapaws_intake::server::{Intake, Routes, router};
 use ninjapaws_storage::Sink;
 use serde_json::Value;
@@ -100,6 +102,19 @@ fn route_set(name: &str) -> Option<Process> {
         "routeKubeops" => process(agent, kubeops::mount),
         "routeContainers" => process(agent, containers::mount),
         "routeConfig" => process(agent, config::mount),
+        "routeDBM" => process(agent, dbm::mount),
+        "routeNDM" => process(agent, ndm::mount),
+        "routeCWS" => process(agent, security::mount_cws),
+        "routeRuntimeSecurity" => process(agent, security::mount_runtime_security),
+        "routeCSPM" => process(agent, security::mount_cspm),
+        "routeSBOM" => process(agent, security::mount_sbom),
+        "routeSDS" => process(agent, security::mount_sds),
+        "routeAgentDiscovery" => process(agent, evp::mount_agent_discovery),
+        "routeAgentHealth" => process(agent, evp::mount_agent_health),
+        "routeEventManagement" => process(agent, evp::mount_event_management),
+        "routeSoftwareInventory" => process(agent, evp::mount_software_inventory),
+        "routeSynthetics" => process(agent, evp::mount_synthetics_results),
+        "routeDataObs" => process(Some(Scheme::Lineage), evp::mount_data_obs),
         _ => None,
     }
 }
@@ -146,6 +161,46 @@ fn host_process(host: &str) -> Option<Process> {
     if host.starts_with("config.") {
         return process(agent, config::mount);
     }
+    let on = |prefix: &str| host.starts_with(prefix);
+    if on("dbm-metrics-intake.") {
+        return process(agent, dbm::mount);
+    }
+    if on("ndm-intake.") || on("snmp-traps-intake.") || on("ndmflow-intake.") || on("netpath-intake.") {
+        return process(agent, ndm::mount);
+    }
+    if on("cws-intake.") {
+        return process(agent, security::mount_cws);
+    }
+    if on("runtime-security-http-intake.logs.") {
+        return process(agent, security::mount_runtime_security);
+    }
+    if on("cspm-intake.") {
+        return process(agent, security::mount_cspm);
+    }
+    if on("sbom-intake.") {
+        return process(agent, security::mount_sbom);
+    }
+    if on("sds-intake.") {
+        return process(agent, security::mount_sds);
+    }
+    if on("agentdiscovery-intake.") {
+        return process(agent, evp::mount_agent_discovery);
+    }
+    if on("agenthealth-intake.") {
+        return process(agent, evp::mount_agent_health);
+    }
+    if on("event-management-intake.") {
+        return process(agent, evp::mount_event_management);
+    }
+    if on("softinv-intake.") {
+        return process(agent, evp::mount_software_inventory);
+    }
+    if on("http-synthetics.") {
+        return process(agent, evp::mount_synthetics_results);
+    }
+    if on("data-obs-intake.") {
+        return process(Some(Scheme::Lineage), evp::mount_data_obs);
+    }
     None
 }
 
@@ -155,6 +210,11 @@ fn process_for(fixture: &Value) -> Option<Process> {
     let request = &fixture["request"];
     let host = request["host"].as_str()?;
     let path = request["url"].as_str()?.split('?').next()?;
+    // A Go test that built an engine around a handler of its own (`func1`) names no route set; the
+    // F# replay skips it too, and it is ported by hand.
+    if routes.iter().any(|name| !name.starts_with("route")) {
+        return None;
+    }
 
     // Most Go tests built one engine and sent to "example.com"; the ones that went through the
     // host dispatch carry a real intake host.
@@ -264,6 +324,11 @@ fn same_number(expected: &Value, actual: &Value) -> bool {
     }
 }
 
+/// Text as the list of its bytes, as a Vec<u8> serializes.
+fn bytes_of(text: &str) -> Vec<Option<u64>> {
+    text.bytes().map(|b| Some(u64::from(b))).collect()
+}
+
 fn json_container(text: &str) -> Option<Value> {
     let trimmed = text.trim_start();
     if trimmed.starts_with('{') || trimmed.starts_with('[') { serde_json::from_str(text).ok() } else { None }
@@ -319,16 +384,19 @@ fn differences(ignored: &HashSet<String>, path: &str, expected: &Value, actual: 
             },
         },
         (Value::String(_), Value::String(_)) | (Value::Null, Value::Null) => {}
+        // Go's recorder wrote a []byte (an Array(UInt8) column) as its text.
+        (Value::String(e), Value::Array(a)) if a.iter().map(Value::as_u64).collect::<Vec<_>>() == bytes_of(e) => {}
         (Value::Bool(e), Value::Bool(a)) if e == a => {}
         _ => found.push(format!("{path}: Go {}, Rust {}", show(expected), show(actual))),
     }
 }
 
-/// The column names of an INSERT statement's column list.
+/// The column names of an INSERT statement's column list. A name the statement quoted (`group`, a
+/// keyword) is the same column unquoted: the driver quotes every name itself.
 fn insert_columns(insert: &str) -> Vec<String> {
     let opening = insert.find('(').unwrap();
     let closing = opening + insert[opening..].find(')').unwrap();
-    insert[opening + 1..closing].split(',').map(|c| c.trim().to_string()).collect()
+    insert[opening + 1..closing].split(',').map(|c| c.trim().trim_matches('`').to_string()).collect()
 }
 
 /// Runs the fixture's request; returns the differences from what Go did.

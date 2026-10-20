@@ -129,7 +129,7 @@ fn extra_encoded(skip: &[&str], values: &BTreeMap<String, Value>) -> Extra {
 
 /// Folds a nested object's extras into the outer ones under a prefix, so two levels of one
 /// document share a column without colliding.
-fn merge_extra(mut outer: Extra, prefix: &str, nested: Extra) -> Extra {
+pub(crate) fn merge_extra(mut outer: Extra, prefix: &str, nested: Extra) -> Extra {
     for (name, value) in nested {
         outer.insert(format!("{prefix}{name}"), value);
     }
