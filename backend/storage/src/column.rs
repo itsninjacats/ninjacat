@@ -120,3 +120,16 @@ impl Serialize for Blob {
 pub fn json_object(text: &str) -> String {
     if text.is_empty() { "{}".into() } else { text.into() }
 }
+
+/// An `Array(UInt8)` column of flags, one per element of a parallel array. As JSON it is spelled
+/// as bytes are, like [`Blob`].
+pub mod uint8_array {
+    use super::*;
+
+    pub fn serialize<S: Serializer>(values: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
+        if serializer.is_human_readable() {
+            return Blob(values.to_vec()).serialize(serializer);
+        }
+        values.serialize(serializer)
+    }
+}

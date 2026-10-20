@@ -15,10 +15,12 @@ use base64::Engine;
 use http_body_util::BodyExt;
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::keys::{self, Key, Store};
-use ninjapaws_intake::routers::{api, app, misc, trace};
+use ninjapaws_intake::routers::{api, app, logs, misc, profiling, rum, trace};
 use ninjapaws_intake::server::{Intake, Routes, router};
 use ninjapaws_storage::Sink;
 use serde_json::Value;
+use tako::conn_info::ConnInfo;
+use tako::router::Router;
 
 /// The keys the Go tests used: one for handler tests, one for the tests of the host dispatch.
 fn test_keys() -> Arc<Store> {
@@ -55,14 +57,29 @@ const NOT_PORTED_ON_API: [&str; 10] = [
     "/api/intake/ci/custom_spans",
 ];
 
-/// A ported host's process as the fixtures need it: the key it asks for and its routes.
+/// A ported host's process as the fixtures need it: the key it asks for, its routes, and what its
+/// binary puts above them.
 struct Process {
     scheme: Option<Scheme>,
     mounts: Vec<fn(&mut Routes)>,
+    above: Option<fn(Router) -> Router>,
 }
 
 fn process(scheme: Option<Scheme>, mount: fn(&mut Routes)) -> Option<Process> {
-    Some(Process { scheme, mounts: vec![mount] })
+    Some(Process { scheme, mounts: vec![mount], above: None })
+}
+
+/// The peer of every Go httptest request.
+const PEER: &str = "192.0.2.1:1234";
+
+/// browser-intake as its binary serves it, the peer every recorded request comes from being a
+/// proxy it trusts, as an operator would name theirs.
+fn browser() -> Option<Process> {
+    let above: fn(Router) -> Router = |router| {
+        let trusted = rum::trusted_proxies("192.0.2.1").unwrap();
+        rum::above(router, &[], trusted)
+    };
+    Some(Process { scheme: Some(Scheme::Browser), mounts: vec![rum::mount], above: Some(above) })
 }
 
 /// The Go server's name for each group of routes, as the fixtures recorded which groups served a
@@ -75,6 +92,11 @@ fn route_set(name: &str) -> Option<Process> {
         "routeTrace" => process(agent, trace::mount),
         "routeTelemetry" => process(agent, misc::telemetry),
         "routeResources" => process(agent, misc::resources),
+        "routeLogs" => process(agent, logs::mount),
+        "routeProfile" => process(agent, profiling::mount_profile),
+        "routeDebugger" => process(agent, profiling::mount_debugger),
+        "routeSourcemap" => process(agent, profiling::mount_sourcemap),
+        "routeRUM" => browser(),
         _ => None,
     }
 }
@@ -97,6 +119,21 @@ fn host_process(host: &str) -> Option<Process> {
     if host.starts_with("resources-intake.") {
         return process(agent, misc::resources);
     }
+    if host.starts_with("http-intake.logs.") || host.starts_with("agent-http-intake.logs.") {
+        return process(agent, logs::mount);
+    }
+    if host.starts_with("intake.profile.") {
+        return process(agent, profiling::mount_profile);
+    }
+    if host.starts_with("debugger-intake.") {
+        return process(agent, profiling::mount_debugger);
+    }
+    if host.starts_with("sourcemap-intake.") {
+        return process(agent, profiling::mount_sourcemap);
+    }
+    if host.starts_with("browser-intake.") {
+        return browser();
+    }
     None
 }
 
@@ -117,11 +154,16 @@ fn process_for(fixture: &Value) -> Option<Process> {
     }
     if routes.is_empty() {
         // The Go flare tests called its router alone; every host with a key serves it.
-        return path.starts_with("/support/flare").then(|| Process { scheme: Some(Scheme::Agent), mounts: Vec::new() });
+        return path.starts_with("/support/flare").then(|| Process {
+            scheme: Some(Scheme::Agent),
+            mounts: Vec::new(),
+            above: None,
+        });
     }
     // The intake made of the named route sets, guarded as the first one is.
     let sets: Vec<Process> = routes.iter().map(|name| route_set(name)).collect::<Option<_>>()?;
-    Some(Process { scheme: sets[0].scheme, mounts: sets.into_iter().flat_map(|set| set.mounts).collect() })
+    let (scheme, above) = (sets[0].scheme, sets[0].above);
+    Some(Process { scheme, mounts: sets.into_iter().flat_map(|set| set.mounts).collect(), above })
 }
 
 /// Every fixture file: those recorded by the Go server's own tests (`go/`), and those recorded
@@ -146,13 +188,17 @@ struct Answer {
     body: Vec<u8>,
 }
 
-fn router_of(process: &Process, sink: Sink) -> tako::router::Router {
+fn router_of(process: &Process, sink: Sink) -> Router {
     let intake = Intake { sink, keys: test_keys(), ack_unknown: false, max_body_bytes: 64 * 1024 * 1024 };
-    router(intake, process.scheme, |routes| {
+    let router = router(intake, process.scheme, |routes| {
         for mount in &process.mounts {
             mount(routes);
         }
-    })
+    });
+    match process.above {
+        Some(above) => above(router),
+        None => router,
+    }
 }
 
 /// The fixture's request. Of two values of a header the later one counts, as the F# replay sets
@@ -169,7 +215,9 @@ fn request_of(fixture: &Value) -> tako::types::Request {
         }
     }
     let body = base64::engine::general_purpose::STANDARD.decode(request["body_b64"].as_str().unwrap()).unwrap();
-    builder.body(body.into()).unwrap()
+    let mut request: tako::types::Request = builder.body(body.into()).unwrap();
+    request.extensions_mut().insert(ConnInfo::tcp(PEER.parse().unwrap()));
+    request
 }
 
 async fn send(fixture: &Value, process: &Process) -> (Answer, Vec<ninjapaws_storage::Write>) {

@@ -344,27 +344,34 @@ pub fn try_parse_array(body: &[u8]) -> Result<Vec<Value>, String> {
 
 /// The elements of a JSON list, each as the bytes it had on the wire: for bodies whose elements
 /// are stored as they were sent. `null` is no elements.
-pub fn try_parse_element_bytes(body: &[u8]) -> Result<Vec<Vec<u8>>, String> {
-    // The parser reads text. A byte that is not UTF-8 is read as '?', one for one, so the text has
-    // the body's offsets and each element is cut from the body as it was sent.
-    let mut text = String::with_capacity(body.len());
-    for chunk in body.utf8_chunks() {
-        text.push_str(chunk.valid());
-        text.extend(std::iter::repeat_n('?', chunk.invalid().len()));
-    }
-    let whole: &serde_json::value::RawValue = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    match whole.get().as_bytes()[0] {
-        b'[' => {
-            let elements: Vec<&serde_json::value::RawValue> =
-                serde_json::from_str(whole.get()).map_err(|e| e.to_string())?;
-            Ok(elements.iter().map(|element| body[text.substr_range(element.get()).unwrap()].to_vec()).collect())
+///
+/// The body is not repaired, so bytes that are not UTF-8 are kept. They are read past as the
+/// parser reads a repaired body: a copy of the body of the same length, where each such byte is
+/// a `?` and half a surrogate pair is `�`, marks where each element starts and ends.
+pub fn try_parse_element_bytes(body: &[u8]) -> Result<Vec<&[u8]>, String> {
+    let marked: Vec<u8> = body
+        .utf8_chunks()
+        .flat_map(|chunk| chunk.valid().bytes().chain(std::iter::repeat_n(b'?', chunk.invalid().len())))
+        .collect();
+    let readable = repair(&marked);
+    let elements: Option<Vec<&serde_json::value::RawValue>> = match serde_json::from_slice(&readable) {
+        Ok(elements) => elements,
+        Err(e) => {
+            return Err(match try_parse(&readable) {
+                Ok(other) if !other.is_array() => format!("expected a list, got {}", kind(&other)),
+                _ => e.to_string(),
+            });
         }
-        b'n' => Ok(Vec::new()),
-        b'{' => Err("expected a list, got object".into()),
-        b'"' => Err("expected a list, got string".into()),
-        b't' | b'f' => Err("expected a list, got bool".into()),
-        _ => Err("expected a list, got number".into()),
-    }
+    };
+    let start = readable.as_ptr() as usize;
+    Ok(elements
+        .unwrap_or_default()
+        .iter()
+        .map(|element| {
+            let at = element.get().as_ptr() as usize - start;
+            &body[at..at + element.get().len()]
+        })
+        .collect())
 }
 
 /// The object's property names, sorted and comma-separated, for a log line or a note that says

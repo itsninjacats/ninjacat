@@ -15,10 +15,13 @@ use ninjapaws_storage::{Sink, Table};
 use serde::Serialize;
 use tako::Server;
 use tako::body::TakoBody;
+use tako::extractors::ipaddr::IpAddr;
 use tako::middleware::Next;
 use tako::router::Router;
 use tako::types::{BoxError, Request, Response};
 use tokio::net::TcpListener;
+use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 
 use crate::auth::{self, Admitted, Scheme};
 use crate::keys::{self, Store};
@@ -84,6 +87,21 @@ impl Ctx {
     /// The agent's connectivity sweep at startup: an empty body or `{}`, nothing to decode.
     pub fn is_sweep(&self) -> bool {
         self.header("x-requested-with") == "datadog-agent-diagnose"
+    }
+
+    /// The sender's address: the peer, or, where the request carries the proxies its host trusts
+    /// (an `IpAddrConfig` extension, as browser-intake puts there), the address such a proxy
+    /// wrote in X-Forwarded-For. No other header is believed. "" when the transport has no IP
+    /// peer.
+    pub fn client_ip(&self) -> String {
+        let mut forwarded = http::HeaderMap::new();
+        for value in self.parts.headers.get_all("x-forwarded-for") {
+            forwarded.append("x-forwarded-for", value.clone());
+        }
+        match IpAddr::resolve(&self.parts.extensions, &forwarded) {
+            Ok(IpAddr(ip)) => ip.to_canonical().to_string(),
+            Err(_) => String::new(),
+        }
     }
 }
 
@@ -271,22 +289,44 @@ impl Unhandled {
     }
 }
 
-fn var_or(name: &str, default: &str) -> String {
+/// An environment variable, or `default` when it is unset or empty.
+pub fn var_or(name: &str, default: &str) -> String {
     env::var(name).ok().filter(|v| !v.is_empty()).unwrap_or_else(|| default.to_string())
 }
 
 /// `:8080`, `*:8080` and `0.0.0.0:8080` are every interface, as the F# server reads them.
-fn listen_on(addr: &str) -> String {
+pub fn listen_on(addr: &str) -> String {
     match addr.rsplit_once(':') {
         Some(("" | "*", port)) => format!("0.0.0.0:{port}"),
         _ => addr.to_string(),
     }
 }
 
+/// What a host's process has besides its routes, for a binary that adds to them.
+pub struct Process {
+    pub keys: Arc<Store>,
+    pub sink: Sink,
+    /// Cancelled once the HTTP listener has stopped. The tasks in `tasks` end on it, and the
+    /// writers flush only after every one of them has.
+    pub stopping: CancellationToken,
+    pub tasks: TaskTracker,
+}
+
 /// The process of one host: reads its settings, the API keys and ClickHouse from the
 /// environment, serves `mount`'s routes on `NINJACAT_ADDR` until it is told to stop, then
 /// flushes what its writers still hold.
 pub async fn run(name: &str, scheme: Option<Scheme>, mount: impl FnOnce(&mut Routes)) -> Result<(), BoxError> {
+    run_with(name, scheme, mount, |router, _| Ok(router)).await
+}
+
+/// [`run`], with `around` handed the host's router before it is served, and the process: for what
+/// sits above a host's routes (browser-intake's CORS) or listens beside them (the logs over TCP).
+pub async fn run_with(
+    name: &str,
+    scheme: Option<Scheme>,
+    mount: impl FnOnce(&mut Routes),
+    around: impl FnOnce(Router, &Process) -> Result<Router, BoxError>,
+) -> Result<(), BoxError> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -307,15 +347,23 @@ pub async fn run(name: &str, scheme: Option<Scheme>, mount: impl FnOnce(&mut Rou
     tokio::spawn(keys::keep(keys.clone(), database_url));
 
     let sink = Sink::clickhouse(ninjapaws_storage::client_from_env());
-    let intake =
-        Intake { sink: sink.clone(), keys, ack_unknown: var_or("NINJACAT_ACK_UNKNOWN", "") == "true", max_body_bytes };
-    let router = router(intake, scheme, mount);
+    let process = Process { keys, sink, stopping: CancellationToken::new(), tasks: TaskTracker::new() };
+    let intake = Intake {
+        sink: process.sink.clone(),
+        keys: process.keys.clone(),
+        ack_unknown: var_or("NINJACAT_ACK_UNKNOWN", "") == "true",
+        max_body_bytes,
+    };
+    let router = around(router(intake, scheme, mount), &process)?;
 
     let addr = var_or("NINJACAT_ADDR", ":8080");
     let listener = TcpListener::bind(listen_on(&addr)).await?;
     tracing::info!("{name} listening on {addr}");
     Server::builder().build().try_spawn_http(listener, router)?.shutdown_on_signal().await?;
+    process.stopping.cancel();
+    process.tasks.close();
+    process.tasks.wait().await;
     // Last, once nothing feeds the writers any more.
-    sink.stop().await;
+    process.sink.stop().await;
     Ok(())
 }

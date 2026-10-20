@@ -1001,7 +1001,7 @@ pub fn message_keys(message: &[u8]) -> Vec<String> {
 pub fn dsm_message_rows(
     tenant: &str,
     received_at: DateTime<Utc>,
-    messages: Vec<Vec<u8>>,
+    messages: Vec<&[u8]>,
     origin: &str,
     origin_version: &str,
     encoding: &str,
@@ -1013,8 +1013,8 @@ pub fn dsm_message_rows(
             tenant_id: tenant.into(),
             received_at,
             position: position as u32,
-            keys: message_keys(&message),
-            message: Blob(message),
+            keys: message_keys(message),
+            message: Blob(message.to_vec()),
             dd_evp_origin: origin.into(),
             dd_evp_origin_version: origin_version.into(),
             content_encoding: encoding.into(),
@@ -1754,6 +1754,6 @@ mod tests {
         let messages = json::try_parse_element_bytes(b"[{\"a\":\"x\xffy\"}]").unwrap();
         assert_eq!(messages, vec![b"{\"a\":\"x\xffy\"}".to_vec()]);
         // The keys are still read: only the value was not UTF-8.
-        assert_eq!(message_keys(&messages[0]), vec!["a"]);
+        assert_eq!(message_keys(messages[0]), vec!["a"]);
     }
 }
