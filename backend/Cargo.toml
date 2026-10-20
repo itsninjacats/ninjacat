@@ -1,0 +1,18 @@
+[workspace]
+resolver = "3"
+members = ["anomaly", "api", "cli", "engine", "intake", "proto", "protogen", "storage"]
+# protogen runs only when asked: cargo run -p protogen
+default-members = ["anomaly", "api", "engine", "intake", "proto", "storage"]
+
+[workspace.dependencies]
+ninjapaws-anomaly = { path = "anomaly" }
+ninjapaws-engine = { path = "engine" }
+ninjapaws-intake = { path = "intake" }
+ninjapaws-proto = { path = "proto" }
+ninjapaws-storage = { path = "storage" }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = true
+opt-level = 3

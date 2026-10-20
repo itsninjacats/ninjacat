@@ -1,0 +1,11 @@
+[package]
+name = "protogen"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+pbjson-build = "0.9.0"
+prost = "0.14.4"
+prost-build = "0.14.4"
+protox = "0.10.0"

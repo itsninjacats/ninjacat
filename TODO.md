@@ -261,6 +261,31 @@ Looked home-made, kept on purpose: body decompression (the middleware drops
 `postgres://` URLs), `Config.fs`, `Capture.fs`, DDSketch and the STL/DBSCAN/Huber code
 (MathNet has none of them), the RFC 3339 and half-surrogate handling.
 
+## 1c. The intake in Rust, one program per host
+
+`backend/` ports the intake host by host: one program per router of `Intake/Routes.fs`
+(`ninjapaws_<host>`), so each host can be deployed, scaled and stopped on its own, with
+whatever is in front of them sending each host name to its program. The shared part is
+`backend/storage` (rows, one writer per table, the migrations) and `backend/intake` (keys,
+auth, bodies, JSON, raw_payloads, the server); `ninjapaws_migrate` applies the schema. The
+golden fixtures are replayed against every ported host (`intake/tests/golden.rs`), and their
+rows inserted into a scratch ClickHouse.
+
+- [x] `api.` and `app.` (`ninjapaws_api`, `ninjapaws_app`), the flare and the probes on
+      every host, `ninjapaws_migrate` (2026-10-20).
+- [ ] The CI Visibility endpoints of `api.`, with the CI hosts.
+- [ ] The other hosts, in the order of section 1 of `Routes.fs`: trace, telemetry, profile,
+      debugger, sourcemap, logs (and logs over TCP), process, kubeops, containers, config,
+      dbm, ndm, resources, the security hosts, the event platform hosts, synthetics, CI,
+      webhook, data-obs, aiusage, llmobs, install, browser-intake (CORS, the `proxy` rewrite,
+      `NINJACAT_TRUSTED_PROXIES`).
+- [ ] Not ported yet on any host: self-monitoring (`ninjacat.node.*`, `SelfMetrics`), the
+      capture lab (`DEBUG=true` dumps), TLS to Postgres (the keeper connects without it).
+- [ ] Deploy: compose services and chart Deployments per host, and the ingress rules that
+      send each host name to its program; `ninjapaws_migrate` as the schema's hook Job.
+- [ ] serde_json nests at most 128 deep, System.Text.Json 512: a body between the two is
+      kept raw by the Rust intake and decoded by the F# one.
+
 ## 2. Intake: not served yet
 
 - [ ] **Remote Config** (`config.<site>`). Answered 404 on purpose: the agent verifies the

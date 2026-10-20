@@ -1,0 +1,10 @@
+[package]
+name = "ninjapaws-proto"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pbjson = "0.9.0"
+pbjson-types = "0.9.0"
+prost = "0.14.4"
+serde = "1"

@@ -439,5 +439,12 @@
       "/sends/0/args/0/13"
     ],
     "why": "The note quotes the MessagePack reader's error. Go's msgp worded it its own way; these are the library's words and this intake's."
+  },
+  "TestSketchesStoreOriginSenderIdentityAndLegacyDistributions/001": {
+    "ignore": [
+      "/sends/0/rows/0/BodyBytes",
+      "/sends/0/args/0/12"
+    ],
+    "why": "The kept body is the sketch as proto3 JSON, the same object either way: Go and Google.Protobuf write it with spaces, the Rust intake's pbjson compact, so its length differs."
   }
 }

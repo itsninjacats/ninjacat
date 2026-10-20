@@ -1,0 +1,33 @@
+[package]
+name = "ninjapaws-intake"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+arc-swap = "1"
+bytes = "1"
+chrono = "0.4"
+flate2 = "1"
+form_urlencoded = "1"
+futures = "0.3"
+http = "1"
+http-body-util = "0.1"
+multer = "3"
+ninjapaws-proto.workspace = true
+ninjapaws-storage.workspace = true
+pbjson-types = "0.9.0"
+prost = "0.14.4"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+sha2 = "0.10"
+tako-rs = "2.5.0"
+tokio = { version = "1.54.0", features = ["full"] }
+tokio-postgres = "0.7"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4"] }
+zstd = "0.13"
+
+[dev-dependencies]
+base64 = "0.22"
