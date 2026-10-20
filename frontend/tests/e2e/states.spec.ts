@@ -103,6 +103,33 @@ test.describe('API keys', () => {
 	});
 });
 
+test.describe('account', () => {
+	// Better Auth answers a wrong current password with a 400.
+	test.use({ storageState: stateFile('longEmail'), allowedErrors: [/status of 400/] });
+
+	// Neither changes the password: every project signs in as the same people at once.
+	test('new passwords that differ, and a wrong current one', async ({ page }, testInfo) => {
+		// The limiter counts per address; each project changes from its own.
+		const projects = testInfo.config.projects.map((project) => project.name);
+		await page.context().setExtraHTTPHeaders({
+			'x-forwarded-for': `192.0.2.${120 + projects.indexOf(testInfo.project.name)}`
+		});
+		await open(page, '/app/settings/account');
+		await page.getByLabel('Current password').fill(password);
+		await page.getByLabel('New password', { exact: true }).fill(`${password}-new`);
+		await page.getByLabel('New password, again').fill(`${password}-other`);
+		await page.getByRole('button', { name: 'Change password' }).click();
+		await expect(page.getByText('The two new passwords are not the same.')).toBeVisible();
+
+		await page.getByLabel('Current password').fill(`${password}-wrong`);
+		await page.getByLabel('New password, again').fill(`${password}-new`);
+		await page.getByRole('button', { name: 'Change password' }).click();
+		await expect(page.getByText('The current password is wrong.')).toBeVisible();
+		await expectNoOverflow(page, testInfo, 'password change refused');
+		await shoot(page, testInfo, 'account-refused');
+	});
+});
+
 test.describe('monitor editor', () => {
 	test.use({ storageState: stateFile('longEmail'), allowedErrors: refusals });
 

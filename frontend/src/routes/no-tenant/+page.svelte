@@ -24,6 +24,7 @@
 			{#if data.instanceAdmin}
 				<Button href={resolve('/app/admin/tenants')}>{m.admin_manage_tenants()}</Button>
 			{/if}
+			<Button variant="outline" href={resolve('/app/settings/account')}>{m.account()}</Button>
 			<Button variant="outline" onclick={signOut}>{m.sign_out()}</Button>
 		</Card.Footer>
 	</Card.Root>
