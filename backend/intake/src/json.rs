@@ -383,6 +383,56 @@ pub fn keys(object: &Value) -> String {
     if names.is_empty() { "(none)".into() } else { names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ") }
 }
 
+/// JSON values as the text they were sent as, for the columns that keep a value as it arrived: a
+/// number keeps its digits (`1.50`), an element its spacing. The text is the repaired body's
+/// ([`repair`]), which is what every value of it was parsed from.
+pub mod raw {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use serde_json::value::RawValue;
+
+    /// The body repaired, as text: repairing leaves only UTF-8.
+    pub fn text(body: &[u8]) -> String {
+        String::from_utf8_lossy(&super::repair(body)).into_owned()
+    }
+
+    /// The elements of a list, or the text itself when it is an object: a body read with
+    /// [`super::try_parse_list`]. Nothing for anything else.
+    pub fn list(text: &str) -> Vec<&str> {
+        let text = text.trim();
+        if text.starts_with('{') { vec![text] } else { elements(text) }
+    }
+
+    /// The elements of a list; none for anything else.
+    pub fn elements(text: &str) -> Vec<&str> {
+        serde_json::from_str::<Vec<&RawValue>>(text)
+            .map(|items| items.iter().map(|i| i.get()).collect())
+            .unwrap_or_default()
+    }
+
+    /// The members of an object, `null` ones included, the last of a repeated name; none for
+    /// anything else.
+    pub fn members(text: &str) -> BTreeMap<String, &str> {
+        serde_json::from_str::<BTreeMap<String, &RawValue>>(text)
+            .map(|found| found.into_iter().map(|(k, v)| (k, v.get())).collect())
+            .unwrap_or_default()
+    }
+
+    /// A member's text, `null` included; None when the object has no such member.
+    pub fn member<'a>(name: &str, text: &'a str) -> Option<&'a str> {
+        members(text).remove(name)
+    }
+
+    /// The members that have no column of their own, those not in `known`, each as its text.
+    pub fn other_members(known: &BTreeSet<&str>, text: &str) -> BTreeMap<String, String> {
+        members(text)
+            .into_iter()
+            .filter(|(name, _)| !known.contains(name.as_str()))
+            .map(|(k, v)| (k, v.into()))
+            .collect()
+    }
+}
+
 /// Protobuf messages as JSON text, written and read in proto3's JSON mapping: lowerCamelCase
 /// names, 64-bit integers as strings, enums by name, fields at their default left out.
 //

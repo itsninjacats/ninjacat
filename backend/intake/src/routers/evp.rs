@@ -111,12 +111,13 @@ fn handle_batch<T: Table>(
             Err(_) => ctx.raw(intake, "unexpected_shape", "body is not a JSON array or object", body),
             Ok(items) => {
                 let now = Utc::now();
+                let text = json::raw::text(body);
                 let mut rows = Vec::new();
-                for item in &items {
+                for (item, item_text) in items.iter().zip(json::raw::list(&text)) {
                     if is_object_or_null(item) {
                         rows.extend(to_rows(now, item));
                     } else {
-                        ctx.raw(intake, "decode_error", "item is not a JSON object", &json::raw_bytes(item));
+                        ctx.raw(intake, "decode_error", "item is not a JSON object", item_text.as_bytes());
                     }
                 }
                 ctx.write(rows);

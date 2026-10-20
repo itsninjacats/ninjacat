@@ -89,14 +89,14 @@ fn count_tree(nodes: &[ProcessActivityNode]) -> u32 {
     nodes.iter().map(|node| 1 + count_tree(&node.children)).sum()
 }
 
-/// The cws_activity_dumps row, from whichever of the two parts decoded. `header` is the "event"
-/// part (the agent's ActivityDumpHeader) as a JSON object. Both parts are kept as they arrived,
-/// decoded or not.
+/// The cws_activity_dumps row, from whichever of the two parts decoded. `header` is the text of
+/// the "event" part (the agent's ActivityDumpHeader) when it is a JSON object. Both parts are kept
+/// as they arrived, decoded or not.
 pub fn dump_row(
     tenant: &str,
     received_at: DateTime<Utc>,
     dump_id: Uuid,
-    header: Option<&Value>,
+    header: Option<&str>,
     header_bytes: &[u8],
     dump: Option<&SecDump>,
     dump_bytes: &[u8],
@@ -136,13 +136,17 @@ pub fn dump_row(
         dump: Blob(dump_bytes.to_vec()),
     };
 
-    if let Some(h) = header {
+    if let Some(text) = header {
+        let parsed = json::try_parse(text.as_bytes()).unwrap_or_default();
+        let h = &parsed;
         row.header_host = json::lenient_string(json::field("host", h));
         row.header_service = json::lenient_string(json::field("service", h));
         row.header_source = json::lenient_string(json::field("ddsource", h));
         row.header_tags = tags::to_multi_map(json::tag_list(json::field("ddtags", h)));
-        row.dns_names = json::compact_or_empty(json::field("dns_names", h));
-        row.header_extra = json::other_members(&KNOWN_HEADER_KEYS, json::compact, Some(h));
+        if json::field("dns_names", h).is_some() {
+            row.dns_names = json::raw::member("dns_names", text).unwrap_or_default().into();
+        }
+        row.header_extra = json::raw::other_members(&KNOWN_HEADER_KEYS, text);
     }
 
     if let Some(d) = dump {
@@ -246,7 +250,7 @@ pub async fn handle_sec_dump(ctx: Ctx, body: Bytes) -> Response {
     let part_data = |name: &str| parts.iter().rev().find(|part| part.name == name).map(|part| part.data.clone());
     let header_bytes = part_data("event");
     let dump_bytes = part_data("dump");
-    let header = header_bytes.as_deref().and_then(json::try_parse_object).map(Value::Object);
+    let header = header_bytes.as_deref().filter(|bytes| json::try_parse_object(bytes).is_some()).map(json::raw::text);
     let dump = dump_bytes.as_deref().and_then(decode_dump);
 
     if let (Some(bytes), None) = (&header_bytes, &header) {
@@ -266,7 +270,7 @@ pub async fn handle_sec_dump(ctx: Ctx, body: Bytes) -> Response {
         ctx.tenant(),
         received_at,
         dump_id,
-        header.as_ref(),
+        header.as_deref(),
         header_bytes.as_deref().unwrap_or_default(),
         dump.as_ref(),
         dump_bytes.as_deref().unwrap_or_default(),
@@ -304,13 +308,13 @@ pub fn inner_message(message: Option<&Value>) -> Option<Value> {
     }
 }
 
-/// A body as a list of envelopes, or why it is not one. A null entry is an empty envelope, a null
-/// body an empty batch.
-pub fn decode_envelopes(body: &[u8]) -> Result<Vec<Value>, String> {
+/// A body as a list of envelopes, each as its text, or why it is not one. A null entry is an empty
+/// envelope, a null body an empty batch.
+pub fn decode_envelopes(body: &[u8]) -> Result<Vec<String>, String> {
     let envelopes = json::try_parse_array(body)?;
     match envelopes.iter().position(|e| !e.is_object() && !e.is_null()) {
         Some(index) => Err(format!("entry {index} is not a JSON object")),
-        None => Ok(envelopes),
+        None => Ok(json::raw::elements(&json::raw::text(body)).into_iter().map(String::from).collect()),
     }
 }
 
@@ -320,11 +324,13 @@ pub fn decode_envelopes(body: &[u8]) -> Result<Vec<Value>, String> {
 /// The event sits in "message" as escaped JSON: for secruntime a CWS event, for compliance a
 /// check event or resource log. The agent publishes no type for any of them, so the event is kept
 /// as JSON. An envelope whose message does not decode still gets its row.
-pub fn event_rows(tenant: &str, received_at: DateTime<Utc>, track: &str, envelopes: &[Value]) -> Vec<SecurityEvent> {
+pub fn event_rows(tenant: &str, received_at: DateTime<Utc>, track: &str, envelopes: &[String]) -> Vec<SecurityEvent> {
     envelopes
         .iter()
         .enumerate()
-        .map(|(i, envelope)| {
+        .map(|(i, text)| {
+            let parsed = json::try_parse(text.as_bytes()).unwrap_or_default();
+            let envelope = &parsed;
             let message = json::field("message", envelope);
             let event = inner_message(message);
             let event_text = |path: &[&str]| json::lenient_string(event.as_ref().and_then(|e| json::at(path, e)));
@@ -339,8 +345,11 @@ pub fn event_rows(tenant: &str, received_at: DateTime<Utc>, track: &str, envelop
                 ddsource: json::lenient_string(json::field("ddsource", envelope)),
                 status: json::lenient_string(json::field("status", envelope)),
                 ddtags: tags::to_multi_map(json::tag_list(json::field("ddtags", envelope))),
-                extra: json::other_members(&KNOWN_ENVELOPE_KEYS, json::compact, Some(envelope)),
-                message_raw: json::compact_or_empty(message),
+                extra: json::raw::other_members(&KNOWN_ENVELOPE_KEYS, text),
+                message_raw: match message {
+                    Some(_) => json::raw::member("message", text).unwrap_or_default().into(),
+                    None => String::new(),
+                },
                 message: json::compact_sorted_or_empty(event.as_ref()),
                 message_decoded: text::flag(event.is_some()),
                 rule_id: event_text(&["agent", "rule_id"]),
@@ -1033,20 +1042,20 @@ mod tests {
 
     #[test]
     fn the_headers_tags_are_a_multiset_and_its_unknown_keys_are_kept() {
-        let header = value(
+        let header = String::from(
             r#"{"host": "h1", "service": "cws-agent", "ddsource": "security-agent",
                 "ddtags": ["env:prod","kube_service:a","kube_service:b"],
-                "dns_names": ["example.com"], "unexpected": {"nested":true}, "n": 15}"#,
+                "dns_names" : [ "example.com" ], "unexpected": {"nested":true}, "n": 1.50}"#,
         );
-        let row = dump_row("default", now(), dump_id(), Some(&header), &[], None, &[]);
+        let row = dump_row("default", now(), dump_id(), Some(header.as_str()), &[], None, &[]);
         assert_eq!(
             [row.header_host.as_str(), &row.header_service, &row.header_source],
             ["h1", "cws-agent", "security-agent"]
         );
         assert_eq!(row.header_tags["kube_service"], ["a", "b"]);
-        assert_eq!(row.dns_names, r#"["example.com"]"#);
+        assert_eq!(row.dns_names, r#"[ "example.com" ]"#);
         assert_eq!(row.header_extra["unexpected"], r#"{"nested":true}"#);
-        assert_eq!(row.header_extra["n"], "15");
+        assert_eq!(row.header_extra["n"], "1.50");
         assert_eq!(row.header_extra.len(), 2);
     }
 
@@ -1060,8 +1069,8 @@ mod tests {
             ("null", ""),
             ("5", ""),
         ] {
-            let header = value(&format!("{{\"ddtags\": {ddtags}}}"));
-            let row = dump_row("default", now(), dump_id(), Some(&header), &[], None, &[]);
+            let header = String::from(&format!("{{\"ddtags\": {ddtags}}}"));
+            let row = dump_row("default", now(), dump_id(), Some(header.as_str()), &[], None, &[]);
             let shown: Vec<String> = row.header_tags.iter().map(|(k, v)| format!("{k}={}", v.join(","))).collect();
             assert_eq!(shown.join(" "), expected, "{ddtags}");
         }
@@ -1093,7 +1102,7 @@ mod tests {
         );
     }
 
-    fn envelopes(body: &str) -> Vec<Value> {
+    fn envelopes(body: &str) -> Vec<String> {
         decode_envelopes(body.as_bytes()).unwrap()
     }
 
@@ -1131,7 +1140,7 @@ mod tests {
     #[test]
     fn an_event_is_kept_as_json_with_sorted_keys_a_repeated_key_keeping_its_last_value() {
         let batch = envelopes(
-            r#"[{"custom":{"a":[1,2]},"n":15,"hostname":5,
+            r#"[{"custom":{"a":[1,2]},"n":1.50,"hostname":5,
                  "message":"{\"title\":\"T <b>\",\"kind\":\"alert\",\"big\":12345678901234567890,\"z\":1,\"z\":2,\"f\":1.0}"}]"#,
         );
         let rows = event_rows("default", now(), "compliance", &batch);
@@ -1140,7 +1149,7 @@ mod tests {
         assert_eq!((row.title.as_str(), row.event_kind.as_str()), ("T <b>", "alert"));
         // What is not a known key is kept as the JSON it arrived as.
         assert_eq!(row.extra["custom"], r#"{"a":[1,2]}"#);
-        assert_eq!(row.extra["n"], "15");
+        assert_eq!(row.extra["n"], "1.50");
         assert_eq!(row.extra.len(), 2);
         // A hostname that is not a string is no hostname.
         assert_eq!(row.hostname, "");
@@ -1194,6 +1203,19 @@ mod tests {
             assert_eq!(parsed, (!expected.is_empty()).then(|| at(expected)), "{sent}");
         }
         assert_eq!(parse_timestamp(None), None);
+    }
+
+    #[test]
+    fn an_envelopes_extra_and_message_are_the_text_as_sent() {
+        let rows = event_rows(
+            "t",
+            now(),
+            "secruntime",
+            &envelopes(r#"[ {"n" : 1.50, "message" : { "title" : "t", "f": 1E3 } } ]"#),
+        );
+        assert_eq!(rows[0].extra["n"], "1.50");
+        assert_eq!(rows[0].message_raw, r#"{ "title" : "t", "f": 1E3 }"#);
+        assert_eq!(rows[0].title, "t");
     }
 
     #[test]

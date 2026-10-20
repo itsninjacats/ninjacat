@@ -279,6 +279,25 @@ async fn an_entry_without_a_trap_is_an_unexpected_shape_a_broken_trap_a_decode_e
     assert!(text(&raw[2]["note"]).starts_with("entry 3: "));
 }
 
+/// A batch entry kept raw is the text that was sent, numbers and spacing included.
+#[tokio::test]
+async fn an_entry_kept_raw_is_the_text_as_sent() {
+    let bad = r#"{"namespace" : "x", "n": 1.50, "devices":[{"id":17}]}"#;
+    let answer = post(ndm::mount, "/api/v2/ndm", format!("[ {bad} ]")).await;
+    assert_eq!(text(&answer.raw()[0]["body"]), bad);
+
+    let bad = r#"{"n": 1.50, "configs": 7}"#;
+    let answer = post(ndm::mount, "/api/v2/ndmconfig", format!("[ {bad} ]")).await;
+    assert_eq!(text(&answer.raw()[0]["body"]), bad);
+
+    let bad = r#"{"other" : 1E3}"#;
+    let answer = post(ndm::mount, "/api/v2/ndmtraps", format!("[ {bad} ]")).await;
+    assert_eq!(text(&answer.raw()[0]["body"]), bad);
+
+    let answer = post(evp::mount_synthetics_results, "/api/v2/synthetics", r#"[ {"test":{"id":"t"}} , 1.50 ]"#).await;
+    assert_eq!(text(&answer.raw()[0]["body"]), "1.50");
+}
+
 #[tokio::test]
 async fn an_address_that_is_not_one_refuses_the_batch_of_paths() {
     let answer =
@@ -405,7 +424,9 @@ async fn an_envelope_with_text_that_is_not_valid_unicode_keeps_its_row() {
         ["h\u{fffd}", "s\u{fffd}", "t\u{fffd}", "r\u{fffd}"]
     );
     assert_eq!(row["message_decoded"], 1);
-    assert_eq!(text(&row["extra"]["k\u{fffd}"]), "{\"a\u{fffd}\":1}");
+    // Raw JSON kept in a column is the repaired text: half a pair in it would stop the next reader
+    // of that column.
+    assert_eq!(text(&row["extra"]["k\u{fffd}"]), r#"{"a\ufffd":1}"#);
 }
 
 #[tokio::test]

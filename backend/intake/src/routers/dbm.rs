@@ -13,7 +13,6 @@ use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use ninjapaws_storage::rows::dbm::DbmEvent;
 use serde_json::Value;
-use serde_json::value::RawValue;
 use tako::types::Response;
 
 use crate::fields::{Mismatches, fields};
@@ -75,27 +74,9 @@ pub struct Event {
 /// Splits a body into events, each with its text: the elements of a list, or the one object of a
 /// sender that skipped the batch. `null` is no events.
 pub fn split_events(body: &[u8]) -> Result<Vec<Event>, String> {
-    let repaired = json::repair(body);
-    let root: &RawValue = serde_json::from_slice(&repaired).map_err(|e| e.to_string())?;
-    let text = root.get().trim();
-    let items: Vec<&RawValue> = if text.starts_with('[') {
-        serde_json::from_str(text).map_err(|e| e.to_string())?
-    } else if text.starts_with('{') {
-        vec![root]
-    } else if text == "null" {
-        Vec::new()
-    } else {
-        let other: Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
-        return Err(format!("expected a list or an object, got {}", json::kind(&other)));
-    };
-    items
-        .into_iter()
-        .map(|item| {
-            let text = item.get().trim().to_string();
-            let json = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-            Ok(Event { text, json })
-        })
-        .collect()
+    let events = json::try_parse_list(body)?;
+    let text = json::raw::text(body);
+    Ok(json::raw::list(&text).into_iter().zip(events).map(|(text, json)| Event { text: text.into(), json }).collect())
 }
 
 /// A tag list in either spelling: one comma-joined string, or a list.
@@ -458,6 +439,9 @@ mod tests {
 
     #[test]
     fn a_bare_object_and_each_element_keep_their_text_as_sent() {
+        let events = split_events(b"[ {\"host\" : \"db1\", \"n\": 1.50 ,\"e\":1E3} ]").unwrap();
+        assert_eq!(events[0].text, r#"{"host" : "db1", "n": 1.50 ,"e":1E3}"#);
+
         let body = " {\"host\": \"db1\",\n  \"status\": \"ok\"}\n";
         assert_eq!(split_events(body.as_bytes()).unwrap()[0].text, body.trim());
         let texts: Vec<String> = split_events(br#"[ {"host" : "db1"} , {"host":"db2"} ]"#)

@@ -92,17 +92,18 @@ pub struct MetadataRows {
     pub objects: Vec<NdmMetadataObject>,
 }
 
-/// The rows of one NetworkDevicesMetadata, or what did not fit.
-pub fn metadata_rows(tenant: &str, payload: &Value) -> Result<MetadataRows, String> {
+/// The rows of one NetworkDevicesMetadata, from its text, or what did not fit.
+pub fn metadata_rows(tenant: &str, entry: &str) -> Result<MetadataRows, String> {
+    let payload = json::try_parse(entry.as_bytes())?;
     let bad = Mismatches::default();
-    let p = fields(&bad, "", payload);
+    let p = fields(&bad, "", &payload);
 
     let space = p.string("namespace");
     let subnet = p.string("subnet");
     let integration = p.string("integration");
     // Whole seconds: the agent fills it from time.Unix().
     let collected = time::from_unix_seconds(p.int64("collect_timestamp"));
-    let extra = json::other_members(&METADATA_KEYS, json::compact, Some(payload));
+    let extra = json::raw::other_members(&METADATA_KEYS, entry);
 
     let device_row = |d: Fields| NdmDevice {
         tenant_id: tenant.into(),
@@ -177,7 +178,7 @@ pub fn metadata_rows(tenant: &str, payload: &Value) -> Result<MetadataRows, Stri
 
     // The other lists are kept whole. Only some of their shapes carry a device or an interface
     // id; the ones that do not leave it empty, and a malformed element still keeps its text.
-    let object_row = |kind: &str, item: &Value| {
+    let object_row = |kind: &str, item: &Value, text: &str| {
         let unnoted = Mismatches::default();
         let ids = fields(&unnoted, "", item);
         NdmMetadataObject {
@@ -190,11 +191,12 @@ pub fn metadata_rows(tenant: &str, payload: &Value) -> Result<MetadataRows, Stri
             kind: kind.into(),
             device_id: ids.string("device_id"),
             interface_id: ids.string("interface_id"),
-            object: json::compact(item),
+            object: text.into(),
         }
     };
     let objects_of = |kind: &str, list: &str| -> Vec<NdmMetadataObject> {
-        p.items(list).into_iter().map(|item| object_row(kind, item)).collect()
+        let texts = json::raw::elements(json::raw::member(list, entry).unwrap_or_default());
+        p.items(list).into_iter().zip(texts).map(|(item, text)| object_row(kind, item, text)).collect()
     };
 
     let objects: Vec<Vec<NdmMetadataObject>> = vec![
@@ -203,7 +205,12 @@ pub fn metadata_rows(tenant: &str, payload: &Value) -> Result<MetadataRows, Stri
         objects_of("netflow_exporter", "netflow_exporters"),
         objects_of("diagnosis", "diagnoses"),
         objects_of("device_oid", "device_oids"),
-        p.find("scan_status").map(|status| object_row("scan_status", status)).into_iter().collect(),
+        p.find("scan_status")
+            .map(|status| {
+                object_row("scan_status", status, json::raw::member("scan_status", entry).unwrap_or_default())
+            })
+            .into_iter()
+            .collect(),
     ];
     let rows = MetadataRows {
         devices: p.objects("devices").into_iter().map(device_row).collect(),
@@ -220,11 +227,12 @@ pub fn metadata_rows(tenant: &str, payload: &Value) -> Result<MetadataRows, Stri
 pub async fn handle_metadata(ctx: Ctx, body: Bytes) -> Response {
     match json::try_parse_list(&body) {
         Err(e) => ctx.raw("ndm", "decode_error", &e, &body),
-        Ok(batch) => {
+        Ok(_) => {
+            let text = json::raw::text(&body);
             let mut all = MetadataRows::default();
-            for (i, entry) in batch.iter().enumerate() {
+            for (i, entry) in json::raw::list(&text).into_iter().enumerate() {
                 match metadata_rows(ctx.tenant(), entry) {
-                    Err(e) => ctx.raw("ndm", "decode_error", &format!("entry {i}: {e}"), &json::raw_bytes(entry)),
+                    Err(e) => ctx.raw("ndm", "decode_error", &format!("entry {i}: {e}"), entry.as_bytes()),
                     Ok(rows) => {
                         all.devices.extend(rows.devices);
                         all.interfaces.extend(rows.interfaces);
@@ -247,17 +255,18 @@ pub async fn handle_metadata(ctx: Ctx, body: Bytes) -> Response {
 static CONFIG_KEYS: LazyLock<BTreeSet<&str>> =
     LazyLock::new(|| BTreeSet::from(["namespace", "configs", "collect_timestamp", "agent_hostname", "inventories"]));
 
-/// The rows of one NCMPayload, or what did not fit.
-pub fn config_rows(tenant: &str, payload: &Value) -> Result<Vec<NdmDeviceConfig>, String> {
+/// The rows of one NCMPayload, from its text, or what did not fit.
+pub fn config_rows(tenant: &str, entry: &str) -> Result<Vec<NdmDeviceConfig>, String> {
+    let payload = json::try_parse(entry.as_bytes())?;
     let bad = Mismatches::default();
-    let p = fields(&bad, "", payload);
+    let p = fields(&bad, "", &payload);
 
     let space = p.string("namespace");
     // Seconds, like a config's own timestamp below: both are time.Unix().
     let collected = time::from_unix_seconds(p.int64("collect_timestamp"));
     let agent_hostname = p.string("agent_hostname");
-    let inventories = p.raw("inventories");
-    let extra = json::other_members(&CONFIG_KEYS, json::compact, Some(payload));
+    let inventories = json::raw::member("inventories", entry).unwrap_or_default().to_string();
+    let extra = json::raw::other_members(&CONFIG_KEYS, entry);
 
     let rows = p
         .objects("configs")
@@ -287,11 +296,12 @@ pub fn config_rows(tenant: &str, payload: &Value) -> Result<Vec<NdmDeviceConfig>
 pub async fn handle_config(ctx: Ctx, body: Bytes) -> Response {
     match json::try_parse_list(&body) {
         Err(e) => ctx.raw("ndmconfig", "decode_error", &e, &body),
-        Ok(batch) => {
+        Ok(_) => {
+            let text = json::raw::text(&body);
             let mut rows = Vec::new();
-            for (i, entry) in batch.iter().enumerate() {
+            for (i, entry) in json::raw::list(&text).into_iter().enumerate() {
                 match config_rows(ctx.tenant(), entry) {
-                    Err(e) => ctx.raw("ndmconfig", "decode_error", &format!("entry {i}: {e}"), &json::raw_bytes(entry)),
+                    Err(e) => ctx.raw("ndmconfig", "decode_error", &format!("entry {i}: {e}"), entry.as_bytes()),
                     Ok(configs) => rows.extend(configs),
                 }
             }
@@ -319,12 +329,14 @@ static TRAP_KEYS: LazyLock<BTreeSet<&str>> = LazyLock::new(|| {
     ])
 });
 
-/// The row of one trap (the object under "trap"), or what did not fit.
-pub fn trap_row(tenant: &str, trap: &Value) -> Result<SnmpTrap, String> {
+/// The row of one trap (the object under "trap"), from its text, or what did not fit.
+pub fn trap_row(tenant: &str, trap: &str) -> Result<SnmpTrap, String> {
+    let parsed = json::try_parse(trap.as_bytes())?;
     let bad = Mismatches::default();
-    let t = fields(&bad, "", trap);
+    let t = fields(&bad, "", &parsed);
     let ddtags = t.string("ddtags");
     let variables = t.objects("variables");
+    let variable_texts = json::raw::elements(json::raw::member("variables", trap).unwrap_or_default());
 
     let row = SnmpTrap {
         tenant_id: tenant.into(),
@@ -344,9 +356,12 @@ pub fn trap_row(tenant: &str, trap: &Value) -> Result<SnmpTrap, String> {
         var_oids: variables.iter().map(|v| v.string("oid")).collect(),
         var_types: variables.iter().map(|v| v.string("type")).collect(),
         // A variable's value has the type of its OID, so it stays JSON.
-        var_values: variables.iter().map(|v| v.raw("value")).collect(),
-        enriched: json::other_members(&TRAP_KEYS, json::compact, Some(trap)),
-        raw: json::compact(trap),
+        var_values: variable_texts
+            .iter()
+            .map(|variable| json::raw::member("value", variable).unwrap_or_default().to_string())
+            .collect(),
+        enriched: json::raw::other_members(&TRAP_KEYS, trap),
+        raw: trap.into(),
     };
     match first_problem(&bad) {
         None => Ok(row),
@@ -358,13 +373,14 @@ pub async fn handle_traps(ctx: Ctx, body: Bytes) -> Response {
     match json::try_parse_list(&body) {
         Err(e) => ctx.raw("ndmtraps", "decode_error", &e, &body),
         Ok(batch) => {
+            let text = json::raw::text(&body);
             let mut rows = Vec::new();
-            for (i, entry) in batch.iter().enumerate() {
-                let keep = |reason: &str, note: String| ctx.raw("ndmtraps", reason, &note, &json::raw_bytes(entry));
+            for (i, (entry, entry_text)) in batch.iter().zip(json::raw::list(&text)).enumerate() {
+                let keep = |reason: &str, note: String| ctx.raw("ndmtraps", reason, &note, entry_text.as_bytes());
                 if !entry.is_object() && !entry.is_null() {
                     keep("decode_error", format!("entry {i}: expected an object, got {}", json::kind(entry)));
                 } else {
-                    match entry.get("trap") {
+                    match json::raw::member("trap", entry_text) {
                         None => keep("unexpected_shape", format!("entry {i}: no trap object")),
                         Some(trap) => match trap_row(ctx.tenant(), trap) {
                             Err(e) => keep("decode_error", format!("entry {i}: trap: {e}")),
@@ -660,10 +676,6 @@ pub async fn handle_netpath(ctx: Ctx, body: Bytes) -> Response {
 mod tests {
     use super::*;
 
-    fn value(text: &str) -> Value {
-        json::try_parse(text.as_bytes()).unwrap()
-    }
-
     fn flows(body: &str) -> Vec<NetflowFlow> {
         decode_flows("test", body.as_bytes()).expect("flows")
     }
@@ -777,11 +789,9 @@ mod tests {
 
     #[test]
     fn an_interface_flag_is_true_false_or_not_reported() {
-        let rows = metadata_rows(
-            "test",
-            &value(r#"{"interfaces":[{"is_physical":true,"meraki_enabled":false},{"device_id":"d"}]}"#),
-        )
-        .unwrap();
+        let rows =
+            metadata_rows("test", r#"{"interfaces":[{"is_physical":true,"meraki_enabled":false},{"device_id":"d"}]}"#)
+                .unwrap();
         assert_eq!(rows.interfaces[0].is_physical, Some(1));
         assert_eq!(rows.interfaces[0].meraki_enabled, Some(0));
         assert_eq!(rows.interfaces[1].is_physical, None);
@@ -792,11 +802,9 @@ mod tests {
     fn the_other_lists_are_kept_whole_with_the_ids_the_element_carries() {
         let rows = metadata_rows(
             "test",
-            &value(
-                r#"{"namespace":"default","collect_timestamp":1700000000,"x":1,
+            r#"{"namespace":"default","collect_timestamp":1700000000,"x":1,
                     "links":[{"id":"link1","source_type":"lldp"}],
                     "vpn_tunnels":[{"device_id":"dev1","interface_id":"dev1:1","status":"up"}]}"#,
-            ),
         )
         .unwrap();
         // No scan_status was sent, so there is no row for one.
@@ -815,7 +823,7 @@ mod tests {
     fn scan_status_is_one_object_and_one_row_a_malformed_list_element_keeps_its_text() {
         let rows = metadata_rows(
             "test",
-            &value(r#"{"scan_status":{"device_id":"dev1","scan_status":"completed"},"diagnoses":["not-an-object"]}"#),
+            r#"{"scan_status":{"device_id":"dev1","scan_status":"completed"},"diagnoses":["not-an-object"]}"#,
         )
         .unwrap();
         let kinds: Vec<&str> = rows.objects.iter().map(|o| o.kind.as_str()).collect();
@@ -829,10 +837,8 @@ mod tests {
     fn a_config_payload_repeats_its_own_fields_on_every_config() {
         let rows = config_rows(
             "test",
-            &value(
-                r#"{"namespace":"default","collect_timestamp":1700000000,"agent_hostname":"agent01",
+            r#"{"namespace":"default","collect_timestamp":1700000000,"agent_hostname":"agent01",
                     "configs":[{"device_id":"a","timestamp":1700000100},{"device_id":"b","tags":["env:prod"]}]}"#,
-            ),
         )
         .unwrap();
         let ids: Vec<&str> = rows.iter().map(|r| r.device_id.as_str()).collect();
@@ -847,13 +853,11 @@ mod tests {
     fn a_v1_trap_carries_its_enterprise_oid_and_both_trap_numbers_zero_included() {
         let row = trap_row(
             "test",
-            &value(
-                r#"{"ddsource":"snmp-traps","ddtags":"namespace:default,snmp_device:10.0.0.5",
+            r#"{"ddsource":"snmp-traps","ddtags":"namespace:default,snmp_device:10.0.0.5",
                     "timestamp":1700000200,"uptime":123456,"snmpTrapOID":"1.3.6.1.6.3.1.1.5.3",
                     "enterpriseOID":"1.3.6.1.4.1.9","genericTrap":2,"specificTrap":0,
                     "variables":[{"oid":"1.3.6.1.2.1.2.2.1.1","type":"Integer","value":1}],
                     "customEnrichedKey":"resolved-value"}"#,
-            ),
         )
         .unwrap();
         assert_eq!(row.device, "10.0.0.5");
@@ -868,9 +872,7 @@ mod tests {
 
     #[test]
     fn a_traps_timestamp_is_milliseconds_and_a_v2_trap_has_no_v1_fields() {
-        let row = trap_row(
-            "test",
-            &value(r#"{"ddsource":"snmp-traps","ddtags":"snmp_device:10.0.0.6","timestamp":1758326400123,"snmpTrapOID":"1.3"}"#),
+        let row = trap_row("test", r#"{"ddsource":"snmp-traps","ddtags":"snmp_device:10.0.0.6","timestamp":1758326400123,"snmpTrapOID":"1.3"}"#,
         )
         .unwrap();
         assert_eq!(row.timestamp, time::from_unix_millis(1758326400123));
@@ -954,6 +956,43 @@ mod tests {
     fn an_address_that_is_not_one_refuses_the_batch_of_paths() {
         let body = r#"[{"traceroute":{"runs":[{"hops":[{"ip_address":"nowhere"}]}]}}]"#;
         assert!(decode_paths("test", body.as_bytes()).is_err());
+    }
+
+    /// What is kept as it arrived is the text that was sent: its numbers digit for digit, its
+    /// spacing.
+    #[test]
+    fn metadata_extra_and_objects_are_the_text_as_sent() {
+        let rows = metadata_rows(
+            "test",
+            r#"{"namespace":"default", "x" : 1.50, "devices":[{"id":"d1"}],
+                "links":[ {"id" : "l1", "w": 1E3} ], "scan_status": {"s" : 2.0}}"#,
+        )
+        .unwrap();
+        assert_eq!(rows.devices[0].extra, texts(&[("x", "1.50")]));
+        assert_eq!(rows.objects[0].object, r#"{"id" : "l1", "w": 1E3}"#);
+        assert_eq!(rows.objects[0].extra, texts(&[("x", "1.50")]));
+        assert_eq!(rows.objects[1].object, r#"{"s" : 2.0}"#);
+    }
+
+    #[test]
+    fn config_inventories_and_extra_are_the_text_as_sent() {
+        let rows = config_rows(
+            "test",
+            r#"{"inventories": [ 1.50 , {"a" : 2} ], "custom": 1E3, "configs":[{"device_id":"a"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(rows[0].inventories, r#"[ 1.50 , {"a" : 2} ]"#);
+        assert_eq!(rows[0].extra, texts(&[("custom", "1E3")]));
+    }
+
+    #[test]
+    fn a_traps_raw_text_values_and_enrichments_are_the_text_as_sent() {
+        let trap =
+            r#"{"snmpTrapOID":"1.3", "variables":[{"oid":"1","type":"Float","value": 1.50 }], "ifSpeed" : 1E3 }"#;
+        let row = trap_row("test", trap).unwrap();
+        assert_eq!(row.raw, trap);
+        assert_eq!(row.var_values, ["1.50"]);
+        assert_eq!(row.enriched, texts(&[("ifSpeed", "1E3")]));
     }
 
     #[test]
