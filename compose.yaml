@@ -3,10 +3,11 @@
 #   docker compose up            everything, with hot reload
 #   docker compose up -d postgres clickhouse   just the databases, if you run the apps on the host
 #
-# The application services rebuild themselves on save: the server's two
-# processes and the monitor service through `dotnet watch`, the panel through
-# Vite's dev server. Source is bind-mounted, so an edit on the host is an edit
-# in the container.
+# The intake rebuilds itself on save through `dotnet watch`, the panel through
+# Vite's dev server: their source is bind-mounted, so an edit on the host is an
+# edit in the container. The query process and the monitor service are the Rust
+# ones (backend/), rebuilt with `docker compose up --build internal monitors`;
+# the F# ones run with `--profile fsharp`, in their place, never beside them.
 #
 # Databases and the query process publish on 127.0.0.1 only. The databases
 # have passwords, the query process asks for a token the panel signs (see
@@ -131,11 +132,11 @@ services:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
 
-  # What the panel reads from: the panel's and the query API. It only reads.
-  # Its port asks for the panel's token, not for an API key, and is published
-  # on the loopback alone; the panel's container reaches it over the compose
-  # network.
+  # The F# query process, which `internal` replaced. Never beside it: both
+  # publish 8081. `docker compose stop internal && docker compose --profile
+  # fsharp up -d query` runs it instead.
   query:
+    profiles: [fsharp]
     image: mcr.microsoft.com/dotnet/sdk:10.0
     container_name: ninjacat-query
     restart: unless-stopped
@@ -157,11 +158,59 @@ services:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
 
-  # One Akka node seeding itself. The intake creates the tables and has no
-  # healthcheck to wait on, so a table not there yet is read again later.
+  # What the panel reads from: the panel's and the query API, in Rust (backend/). It only
+  # reads. Its port asks for the panel's token, not for an API key, and is published on the
+  # loopback alone; the panel's container reaches it over the compose network.
+  # `docker compose up --build internal` rebuilds it after a change.
+  internal:
+    build:
+      context: ./backend
+    image: ninjapaws:dev
+    container_name: ninjacat-internal
+    command: ["ninjapaws_internal"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
+      CLICKHOUSE_HTTP_ADDR: clickhouse:8123
+      CLICKHOUSE_DB: ninjacat
+      CLICKHOUSE_USER: ninjacat
+      CLICKHOUSE_PASSWORD: ninjacat
+      NINJACAT_INTERNAL_ADDR: ":8081"
+      NINJACAT_QUERY_TOKEN_SECRET: dev-only-query-token-secret-change-me-32ch
+    depends_on:
+      clickhouse: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+
+  # The monitor service, in Rust (backend/). Replicas share the monitors through Postgres
+  # advisory locks; here there is one. The intake creates the tables and has no healthcheck to
+  # wait on, so a table not there yet is read again later.
   monitors:
-    image: mcr.microsoft.com/dotnet/sdk:10.0
+    build:
+      context: ./backend
+    image: ninjapaws:dev
     container_name: ninjacat-monitors
+    command: ["ninjapaws_monitors"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
+      CLICKHOUSE_HTTP_ADDR: clickhouse:8123
+      CLICKHOUSE_DB: ninjacat
+      CLICKHOUSE_USER: ninjacat
+      CLICKHOUSE_PASSWORD: ninjacat
+    depends_on:
+      clickhouse: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+
+  # The F# monitor service, as an Akka node seeding itself. Never beside the Rust one: both
+  # would evaluate every monitor. `docker compose stop monitors && docker compose --profile
+  # fsharp up -d monitors-fsharp` runs it instead.
+  monitors-fsharp:
+    profiles: [fsharp]
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    container_name: ninjacat-monitors-fsharp
     restart: unless-stopped
     working_dir: /app
     command: ["dotnet", "watch", "--project", "src/Monitors", "run", "--non-interactive"]
@@ -187,7 +236,7 @@ services:
     environment:
       DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
       # The panel talks to the query process, never to the agent intake.
-      NINJACAT_INTERNAL_URL: http://query:8081
+      NINJACAT_INTERNAL_URL: http://internal:8081
       ORIGIN: http://localhost:5173
       BETTER_AUTH_SECRET: dev-only-secret-change-me-in-production-32ch
       NINJACAT_QUERY_TOKEN_SECRET: dev-only-query-token-secret-change-me-32ch
