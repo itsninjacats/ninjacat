@@ -10,6 +10,9 @@ const publicRoutes = new Set(['/login']);
 // back to `default`: data read or written there would be another tenant's.
 const noTenantRoute = '/no-tenant';
 
+// The account is the user's, not a tenant's: its password can be changed without one.
+const accountRoute = '/app/settings/account';
+
 // What can follow a redirect: a page, a data request, and an enhanced form
 // action, to which SvelteKit sends the redirect as an action result.
 function canRedirect(event: RequestEvent): boolean {
@@ -45,7 +48,7 @@ export const handleGuard: Handle = ({ event, resolve }) => {
 		return resolve(event);
 	}
 
-	if (event.locals.tenant || routeId === noTenantRoute) {
+	if (event.locals.tenant || routeId === noTenantRoute || routeId === accountRoute) {
 		return resolve(event);
 	}
 

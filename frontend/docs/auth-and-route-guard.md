@@ -54,15 +54,16 @@ so every load runs again for the new tenant.
 Everything is private unless its route is in `publicRoutes` in `src/lib/server/guard.ts`;
 only `/login` is. For the rest:
 
-| Who                           | Admin pages (`/app/admin/**`) | `/no-tenant` | Anything else  |
-| ----------------------------- | ----------------------------- | ------------ | -------------- |
-| no session                    | → `/login`                    | → `/login`   | → `/login`     |
-| instance admin, with a tenant | yes                           | → `/app`     | yes            |
-| instance admin, no tenant     | yes                           | yes          | → `/no-tenant` |
-| anyone else, with a tenant    | 403                           | → `/app`     | yes            |
-| anyone else, no tenant        | 403                           | yes          | → `/no-tenant` |
+| Who                           | Admin pages (`/app/admin/**`) | `/no-tenant` | `/app/settings/account` | Anything else  |
+| ----------------------------- | ----------------------------- | ------------ | ----------------------- | -------------- |
+| no session                    | → `/login`                    | → `/login`   | → `/login`              | → `/login`     |
+| instance admin, with a tenant | yes                           | → `/app`     | yes                     | yes            |
+| instance admin, no tenant     | yes                           | yes          | yes                     | → `/no-tenant` |
+| anyone else, with a tenant    | 403                           | → `/app`     | yes                     | yes            |
+| anyone else, no tenant        | 403                           | yes          | yes                     | → `/no-tenant` |
 
-The instance admin is a user whose `user.role` includes `admin` (`isInstanceAdmin`). The
+The account page is the user's own, not a tenant's, so its password can be changed without
+one. The instance admin is a user whose `user.role` includes `admin` (`isInstanceAdmin`). The
 redirect from `/no-tenant` to `/app` is that page's own load; the rest is the guard.
 
 "→" is a redirect where the request can follow one — a page load (`GET` that accepts

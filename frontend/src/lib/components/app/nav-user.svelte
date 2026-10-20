@@ -1,8 +1,10 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { signOut } from '$lib/auth-client';
 	import { m } from '$lib/paraglide/messages';
 	import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
+	import UserRoundIcon from '@lucide/svelte/icons/user-round';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
@@ -65,6 +67,14 @@
 					</div>
 				</DropdownMenu.Label>
 				<DropdownMenu.Separator />
+				<DropdownMenu.Item>
+					{#snippet child({ props })}
+						<a href={resolve('/app/settings/account')} {...props}>
+							<UserRoundIcon />
+							{m.account()}
+						</a>
+					{/snippet}
+				</DropdownMenu.Item>
 				<DropdownMenu.Item onSelect={signOut}>
 					<LogOutIcon />
 					{m.sign_out()}

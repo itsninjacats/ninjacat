@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release --locked -p api --bins \
     && mkdir /out \
     && cp target/release/ninjapaws_api target/release/ninjapaws_app target/release/ninjapaws_internal \
-          target/release/ninjapaws_migrate /out/
+          target/release/ninjapaws_migrate target/release/ninjapaws_monitors /out/
 
 # cc: glibc and libgcc, all a Rust binary links against; nonroot: uid 65532.
 FROM gcr.io/distroless/cc-debian13:nonroot
@@ -32,5 +32,5 @@ COPY proto/protos /usr/share/doc/ninjapaws/protos
 
 COPY --from=build /out/ /usr/local/bin/
 
-# ninjapaws_internal listens on 8081, the intake hosts on 8080.
-EXPOSE 8080 8081
+# ninjapaws_internal listens on 8081, the intake hosts on 8080, ninjapaws_monitors' health on 8559.
+EXPOSE 8080 8081 8559

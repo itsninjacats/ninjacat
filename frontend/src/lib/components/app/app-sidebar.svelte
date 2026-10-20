@@ -7,6 +7,7 @@
 	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
 	import BuildingIcon from '@lucide/svelte/icons/building';
 	import UsersIcon from '@lucide/svelte/icons/users';
+	import UserRoundIcon from '@lucide/svelte/icons/user-round';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import NavMain from './nav-main.svelte';
 	import NavUser from './nav-user.svelte';
@@ -41,6 +42,7 @@
 
 	const settings = $derived([
 		{ title: m.api_keys(), url: '/app/settings/keys', icon: KeyRoundIcon },
+		{ title: m.account(), url: '/app/settings/account', icon: UserRoundIcon },
 		...(instanceAdmin
 			? [
 					{ title: m.tenants(), url: '/app/admin/tenants', icon: BuildingIcon },

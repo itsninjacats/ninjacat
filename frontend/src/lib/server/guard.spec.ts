@@ -109,6 +109,13 @@ describe('the guard in front of every route', () => {
 		);
 	});
 
+	it('lets a user reach their account without a tenant, as the account is not a tenant’s', async () => {
+		expect(await outcome(event({ route: '/app/settings/account', user: true, tenant: null }))).toBe(
+			'resolved'
+		);
+		expect(await outcome(event({ route: '/app/settings/account' }))).toBe('redirect /login');
+	});
+
 	it('lets the instance admin reach the admin pages without a tenant, and only those', async () => {
 		const admin = { admin: true, tenant: null };
 		expect(await outcome(event({ route: '/app/admin', ...admin }))).toBe('resolved');

@@ -109,6 +109,8 @@ export const routes: ViewRoute[] = [
 		owner: 'a'
 	},
 	{ name: 'keys', path: '/app/settings/keys', as: 'longEmail' },
+	{ name: 'account', path: '/app/settings/account', as: 'longEmail' },
+	{ name: 'account-no-tenant', path: '/app/settings/account', as: 'noTenant' },
 	{ name: 'admin-tenants', path: '/app/admin/tenants', as: 'admin' },
 	{ name: 'admin-tenant-a', path: `/app/admin/tenants/${tenants.a.id}`, as: 'admin' },
 	{ name: 'admin-tenant-b', path: `/app/admin/tenants/${tenants.b.id}`, as: 'admin' },

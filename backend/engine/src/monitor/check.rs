@@ -12,10 +12,11 @@ use crate::metric_query::ast::TagFilter;
 use crate::metric_query::parser::{quoted, ws};
 use crate::metric_query::{filter, parser};
 use crate::monitor::definition::{CheckDefinition, CheckQuery};
-use crate::monitor::evaluate::{Evaluation, Period, Streak};
+use crate::monitor::evaluate::{Evaluation, GroupResult, Period, Reading, Streak};
 use crate::monitor::options;
-use crate::query::compile::Row;
+use crate::query::compile::{Row, group_sql};
 use crate::query::execute::Executor;
+use crate::query::series::grouped;
 use crate::sql::{Sql, SqlParams, SqlValue, TenantId};
 
 enum CallArg {
@@ -319,26 +320,139 @@ LIMIT 100"
     }
 }
 
+/// How far back a tick reads: 8 runs of a check every 15 minutes, last(100) of one every 72 s, or
+/// the no-data timeframe when longer, so a check run less often has its runs read.
+fn lookback(c: &CheckDefinition) -> TimeDelta {
+    TimeDelta::hours(2).max(c.options.no_data_timeframe.unwrap_or(TimeDelta::zero()))
+}
+
 /// WARNING(undocumented): evaluation_delay moves the read back, with no minimum: a run is stored
 /// or not, and one stored late still counts at the next tick.
 pub fn period(c: &CheckDefinition, at: i64) -> Period {
-    let _ = (c, at);
-    todo!()
+    let until = at - c.options.evaluation_delay.num_milliseconds();
+    Period { from: until - lookback(c).num_milliseconds(), to: until }
 }
 
 /// The newest runs of each series, a host and tag set, in `Row`'s columns: `value` is the run's
 /// status, `bucket_ms` its time. N of its known runs and N of its UNKNOWN ones, two at least, as
 /// the live rule needs the gap between its newest two runs. A run stored twice is one run.
 pub fn sql(tenant: &TenantId, q: &CheckQuery, p: &Period) -> Sql {
-    let _ = (tenant, q, p);
-    todo!()
+    let mut bound = SqlParams::new();
+
+    let groups = match q.group_by.as_slice() {
+        [star] if star == "*" => format!(
+            "arrayStringConcat(arraySort(arrayConcat(if(host = '', [], [concat('host:', toString(host))]), {TAG_PAIRS})), ',') AS g0, "
+        ),
+        keys => keys.iter().enumerate().map(|(i, k)| format!("{} AS g{i}, ", group_sql(&[], &mut bound, k))).collect(),
+    };
+    let condition = condition(&mut bound, tenant, q, p.from, p.to);
+
+    Sql {
+        text: format!(
+            "SELECT {groups}toInt64(toUnixTimestamp(timestamp)) * 1000 AS bucket_ms, toFloat64(CAST(status, 'Int8')) AS value, series_id
+FROM (
+    SELECT DISTINCT timestamp, host, tags, status, cityHash64(host, tags) AS series_id
+    FROM check_runs
+    WHERE {condition}
+    ORDER BY timestamp DESC
+    LIMIT {} BY series_id, status = 'UNKNOWN'
+)",
+            q.last.max(2)
+        ),
+        parameters: bound.into_parameters(),
+    }
+}
+
+// --- judging ---------------------------------------------------------------------------------
+
+const STATUS_OK: i32 = 0;
+const STATUS_WARNING: i32 = 1;
+const STATUS_CRITICAL: i32 = 2;
+const STATUS_UNKNOWN: i32 = 3;
+
+fn leading(status: i32, among: &[i32]) -> i32 {
+    among.iter().take_while(|s| **s == status).count() as i32
+}
+
+/// WARNING(undocumented): a series counts while `until − newest ≤ 2 × gap + 1 min`, so a renamed
+/// host or an old tag set stops counting; one with a single run in the window counts while it is
+/// there, as a check run once a day does.
+fn streak_of(last: i32, p: &Period, runs: &[&Row]) -> Option<(Streak, i64)> {
+    let mut runs = runs.to_vec();
+    runs.sort_by_key(|r| std::cmp::Reverse(r.bucket_ms));
+    runs.dedup_by_key(|r| r.bucket_ms);
+    let newest = runs.first()?.bucket_ms;
+
+    let live = match runs.as_slice() {
+        [_, previous, ..] => p.to - newest <= 2 * (newest - previous.bucket_ms) + 60_000,
+        _ => true,
+    };
+    if !live {
+        return None;
+    }
+
+    let last = usize::try_from(last).unwrap_or(0);
+    let statuses: Vec<i32> = runs.iter().map(|r| r.value as i32).collect();
+    let known: Vec<i32> = statuses.iter().copied().filter(|s| *s != STATUS_UNKNOWN).take(last).collect();
+
+    Some((
+        Streak {
+            latest: statuses[0],
+            critical: leading(STATUS_CRITICAL, &known),
+            warning: leading(STATUS_WARNING, &known),
+            ok: leading(STATUS_OK, &known),
+            unknown: leading(STATUS_UNKNOWN, &statuses),
+            ok_since_unknown: leading(STATUS_OK, &statuses[..last.min(statuses.len())]),
+        },
+        newest,
+    ))
 }
 
 /// The rows of `sql` as an evaluation: one group per combination of the `by` values, or per series
 /// for by("*"), each with its live series. A group with none is left out, so it goes silent.
 pub fn evaluation(q: &CheckQuery, p: &Period, max_groups: usize, rows: &[Row]) -> Result<Evaluation, String> {
-    let _ = (q, p, max_groups, rows);
-    todo!()
+    let pairs_of = |values: &[Option<String>]| -> Vec<String> {
+        let mut pairs: Vec<String> = match (q.group_by.as_slice(), values) {
+            ([star], [Some(series)]) if star == "*" => {
+                series.split(',').filter(|s| !s.is_empty()).map(str::to_string).collect()
+            }
+            (keys, values) => {
+                keys.iter().zip(values).map(|(k, v)| format!("{k}:{}", v.as_deref().unwrap_or_default())).collect()
+            }
+        };
+        pairs.sort();
+        pairs
+    };
+
+    let complete: Vec<&Row> = rows.iter().filter(|r| r.groups.iter().all(Option::is_some)).collect();
+    let groups = grouped(complete, |r| pairs_of(&r.groups));
+
+    if groups.len() > max_groups {
+        return Err(format!(
+            "too_many_groups: the query yields {} groups, at most {max_groups} are evaluated",
+            groups.len()
+        ));
+    }
+
+    let results = groups
+        .into_iter()
+        .filter_map(|(pairs, members)| {
+            let live: Vec<(Streak, i64)> = grouped(members, |r| r.series_id)
+                .into_iter()
+                .filter_map(|(_, runs)| streak_of(q.last, p, &runs))
+                .collect();
+            let newest = live.iter().map(|(_, newest)| *newest).max()?;
+            Some(GroupResult {
+                key: if pairs.is_empty() { "*".to_string() } else { pairs.join(",") },
+                tags: pairs,
+                reading: Reading::Streaks(live.into_iter().map(|(streak, _)| streak).collect()),
+                recovery: None,
+                last_point: Some(newest),
+            })
+        })
+        .collect();
+
+    Ok(Evaluation { period: *p, groups: results })
 }
 
 pub async fn evaluate<E: Executor>(
@@ -348,14 +462,24 @@ pub async fn evaluate<E: Executor>(
     c: &CheckDefinition,
     at: i64,
 ) -> Result<Evaluation, String> {
-    let _ = (execute, tenant, max_groups, c, at);
-    todo!()
+    let p = period(c, at);
+    let rows = execute.rows(sql(tenant, &c.query, &p)).await?;
+    evaluation(&c.query, &p, max_groups, &rows)
+}
+
+fn severity(status: i32) -> i32 {
+    match status {
+        STATUS_CRITICAL => 3,
+        STATUS_WARNING => 2,
+        STATUS_UNKNOWN => 1,
+        _ => 0,
+    }
 }
 
 /// The worst newest status, as the group's value: CRITICAL, then WARNING, UNKNOWN and OK.
 pub fn worst(streaks: &[Streak]) -> f64 {
-    let _ = streaks;
-    todo!()
+    let worst = streaks.iter().map(|s| s.latest).reduce(|a, b| if severity(b) > severity(a) { b } else { a });
+    f64::from(worst.unwrap_or(STATUS_OK))
 }
 
 #[cfg(test)]
@@ -364,7 +488,7 @@ mod tests {
 
     use super::*;
     use crate::monitor::definition::Monitor;
-    use crate::monitor::validate;
+    use crate::monitor::{state, validate};
     use crate::query::plan::DEFAULT_RETENTION;
 
     fn or_fail<T>(result: Result<T, Vec<String>>) -> T {
@@ -574,5 +698,297 @@ mod tests {
             "SELECT toInt64(toUnixTimestamp(timestamp)) * 1000, host, toString(status), message, {TAG_PAIRS}\nFROM check_runs\nWHERE tenant_id = {{tenant0:String}} AND check_name = {{check1:String}}\n      AND timestamp >= fromUnixTimestamp64Milli({{from2:Int64}})\n      AND timestamp < fromUnixTimestamp64Milli({{to3:Int64}})\n      AND ("
         )));
         assert!(sql.text.ends_with(")\nORDER BY timestamp DESC\nLIMIT 100"));
+    }
+
+    // --- the SQL -----------------------------------------------------------------------------
+
+    const MINUTE: i64 = 60_000;
+    const HOUR: i64 = 60 * MINUTE;
+
+    fn at() -> i64 {
+        Utc.with_ymd_and_hms(2026, 10, 17, 12, 0, 0).unwrap().timestamp_millis()
+    }
+
+    fn acme() -> TenantId {
+        TenantId("acme".to_string())
+    }
+
+    #[test]
+    fn the_sql_binds_every_value_and_reads_the_newest_runs_of_each_series() {
+        let c = defined(
+            r#""pg.can_connect".over("env:prod").by("kube_namespace","host").last(3).count_by_status()"#,
+            r#"{"evaluation_delay":60}"#,
+        );
+        let p = period(&c, at());
+        assert_eq!(p, Period { from: at() - 121 * MINUTE, to: at() - MINUTE });
+
+        let sql = sql(&acme(), &c.query, &p);
+        let values: Vec<&SqlValue> = sql.parameters.iter().map(|(_, v)| v).collect();
+        for v in [
+            SqlValue::String("acme".into()),
+            SqlValue::String("pg.can_connect".into()),
+            SqlValue::Int64(p.from),
+            SqlValue::Int64(p.to),
+            SqlValue::String("env".into()),
+            SqlValue::String("prod".into()),
+        ] {
+            assert!(values.contains(&&v), "{v:?}");
+        }
+
+        assert!(!sql.text.contains("acme"));
+        assert!(sql.text.contains("SELECT DISTINCT timestamp"));
+        assert!(sql.text.contains("LIMIT 3 BY series_id, status = 'UNKNOWN'"));
+        let groups = regex::Regex::new(r"nullIf\(toString\(host\), ''\) AS g0, arrayJoin.* AS g1, toInt64").unwrap();
+        assert!(groups.is_match(&sql.text), "{}", sql.text);
+        let one = CheckQuery { last: 1, ..c.query.clone() };
+        assert!(super::sql(&acme(), &one, &p).text.contains("LIMIT 2 BY series_id, status = 'UNKNOWN'"));
+    }
+
+    #[test]
+    fn a_longer_no_data_timeframe_reads_further_back() {
+        let c = defined(CONSUL, r#"{"notify_no_data":true,"no_data_timeframe":1440}"#);
+        assert_eq!(period(&c, at()).from, at() - 24 * HOUR);
+        assert_eq!(period(&defined(CONSUL, r#"{"no_data_timeframe":30}"#), at()).from, at() - 2 * HOUR);
+    }
+
+    #[test]
+    fn by_star_groups_by_series_its_host_and_tags() {
+        let sql = sql(&acme(), &parsed(r#""x".by("*").last(2).count_by_status()"#), &Period { from: at() - 2 * HOUR, to: at() });
+        assert!(sql.text.contains("concat('host:', toString(host))"));
+        assert!(sql.text.contains(" AS g0, toInt64"));
+    }
+
+    /// The text the F# service ran for these queries (`Check.sql`, Engine built 2026-10-18).
+    #[test]
+    fn the_sql_is_the_f_sharp_services() {
+        let by_host = defined(r#""pg.can_connect".over("env:prod").by("kube_namespace","host").last(3).count_by_status()"#, "");
+        let per_series = defined(r#""x".by("*").last(2).count_by_status()"#, "");
+        assert_eq!(sql(&acme(), &by_host.query, &period(&by_host, at())).text, BY_HOST_SQL);
+        let per_series_sql = sql(&acme(), &per_series.query, &period(&per_series, at()));
+        assert_eq!(per_series_sql.text, PER_SERIES_SQL);
+        let names: Vec<&str> = per_series_sql.parameters.iter().map(|(name, _)| name.as_str()).collect();
+        assert_eq!(names, ["tenant0", "check1", "from2", "to3"]);
+    }
+
+    const BY_HOST_SQL: &str = r#"SELECT nullIf(toString(host), '') AS g0, arrayJoin(if(empty(tags[{k0:String}]), [NULL], CAST(tags[{k0:String}], 'Array(Nullable(String))'))) AS g1, toInt64(toUnixTimestamp(timestamp)) * 1000 AS bucket_ms, toFloat64(CAST(status, 'Int8')) AS value, series_id
+FROM (
+    SELECT DISTINCT timestamp, host, tags, status, cityHash64(host, tags) AS series_id
+    FROM check_runs
+    WHERE tenant_id = {tenant1:String} AND check_name = {check2:String}
+      AND timestamp >= fromUnixTimestamp64Milli({from3:Int64})
+      AND timestamp < fromUnixTimestamp64Milli({to4:Int64})
+      AND (has(tags[{k5:String}], {p6:String}))
+    ORDER BY timestamp DESC
+    LIMIT 3 BY series_id, status = 'UNKNOWN'
+)"#;
+
+    const PER_SERIES_SQL: &str = r#"SELECT arrayStringConcat(arraySort(arrayConcat(if(host = '', [], [concat('host:', toString(host))]), arrayFlatten(arrayMap((k, vs) -> arrayMap(v -> if(v = '', toString(k), concat(toString(k), ':', toString(v))), vs), mapKeys(tags), mapValues(tags))))), ',') AS g0, toInt64(toUnixTimestamp(timestamp)) * 1000 AS bucket_ms, toFloat64(CAST(status, 'Int8')) AS value, series_id
+FROM (
+    SELECT DISTINCT timestamp, host, tags, status, cityHash64(host, tags) AS series_id
+    FROM check_runs
+    WHERE tenant_id = {tenant0:String} AND check_name = {check1:String}
+      AND timestamp >= fromUnixTimestamp64Milli({from2:Int64})
+      AND timestamp < fromUnixTimestamp64Milli({to3:Int64})
+      AND (1)
+    ORDER BY timestamp DESC
+    LIMIT 2 BY series_id, status = 'UNKNOWN'
+)"#;
+
+    // --- the evaluation ----------------------------------------------------------------------
+
+    const OK: i32 = 0;
+    const WARNING: i32 = 1;
+    const CRITICAL: i32 = 2;
+    const UNKNOWN: i32 = 3;
+
+    /// Runs of one series, newest first, `every` seconds apart, the newest `age` seconds before
+    /// `to`.
+    fn runs_of(series: u64, groups: &[Option<&str>], age: f64, every: f64, statuses: &[i32]) -> Vec<Row> {
+        let p = period(&defined(CONSUL, ""), at());
+        statuses
+            .iter()
+            .enumerate()
+            .map(|(i, status)| Row {
+                groups: groups.iter().map(|g| g.map(str::to_string)).collect(),
+                series_id: Some(series),
+                bucket_ms: p.to - ((age + every * i as f64) * 1000.0) as i64,
+                value: f64::from(*status),
+            })
+            .collect()
+    }
+
+    fn evaluate_rows(query: &str, rows: &[Row]) -> Evaluation {
+        let c = defined(query, "");
+        evaluation(&c.query, &period(&c, at()), 100, rows).unwrap_or_else(|e| panic!("{e}"))
+    }
+
+    const BY_HOST: &str = r#""x".over("*").by("host").last(5).count_by_status()"#;
+    const ONE_GROUP: &str = r#""x".over("*").last(5).count_by_status()"#;
+
+    fn streaks(e: &Evaluation) -> Vec<(String, Vec<Streak>)> {
+        e.groups
+            .iter()
+            .map(|g| match &g.reading {
+                Reading::Streaks(s) => (g.key.clone(), s.clone()),
+                other => panic!("{other:?}"),
+            })
+            .collect()
+    }
+
+    fn only_streak(e: &Evaluation) -> Streak {
+        let (_, s) = streaks(e).remove(0);
+        assert_eq!(s.len(), 1, "{s:?}");
+        s[0]
+    }
+
+    fn streak(latest: i32, critical: i32, warning: i32, ok: i32, unknown: i32, ok_since_unknown: i32) -> Streak {
+        Streak { latest, critical, warning, ok, unknown, ok_since_unknown }
+    }
+
+    #[test]
+    fn a_streak_counts_the_newest_runs_in_a_row_within_the_last_n() {
+        let e = evaluate_rows(BY_HOST, &runs_of(1, &[Some("a")], 10.0, 15.0, &[CRITICAL, CRITICAL, WARNING, OK, OK, OK]));
+        assert_eq!(streaks(&e), vec![("host:a".to_string(), vec![streak(CRITICAL, 2, 0, 0, 0, 0)])]);
+
+        let healthy = evaluate_rows(BY_HOST, &runs_of(1, &[Some("a")], 10.0, 15.0, &[OK; 7]));
+        assert_eq!(only_streak(&healthy), streak(OK, 0, 0, 5, 0, 5));
+    }
+
+    #[test]
+    fn unknown_runs_take_no_place_among_the_last_n_and_the_newest_in_a_row_are_counted() {
+        let e = evaluate_rows(
+            BY_HOST,
+            &runs_of(1, &[Some("a")], 10.0, 15.0, &[UNKNOWN, CRITICAL, UNKNOWN, CRITICAL, OK, CRITICAL, CRITICAL]),
+        );
+        assert_eq!(only_streak(&e), streak(UNKNOWN, 2, 0, 0, 1, 0));
+
+        // ntp: four UNKNOWN in a row do not push the CRITICAL runs out.
+        let ntp = evaluate_rows(BY_HOST, &runs_of(1, &[Some("a")], 10.0, 15.0, &[UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN, CRITICAL, CRITICAL]));
+        assert_eq!(only_streak(&ntp), streak(UNKNOWN, 2, 0, 0, 4, 0));
+
+        // OK runs before an UNKNOWN one count for ok, not for ok_since_unknown.
+        let back = evaluate_rows(BY_HOST, &runs_of(1, &[Some("a")], 10.0, 15.0, &[OK, UNKNOWN, UNKNOWN, OK, OK]));
+        assert_eq!(only_streak(&back), streak(OK, 0, 0, 3, 0, 1));
+
+        // All UNKNOWN: no streak of a known status.
+        let silent = evaluate_rows(BY_HOST, &runs_of(1, &[Some("a")], 10.0, 15.0, &[UNKNOWN, UNKNOWN]));
+        assert_eq!(only_streak(&silent), streak(UNKNOWN, 0, 0, 0, 2, 0));
+    }
+
+    #[test]
+    fn critical_runs_between_unknown_ones_alert() {
+        let c = defined(r#""x".over("*").last(3).count_by_status()"#, r#"{"thresholds":{"critical":2}}"#);
+        let p = period(&c, at());
+        let rows = runs_of(1, &[], 10.0, 15.0, &[UNKNOWN, CRITICAL, UNKNOWN, CRITICAL, UNKNOWN, CRITICAL]);
+
+        let e = evaluation(&c.query, &p, 100, &rows).unwrap_or_else(|e| panic!("{e}"));
+        let (groups, transitions) = state::step(&Monitor::ServiceCheck(c), &Default::default(), &e, at());
+        assert_eq!(groups["*"].state, Some(state::Status::Alert));
+        assert_eq!(transitions.len(), 1);
+        assert_eq!(transitions[0].reason, state::Reason::New);
+    }
+
+    #[test]
+    fn a_series_counts_while_its_newest_run_is_at_most_twice_its_gap_and_a_minute_old_or_is_its_only_one() {
+        for (age, every, count, live) in
+            [(90.0, 15.0, 2, true), (91.0, 15.0, 2, false), (1800.0, 900.0, 2, true), (1861.0, 900.0, 2, false), (3600.0, 15.0, 1, true)]
+        {
+            let e = evaluate_rows(BY_HOST, &runs_of(1, &[Some("a")], age, every, &vec![CRITICAL; count]));
+            assert_eq!(!e.groups.is_empty(), live, "{age} {every} {count}");
+        }
+    }
+
+    #[test]
+    fn a_node_whose_tags_changed_the_old_series_drops_out() {
+        let mut rows = runs_of(1, &[Some("a")], 600.0, 15.0, &[CRITICAL, CRITICAL, CRITICAL]);
+        rows.extend(runs_of(2, &[Some("a")], 5.0, 15.0, &[OK, OK]));
+        let e = evaluate_rows(BY_HOST, &rows);
+        assert_eq!(streaks(&e), vec![("host:a".to_string(), vec![streak(OK, 0, 0, 2, 0, 2)])]);
+    }
+
+    #[test]
+    fn runs_without_a_by_key_are_n_a_and_dropped() {
+        let mut rows = runs_of(1, &[None], 5.0, 15.0, &[CRITICAL]);
+        rows.extend(runs_of(2, &[Some("b")], 5.0, 15.0, &[OK]));
+        let e = evaluate_rows(BY_HOST, &rows);
+        assert_eq!(e.groups.iter().map(|g| g.key.as_str()).collect::<Vec<_>>(), ["host:b"]);
+        assert_eq!(e.groups[0].tags, ["host:b"]);
+    }
+
+    #[test]
+    fn no_by_is_one_group_judging_each_series() {
+        let mut rows = runs_of(1, &[], 5.0, 15.0, &[CRITICAL]);
+        rows.extend(runs_of(2, &[], 5.0, 15.0, &[OK]));
+        let e = evaluate_rows(ONE_GROUP, &rows);
+        assert_eq!(e.groups.len(), 1);
+        assert_eq!((e.groups[0].key.as_str(), e.groups[0].tags.clone()), ("*", vec![]));
+        assert_eq!(streaks(&e)[0].1.len(), 2);
+    }
+
+    #[test]
+    fn by_star_is_a_group_per_series() {
+        let per_series = r#""x".over("*").by("*").last(5).count_by_status()"#;
+        let mut rows = runs_of(1, &[Some("host:a,role:db")], 5.0, 15.0, &[CRITICAL]);
+        rows.extend(runs_of(2, &[Some("")], 5.0, 15.0, &[OK]));
+        let e = evaluate_rows(per_series, &rows);
+        let mut groups: Vec<(String, Vec<String>)> = e.groups.iter().map(|g| (g.key.clone(), g.tags.clone())).collect();
+        groups.sort();
+        assert_eq!(
+            groups,
+            vec![("*".to_string(), vec![]), ("host:a,role:db".to_string(), vec!["host:a".to_string(), "role:db".to_string()])]
+        );
+    }
+
+    #[test]
+    fn a_group_with_only_dead_series_is_left_out() {
+        let mut rows = runs_of(1, &[Some("a")], 3600.0, 15.0, &[CRITICAL, CRITICAL]);
+        rows.extend(runs_of(2, &[Some("b")], 5.0, 15.0, &[OK]));
+        let e = evaluate_rows(BY_HOST, &rows);
+        assert_eq!(e.groups.iter().map(|g| g.key.as_str()).collect::<Vec<_>>(), ["host:b"]);
+    }
+
+    #[test]
+    fn too_many_groups_is_an_error() {
+        let c = defined(BY_HOST, "");
+        let rows: Vec<Row> = (1..=3).flat_map(|i| runs_of(i, &[Some(&format!("h{i}"))], 5.0, 15.0, &[OK])).collect();
+        match evaluation(&c.query, &period(&c, at()), 2, &rows) {
+            Err(e) => assert!(e.starts_with("too_many_groups: the query yields 3 groups, at most 2"), "{e}"),
+            Ok(e) => panic!("{e:?}"),
+        }
+    }
+
+    #[test]
+    fn a_groups_last_point_is_its_newest_run_one_run_per_second_counts_once() {
+        let mut rows = runs_of(1, &[Some("a")], 20.0, 15.0, &[CRITICAL, CRITICAL]);
+        rows.extend(runs_of(2, &[Some("a")], 5.0, 15.0, &[OK, OK]));
+        rows.extend(runs_of(1, &[Some("a")], 20.0, 15.0, &[CRITICAL]));
+        let e = evaluate_rows(BY_HOST, &rows);
+        let p = period(&defined(BY_HOST, ""), at());
+        assert_eq!(e.groups[0].last_point, Some(p.to - 5_000));
+        let critical = streaks(&e)[0].1.iter().find(|s| s.latest == CRITICAL).copied().unwrap();
+        assert_eq!(critical.critical, 2);
+    }
+
+    #[test]
+    fn the_worst_newest_status_is_the_groups_value() {
+        let latest = |l: i32| streak(l, 0, 0, 0, 0, 0);
+        assert_eq!(worst(&[latest(OK), latest(CRITICAL), latest(WARNING)]), 2.0);
+        assert_eq!(worst(&[latest(UNKNOWN), latest(WARNING)]), 1.0);
+        assert_eq!(worst(&[latest(OK), latest(UNKNOWN)]), 3.0);
+        assert_eq!(worst(&[latest(OK)]), 0.0);
+    }
+
+    #[tokio::test]
+    async fn evaluate_reads_the_runs_through_the_executor() {
+        let c = defined(BY_HOST, "");
+        let rows = runs_of(1, &[Some("a")], 10.0, 15.0, &[CRITICAL, OK]);
+        let asked = std::sync::Mutex::new(vec![]);
+        let fake = crate::query::execute::Fake(|sql: &Sql| {
+            asked.lock().unwrap().push(sql.text.clone());
+            rows.clone()
+        });
+        let e = evaluate(&fake, &acme(), 100, &c, at()).await.unwrap();
+        assert_eq!(asked.into_inner().unwrap(), [super::sql(&acme(), &c.query, &period(&c, at())).text]);
+        assert_eq!(only_streak(&e), streak(CRITICAL, 1, 0, 0, 0, 0));
     }
 }
