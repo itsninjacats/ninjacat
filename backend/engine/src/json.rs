@@ -1,5 +1,5 @@
-//! Times in JSON as the F# server wrote them (System.Text.Json): RFC 3339 with the fraction of a
-//! second only when there is one, trailing zeros dropped. Use with `#[serde(serialize_with)]`.
+//! Times in JSON as the panel has always been given them: RFC 3339 with the fraction of a second
+//! only when there is one, trailing zeros dropped. Use with `#[serde(serialize_with)]`.
 
 use chrono::{DateTime, Utc};
 use serde::Serializer;

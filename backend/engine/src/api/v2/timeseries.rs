@@ -1,5 +1,4 @@
-//! `POST /api/v2/query/timeseries`: the request, from JSON to parsed trees. (F#:
-//! `Api/V2/Timeseries.fs`.)
+//! `POST /api/v2/query/timeseries`: the request, from JSON to parsed trees.
 //!
 //! Two steps, kept apart so each has one kind of error:
 //!

@@ -1,6 +1,6 @@
 //! A service check monitor,
 //! `"postgres.can_connect".over("env:prod").by("host").last(3).count_by_status()`: read, and
-//! evaluated from `check_runs`. (F#: `Monitor/Check.fs`.)
+//! evaluated from `check_runs`.
 
 use chrono::TimeDelta;
 use winnow::combinator::{alt, delimited, preceded, repeat, separated, terminated};
@@ -758,9 +758,9 @@ mod tests {
         assert!(sql.text.contains(" AS g0, toInt64"));
     }
 
-    /// The text the F# service ran for these queries (`Check.sql`, Engine built 2026-10-18).
+    /// The text these queries have always run as (recorded on 2026-10-18).
     #[test]
-    fn the_sql_is_the_f_sharp_services() {
+    fn the_sql_is_what_it_was() {
         let by_host = defined(r#""pg.can_connect".over("env:prod").by("kube_namespace","host").last(3).count_by_status()"#, "");
         let per_series = defined(r#""x".by("*").last(2).count_by_status()"#, "");
         assert_eq!(sql(&acme(), &by_host.query, &period(&by_host, at())).text, BY_HOST_SQL);

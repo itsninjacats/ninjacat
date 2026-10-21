@@ -1,7 +1,7 @@
 //! The service's parts driven by hand over fakes, and against a scratch database of the dev
-//! ClickHouse and a scratch schema of the dev Postgres (F#: `api/tests/Monitors.Tests`). Neither
-//! is the dev stack's own: the monitor service running there must not see what these write. The
-//! tests that need a database pass without asserting when it is not running, as the F# ones skip.
+//! ClickHouse and a scratch schema of the dev Postgres. Neither is the dev stack's own: the
+//! monitor service running there must not see what these write. The tests that need a database
+//! pass without asserting when it is not running.
 
 mod check;
 mod definitions;

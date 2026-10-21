@@ -1,5 +1,4 @@
 //! `ninjacat.monitor.*`, written from the entities' tasks and read by the sampler from another.
-//! (F#: `Monitors/Telemetry.fs`.)
 
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicI64, Ordering};

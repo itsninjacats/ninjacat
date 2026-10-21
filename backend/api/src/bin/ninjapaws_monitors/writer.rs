@@ -1,5 +1,5 @@
 //! Writing to ClickHouse: one insert awaited, for rows that must be stored, and one buffered
-//! writer per table for the rest. (F#: `Storage/ClickHouseSink.fs`, `Writer.fs`.)
+//! writer per table for the rest.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;

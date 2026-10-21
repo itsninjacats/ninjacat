@@ -1,6 +1,6 @@
 //! One evaluation of a metric monitor at the tick `at`; nothing here reads the clock. As in
 //! Datadog, `.as_count()` reduces each query before the formula, otherwise the window is reduced
-//! after it. (F#: `Monitor/Evaluate.fs`.)
+//! after it.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -284,7 +284,7 @@ fn pairs(points: &[Point]) -> Vec<(i64, f64)> {
     points.iter().map(|p| (p.time, p.value)).collect()
 }
 
-/// The first of the least, as F#'s List.min picks it.
+/// The first of the least.
 fn least(values: impl IntoIterator<Item = f64>) -> Option<f64> {
     values.into_iter().reduce(|acc, x| if x < acc { x } else { acc })
 }
@@ -836,10 +836,10 @@ mod tests {
         assert_eq!(ten_minutes, at() + 10 * MINUTE);
     }
 
-    /// The offsets the F# service gave these monitors (`Evaluate.offset`), so a takeover keeps
-    /// each monitor's place in the minute.
+    /// The offsets these monitors have always had, so a takeover keeps each monitor's place in the
+    /// minute.
     #[test]
-    fn offsets_are_the_f_sharp_services() {
+    fn offsets_are_the_ones_in_use() {
         for (monitor, ms) in
             [("default/7", 4551), ("default/1", 13234), ("acme/0f3c9a2e-8d4b-4e1a-9c7d-2b5e6f8a1c3d", 13858)]
         {

@@ -1,6 +1,6 @@
 //! The process as `app` builds it, called in memory, with the panel's token, on a scratch database
-//! of the dev ClickHouse (F#: `api/tests/Query.Tests`). The tests that need ClickHouse pass
-//! without asserting when it is not running, as the F# ones skip.
+//! of the dev ClickHouse. The tests that need ClickHouse pass without asserting when it is not
+//! running.
 
 use http_body_util::BodyExt;
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode, get_current_timestamp};
@@ -151,7 +151,7 @@ fn time(ms: Option<i64>) -> String {
     ms.map_or("NULL".into(), |ms| format!("fromUnixTimestamp64Milli({ms})"))
 }
 
-// --- the door (F#: TokenTests) -----------------------------------------------------------------
+// --- the door -----------------------------------------------------------------
 
 /// One request to each kind of guarded route that queries: the panel's, the monitors', and
 /// Datadog's query API, over the hour before `now`. Each GET names another tenant in its query
@@ -323,7 +323,7 @@ async fn the_query_process_does_not_start_with_a_short_secret() {
     assert!(app(&"x".repeat(32), clickhouse(), DEFAULT_RETENTION, no_postgres()).is_ok());
 }
 
-// --- ranges past what a date can hold (F#: TimeRangeTests) --------------------------------------
+// --- ranges past what a date can hold --------------------------------------
 
 /// A range past what a date can hold finds nothing, as in Datadog: 200 and the empty answer,
 /// never an error.
@@ -402,7 +402,7 @@ async fn panel_metric_query() {
     answers(&requests, expected).await;
 }
 
-// --- monitors (F#: MonitorTests) ----------------------------------------------------------------
+// --- monitors ----------------------------------------------------------------
 
 fn strings(v: &Value) -> Vec<String> {
     v.as_array().unwrap().iter().map(|s| s.as_str().unwrap().to_string()).collect()

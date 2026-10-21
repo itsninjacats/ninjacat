@@ -1,5 +1,4 @@
-//! From ClickHouse rows to the response: series, the shared time axis, limits. (F#:
-//! `Query/Series.fs`.)
+//! From ClickHouse rows to the response: series, the shared time axis, limits.
 //!
 //! Gaps stay gaps. ClickHouse returns only buckets that had points, and a series with nothing in a
 //! bucket gets null there, not zero, which would draw a drop that never happened.
@@ -49,12 +48,12 @@ pub(crate) fn grouped<T, K: Eq + Hash + Clone>(items: Vec<T>, key: impl Fn(&T) -
     groups
 }
 
-/// Floats ordered as the F# engine's sorts order them: NaN below every number.
+/// Floats ordered with NaN below every number.
 pub(crate) fn compare(a: f64, b: f64) -> Ordering {
     a.partial_cmp(&b).unwrap_or_else(|| b.is_nan().cmp(&a.is_nan()))
 }
 
-/// Summed from 0.0, as the F# engine sums.
+/// Summed from 0.0.
 pub(crate) fn sum(values: &[f64]) -> f64 {
     values.iter().fold(0.0, |acc, v| acc + v)
 }
@@ -121,7 +120,7 @@ fn fill_at(method: FillMethod, limit_ms: i64, times: &[i64], points: BTreeMap<i6
     points
 }
 
-/// The F# engine's `List.max`: the first value no later value is greater than.
+/// The first value no later value is greater than.
 pub(crate) fn max_of(values: &[f64]) -> f64 {
     values[1..].iter().fold(values[0], |acc, &x| if x > acc { x } else { acc })
 }

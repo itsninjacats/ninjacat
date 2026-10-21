@@ -1399,7 +1399,7 @@ mod tests {
         assert_eq!(row.source.as_deref(), Some("agent"));
         // Set to the empty string is not the same as never set.
         assert_eq!(row.dd_env.as_deref(), Some(""));
-        // To 100 ns, as protobuf's Timestamp reads into the F# server's DateTime.
+        // To 100 ns, as the times already stored are.
         assert_eq!(row.generated_at, Some(at("2024-05-06T07:08:09.1234567Z")));
         assert_eq!(row.generation_duration_ms, Some(2345));
         assert_eq!(row.repo_tags, ["nginx:1", "nginx:latest"]);
@@ -1529,7 +1529,7 @@ mod tests {
         assert_eq!(full.published, None);
         assert_eq!((full.detail.as_deref(), full.description.as_deref()), (Some(""), None));
         assert_eq!((full.source_name.as_deref(), full.source_url.as_deref()), (None, Some("")));
-        // serde writes the float 9 as 9.0; the F# server wrote 9. The same JSON number.
+        // serde writes the float 9 as 9.0, the rows already stored have 9: the same JSON number.
         assert_eq!(full.ratings, r#"[{"score":7.5,"severity":"SEVERITY_HIGH"},{"score":9.0}]"#);
 
         // An analysis that says nothing still names its zero values.
@@ -1570,8 +1570,7 @@ mod tests {
             ("08", "malformed"),
             ("0880", "malformed"),
             ("08ffffffffffffffffff01", "1:varint"),
-            // Ten bytes whose last holds more than the one bit that fits: prost refuses it, where
-            // the F# server's protobuf library dropped the extra bits and read on.
+            // Ten bytes whose last holds more than the one bit that fits: prost refuses it.
             ("08ffffffffffffffffff02", "malformed"),
             ("08ffffffffffffffffffff01", "malformed"),
             ("f8ffffff0701", "268435455:varint"),

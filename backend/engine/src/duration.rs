@@ -1,4 +1,4 @@
-//! Durations as people write them: in a query, a URL or a setting. (F#: `Duration.fs`.)
+//! Durations as people write them: in a query, a URL or a setting.
 
 use std::sync::LazyLock;
 
@@ -7,7 +7,7 @@ use regex::Regex;
 
 const PAIR: &str = r"([0-9]+(?:\.[0-9]*)?|\.[0-9]+)(ns|us|µs|ms|s|m|h|d|w)";
 
-/// .NET's `$` also matches before a final newline, so the F# accepted one.
+/// A final newline is taken, as it always has been.
 static WHOLE: LazyLock<Regex> = LazyLock::new(|| Regex::new(&format!(r"^([+-])?(?:{PAIR})+\n?$")).unwrap());
 static PAIRS: LazyLock<Regex> = LazyLock::new(|| Regex::new(PAIR).unwrap());
 

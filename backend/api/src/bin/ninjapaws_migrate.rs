@@ -1,5 +1,5 @@
-//! Applies the ClickHouse migrations and the metrics retention, then exits: `ninjacat-api
-//! migrate` of the F# server, the same files into the same ledger. The intake hosts only write;
+//! Applies the ClickHouse migrations and the metrics retention, then exits. An applied migration's
+//! checksum is in the ledger; one whose file changed stops the run. The intake hosts only write;
 //! this runs before them, as a pre-upgrade Job where replicas race.
 
 use std::env;

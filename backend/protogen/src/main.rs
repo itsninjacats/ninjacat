@@ -47,8 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .compile_fds(fds)?;
 
     // proto3's JSON mapping, as protobuf's own JSON parsers and printers have it: for the bodies
-    // sent as JSON, and for messages stored as JSON text. Unknown fields are passed over, as the
-    // F# server's parser does.
+    // sent as JSON, and for messages stored as JSON text. Unknown fields are passed over.
     pbjson_build::Builder::new()
         .register_descriptors(&descriptors)?
         .out_dir(&out)

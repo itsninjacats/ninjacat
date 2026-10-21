@@ -1,6 +1,5 @@
 //! What each group of a monitor is in, and how an evaluation moves it: one pure step from the
-//! groups and an evaluation to the new groups and the transitions to store. (F#:
-//! `Monitor/State.fs`.)
+//! groups and an evaluation to the new groups and the transitions to store.
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
@@ -510,12 +509,13 @@ pub fn close(reason: Reason, at: i64, groups: &BTreeMap<String, Group>) -> (BTre
 
 // --- the hash --------------------------------------------------------------------------------
 //
-// The hash is stored with every transition and was first written by the F# service, so the text
-// hashed is what its System.Text.Json wrote (FSharp.SystemTextJson 1.4.36, snake_case names): a
-// union as {"Case":…,"Fields":[…]}, a tuple as an array, a None field left out, a TimeSpan as
-// [d.]hh:mm:ss[.fffffff], numbers and escapes as .NET writes them.
+// The hash is stored with every transition, and the hashes already stored were taken of the text
+// .NET's System.Text.Json wrote (FSharp.SystemTextJson 1.4.36, snake_case names): a union as
+// {"Case":…,"Fields":[…]}, a tuple as an array, a None field left out, a TimeSpan as
+// [d.]hh:mm:ss[.fffffff], numbers and escapes as .NET writes them. The text stays that, or every
+// stored monitor would read as changed.
 
-/// The order F# gives a union: by case, then field by field.
+/// The order the hashed text puts a union in: by case, then field by field.
 fn filter_rank(f: &TagFilter) -> u8 {
     match f {
         TagFilter::All => 0,
@@ -753,7 +753,7 @@ fn detection_json(d: &Detection) -> Value {
             case("Forecast", vec![spec])
         }
         Detection::Outlier(o) => {
-            // F#'s algorithm is Dbscan of scaled | Mad of scaled * percent.
+            // In the hashed text the algorithm is Dbscan of scaled | Mad of scaled * percent.
             let algorithm = match o.algorithm {
                 Outliers::Dbscan => case("Dbscan", vec![json!(false)]),
                 Outliers::ScaledDbscan => case("Dbscan", vec![json!(true)]),
@@ -808,8 +808,8 @@ impl Formatter for DotNet {
     }
 
     /// With serde_json's arbitrary precision every number reaches the writer as its text. A
-    /// fraction or an exponent makes it the double the F# service wrote; digits alone are an
-    /// integer, written as they are.
+    /// fraction or an exponent makes it a double, written as .NET wrote it into the hashes already
+    /// stored; digits alone are an integer, written as they are.
     fn write_number_str<W: ?Sized + io::Write>(&mut self, writer: &mut W, value: &str) -> io::Result<()> {
         match value.parse::<f64>() {
             Ok(double) if value.contains(['.', 'e', 'E']) => self.write_f64(writer, double),
@@ -1923,7 +1923,7 @@ mod tests {
     }
 
     #[test]
-    fn the_hashed_text_is_what_the_f_sharp_service_hashed() {
+    fn the_hashed_text_is_what_was_hashed() {
         let d = definition("avg(last_5m):avg:cpu{env:prod} by {host} > 90", "");
         assert_eq!(
             query_text(&d.query),
@@ -1939,10 +1939,10 @@ mod tests {
         );
     }
 
-    /// Digests the F# service computed (`State.monitorHash`, Engine built 2026-10-18) for these
-    /// definitions, every detection and filter shape among them.
+    /// Digests already stored for these definitions (computed on 2026-10-18), every detection and
+    /// filter shape among them.
     #[test]
-    fn the_hashes_are_the_f_sharp_services() {
+    fn the_hashes_are_the_stored_ones() {
         for (monitor_type, query, digest) in [
             (
                 "query alert",

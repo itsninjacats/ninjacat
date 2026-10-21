@@ -1,5 +1,5 @@
 //! The query engine as Rust code calls it: the panel, monitors, anything that is not an HTTP
-//! client. (F#: `Query/Engine.fs`.)
+//! client.
 //!
 //! Queries and formulas go in as the same strings Datadog takes; results come back as plain
 //! records, with no JSON shape, parallel lists or "key:value" strings to take apart. The HTTP

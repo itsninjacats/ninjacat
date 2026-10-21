@@ -1,5 +1,4 @@
-//! Evaluates the monitors: it takes the place of the F# `ninjacat-monitors`, with the same
-//! environment but for the Akka cluster's. Replicas share the monitors through Postgres advisory
+//! Evaluates the monitors. Replicas share the monitors through Postgres advisory
 //! locks (`shards.rs`); each runs the entities of the shards it holds, and one of them the
 //! notifier. Health is all it serves over HTTP.
 //!
@@ -130,7 +129,7 @@ fn machine_name() -> String {
         .unwrap_or_else(|| var_or("HOSTNAME", "localhost"))
 }
 
-/// `:8559`, `*:8559` and `0.0.0.0:8559` are every interface, as the F# server reads them.
+/// `:8559`, `*:8559` and `0.0.0.0:8559` are every interface, as the settings have always spelled it.
 fn listen_on(addr: &str) -> String {
     match addr.rsplit_once(':') {
         Some(("" | "*", port)) => format!("0.0.0.0:{port}"),
@@ -261,7 +260,7 @@ async fn terminated() {
 async fn main() -> Result<(), BoxError> {
     let s = settings()?;
     let mut postgres: tokio_postgres::Config = s.database_url.parse()?;
-    // A connection gives up after 15 s, as Npgsql's did, and an idle one is probed, so a dead
+    // A connection gives up after 15 s, and an idle one is probed, so a dead
     // server or link is noticed.
     if postgres.get_connect_timeout().is_none() {
         postgres.connect_timeout(Duration::from_secs(15));

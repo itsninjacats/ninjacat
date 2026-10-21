@@ -1,5 +1,4 @@
-//! agentdiscovery-intake.<site>: the integrations each agent runtime sees. It takes the place of that host of the F#
-//! `ninjacat-api intake`, with the same environment.
+//! agentdiscovery-intake.<site>: the integrations each agent runtime sees.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::evp;

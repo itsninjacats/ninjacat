@@ -1,5 +1,5 @@
 //! One monitor: evaluates on its ticks and stores transitions before adopting them; slow work runs
-//! as spawned futures whose outcome comes back as a message. (F#: `Monitors/Entity.fs`.)
+//! as spawned futures whose outcome comes back as a message.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;

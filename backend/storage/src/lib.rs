@@ -1,6 +1,6 @@
 //! Rows and where they go: one writer per ClickHouse table, the sink handlers hand rows to, and
-//! the schema's migrations; ported from the F# `api/src/Storage`. Nothing here knows HTTP or
-//! Datadog, which is what lets a second source (OTLP) write through it unchanged.
+//! the schema's migrations. Nothing here knows HTTP or Datadog, which is what lets a second source
+//! (OTLP) write through it unchanged.
 
 pub mod column;
 pub mod fnv;

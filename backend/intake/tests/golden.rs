@@ -1,7 +1,7 @@
 //! The golden fixtures of the F# intake (`backend/intake/tests/fixtures/go`): requests recorded
 //! from the Go server, each with its answer and the rows it stored. Every fixture a ported host
 //! serves is replayed through that host's router, in memory, and compared field by field;
-//! `Fixtures/overrides.json` lists the accepted differences, as for the F# replay.
+//! `fixtures/overrides.json` lists the accepted differences, each with its reason.
 //!
 //! Equal means equal in meaning: object key order does not matter, a number is a number however
 //! it is written, a timestamp may lose digits past 100 ns, and a string that is itself JSON is
@@ -230,8 +230,8 @@ fn process_for(fixture: &Value) -> Option<Process> {
     let request = &fixture["request"];
     let host = request["host"].as_str()?;
     let path = request["url"].as_str()?.split('?').next()?;
-    // A Go test that built an engine around a handler of its own (`func1`) names no route set; the
-    // F# replay skips it too, and it is ported by hand.
+    // A Go test that built an engine around a handler of its own (`func1`) names no route set; it
+    // is a test of its own instead.
     if routes.iter().any(|name| !name.starts_with("route")) {
         return None;
     }
@@ -290,7 +290,7 @@ fn router_of(process: &Process, sink: Sink) -> Router {
     }
 }
 
-/// The fixture's request. Of two values of a header the later one counts, as the F# replay sets
+/// The fixture's request. Of two values of a header the later one counts, as the recorded replay set
 /// them.
 fn request_of(fixture: &Value) -> tako::types::Request {
     let request = &fixture["request"];

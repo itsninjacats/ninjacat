@@ -1,5 +1,4 @@
-//! data-obs-intake.<site>: OpenLineage events and query action results. It takes the place of that host of the F#
-//! `ninjacat-api intake`, with the same environment.
+//! data-obs-intake.<site>: OpenLineage events and query action results.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::evp;

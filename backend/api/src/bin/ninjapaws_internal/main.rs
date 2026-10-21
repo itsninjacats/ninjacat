@@ -1,6 +1,5 @@
 //! What the panel reads from: the panel's internal API (`/internal/*`) and Datadog's query API
-//! (`/api/v1/metrics`, `/api/v2/query/*`), on the internal port. It takes the place of the F#
-//! `ninjacat-api query`, with the same environment.
+//! (`/api/v1/metrics`, `/api/v2/query/*`), on the internal port.
 //!
 //! It only reads: its ClickHouse client cannot write. Every route but the probes asks for the
 //! panel's token, which names the tenant; the port still belongs on a network only the panel can
@@ -90,7 +89,7 @@ fn var_or(name: &str, default: &str) -> String {
     env::var(name).ok().filter(|v| !v.is_empty()).unwrap_or_else(|| default.to_string())
 }
 
-/// `:8081`, `*:8081` and `0.0.0.0:8081` are every interface, as the F# server reads them.
+/// `:8081`, `*:8081` and `0.0.0.0:8081` are every interface, as the settings have always spelled it.
 fn listen_on(addr: &str) -> String {
     match addr.rsplit_once(':') {
         Some(("" | "*", port)) => format!("0.0.0.0:{port}"),

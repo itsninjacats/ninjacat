@@ -1,7 +1,7 @@
 //! A tag filter as a SQL condition on a table with a `host` column and a `tags` map of value
 //! lists: `metrics`, `metrics_1m` and `logs` alike. Raw `metrics` also keeps some tags as array
 //! columns of their own (`metrics::LIFTED_TAGS`), which it passes as `columns`; the others pass
-//! none. (F#: `MetricQuery/Filter.fs`.)
+//! none.
 
 use crate::metric_query::ast::TagFilter;
 use crate::sql::{SqlParams, SqlValue};

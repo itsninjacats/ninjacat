@@ -1,6 +1,5 @@
 //! The ClickHouse schema: the numbered SQL files of `backend/schema/migrations`, embedded in the
-//! binary, applied in order and recorded in `schema_migrations`. The F# server applies the same
-//! files into the same ledger, with the same checksums.
+//! binary, applied in order and recorded in `schema_migrations`.
 //!
 //! Applied migrations are immutable. Each is recorded with a checksum of its file, and a file that
 //! changed after it was applied stops the run rather than letting the schema drift from the files.

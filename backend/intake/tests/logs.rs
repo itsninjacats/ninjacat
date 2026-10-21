@@ -1,5 +1,5 @@
-//! Tests of the logs intake beyond the golden fixtures: the cases of the F# RealPayloadTests and
-//! IntakeCoreTests for the logs host, and the F# TcpLogsTests for the agent's logs over TCP.
+//! Tests of the logs intake beyond the golden fixtures: real payloads, the host's own cases, and
+//! the agent's logs over TCP.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -82,7 +82,7 @@ async fn an_empty_object_among_the_logs_is_not_stored() {
     assert_eq!(rows(&writes, "logs").iter().map(|row| row["message"].as_str().unwrap()).collect::<Vec<_>>(), ["kept"]);
 }
 
-/// The shared reader nests 128 deep (the F# one 512); the rule is the same on both sides of it.
+/// The JSON reader nests 128 deep; the rule is the same on both sides of it.
 #[tokio::test]
 async fn a_body_nested_deeper_than_any_telemetry_is_kept_raw_and_one_inside_the_limit_is_stored() {
     let send = |depth: usize| async move {

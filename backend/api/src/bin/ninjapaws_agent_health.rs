@@ -1,5 +1,4 @@
-//! agenthealth-intake.<site>: the agent's reports on its own setup. It takes the place of that host of the F#
-//! `ninjacat-api intake`, with the same environment.
+//! agenthealth-intake.<site>: the agent's reports on its own setup.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::evp;

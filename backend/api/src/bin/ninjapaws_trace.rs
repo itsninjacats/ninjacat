@@ -1,5 +1,4 @@
-//! trace.agent.<site>: what the trace-agent sends, spans, APM stats and Data Streams. It takes the
-//! place of that host of the F# `ninjacat-api intake`, with the same environment.
+//! trace.agent.<site>: what the trace-agent sends, spans, APM stats and Data Streams.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::trace;

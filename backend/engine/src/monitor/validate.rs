@@ -1,5 +1,4 @@
 //! A monitor definition checked whole; the query process and the monitor service both run it.
-//! (F#: `Monitor/Validate.fs`.)
 
 use chrono::TimeDelta;
 use ninjapaws_anomaly::Forecast;
@@ -336,7 +335,7 @@ pub fn monitor(retention: Retention, now: i64, json: &str) -> Result<Monitor, Ve
         Some(Value::String(value)) => Ok(value.clone()),
         _ => Err(vec![format!("{name} must be a string")]),
     };
-    // Written back out for options::parse, as the F# passed on the property's raw text.
+    // Written back out for options::parse, which reads the property's text.
     let options = root.get("options").map(Value::to_string).unwrap_or_default();
 
     match (text("type"), text("query")) {
@@ -478,7 +477,7 @@ mod tests {
         }
     }
 
-    /// The number reads (serde_json keeps its digits) and is refused as the F# refused it.
+    /// The number reads (serde_json keeps its digits) and is refused as too large.
     #[test]
     fn a_number_too_large_is_refused() {
         refused(ABOVE_90, r#"{"thresholds":{"critical":1e999}}"#, "options.thresholds.critical is too large a number");

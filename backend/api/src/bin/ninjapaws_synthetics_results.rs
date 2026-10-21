@@ -1,5 +1,4 @@
-//! http-synthetics.<site>: the results of the tests the agent ran. It takes the place of that host of the F#
-//! `ninjacat-api intake`, with the same environment.
+//! http-synthetics.<site>: the results of the tests the agent ran.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::evp;

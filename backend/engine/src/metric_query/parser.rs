@@ -1,5 +1,4 @@
-//! The parser of the metric query language, written with winnow. (F#: `MetricQuery/Parser.fs`,
-//! written with FParsec.)
+//! The parser of the metric query language, written with winnow.
 //!
 //! Three layers, each built on the one before: the tag filter inside `{...}`; a metric query,
 //! `avg:system.cpu.user{env:prod} by {host}.rollup(sum, 60)`; expressions, arithmetic and function
@@ -631,7 +630,7 @@ mod tests {
         values.iter().map(|v| v.to_string()).collect()
     }
 
-    // --- tag filters (F#: TagFilterTests.fs) -------------------------------------------
+    // --- tag filters -------------------------------------------
 
     fn filter_parses(input: &str, expected: TagFilter) {
         match parse_tag_filter(input) {
@@ -778,7 +777,7 @@ mod tests {
         filter_fails("{env:prod", "Expecting");
     }
 
-    // --- metric queries (F#: MetricQueryTests.fs) ----------------------------------------
+    // --- metric queries ----------------------------------------
 
     fn q(metric: &str) -> MetricQuery {
         MetricQuery { space_agg: None, metric: metric.into(), filter: All, group_by: vec![], modifiers: vec![] }
@@ -938,7 +937,7 @@ mod tests {
         );
     }
 
-    // --- expressions (F#: ExpressionTests.fs) ----------------------------------------------
+    // --- expressions ----------------------------------------------
 
     fn leaf(space_agg: Option<&str>, metric: &str) -> Expr<MetricQuery> {
         Expr::Leaf(MetricQuery { space_agg: space_agg.map(String::from), ..q(metric) })
@@ -1153,7 +1152,7 @@ mod tests {
         program_fails("x{*} * 2e", "Expecting: decimal digit");
     }
 
-    // --- formulas (F#: FormulaTests.fs) ------------------------------------------------------
+    // --- formulas ------------------------------------------------------
 
     fn name(n: &str) -> Formula {
         Expr::Leaf(n.into())

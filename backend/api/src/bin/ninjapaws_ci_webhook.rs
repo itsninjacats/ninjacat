@@ -1,5 +1,4 @@
-//! webhook-intake.<site>: CI providers' pipeline webhooks (Jenkins, GitLab). It takes the place of
-//! that host of the F# `ninjacat-api intake`, with the same environment.
+//! webhook-intake.<site>: CI providers' pipeline webhooks (Jenkins, GitLab).
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::ci_webhook;

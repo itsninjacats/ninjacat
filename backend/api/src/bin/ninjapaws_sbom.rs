@@ -1,5 +1,4 @@
-//! sbom-intake.<site>: software bills of materials. It takes the place of that host of the F#
-//! `ninjacat-api intake`, with the same environment.
+//! sbom-intake.<site>: software bills of materials.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::security;

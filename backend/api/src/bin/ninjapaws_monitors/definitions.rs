@@ -1,4 +1,4 @@
-//! The `monitor` table, read only: the panel owns it. (F#: `Monitors/Definitions.fs`.)
+//! The `monitor` table, read only: the panel owns it.
 //!
 //! Without TLS, as the query process's health ping: a `DATABASE_URL` that asks for it
 //! (`sslmode=require`) does not connect.

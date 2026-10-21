@@ -1,5 +1,4 @@
-//! intake.profile.<site>: the profiles the trace-agent forwards. It takes the place of that host
-//! of the F# `ninjacat-api intake`, with the same environment.
+//! intake.profile.<site>: the profiles the trace-agent forwards.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::profiling;

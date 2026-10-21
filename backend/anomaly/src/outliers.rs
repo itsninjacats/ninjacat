@@ -94,7 +94,7 @@ fn by_dbscan(scaled: bool, tolerance: f64, rows: &[Vec<f64>]) -> Vec<bool> {
         }
         sizes.push(size);
     }
-    // The first of the largest, as F#'s Array.maxBy picks.
+    // The first of the largest.
     let largest = (0..sizes.len()).rev().max_by_key(|&c| sizes[c]).unwrap_or(0);
     cluster.iter().map(|&c| c != largest).collect()
 }

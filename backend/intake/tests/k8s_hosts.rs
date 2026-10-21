@@ -218,8 +218,8 @@ async fn a_kubeactions_body_of_null_or_an_empty_array_stores_nothing() {
 }
 
 /// An image payload posted to the lifecycle route: field 3 of EventsPayload arrives
-/// length-delimited. Go and Google.Protobuf skip the mistyped field and stored a junk event row;
-/// prost refuses the message, and the body is kept whole (overrides.json names the fixture).
+/// length-delimited. Go's library skipped the mistyped field and stored a junk event row; prost
+/// refuses the message, and the body is kept whole (overrides.json names the fixture).
 #[tokio::test]
 async fn a_lifecycle_body_with_a_mistyped_field_is_kept_raw_not_stored_as_an_event() {
     use base64::Engine;

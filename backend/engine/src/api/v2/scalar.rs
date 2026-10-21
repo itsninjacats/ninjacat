@@ -1,5 +1,5 @@
 //! `POST /api/v2/query/scalar`: the request, from JSON to a parsed timeseries request plus each
-//! query's aggregator. (F#: `Api/V2/Scalar.fs`.)
+//! query's aggregator.
 //!
 //! A scalar request is a timeseries request whose every query also says how its window becomes
 //! one value. Everything else (the query language, formulas, functions) is the timeseries
@@ -159,8 +159,7 @@ pub fn read(json: &str) -> Result<ParsedScalarRequest, Vec<String>> {
     decode(json).and_then(|raw| parse(&raw))
 }
 
-/// The request-reading tests of the F# `ScalarTests.fs`; the ones that run queries are
-/// `query::execute`'s.
+/// The request-reading tests; the ones that run queries are `query::execute`'s.
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,6 +1,5 @@
-//! http-intake.logs.<site> and agent-http-intake.logs.<site>, and beside them the agent's logs
-//! over TCP (`NINJACAT_LOGS_TCP_ADDR`). It takes the place of those hosts of the F#
-//! `ninjacat-api intake`, with the same environment.
+//! http-intake.logs.<site> and agent-http-intake.logs.<site>, and beside them the agent's logs over
+//! TCP (`NINJACAT_LOGS_TCP_ADDR`).
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::logs;

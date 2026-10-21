@@ -1,13 +1,12 @@
-//! Tests of routers/rum.rs beyond the golden fixtures, ported from the F# RumTests, and the browser
-//! SDK's real payloads from RealPayloadTests.
+//! Tests of routers/rum.rs beyond the golden fixtures, and the browser SDK's real payloads.
 //!
 //! The RUM intake is the one surface whose clients are web pages and phones, and almost every
 //! failure it can have is invisible from outside: a browser that loses a batch to CORS reports
 //! success, an Android app that gets a 200 drops the batch, and a mobile batch can carry events
 //! from hours ago.
 //!
-//! What the F# suite checked by replaying the fixtures recorded on Go's engine through the wrapper
-//! with Go's peer, the golden replay here does for every one of them.
+//! The fixtures recorded on Go's engine, through the wrapper and from Go's peer, are the golden
+//! replay's.
 
 use std::io::Write;
 use std::path::Path;

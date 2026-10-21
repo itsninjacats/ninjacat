@@ -1,5 +1,4 @@
-//! A monitor as Datadog defines one, read into what the evaluation needs. (F#:
-//! `Monitor/Definition.fs`.)
+//! A monitor as Datadog defines one, read into what the evaluation needs.
 
 use chrono::TimeDelta;
 use ninjapaws_anomaly::{Anomalies, Forecast, Outliers};

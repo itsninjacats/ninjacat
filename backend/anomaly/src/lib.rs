@@ -1,6 +1,5 @@
-//! The algorithmic functions of the metric query language, ported from the F# engine
-//! (`api/src/Engine/Query`): `anomalies()` and `forecast()` over one series, `outliers()` over a
-//! group of them.
+//! The algorithmic functions of the metric query language: `anomalies()` and `forecast()` over one
+//! series, `outliers()` over a group of them.
 //!
 //! Times are milliseconds since the epoch; points are `(time, value)`, oldest first.
 //!

@@ -1,5 +1,4 @@
-//! cws-intake.<site>: CWS activity dumps. It takes the place of that host of the F#
-//! `ninjacat-api intake`, with the same environment.
+//! cws-intake.<site>: CWS activity dumps.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::security;

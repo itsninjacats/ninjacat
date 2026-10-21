@@ -1,5 +1,5 @@
 //! What the panel asks of the telemetry tables: metric names, tag keys and values, one metric's
-//! series, log search and its facets. (F#: `Panel.fs`.)
+//! series, log search and its facets.
 //!
 //! Everything here is pure: a request becomes `Sql` or, for series, a request to the query
 //! engine, and the server runs it. A caller's text is never put into the SQL itself.

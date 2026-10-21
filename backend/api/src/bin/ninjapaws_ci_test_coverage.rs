@@ -1,5 +1,4 @@
-//! citestcov-intake.<site>: CI Visibility code coverage from tracers in CI. It takes the place of
-//! that host of the F# `ninjacat-api intake`, with the same environment.
+//! citestcov-intake.<site>: CI Visibility code coverage from tracers in CI.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::ci_visibility;

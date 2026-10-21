@@ -1,5 +1,5 @@
 //! Compiles one `QueryPlan` into SQL against `metrics`, or against its one-minute rollup
-//! `metrics_1m` when the step is whole minutes. (F#: `Query/Compile.fs`.)
+//! `metrics_1m` when the step is whole minutes.
 //!
 //! Time first, then space, as Datadog orders them (docs: dashboards/guide/query-to-the-graph): an
 //! inner query makes one row per series and bucket with the time aggregator, an outer one combines

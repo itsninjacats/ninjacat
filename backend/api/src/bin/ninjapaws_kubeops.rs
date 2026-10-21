@@ -1,6 +1,5 @@
-//! orchestrator.<site> and kubeops-intake.<site>: what the cluster agent sends, Kubernetes and
-//! ECS collections, manifests and the results of remote actions. It takes the place of those
-//! hosts of the F# `ninjacat-api intake`, with the same environment.
+//! orchestrator.<site> and kubeops-intake.<site>: what the cluster agent sends, Kubernetes and ECS
+//! collections, manifests and the results of remote actions.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::kubeops;

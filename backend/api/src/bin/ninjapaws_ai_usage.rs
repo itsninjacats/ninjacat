@@ -1,5 +1,4 @@
-//! eudm-intake.<site>: AI usage reports through the agent's EVP proxy. It takes the place of that
-//! host of the F# `ninjacat-api intake`, with the same environment.
+//! eudm-intake.<site>: AI usage reports through the agent's EVP proxy.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::install;

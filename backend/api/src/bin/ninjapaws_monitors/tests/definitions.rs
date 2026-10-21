@@ -1,4 +1,4 @@
-//! The `monitor` reader against the table Drizzle migrated (F#: `DefinitionsTests.fs`).
+//! The `monitor` reader against the table Drizzle migrated.
 
 use ninjapaws_engine::monitor::validate;
 use ninjapaws_engine::query::plan::DEFAULT_RETENTION;

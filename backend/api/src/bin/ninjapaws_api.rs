@@ -1,7 +1,6 @@
 //! api.<site> and <version>-flare.agent.<site>: the core agent's metrics, checks, events, host
 //! metadata and Private Action Runner traffic, and CI Visibility's settings, git metadata and
-//! datadog-ci calls. It takes the place of that host of the F# `ninjacat-api intake`, with the
-//! same environment.
+//! datadog-ci calls.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::api;

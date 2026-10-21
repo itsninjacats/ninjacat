@@ -1,5 +1,5 @@
 //! The notifier, a stub: logs the transitions it would notify and records a `stub` row for each.
-//! It runs on the one replica that holds the notifier's lock. (F#: `Monitors/Notifier.fs`.)
+//! It runs on the one replica that holds the notifier's lock.
 
 use std::sync::Arc;
 use std::time::Duration;

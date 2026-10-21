@@ -1,6 +1,4 @@
-//! debugger-intake.<site>: Dynamic Instrumentation logs, probe diagnostics and the symbol
-//! database. It takes the place of that host of the F# `ninjacat-api intake`, with the same
-//! environment.
+//! debugger-intake.<site>: Dynamic Instrumentation logs, probe diagnostics and the symbol database.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::profiling;

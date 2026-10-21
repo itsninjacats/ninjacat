@@ -1,4 +1,4 @@
-//! A metric monitor's query. (F#: `Monitor/Parse.fs`.)
+//! A metric monitor's query.
 //!
 //! ```text
 //! threshold  avg(last_5m):<expr> > 90
@@ -116,7 +116,7 @@ fn read_syntax(text: &str) -> Result<Syntax, String> {
 
 // --- windows ---------------------------------------------------------------------------------
 
-// .NET's `$` also matches before a final newline, so the F# accepted one.
+// A final newline is taken, as it always has been.
 static WINDOW_PATTERN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(last|next)_(\d+)(mo|m|h|d|w)\n?$").unwrap());
 static AGO_PATTERN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(\d+)(m|h|d)_ago\n?$").unwrap());
 

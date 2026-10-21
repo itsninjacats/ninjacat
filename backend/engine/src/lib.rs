@@ -1,5 +1,5 @@
-//! The query language and what the panel asks for, compiled to SQL; ported from the F# engine
-//! (`api/src/Engine`). Nothing here knows HTTP or the ClickHouse driver: a query becomes [`Sql`]
+//! The query language and what the panel asks for, compiled to SQL. Nothing here knows HTTP or
+//! the ClickHouse driver: a query becomes [`Sql`]
 //! (text with `{name:Type}` placeholders and the values bound to them), and the caller runs it.
 //!
 //! Instants are `i64` milliseconds since the epoch; spans are [`chrono::TimeDelta`].

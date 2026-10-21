@@ -1,7 +1,6 @@
 //! browser-intake.<site>: the RUM and Logs SDKs, browser and mobile, with the CORS policy
 //! (`NINJACAT_RUM_ALLOWED_ORIGINS`) and the trusted proxies (`NINJACAT_TRUSTED_PROXIES`) above its
-//! routes. It takes the place of that host of the F# `ninjacat-api intake`, with the same
-//! environment.
+//! routes.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::rum;

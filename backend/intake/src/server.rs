@@ -115,7 +115,7 @@ pub fn query_value(uri: &Uri, name: &str) -> String {
     query_pairs(uri).into_iter().find(|(key, _)| key == name).map(|(_, value)| value).unwrap_or_default()
 }
 
-/// JSON with the content type ASP.NET and Go gave it.
+/// JSON with the content type the agent has always been answered with.
 pub fn json<T: Serialize + ?Sized>(status: StatusCode, value: &T) -> Response {
     json_as(status, "application/json; charset=utf-8", value)
 }
@@ -294,7 +294,7 @@ pub fn var_or(name: &str, default: &str) -> String {
     env::var(name).ok().filter(|v| !v.is_empty()).unwrap_or_else(|| default.to_string())
 }
 
-/// `:8080`, `*:8080` and `0.0.0.0:8080` are every interface, as the F# server reads them.
+/// `:8080`, `*:8080` and `0.0.0.0:8080` are every interface, as the settings have always spelled it.
 pub fn listen_on(addr: &str) -> String {
     match addr.rsplit_once(':') {
         Some(("" | "*", port)) => format!("0.0.0.0:{port}"),

@@ -1,4 +1,4 @@
-//! Unix times and spans a client sends, kept to the span of stored times. (F#: `UnixTime.fs`.)
+//! Unix times and spans a client sends, kept to the span of stored times.
 //!
 //! Every stored time falls between the epoch and the end of 2105 (ClickHouse's DateTime), so a
 //! range outside them finds nothing, which is Datadog's answer too, not an error. Clamped this far

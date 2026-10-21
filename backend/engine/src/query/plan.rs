@@ -1,6 +1,6 @@
 //! A parsed request becomes a plan: defaults filled in, formula names resolved to queries, every
 //! function's arguments checked. Anything the engine cannot do yet is refused here by name, so
-//! later stages never have to check. (F#: `Query/Plan.fs`.)
+//! later stages never have to check.
 
 use std::collections::{BTreeSet, HashMap};
 use std::sync::LazyLock;
@@ -216,7 +216,7 @@ fn nanos(d: TimeDelta) -> i128 {
     d.num_seconds() as i128 * 1_000_000_000 + d.subsec_nanos() as i128
 }
 
-/// .NET's 100 ns ticks, which the F# divided and compared spans in.
+/// Spans in 100 ns ticks, so that steps and point counts round as they always have.
 fn ticks(d: TimeDelta) -> i128 {
     nanos(d) / 100
 }
@@ -678,7 +678,7 @@ pub fn outlier_args(args: &[Literal]) -> Result<(Outliers, f64), String> {
     }
 }
 
-/// .NET's `$` also matches before a final newline, so the F# accepted one.
+/// A final newline is taken, as it always has been.
 static CALENDAR_SHIFT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^-([0-9]{1,4})(d|w|mo)\n?$").unwrap());
 
 /// `TimeZoneInfo.GetUtcOffset` of a wall-clock time: one that is ambiguous or skipped takes the
@@ -904,7 +904,7 @@ pub fn split_args(rest: &[Arg<String>]) -> (Vec<Option<Literal>>, Vec<(String, L
     (positional, named)
 }
 
-/// F#'s `string` of a float: .NET's shortest round-trip form, with an exponent from 1E+15 and
+/// A float in an error message: the shortest round-trip form, with an exponent from 1E+15 and
 /// below 1E-04.
 fn dotnet_number(n: f64) -> String {
     if n.is_nan() {

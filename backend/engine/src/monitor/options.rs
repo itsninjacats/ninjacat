@@ -1,4 +1,4 @@
-//! A monitor's options, from Datadog's options object. (F#: `Monitor/Options.fs`.)
+//! A monitor's options, from Datadog's options object.
 //!
 //! Every option not acted on is accepted and named in `not_acted_on`, so a Datadog definition
 //! loads unchanged; only the two that would change what is evaluated are refused.

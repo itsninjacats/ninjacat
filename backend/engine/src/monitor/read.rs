@@ -1,6 +1,6 @@
 //! What the panel reads of monitors: each monitor's state, its groups, its transitions and its
 //! evaluations, from what the monitor service stored. Every statement binds the tenant it is
-//! given; the server takes that from the panel's token and runs the SQL. (F#: `Monitor/Read.fs`.)
+//! given; the server takes that from the panel's token and runs the SQL.
 //!
 //! The records are the JSON the panel reads: times as `json::offset`, a None left out.
 

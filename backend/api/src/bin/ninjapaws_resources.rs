@@ -1,5 +1,4 @@
-//! resources-intake.<site>: the opaque payloads integrations hand the agent. It takes the place of
-//! that host of the F# `ninjacat-api intake`, with the same environment.
+//! resources-intake.<site>: the opaque payloads integrations hand the agent.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::misc;

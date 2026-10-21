@@ -1,5 +1,4 @@
-//! A service check monitor's SQL against real `check_runs` rows, in a scratch database (F#:
-//! `CheckTests.fs`).
+//! A service check monitor's SQL against real `check_runs` rows, in a scratch database.
 
 use ninjapaws_engine::TenantId;
 use ninjapaws_engine::monitor::check;

@@ -1,6 +1,5 @@
 //! install.datadoghq.com and install.datad0g.com: the installer's OCI registry, BTF archives and
-//! the HEAD probe; anonymous, as its clients send no key. It takes the place of that host of the F#
-//! `ninjacat-api intake`, with the same environment.
+//! the HEAD probe; anonymous, as its clients send no key.
 
 use ninjapaws_intake::routers::install;
 use tako::types::BoxError;

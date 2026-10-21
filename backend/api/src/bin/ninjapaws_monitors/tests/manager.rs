@@ -1,6 +1,6 @@
 //! The manager with the entities replaced by a probe and Postgres by fakes over values the test
-//! sets, and once by a scratch schema of the dev Postgres itself (F#: `ManagerTests.fs`); and the
-//! entities' region handing a shard off.
+//! sets, and once by a scratch schema of the dev Postgres itself; and the entities' region
+//! handing a shard off.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};

@@ -528,7 +528,7 @@ pub fn ip_text(text: &str) -> Option<String> {
     }
 }
 
-/// An IPv6 address as the F# server printed it: RFC 5952, except that an address whose last 32
+/// An IPv6 address as the rows already stored spell it: RFC 5952, except that an address whose last 32
 /// bits read as IPv4 (an IPv4-compatible `::a.b.c.d`, SIIT's `::ffff:0:a.b.c.d`, ISATAP's
 /// `…:0:5efe:a.b.c.d`) ends in dotted decimal. The standard library prints those in hex.
 fn ipv6_text(address: Ipv6Addr) -> String {
@@ -888,7 +888,7 @@ mod tests {
             ("10.0.0.1", "10.0.0.1"),
             ("::ffff:1.2.3.4", "1.2.3.4"),
             ("2001:DB8:0:0:0:0:0:1", "2001:db8::1"),
-            // An IPv4-compatible address keeps its dotted tail, as the F# server printed it.
+            // An IPv4-compatible address keeps its dotted tail, as the rows already stored have it.
             ("::1.2.3.4", "::1.2.3.4"),
             ("1:0:0:2:0:0:0:3", "1:0:0:2::3"),
             ("1:0:0:2:3:0:0:4", "1::2:3:0:0:4"),

@@ -1,5 +1,4 @@
-//! cspm-intake.<site>: compliance findings. It takes the place of that host of the F#
-//! `ninjacat-api intake`, with the same environment.
+//! cspm-intake.<site>: compliance findings.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::security;

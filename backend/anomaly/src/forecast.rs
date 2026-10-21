@@ -21,7 +21,7 @@ pub struct Prediction {
 ///
 /// `points` are the history the forecast learns from. Linear fits all of them: pass the
 /// `history` Datadog's forecast() takes, the window by default. Seasonal "requires at least two
-/// seasons of history"; the F# engine reads six. Empty with too little history.
+/// seasons of history"; six are read. Empty with too little history.
 pub fn forecast(method: Forecast, points: &[(i64, f64)], future: &[i64], deviations: f64) -> Vec<Prediction> {
     let Some(&(last, _)) = points.last() else { return Vec::new() };
     match method {

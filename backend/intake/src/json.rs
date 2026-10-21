@@ -36,8 +36,8 @@ pub fn repair(body: &[u8]) -> std::borrow::Cow<'_, [u8]> {
     }
 }
 
-/// The body as JSON, or the parser's message. The parser nests at most 128 deep (the F# server
-/// allowed 512); a body that nests deeper is kept in raw_payloads.
+/// The body as JSON, or the parser's message. The parser nests at most 128 deep; a body that nests
+/// deeper is kept in raw_payloads.
 pub fn try_parse(body: &[u8]) -> Result<Value, String> {
     serde_json::from_slice(&repair(body)).map_err(|e| e.to_string())
 }

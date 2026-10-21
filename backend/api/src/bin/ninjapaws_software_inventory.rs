@@ -1,5 +1,4 @@
-//! softinv-intake.<site>: installed software per host. It takes the place of that host of the F#
-//! `ninjacat-api intake`, with the same environment.
+//! softinv-intake.<site>: installed software per host.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::evp;

@@ -1,5 +1,5 @@
 //! The entity driven by hand: ticks sent to it, Postgres, ClickHouse and the writers replaced by
-//! fakes over values the test sets (F#: `EntityTests.fs`).
+//! fakes over values the test sets.
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};

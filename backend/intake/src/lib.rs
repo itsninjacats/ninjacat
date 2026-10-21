@@ -1,5 +1,5 @@
-//! What every intake host shares, and each host's router; ported from the F# `api/src/Intake`.
-//! A program in `api/src/bin` serves one host: it names the host's router and calls
+//! What every intake host shares, and each host's router. A program in `api/src/bin` serves one
+//! host: it names the host's router and calls
 //! [`server::run`], so each host can be deployed, scaled and stopped on its own.
 //!
 //! A handler turns the wire format into the plain rows of `ninjapaws_storage` and hands them to

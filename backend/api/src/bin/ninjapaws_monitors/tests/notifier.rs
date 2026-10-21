@@ -1,5 +1,5 @@
 //! The notifier stub: its loop over fakes, and what it reads from and writes to ClickHouse, in a
-//! scratch database (F#: `NotifierTests.fs`).
+//! scratch database.
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};

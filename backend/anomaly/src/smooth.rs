@@ -88,7 +88,7 @@ fn roughness(xs: &[f64]) -> f64 {
 }
 
 /// Trailing moving average over `w` points, the first `w - 1` over the points so far. The mean is
-/// kept running, as MathNet's MovingStatistics keeps it in the F# engine.
+/// kept running, as MathNet's MovingStatistics keeps it.
 pub fn moving_average(w: usize, ys: &[f64]) -> Vec<f64> {
     let mut m = 0.0;
     ys.iter()

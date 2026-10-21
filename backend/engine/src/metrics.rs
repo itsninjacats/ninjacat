@@ -1,4 +1,4 @@
-//! Metric queries that need no parser: catalog lookups. (F#: `Metrics.fs`.)
+//! Metric queries that need no parser: catalog lookups.
 
 use crate::sql::{Sql, SqlValue, TenantId, param};
 

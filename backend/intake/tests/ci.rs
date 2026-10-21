@@ -1,6 +1,5 @@
-//! Tests of routers/ci_visibility.rs, ci_webhook.rs and install.rs beyond the golden fixtures,
-//! ported from the F# CiVisibilityTests, CiWebhookTests and InstallTests: the decoders' edge cases,
-//! and the columns that keep a JSON value as the text it arrived in.
+//! Tests of routers/ci_visibility.rs, ci_webhook.rs and install.rs beyond the golden fixtures: the
+//! decoders' edge cases, and the columns that keep a JSON value as the text it arrived in.
 
 use std::collections::BTreeMap;
 use std::io::Write;
@@ -536,7 +535,7 @@ async fn an_events_content_keeps_each_number_as_it_was_written() {
     let answer = post_json(ci_visibility::mount_test_cycle, "/api/v2/citestcycle", body).await;
     let row = answer.row("ci_test_events");
     assert_eq!(row["span_id"], 12345678901234567890u64);
-    // Re-written with sorted keys and no spaces, as F# writes it; the literals stay.
+    // Re-written with sorted keys and no spaces; the literals stay.
     assert_eq!(row["content"], r#"{"metrics":{"cpu":1.50},"span_id":12345678901234567890}"#);
 }
 

@@ -1,6 +1,5 @@
 //! ndm-intake.<site>, snmp-traps-intake.<site>, ndmflow-intake.<site> and netpath-intake.<site>:
-//! Network Device Monitoring. It takes the place of those hosts of the F#
-//! `ninjacat-api intake`, with the same environment.
+//! Network Device Monitoring.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::ndm;

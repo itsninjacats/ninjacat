@@ -1,5 +1,4 @@
-//! config.<site>: remote configuration, answered 404 until signing exists. It takes the place of
-//! that host of the F# `ninjacat-api intake`, with the same environment.
+//! config.<site>: remote configuration, answered 404 until signing exists.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::config;

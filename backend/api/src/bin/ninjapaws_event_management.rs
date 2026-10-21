@@ -1,5 +1,4 @@
-//! event-management-intake.<site>: notable events. It takes the place of that host of the F#
-//! `ninjacat-api intake`, with the same environment.
+//! event-management-intake.<site>: notable events.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::evp;

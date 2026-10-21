@@ -1,6 +1,6 @@
 //! NinjaCat's own vital signs, stored as ordinary metrics so they can be graphed and alerted on
 //! like any other: the process (`ninjacat.node.*`), each table's writer (`ninjacat.storage.*`) and
-//! the monitors' readings (`ninjacat.monitor.*`). (F#: `Platform/SelfMonitor.fs`.)
+//! the monitors' readings (`ninjacat.monitor.*`).
 //!
 //! The process is read from /proc, so on another system its points are left out. A Rust process
 //! has no garbage collector, so the .NET points of one (gc.cycles, cpu.gc_time, memory.alloc,

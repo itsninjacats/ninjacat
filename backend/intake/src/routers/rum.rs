@@ -109,7 +109,7 @@ pub fn cors(allowed_origins: &[String]) -> CorsPlugin {
 }
 
 /// The reverse proxies whose X-Forwarded-For is believed (NINJACAT_TRUSTED_PROXIES): addresses or
-/// networks (`10.0.0.0/8`), comma-separated. The loopback is trusted as well, as ASP.NET does.
+/// networks (`10.0.0.0/8`), comma-separated. The loopback is trusted as well.
 pub fn trusted_proxies(raw: &str) -> Result<IpAddrConfig, String> {
     let mut trusted =
         IpAddrConfig::new().trust_network("127.0.0.0/8".parse().unwrap()).trust("::1".parse::<IpAddr>().unwrap());

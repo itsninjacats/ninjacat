@@ -1,4 +1,4 @@
-//! Datadog's v2 query API as it is on the wire. (F#: `Api/V2/Wire.fs`.)
+//! Datadog's v2 query API as it is on the wire.
 //!
 //! Every type is named after its schema in Datadog's OpenAPI spec (datadog-api-client,
 //! `.generator/schemas/v2/openapi.yaml`), so one grep finds it there and in every generated

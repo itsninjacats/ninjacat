@@ -1,5 +1,4 @@
-//! sds-intake.<site>: Sensitive Data Scanner results. It takes the place of that host of the F#
-//! `ninjacat-api intake`, with the same environment.
+//! sds-intake.<site>: Sensitive Data Scanner results.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::security;

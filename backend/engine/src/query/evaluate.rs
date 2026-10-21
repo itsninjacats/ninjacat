@@ -1,4 +1,4 @@
-//! Evaluates a formula's `Node` over the series its queries returned. (F#: `Query/Evaluate.fs`.)
+//! Evaluates a formula's `Node` over the series its queries returned.
 //!
 //! Functions run after time and space aggregation, on the series the response will show. A value
 //! a function cannot produce becomes a gap: absent from the series, null in the response.

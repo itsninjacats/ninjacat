@@ -1,4 +1,4 @@
-//! Tests of routers/profiling.rs beyond the golden fixtures, ported from the F# ProfilingTests.
+//! Tests of routers/profiling.rs beyond the golden fixtures.
 
 use std::collections::BTreeMap;
 use std::io::Write;
@@ -364,8 +364,7 @@ const PPROF_VERDICTS: &[(&str, &str, &str)] = &[
         "SABIBjIAMgNjcHUyC25hbm9zZWNvbmRzMgltYWluLm1haW4yB21haW4uZ28=",
         "types= units= samples=0 time=6 duration=0 period=/:0 mappings=0 locations=0 functions=0",
     ),
-    // A known field in another wire type: prost refuses it, as Go's library did. The F# server's
-    // protobuf library skipped it as an unknown field.
+    // A known field in another wire type: prost refuses it, as Go's library did.
     ("field of the wrong wire type", "SgFBMgAyA2NwdTILbmFub3NlY29uZHMyCW1haW4ubWFpbjIHbWFpbi5nbw==", "rejected"),
     ("unknown field of any type", "mgYBQZAGB7UGAQIDBDIAMgNjcHUyC25hbm9zZWNvbmRzMgltYWluLm1haW4yB21haW4uZ28=", EMPTY),
     // protobuf: a group is skipped like any unknown field. Go's library refused it.
@@ -387,7 +386,7 @@ const PPROF_VERDICTS: &[(&str, &str, &str)] = &[
     ),
     ("varint of eleven bytes", "YAFg/////////////wEyADIDY3B1MgtuYW5vc2Vjb25kczIJbWFpbi5tYWluMgdtYWluLmdv", "rejected"),
     // Ten bytes whose last one carries more than the 64th bit: prost refuses it as Go's library
-    // did. The F# server's library dropped the extra bits and read -1.
+    // did.
     ("varint of ten bytes", "YP///////////38yADIDY3B1MgtuYW5vc2Vjb25kczIJbWFpbi5tYWluMgdtYWluLmdv", "rejected"),
     ("length past the end", "MgAyA2NwdTILbmFub3NlY29uZHMyCW1haW4ubWFpbjIHbWFpbi5nbzIJYQ==", "rejected"),
     (
@@ -541,7 +540,7 @@ fn a_profile_event_with_broken_text_is_still_read() {
     assert_eq!(row.event.0, event);
 }
 
-/// The shared reader nests 128 deep (the F# one 512): an event inside that is still read.
+/// The JSON reader nests 128 deep: an event inside that is still read.
 #[test]
 fn json_nested_deeply_is_still_read() {
     let deep = format!("{}{}", "[".repeat(100), "]".repeat(100));
@@ -823,9 +822,8 @@ async fn a_repeated_part_name_keeps_the_last_part() {
     assert_eq!(rows[0]["attach_bytes"], serde_json::json!(["second"]));
 }
 
-/// The notes say why a body is not multipart. Three content types the F# server called "not a
-/// media type" (`a/b/c`, `a b`, `multipart/`) are read by the shared reader as media types it does
-/// not take for multipart, and are not listed.
+/// The notes say why a body is not multipart. `a/b/c`, `a b` and `multipart/` read as media types
+/// that are not multipart, and are not listed.
 #[tokio::test]
 async fn a_profile_that_is_not_multipart_is_kept_raw_with_the_reason() {
     let cases = [

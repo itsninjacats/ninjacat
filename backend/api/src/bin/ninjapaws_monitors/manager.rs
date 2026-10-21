@@ -1,6 +1,6 @@
 //! Keeps the entities of the shards this replica holds in step with Postgres; it holds nothing the
 //! table does not, so a new owner starts from the table alone. Every replica runs one, for its own
-//! shards. (F#: `Monitors/Manager.fs`, with the region of `Cluster.fs`.)
+//! shards.
 
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;

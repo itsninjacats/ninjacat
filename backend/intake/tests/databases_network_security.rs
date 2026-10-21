@@ -466,7 +466,7 @@ async fn bytes_that_are_not_a_scanner_result_are_kept_raw_the_note_saying_what_w
     for (body, reason, note) in [
         ("08010802", "unexpected_shape", "not an SdsResultPayload: no resource and no results; 1:varintx2"),
         // A known field in another wire type (2, the timestamp, as bytes): prost refuses the
-        // message, where the F# server's protobuf library skipped the field and found it blank.
+        // message.
         (
             "0801080212036162631a00",
             "decode_error",

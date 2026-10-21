@@ -1,5 +1,5 @@
 //! Shard ownership through advisory locks on the dev Postgres, each test under a lock class and an
-//! application name of its own (F#: the cluster's tests in `ClusterTests.fs`). The manager is a
+//! application name of its own. The manager is a
 //! fake that notes what it was ordered; Postgres's `pg_locks` says who holds what.
 
 use std::collections::{BTreeMap, BTreeSet};

@@ -959,8 +959,8 @@ mod tests {
         assert_eq!(issue.resolved_at, None);
     }
 
-    /// pbjson refuses an enum number the schema does not have; the F# server's parser kept the
-    /// number, and stored it as the severity's name.
+    /// pbjson refuses an enum number the schema does not have, so the report is kept raw rather
+    /// than stored with the number as the severity's name.
     #[test]
     fn a_severity_the_schema_does_not_have_refuses_the_report() {
         assert!(decode_health_report(br#"{"issues": {"b": {"severity": 7}}}"#).is_err());

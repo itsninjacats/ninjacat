@@ -1,5 +1,5 @@
 //! The groups an entity starts from, read back from transitions and evaluations stored through the
-//! real writes, in a scratch database (F#: `StoreTests.fs`).
+//! real writes, in a scratch database.
 
 use ninjapaws_engine::monitor::evaluate::Period;
 use ninjapaws_engine::monitor::state::{Reason, Status, Transition};

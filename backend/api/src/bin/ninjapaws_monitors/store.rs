@@ -1,5 +1,4 @@
-//! What a monitor stored in ClickHouse: the groups it starts from, and the rows it writes. (F#:
-//! `Monitors/Store.fs`.)
+//! What a monitor stored in ClickHouse: the groups it starts from, and the rows it writes.
 
 use std::collections::BTreeMap;
 

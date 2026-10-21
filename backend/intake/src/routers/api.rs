@@ -1124,7 +1124,7 @@ pub async fn handle_metadata(ctx: Ctx, body: Bytes) -> Response {
 /// the process.
 pub async fn handle_opm_validate(ctx: Ctx, _: Bytes) -> Response {
     let digest = Sha256::digest(format!("ninjacat-org:{}", ctx.tenant()).as_bytes());
-    // The bytes as .NET's Guid read them, mixed-endian, as the F# server answered.
+    // The bytes read mixed-endian, as .NET's Guid did: the agents already hold this id.
     let id = Uuid::from_bytes_le(digest[..16].try_into().unwrap());
     json(StatusCode::OK, &json!({ "data": { "id": id.to_string() } }))
 }

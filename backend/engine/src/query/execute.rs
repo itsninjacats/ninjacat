@@ -1,4 +1,4 @@
-//! Runs a plan: every query it needs, in parallel, then the response. (F#: `Query/Execute.fs`.)
+//! Runs a plan: every query it needs, in parallel, then the response.
 //!
 //! The engine never sees ClickHouse. It is handed an `Executor`, which runs SQL and returns rows;
 //! the server's is backed by the driver, a test's by a list.

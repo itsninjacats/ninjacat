@@ -173,8 +173,8 @@ pub struct SbomEntity {
     /// error and bom are the two arms of the wire's oneof.
     pub error: String,
     pub bom: String,
-    /// The F# server's backstop for a BOM it could not write as JSON, as base64 protobuf;
-    /// json::proto writes every message, so it stays "".
+    /// A BOM that could not be written as JSON, as base64 protobuf; json::proto writes every
+    /// message, so it stays "" in new rows.
     pub bom_raw: String,
     pub component_count: u32,
     pub vulnerability_count: u32,

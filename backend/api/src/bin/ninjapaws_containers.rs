@@ -1,6 +1,5 @@
 //! contlcycle-intake.<site> and contimage-intake.<site>: container lifecycle events and the image
-//! inventory. It takes the place of those hosts of the F# `ninjacat-api intake`, with the same
-//! environment.
+//! inventory.
 
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::routers::containers;
