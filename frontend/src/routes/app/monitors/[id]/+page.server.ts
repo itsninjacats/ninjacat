@@ -6,6 +6,7 @@ import { db } from '$lib/server/db';
 import { formText } from '$lib/server/form';
 import { deleteMonitor, findMonitor, monitorId } from '$lib/server/monitors';
 import {
+	fetchCheckRuns,
 	fetchMonitorEvaluations,
 	fetchMonitorGroups,
 	fetchMonitorTransitions,
@@ -66,15 +67,21 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 	const { from, to } = fixed ?? { from: now - RANGE_MS[range], to: now };
 	const window = { from: new Date(from).toISOString(), to: new Date(to).toISOString() };
 
+	const isCheck = found.type === 'service check';
+
 	// Each part is shown on its own, so one that fails leaves the others.
-	const [groups, transitions] = await Promise.allSettled([
+	const [groups, transitions, runs] = await Promise.allSettled([
 		fetchMonitorGroups(found.id),
-		fetchMonitorTransitions(found.id, window)
+		fetchMonitorTransitions(found.id, window),
+		isCheck ? fetchCheckRuns(found.query, window) : null
 	]);
+	// A check's runs say more than its values, which are only its worst status.
 	const [evaluations] = await Promise.allSettled([
-		evaluationsOf(found.id, window, groups.status === 'fulfilled' ? groups.value : null)
+		isCheck
+			? null
+			: evaluationsOf(found.id, window, groups.status === 'fulfilled' ? groups.value : null)
 	]);
-	const failed = [groups, transitions, evaluations].find((r) => r.status === 'rejected');
+	const failed = [groups, transitions, runs, evaluations].find((r) => r.status === 'rejected');
 
 	// Without the editor's view the thresholds are still in the options, but
 	// which side alerts is only in the query.
@@ -91,10 +98,11 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 			priority: found.priority,
 			createdAt: found.createdAt.toISOString(),
 			updatedAt: found.updatedAt.toISOString(),
-			method: editorMethod(found.editor)
+			method: editorMethod(found.editor) ?? (isCheck ? 'check' : null),
+			isCheck
 		},
 		thresholds: {
-			comparator: view ? effectiveComparator(view) : null,
+			comparator: view && !isCheck ? effectiveComparator(view) : null,
 			critical: numberOrNull(thresholds.critical),
 			warning: numberOrNull(thresholds.warning),
 			criticalRecovery: numberOrNull(thresholds.critical_recovery),
@@ -106,6 +114,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		groups: groups.status === 'fulfilled' ? groups.value : null,
 		transitions: transitions.status === 'fulfilled' ? transitions.value : null,
 		evaluations: evaluations.status === 'fulfilled' ? evaluations.value : null,
+		runs: runs.status === 'fulfilled' ? runs.value : null,
 		readError: failed?.status === 'rejected' ? reasonOf(failed.reason) : null
 	};
 };

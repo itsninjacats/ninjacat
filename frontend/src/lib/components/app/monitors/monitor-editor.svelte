@@ -27,9 +27,11 @@
 		alertZone,
 		chartRangeSeconds,
 		chartRequest,
+		defaultCheckLast,
 		effectiveComparator,
 		groupKeysOf,
 		switchMethod,
+		uniqueTrimmed,
 		type Method,
 		type MonitorView
 	} from '$lib/monitors/definition';
@@ -40,6 +42,7 @@
 	let {
 		initial,
 		metrics,
+		checks,
 		tenantId,
 		submitLabel,
 		cancelHref,
@@ -47,6 +50,7 @@
 	}: {
 		initial: MonitorView;
 		metrics: string[];
+		checks: string[];
 		// The tenant the page was shown for; the save is refused for another.
 		tenantId: string;
 		submitLabel: string;
@@ -62,7 +66,8 @@
 		change: m.monitor_method_change_hint,
 		anomaly: m.monitor_method_anomaly_hint,
 		outlier: m.monitor_method_outlier_hint,
-		forecast: m.monitor_method_forecast_hint
+		forecast: m.monitor_method_forecast_hint,
+		check: m.monitor_method_check_hint
 	};
 	// Evaluation of these lands later; they are saved and checked now.
 	const notEvaluatedYet: Method[] = ['anomaly', 'outlier', 'forecast'];
@@ -202,9 +207,14 @@
 
 	let tagInput = $state('');
 
+	// Typed as text, so a comma being typed is not taken away.
+	const commaList = (text: string) => uniqueTrimmed(text.split(','));
+	let overText = $state(untrack(() => view.check.over.join(', ')));
+	let byText = $state(untrack(() => view.check.by.join(', ')));
+
 	function addTags() {
-		for (const tag of tagInput.split(',').map((t) => t.trim())) {
-			if (tag && !view.tags.includes(tag)) view.tags.push(tag);
+		for (const tag of commaList(tagInput)) {
+			if (!view.tags.includes(tag)) view.tags.push(tag);
 		}
 		tagInput = '';
 	}
@@ -246,7 +256,7 @@
 			<Card.Title class="text-base">1. {m.monitor_step_method()}</Card.Title>
 		</Card.Header>
 		<Card.Content class="@container space-y-3">
-			<div class="grid grid-cols-1 gap-2 @md:grid-cols-2 @4xl:grid-cols-5" role="group">
+			<div class="grid grid-cols-1 gap-2 @md:grid-cols-2 @3xl:grid-cols-3" role="group">
 				{#each METHODS as method (method)}
 					<button
 						type="button"
@@ -266,137 +276,211 @@
 		</Card.Content>
 	</Card.Root>
 
-	<!-- 2. the metric -->
-	<Card.Root class="overflow-visible">
-		<Card.Header>
-			<Card.Title class="text-base">2. {m.monitor_step_metric()}</Card.Title>
-			<Card.Description>
-				{#if groupKeys.length > 0}
-					{m.monitor_multi_alert({ keys: groupKeys.join(', ') })}
-				{:else}
-					{m.monitor_simple_alert()}
-				{/if}
-			</Card.Description>
-		</Card.Header>
-		<Card.Content class="space-y-4">
-			<div class="flex flex-wrap items-center justify-end gap-1">
-				{#if zoom}
-					<RangeLabel range={zoom} />
-				{/if}
-				{#each RANGES as r (r.seconds)}
-					<Button
-						size="sm"
-						variant={!zoom && rangeSeconds === r.seconds ? 'default' : 'ghost'}
-						onclick={() => {
-							chosenRange = r.seconds;
-							zoom = null;
-						}}
-					>
-						{r.label}
-					</Button>
-				{/each}
-				<Button
-					size="sm"
-					variant="ghost"
-					onclick={() => refreshes++}
-					aria-label={m.monitor_chart_refresh()}
-					title={m.monitor_chart_refresh()}
-				>
-					<RefreshIcon class="size-4 {loading ? 'animate-spin' : ''}" />
-				</Button>
-			</div>
-
-			{#if chartProblems.length > 0}
-				<ul
-					class="space-y-1 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 font-mono text-xs wrap-anywhere"
-				>
-					{#each chartProblems as p, i (i)}
-						<li>{p}</li>
-					{/each}
-				</ul>
-			{/if}
-
-			{#if loading && lines.length === 0}
-				<Skeleton class="h-[320px] w-full" />
-			{:else if lines.length === 0}
-				<div
-					class="flex h-[320px] items-center justify-center rounded-md border border-dashed px-4 text-center text-sm text-muted-foreground"
-				>
-					{request.formulas.length === 0 ? m.monitor_chart_pick_metric() : m.monitor_chart_empty()}
-				</div>
-			{:else}
-				<MetricsChart
-					{lines}
-					window={shownWindow}
-					display="line"
-					{rules}
-					{zone}
-					onzoom={(from, to) => (zoom = { from, to })}
-					onreset={zoom ? () => (zoom = null) : undefined}
-				/>
-			{/if}
-
-			<div class="space-y-2">
-				{#each view.queries as query, i (query.name)}
-					<QueryRow
-						bind:query={view.queries[i]}
-						color={seriesColor(i)}
-						{metrics}
-						onremove={view.queries.length > 1 ? () => view.queries.splice(i, 1) : undefined}
-						chartControls={false}
-					/>
-				{/each}
-
-				{#each view.formulas as formula, i (i)}
-					<div
-						class="flex flex-wrap items-center gap-2 rounded-md border border-dashed px-2 py-1.5"
-					>
-						<span
-							class="inline-flex size-6 shrink-0 items-center justify-center rounded bg-muted font-mono text-xs italic"
-						>
-							ƒ
-						</span>
+	<!-- 2. the check -->
+	{#if view.method === 'check'}
+		<Card.Root>
+			<Card.Header>
+				<Card.Title class="text-base">2. {m.monitor_step_check()}</Card.Title>
+				<Card.Description>
+					{#if groupKeys.length > 0}
+						{m.monitor_multi_alert({ keys: groupKeys.join(', ') })}
+					{:else}
+						{m.monitor_simple_alert()}
+					{/if}
+				</Card.Description>
+			</Card.Header>
+			<Card.Content class="@container">
+				<div class="grid grid-cols-1 gap-4 @xl:grid-cols-2">
+					<div class="space-y-1">
+						<Label for="monitor-check-name">{m.monitor_check_name()}</Label>
 						<Input
-							bind:value={formula.text}
-							placeholder="a / b * 100"
-							aria-label={m.monitor_formula()}
-							class="h-8 min-w-0 grow basis-60 font-mono text-xs md:text-xs"
+							id="monitor-check-name"
+							bind:value={view.check.name}
+							list="monitor-check-names"
+							placeholder="postgres.can_connect"
+							class="h-8 font-mono text-xs md:text-xs"
 							spellcheck={false}
 						/>
-						<FunctionChips bind:functions={formula.functions} allowModifiers={false} />
-						<button
-							type="button"
-							class="ml-auto inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-destructive"
-							onclick={() => view.formulas.splice(i, 1)}
-							aria-label={m.monitor_formula_remove()}
-						>
-							<XIcon class="size-4" />
-						</button>
+						<datalist id="monitor-check-names">
+							{#each checks as name (name)}
+								<option value={name}></option>
+							{/each}
+						</datalist>
+						<p class="text-xs text-muted-foreground">{m.monitor_check_name_hint()}</p>
 					</div>
-				{/each}
-
-				<div class="flex flex-wrap items-center gap-2 pt-1">
-					<Button size="sm" variant="outline" onclick={addQuery}>
-						<PlusIcon class="size-4" />
-						{m.monitor_add_query()}
-					</Button>
-					{#if view.formulas.length === 0}
+					<div class="space-y-1">
+						<Label for="monitor-check-last">{m.monitor_check_last()}</Label>
+						<NumberInput
+							id="monitor-check-last"
+							bind:value={view.check.last}
+							min="1"
+							max="100"
+							placeholder={String(defaultCheckLast(view))}
+						/>
+						<p class="text-xs text-muted-foreground">{m.monitor_check_last_hint()}</p>
+					</div>
+					<div class="space-y-1">
+						<Label for="monitor-check-over">{m.monitor_check_over()}</Label>
+						<Input
+							id="monitor-check-over"
+							bind:value={overText}
+							oninput={() => (view.check.over = commaList(overText))}
+							placeholder="env:prod, role:db"
+							class="h-8 font-mono text-xs md:text-xs"
+							spellcheck={false}
+						/>
+						<p class="text-xs text-muted-foreground">{m.monitor_check_over_hint()}</p>
+					</div>
+					<div class="space-y-1">
+						<Label for="monitor-check-by">{m.monitor_check_by()}</Label>
+						<Input
+							id="monitor-check-by"
+							bind:value={byText}
+							oninput={() => (view.check.by = commaList(byText))}
+							placeholder="host, kube_namespace"
+							class="h-8 font-mono text-xs md:text-xs"
+							spellcheck={false}
+						/>
+						<p class="text-xs text-muted-foreground">{m.monitor_check_by_hint()}</p>
+					</div>
+				</div>
+			</Card.Content>
+		</Card.Root>
+	{:else}
+		<!-- 2. the metric -->
+		<Card.Root class="overflow-visible">
+			<Card.Header>
+				<Card.Title class="text-base">2. {m.monitor_step_metric()}</Card.Title>
+				<Card.Description>
+					{#if groupKeys.length > 0}
+						{m.monitor_multi_alert({ keys: groupKeys.join(', ') })}
+					{:else}
+						{m.monitor_simple_alert()}
+					{/if}
+				</Card.Description>
+			</Card.Header>
+			<Card.Content class="space-y-4">
+				<div class="flex flex-wrap items-center justify-end gap-1">
+					{#if zoom}
+						<RangeLabel range={zoom} />
+					{/if}
+					{#each RANGES as r (r.seconds)}
 						<Button
 							size="sm"
-							variant="outline"
-							onclick={() => view.formulas.push(emptyFormula(view.queries[0].name))}
+							variant={!zoom && rangeSeconds === r.seconds ? 'default' : 'ghost'}
+							onclick={() => {
+								chosenRange = r.seconds;
+								zoom = null;
+							}}
 						>
-							<PlusIcon class="size-4" />
-							{m.monitor_add_formula()}
+							{r.label}
 						</Button>
-					{/if}
-					<span class="text-xs text-muted-foreground">
-						{view.formulas.length > 0 ? m.monitor_formula_hint() : m.monitor_query_hint()}
-					</span>
+					{/each}
+					<Button
+						size="sm"
+						variant="ghost"
+						onclick={() => refreshes++}
+						aria-label={m.monitor_chart_refresh()}
+						title={m.monitor_chart_refresh()}
+					>
+						<RefreshIcon class="size-4 {loading ? 'animate-spin' : ''}" />
+					</Button>
 				</div>
-			</div>
-		</Card.Content>
-	</Card.Root>
+
+				{#if chartProblems.length > 0}
+					<ul
+						class="space-y-1 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 font-mono text-xs wrap-anywhere"
+					>
+						{#each chartProblems as p, i (i)}
+							<li>{p}</li>
+						{/each}
+					</ul>
+				{/if}
+
+				{#if loading && lines.length === 0}
+					<Skeleton class="h-[320px] w-full" />
+				{:else if lines.length === 0}
+					<div
+						class="flex h-[320px] items-center justify-center rounded-md border border-dashed px-4 text-center text-sm text-muted-foreground"
+					>
+						{request.formulas.length === 0
+							? m.monitor_chart_pick_metric()
+							: m.monitor_chart_empty()}
+					</div>
+				{:else}
+					<MetricsChart
+						{lines}
+						window={shownWindow}
+						display="line"
+						{rules}
+						{zone}
+						onzoom={(from, to) => (zoom = { from, to })}
+						onreset={zoom ? () => (zoom = null) : undefined}
+					/>
+				{/if}
+
+				<div class="space-y-2">
+					{#each view.queries as query, i (query.name)}
+						<QueryRow
+							bind:query={view.queries[i]}
+							color={seriesColor(i)}
+							{metrics}
+							onremove={view.queries.length > 1 ? () => view.queries.splice(i, 1) : undefined}
+							chartControls={false}
+						/>
+					{/each}
+
+					{#each view.formulas as formula, i (i)}
+						<div
+							class="flex flex-wrap items-center gap-2 rounded-md border border-dashed px-2 py-1.5"
+						>
+							<span
+								class="inline-flex size-6 shrink-0 items-center justify-center rounded bg-muted font-mono text-xs italic"
+							>
+								ƒ
+							</span>
+							<Input
+								bind:value={formula.text}
+								placeholder="a / b * 100"
+								aria-label={m.monitor_formula()}
+								class="h-8 min-w-0 grow basis-60 font-mono text-xs md:text-xs"
+								spellcheck={false}
+							/>
+							<FunctionChips bind:functions={formula.functions} allowModifiers={false} />
+							<button
+								type="button"
+								class="ml-auto inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-destructive"
+								onclick={() => view.formulas.splice(i, 1)}
+								aria-label={m.monitor_formula_remove()}
+							>
+								<XIcon class="size-4" />
+							</button>
+						</div>
+					{/each}
+
+					<div class="flex flex-wrap items-center gap-2 pt-1">
+						<Button size="sm" variant="outline" onclick={addQuery}>
+							<PlusIcon class="size-4" />
+							{m.monitor_add_query()}
+						</Button>
+						{#if view.formulas.length === 0}
+							<Button
+								size="sm"
+								variant="outline"
+								onclick={() => view.formulas.push(emptyFormula(view.queries[0].name))}
+							>
+								<PlusIcon class="size-4" />
+								{m.monitor_add_formula()}
+							</Button>
+						{/if}
+						<span class="text-xs text-muted-foreground">
+							{view.formulas.length > 0 ? m.monitor_formula_hint() : m.monitor_query_hint()}
+						</span>
+					</div>
+				</div>
+			</Card.Content>
+		</Card.Root>
+	{/if}
 
 	<!-- 3. alert conditions -->
 	<Card.Root>

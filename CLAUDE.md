@@ -4,11 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-NinjaCat is an open-source, drop-in replacement for Datadog: it speaks the Datadog Agent's
-wire protocol, so an existing agent can be pointed at it by changing `DD_SITE`/`DD_*_DD_URL`
-and nothing else. Telemetry lands in ClickHouse; the panel is a SvelteKit app.
+NinjaCat is an open-source, self-hosted observability backend that accepts what the Datadog
+Agent sends: it speaks the agent's wire protocol, so an existing agent can be pointed at it by
+changing `DD_SITE`/`DD_*_DD_URL` and nothing else. Telemetry lands in ClickHouse; the panel
+is a SvelteKit app.
 
 Licence: **AGPL-3.0** (`LICENSE` at the root). The repo is public.
+
+**Naming Datadog.** Name it only to say what NinjaCat is compatible with, the way LibreOffice
+names "Microsoft Office formats": the Datadog Agent, `datadog-agent`, `DD_*` variables,
+`X-Datadog-*` headers, the agent's protocol and query API. Never present NinjaCat as
+Datadog's replacement, alternative, clone or shim, never describe the panel as Datadog's
+("Datadog's monitors", "Datadog's colours"), and keep guesses about Datadog's motives,
+pricing or security out of the repo. Code taken from Datadog's open-source repositories keeps
+its copyright line and is listed in `backend/THIRD_PARTY_NOTICES.md`.
 
 ## Language policy
 
@@ -26,29 +35,31 @@ Message keys and the `en` values are authored first; `es`/`pl` follow.
 **Existing violations are migration debt, not precedent.** Large parts of the tree are still
 Polish and should be converted to English when touched, not extended:
 
-- `api/docs/**` and `experiments/goja-sandbox/README.md` — Polish prose.
+- `docs/protocol/**` and `experiments/goja-sandbox/README.md` — Polish prose.
 - `frontend/src/routes/+page.svelte` and `frontend/src/routes/app/+page.svelte` — Polish copy
   written into the markup rather than `messages/`, Polish identifiers (`etykieta`, `opis`,
   `tytul`) and comments.
 
 Renaming a route changes a URL — batch those deliberately.
 
-The F# server under `api/src/` is already English — match that register: comments explain
+The server under `backend/` is already English — match that register: comments explain
 *why* a decision was made, not what the line does, and there are few of them.
 
 ## Repository layout
 
 Independent units, no shared build:
 
-- `api/` — **the server**, in F# (.NET 10): two programs run as three processes. `intake`
-  takes what agents send and owns the ingest path and the ClickHouse migrations; `query`
-  serves the panel API and Datadog's query API; `ninjacat-monitors` evaluates the metric
-  monitors as an Akka.NET cluster. `api/README.md` is the detailed guide.
-  `api/docs/` holds the protocol notes. They were written beside the Go server this one
-  replaced (removed on 2026-10-02), so the Go files they name no longer exist.
+- `backend/` — **the server**, in Rust: one Cargo workspace, one image, one program per
+  intake host (34), `ninjapaws_internal` (the panel's API and Datadog's query API),
+  `ninjapaws_monitors` (evaluates the monitors) and `ninjapaws_migrate` (the ClickHouse
+  schema). `backend/README.md` is the detailed guide. It replaced an F# server (removed on
+  2026-10-21), which had replaced a Go one (removed on 2026-10-02).
+- `docs/protocol/` holds the protocol notes, written beside the Go server, so the Go and F#
+  files they name no longer exist.
 - `frontend/` — SvelteKit 5 panel + Postgres (Better Auth, Drizzle). Bun.
 - `helm/ninjacat` — the chart; `helm/ninjacat-operators` — CloudNativePG and Altinity's
   ClickHouse operator, its own release installed first when the chart makes its databases.
+- `dev/intake-routes.yml` — which program each intake host name goes to in the dev stack.
 - `experiments/goja-sandbox/` — a standalone spike on sandboxed user JS. Own module, not wired in.
 
 ## Commands
@@ -56,17 +67,19 @@ Independent units, no shared build:
 ### Everything at once (repo root)
 
 ```bash
-docker compose up                # full dev stack, hot reload
+docker compose up                # full dev stack
 docker compose up -d postgres clickhouse   # just the databases
-docker compose logs -f intake query monitors
+docker compose up --build        # after a change to backend/
+docker compose logs -f intake-api intake-logs internal monitors
 docker compose down -v           # also drops the volumes
 DD_API_KEY=<key> docker compose -f compose.yaml -f compose.lab.yaml up   # capture lab, see below
-NINJACAT_SELF_KEY=<key> docker compose -f compose.yaml -f compose.self.yaml up   # NinjaCat watching itself
 ```
 
-The dev stack bind-mounts both source trees and reloads on save: the server through
-`dotnet watch`, the panel through Vite. `migrate` is a one-shot service that applies the
-Drizzle migrations and exits, so a fresh clone comes up with a working schema.
+The dev stack builds the server's image unoptimised (`PROFILE=dev`) and runs every program from
+it; the panel reloads on save through Vite. `schema` is a one-shot service that applies the
+ClickHouse migrations, `migrate` one that applies the Drizzle migrations, so a fresh clone comes
+up with a working schema. Agents send to :8080, where Traefik sends each host name to its
+program (`dev/intake-routes.yml`), as the chart's Ingress does on a cluster.
 `compose.prod.yaml` builds the shipping images instead and takes its secrets from `.env`.
 
 **Migrations have two paths, and they are not interchangeable.** `drizzle-kit`
@@ -78,49 +91,44 @@ has two entrypoints: `node build` serves, `node migrate.js` migrates and exits. 
 is what lets Kubernetes run migrations as a pre-upgrade hook Job without shipping
 drizzle-kit anywhere near production.
 
-**The ClickHouse schema follows the same shape, owned by the server.** Migrations
-live embedded in the binary (`api/schema/migrations/*.sql`, tracked in a
-`schema_migrations` table with a checksum per file) and are applied when the intake
-process starts — a fresh ClickHouse needs no init scripts. `ninjacat-api migrate` does only that:
-apply and exit, for deployments with replicas > 1 where startup races are real — there,
-set `NINJACAT_AUTO_MIGRATE=false` and run the subcommand as a pre-upgrade Job, mirroring
-the frontend's.
+**The ClickHouse schema follows the same shape, owned by the server.** Migrations live embedded
+in the binaries (`backend/schema/migrations/*.sql`, tracked in a `schema_migrations` table with a
+checksum per file); `ninjapaws_migrate` applies them, sets the metrics retention and exits. No
+other program migrates: the chart runs it as a hook Job, compose as `schema`.
 
-**An applied migration is immutable.** Its checksum is in the ledger; an edit makes the
-server refuse to start. In the dev stack the migrations are embedded resources that
-`dotnet watch` rebuilds on, so treat a saved migration as already applied. Fix a mistake with the next
-migration, never by editing the file or the ledger. Both histories were squashed on
+**An applied migration is immutable.** Its checksum is in the ledger; an edit makes
+`ninjapaws_migrate` refuse to run. Treat a saved migration as already applied: fix a mistake with
+the next migration, never by editing the file or the ledger. Both histories were squashed on
 2026-10-13 (Drizzle into `0000`, ClickHouse into `0001_initial.sql`) before anyone ran
 NinjaCat; a database from before must be dropped.
 
-Ports: 8080 agent intake, 8081 panel and query API (internal; the dev stack publishes it
-on 127.0.0.1 only), 10516 logs over TCP, 5173 panel (dev), 5433 Postgres, 8123/9000 ClickHouse.
-The monitor service listens on 2552 (Akka remoting), 8558 (Akka.Management, Kubernetes
-only) and 8559 (health); the dev stack publishes none of them.
+Ports: 8080 agent intake (every intake program listens there; the dev stack's Traefik in front),
+8081 panel and query API (internal; the dev stack publishes it on 127.0.0.1 only), 10516 logs
+over TCP, 5173 panel (dev), 5433 Postgres, 8123/9000 ClickHouse. The monitor service serves its
+health on 8559, which the dev stack does not publish.
 
-Note the intake routes on the `Host` header, so `curl localhost:8080/ping` returns 404
-by design. Use `curl -H 'Host: api.ninjacat.local' localhost:8080/ping`.
+An intake program does not look at the `Host` header: `curl localhost:8080/ping` through the dev
+stack's Traefik needs one (`curl -H 'Host: api.ninjacat.local' localhost:8080/ping`), a program
+reached directly does not.
 
-### Server (`cd api`, .NET 10)
+### Server (`cd backend`, Rust)
 
 ```bash
-dotnet build
-dotnet test                      # xunit v3 on Microsoft.Testing.Platform (opted in via global.json)
-dotnet run --project src/Server -- intake   # :8080 (needs ClickHouse + DATABASE_URL)
-dotnet run --project src/Server -- query    # :8081
-dotnet run --project src/Server -- migrate
-dotnet run --project src/Monitors           # one monitor node, health on :8559 (stop the compose one first)
-cd tests/Intake.Tests && NINJACAT_GOLDEN_ROUTES=routeLogs dotnet test   # one route set's fixtures
+cargo build
+cargo test                       # ClickHouse and Postgres tests skip when the databases are down
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test -p ninjapaws-intake --test golden    # the golden fixtures
+cargo run --bin ninjapaws_api    # one intake program on :8080 (needs ClickHouse + DATABASE_URL)
+cargo run --bin ninjapaws_internal   # :8081
+cargo run --bin ninjapaws_migrate
+cargo run -p protogen            # regenerate proto/src/generated from proto/protos
 ```
 
-`src/Engine` must stay free of ASP.NET, Oxpecker, Akka and the ClickHouse driver — it compiles
-to `Sql` (text with `{name:Type}` placeholders + typed values) and the server executes it.
-Package versions are pinned only in `Directory.Packages.props`.
-The compose container builds into `NINJACAT_ARTIFACTS_PATH` (a volume), never into the
-bind-mounted `bin/`/`obj/`.
-
-`src/Proto` is generated C# from the agent's `.proto` files (`protos/README.md` lists their
-origin) — edit a schema or the project, never the output.
+`engine` must stay free of HTTP and the ClickHouse driver — it compiles to `Sql` (text with
+`{name:Type}` placeholders + typed values) and the programs execute it. `proto/src/generated` is
+generated from the agent's `.proto` files (`proto/protos/README.md` lists their origin) — edit a
+schema or protogen, never the output. Profiles: `dev` (no debug info for dependencies, no
+incremental cache), `release` (optimised, no LTO), `dist` (thin LTO; the image's default).
 
 ### Frontend (`cd frontend`, Bun)
 
@@ -149,172 +157,145 @@ Copy `.env.example` to `.env`: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ORIGIN`,
 
 ## Server architecture
 
-Two programs, `ninjacat-api` (`api/src/Server`) and `ninjacat-monitors` (`api/src/Monitors`),
-run as three processes, seven projects:
-
 ```
-src/Proto     agent protobuf schemas → generated C#
-src/Engine    query language → SQL text + typed parameters; the panel's queries;
-              Monitor/: what a monitor means (parse, validate, evaluate, the group state machine)
-src/Storage   rows, one writer per table, the sink, migrations
-src/Intake    host dispatch, route matching, auth, one router per Datadog product
-src/Platform  what every process shares: config, the ClickHouse and Postgres clients, self-monitoring
-src/Server    ninjacat-api: the two hosts, key keeper, logs over TCP
-src/Monitors  ninjacat-monitors: the actors, the reads of `monitor`, the monitor tables' writes and its self-monitoring
+backend/proto     agent protobuf schemas → generated Rust (prost, prost-reflect for JSON)
+backend/engine    query language → SQL text + typed parameters; the panel's queries;
+                  monitor/: what a monitor means (parse, validate, evaluate, the group state machine)
+backend/anomaly   anomaly, forecast and outlier algorithms
+backend/storage   rows, one writer per table, the sink, migrations
+backend/intake    what every intake host shares: keys, auth, bodies, JSON, raw_payloads, the
+                  server (server.rs); one router per Datadog product (routers/)
+backend/api       the programs: ninjapaws_<host>, ninjapaws_internal, ninjapaws_monitors,
+                  ninjapaws_migrate
 ```
 
-`ninjacat-api` is two processes, deliberately not one (`Program.fs` picks by the first
-argument; there is no mode that serves both ports):
+- **An intake program per host, :8080** (`NINJACAT_ADDR`) — reachable from agent machines; every
+  route but the probes asks for an API key. `backend/api/src/bin/ninjapaws_<host>.rs` names its router
+  and its key scheme and calls `server::run`. Every write of what agents send goes through the
+  table writers of its own process.
+- **`ninjapaws_internal`, :8081** (`NINJACAT_INTERNAL_ADDR`) — `/internal/*` for the panel and
+  Datadog's query API (`/api/v1/metrics`, `/api/v2/query/*`). It only reads. Every route but the
+  probes asks for the panel's JWT (`token.rs`); its `tenant` claim is the only source of the
+  tenant. `/internal/monitors/*` validates monitor definitions and reads what the monitor service
+  stored.
+- **`ninjapaws_monitors`** — reached only by its health probes (:8559). Replicas share the
+  monitors through Postgres advisory locks. Reads the panel's `monitor` table, evaluates through
+  `engine/monitor`, writes the `monitor_*` tables.
+- **`ninjapaws_migrate`** — the ClickHouse schema, then exits.
 
-- **`ninjacat-api intake`, :8080** (`NINJACAT_ADDR`, `IntakeHost.fs`) — reachable from agent
-  machines; every route asks for an API key. Owns the schema (the ClickHouse migrations)
-  and every write of what agents send: the table writers, the key keeper, logs over TCP.
-- **`ninjacat-api query`, :8081** (`NINJACAT_INTERNAL_ADDR`, `QueryHost.fs`) — `/internal/*`
-  for the panel and Datadog's query API (`/api/v1/metrics`, `/api/v2/query/*`). It only
-  reads. Every route but the probes asks for the panel's JWT (`Server/QueryToken.fs`); its
-  `tenant` claim is the only source of the tenant. `/internal/monitors/*` validates monitor
-  definitions and reads what the monitor service stored.
-- **`ninjacat-monitors`** (`src/Monitors`) — an Akka.NET cluster, reached only by its own
-  nodes and the health probes (:8559). Reads the panel's `monitor` table, evaluates through
-  `Engine/Monitor`, writes the `monitor_*` tables; the intake creates them.
-
-All three share ClickHouse and Postgres and nothing else. The panel tells the
-intake that a key changed through Postgres (`NOTIFY ninjacat_api_keys`), and the monitor
-service that a monitor changed (`pg_notify('ninjacat_monitors', …)` in the same transaction
-as the write), so neither has a port for the panel.
+All share ClickHouse and Postgres and nothing else. The panel tells the intake programs that a
+key changed through Postgres (`NOTIFY ninjacat_api_keys`), and the monitor service that a monitor
+changed (`pg_notify('ninjacat_monitors', …)` in the same transaction as the write), so none has a
+port for the panel.
 
 ### The rules that shape this code
 
-**Host-based routing mirrors Datadog.** `Intake/Routes.fs` dispatches on the `Host` header,
-because Datadog puts every product on its own hostname (`app.<site>`, `trace.agent.<site>`,
-`http-intake.logs.<site>`, ~40 more). The router cannot match the START of a host name, so
-`configure` there is a plain list of host prefixes, each given a router of its own. Unknown
-hosts are refused by name so a misconfigured `DD_SITE` fails loudly.
+**A host is a program.** Datadog puts every product on its own hostname (`app.<site>`,
+`trace.agent.<site>`, `http-intake.logs.<site>`, ~40 more); here each router is a program of its
+own, and whatever is in front (the chart's Ingress, the dev stack's Traefik) sends each host name
+to its program. A program does not look at the host it was sent to. The hosts of each program are
+listed three times, and the three must agree: `helm/ninjacat/values.yaml` (`intake.programs`),
+`dev/intake-routes.yml` and `host_process` in `intake/tests/golden.rs`.
 
-**Paths are the framework's.** Every path of the intake is an Oxpecker route in
-`Intake/Routes.fs`, matched by ASP.NET's router; there is no matcher of our own. Do not write
-one: where the framework's behaviour differs from the old Go server's (case, trailing
-slashes, 405), the framework's stands.
+**Paths are the framework's.** Every path is a tako route, registered through `Routes` in
+`intake/src/server.rs` (`post`, `get`, `head`); there is no matcher of our own. Where tako's
+behaviour differs from the old servers' (case, trailing slashes, 405), tako's stands.
 
-**Handlers are Oxpecker's own.** Each is `byte[] -> EndpointHandler`, bound with `bindBody`
-(`Intake/Http.fs`), which reads and decompresses the body the way Oxpecker's `bindJson` binds
-JSON. A handler reads the request from `HttpContext` (the few one-line accessors are in
-`Ctx`) and answers with Oxpecker's handlers (`setStatusCode`, `json`, `bytes`). There is no
-request or response type of our own; do not add one.
+**Handlers take the request and its body.** Each is `async fn(Ctx, Bytes) -> Response`: the
+route reads the body whole and undoes its Content-Encoding first. A handler reads the request
+from `Ctx` (`tenant`, `header`, `query`, `path`) and answers with `server::json`, `status`,
+`accepted`. There is no other request or response type; do not add one.
 
-**One helper of each kind.** JSON is parsed, read and written through `Json` in
-`Intake/Common.fs`; an object is read field by field with `JsonFields.Fields` (exact names,
-the last of a repeated name, null the same as absent, mismatches noted); JSON of a protobuf
-message goes through protobuf's own parser (`ProtoJson`). `Multipart.tryParts`,
-`Time.ofTimestamp`, `ProtoEnum.name`, `accepted` and `Ctx.write` (writes nothing without a
-tenant) are the others. A router does not grow a private copy of any of them, and
-`Raw.store` alone logs a kept payload.
+**One helper of each kind.** JSON is parsed, read and written through `intake/src/json.rs`
+(`json::raw` for the text a value was sent as, `json::proto` for protobuf as JSON); an object is
+read field by field with `fields::Fields` (exact names, the last of a repeated name, null the
+same as absent, mismatches noted). `body::try_parts`, `wire::time`, `wire::enum_name`,
+`server::accepted` and `Ctx::write` (writes nothing without a tenant) are the others. A router
+does not grow a private copy of any of them, and `raw::store` alone logs a kept payload.
 
-**The API key is ASP.NET authentication.** `Intake/Auth.fs` registers four schemes (where
-each looks for the key) over one `AuthenticationHandler`; a host asks for its scheme where it
-is mounted in `Routes.fs`, and the key's tenant is a claim on `ctx.User`. An unknown path is
-answered before any key is asked for.
+**Numbers and text are kept as sent.** serde_json runs with `arbitrary_precision` in the whole
+workspace, so a parsed number keeps its digits. Where a column holds a JSON value as it arrived,
+it holds the text that was sent (`json::raw`, RawValue), not a re-printed copy; the golden
+comparison compares JSON by meaning and would not notice, so such a column has a test of its own.
+
+**The API key is a route middleware.** `intake/src/auth.rs`: a `Scheme` says where a host's
+clients put the key; a known key goes on in the request's extensions (`Admitted`), anything else
+is a 403. An unknown path is answered before any key is asked for.
 
 **Writes are asynchronous, reads are not.** A handler turns the Datadog wire format into the
-plain records in `Storage/Rows/*.fs` and hands them to the sink — the agent gets its 202
-immediately. `Storage` knows nothing about HTTP or Datadog; that is what lets a second source
+plain rows in `storage/src/rows/*.rs` and hands them to the sink — the agent gets its 202
+immediately. `storage` knows nothing about HTTP or Datadog; that is what lets a second source
 (OTLP) be added without touching the write path.
 
 **One writer per table, never a pool.** Separate buffers stop a burst of logs from
 delaying metrics; a pool for the *same* table would shrink batches and recreate ClickHouse's
 "Too many parts" problem. A slow flush is handled by flushing in the background (up to
-`MaxInFlight`), not by adding writers. The rule holds per process: each monitor node has its
-own writers for `monitor_evaluations` and its self-monitoring `metrics`.
+`max_in_flight`), not by adding writers. The rule holds per process.
 
-**API key lookup takes no lock.** `Intake/ApiKeys.fs` publishes an immutable snapshot; the
-keeper (`Server/ApiKeysKeeper.fs`) alone replaces it, every 30s and when the panel asks.
+**API key lookup takes no lock.** `intake/src/keys.rs` publishes an immutable snapshot
+(ArcSwap); its keeper alone replaces it, every 30s and when the panel asks.
 
-**What cannot be decoded is kept, not dropped.** `Raw.store` puts the whole payload in
+**What cannot be decoded is kept, not dropped.** `raw::store` puts the whole payload in
 `raw_payloads` with a reason, so an unhandled endpoint loses nothing.
 
 **Multi-tenancy is in from day one.** `tenant_id` is the first `ORDER BY` column everywhere;
 it is cheap to carry and expensive to add later. A tenant is a Better Auth organization, and
-`tenant_id` is its `organization.id`. Writes: Postgres `api_key.tenant_id` →
-`ApiKeys.Key.TenantID` → the key's `tenant` claim → every ClickHouse row. Reads: the panel's
-`locals.tenant` → the `tenant` claim of the query token → a parameter bound into every query
-the Engine compiles. Monitors: `monitor.tenant_id` → the entity's key `<tenant>/<id>` →
-every statement it evaluates and every monitor row it writes. Nothing falls back to
-`default`: that tenant exists only because `create-user.ts` makes it with the first account,
-under that id, and self-monitoring writes there (`NINJACAT_SELFMON_TENANT`).
+`tenant_id` is its `organization.id`. Writes: Postgres `api_key.tenant_id` → the admitted
+`Key.tenant_id` → every ClickHouse row. Reads: the panel's `locals.tenant` → the `tenant` claim of
+the query token → a parameter bound into every query the engine compiles. Monitors:
+`monitor.tenant_id` → every statement it evaluates and every monitor row it writes. Nothing falls
+back to `default`: that tenant exists only because `create-user.ts` makes it with the first
+account, under that id, and self-monitoring writes there (`NINJACAT_SELFMON_TENANT`).
 
 **A read of raw `metrics` states the 15-minute bucket.** The table is sorted by tenant,
 metric, `toStartOfFifteenMinutes(timestamp)`, host and series, and ClickHouse does not derive
-the bucket from a condition on `timestamp`: a read without `Metrics.rawWindow`/`rawSince`
-reads every granule of its metric. The lifted tag columns (`Metrics.liftedTags`) exist only
-there; `metrics_1m` filters and groups on the `tags` map.
+the bucket from a condition on `timestamp`: a read without the bucket condition reads every
+granule of its metric. The lifted tag columns exist only there; `metrics_1m` filters and groups
+on the `tags` map.
 
-**Plain F#.** `match`, `if`, small named functions. No custom operators, no home-made DSLs
-or computation expressions.
+**Plain Rust.** `match`, `if`, small named functions. No macros of our own, no home-made DSLs.
 
 ### Tests
 
-`tests/Intake.Tests/Fixtures/go/` are **golden fixtures**: requests recorded from the Go
-server, each with its answer and the rows it stored. `GoldenTests.fs` replays every one
-against the F# intake, through an in-memory server (`Golden/Replay.fs`) so the real router is
-in the path, and compares field by field; `Fixtures/overrides.json` lists the
-accepted differences, each with a reason, and is not a place to hide a change in behaviour.
-A deliberate change to what a route stores means updating its fixture by hand and saying why
-in an `edited` key inside it. `ClickHouseRoundTripTests.fs` inserts every fixture's rows through the real
-sink into a scratch database built from the migrations (skipped when ClickHouse is not
-running).
+`backend/intake/tests/fixtures/go/` are **golden fixtures**: requests recorded from the Go
+server, each with its answer and the rows it stored. `intake/tests/golden.rs` replays every one
+through the router of the program that serves its host and compares field by field;
+`fixtures/overrides.json` lists the accepted differences, each with a reason, and is not a place
+to hide a change in behaviour (an ignore of `/sends` marks a deliberate one, pinned by a test of
+its own). A deliberate change to what a route stores means updating its fixture by hand and
+saying why in an `edited` key inside it. The second test of `golden.rs` inserts every fixture's
+rows through the real writers into a scratch database built from the migrations (skipped when
+ClickHouse is not running).
 
-`tests/Monitors.Tests` uses xunit's own `[Fact]`/`[Theory]`, not Akka's attributes; its
-database tests skip when the database is down.
-
-`Fixtures/real/` are payloads recorded from **real senders** against this server: the browser
+`fixtures/real/` are payloads recorded from **real senders** against this server: the browser
 SDK, the agent's DBM integrations (seven databases), its network checks, its data security
 check, system-probe. Where a decoder was written from Datadog's source alone, a real payload
 is the better authority — record one before trusting the reading (`lab/README.md`).
 
 ### Capture lab
 
-With `DEBUG=true` (the dev compose sets it) every intake request is dumped to
-`api/captures/` (gitignored) — decompressed, JSON pretty-printed, protobuf walked field by
-field, hexdump as fallback. This is how the protocol was reverse-engineered and remains the
-tool for the unhandled endpoints. `compose.lab.yaml` adds a real `datadog/agent:7` on an
-`internal: true` network, so nothing can reach Datadog regardless of agent flags; it needs
-a key created in the panel. `lab/` holds the single-purpose runs (one database with DBM, an
-SNMP device with traps and NetFlow, system-probe) and a kind cluster.
+With `DEBUG=true` every request an intake program gets is dumped to `NINJACAT_CAPTURE_DIR` —
+decompressed, JSON pretty-printed, protobuf walked field by field, hexdump as fallback. This is
+how the protocol was reverse-engineered and remains the tool for the unhandled endpoints.
+`compose.lab.yaml` adds a real `datadog/agent:7` on an `internal: true` network, so nothing can
+reach Datadog regardless of agent flags; it needs a key created in the panel. `lab/` holds the
+single-purpose runs (one database with DBM, an SNMP device with traps and NetFlow, system-probe)
+and a kind cluster.
 
 ### Environment
 
-Connections: `CLICKHOUSE_HTTP_ADDR` (default `localhost:8123` — HTTP, not the native port),
-`CLICKHOUSE_DB`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` (all default to `ninjacat`), and
-`DATABASE_URL` for Postgres. All are read in `Platform/Config.fs`.
+`backend/README.md` lists every variable. Connections: `CLICKHOUSE_HTTP_ADDR` (default
+`localhost:8123` — HTTP, not the native port), `CLICKHOUSE_DB`, `CLICKHOUSE_USER`,
+`CLICKHOUSE_PASSWORD` (all default to `ninjacat`), and `DATABASE_URL` for Postgres.
 
-Listeners: `NINJACAT_ADDR` (`:8080`), `NINJACAT_INTERNAL_ADDR` (`:8081`),
-`NINJACAT_LOGS_TCP_ADDR` (`:10516`, `off` to disable), `NINJACAT_TLS_CERT`/`NINJACAT_TLS_KEY`.
-
-Query token: `NINJACAT_QUERY_TOKEN_SECRET` (at least 32 bytes, required by `query`) is the
-key the panel signs its tokens with. It must differ from `BETTER_AUTH_SECRET`, so the query
-process cannot sign panel sessions. `api/README.md` shows how to mint a token for `curl`.
-
-Migrations: `NINJACAT_AUTO_MIGRATE=false` stops the server from applying the ClickHouse
-migrations at startup (use `ninjacat-api migrate` instead).
+Query token: `NINJACAT_QUERY_TOKEN_SECRET` (at least 32 bytes, required by
+`ninjapaws_internal`) is the key the panel signs its tokens with. It must differ from
+`BETTER_AUTH_SECRET`, so the query process cannot sign panel sessions.
 
 Retention: `NINJACAT_METRICS_RETENTION_DAYS` (30, `metrics`) and
-`NINJACAT_METRICS_ROLLUP_RETENTION_DAYS` (400, `metrics_1m` and `metric_tag_keys`), applied
-as TTLs by the migrating process; give `intake`, `migrate`, `query` and `ninjacat-monitors` the same values
-(`api/README.md`, "Metrics come from three tables").
-
-Limits: `NINJACAT_MAX_BODY_BYTES` (64 MiB) is the largest body the intake reads; a body may
-inflate to 64 MiB (`Body.maxInflatedBytes`).
-
-Proxies: `NINJACAT_TRUSTED_PROXIES` names the reverse proxies whose `X-Forwarded-For` is
-believed (ASP.NET's forwarded-headers middleware); `NINJACAT_RUM_ALLOWED_ORIGINS` narrows
-the CORS policy of browser-intake (ASP.NET's CORS middleware), any origin by default.
-
-Debugging: `DEBUG=true` (dumps), `NINJACAT_CAPTURE_DIR`, `NINJACAT_ACK_UNKNOWN` (202 instead
-of 404 on unknown paths), `NINJACAT_SELFMON_INTERVAL`/`_TENANT`/`_HOST`.
-
-Monitor service: the connection, retention and self-monitoring variables above, plus
-`NINJACAT_MONITOR_*` (concurrency, max groups, cluster address and discovery, health address),
-read in `Monitors/Settings.fs` and listed in `api/README.md`.
+`NINJACAT_METRICS_ROLLUP_RETENTION_DAYS` (400, `metrics_1m` and `metric_tag_keys`), applied as
+TTLs by `ninjapaws_migrate`; give it, `ninjapaws_internal` and `ninjapaws_monitors` the same
+values.
 
 ## Frontend architecture
 
@@ -363,14 +344,14 @@ HTTP path.
 
 ## Open work
 
-`TODO.md` at the root is the list: what is left of the move to one server, what the intake
-does not serve, what has never met a real sender, what is stored without being decoded.
-Tick an item there when it is done; add one when something is deferred.
+`TODO.md` at the root is the list: what the intake does not serve, what has never met a real
+sender, what is stored without being decoded. Tick an item there when it is done; add one when
+something is deferred.
 
 ## Docs worth reading before extending the intake
 
-`api/docs/spis-endpointow-datadoga.md` (full endpoint inventory),
+`docs/protocol/spis-endpointow-datadoga.md` (full endpoint inventory),
 `datadog-agent.md`, `konfiguracja-agenta.md`, `traces.md`, `ddsketch-agenta.md`.
-`api/docs/zadania/` holds scoped work items (RUM router, OTLP, remote-config TUF, query
+`docs/protocol/zadania/` holds scoped work items (RUM router, OTLP, remote-config TUF, query
 engine, missing API endpoints, …). These are still in Polish — translate as you touch them.
 `frontend/docs/auth-and-route-guard.md` documents the panel's sessions, tenants and guard.

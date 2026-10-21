@@ -17,11 +17,10 @@ spec:
     seccompProfile:
       type: RuntimeDefault
   containers:
-    # The intake answers only on a known Host, so send one.
+    # The intake program of api.<domainRoot>.
     - name: intake
       image: busybox:1.37
-      command: ["wget", "-qO-", "--header", "Host: api.{{ include "ninjacat.domainRoot" . }}",
-                "http://{{ include "ninjacat.fullname" . }}-intake:{{ .Values.intake.service.port }}/ping"]
+      command: ["wget", "-qO-", "http://{{ include "ninjacat.fullname" . }}-intake-api:{{ .Values.intake.service.port }}/ping"]
       securityContext:
         allowPrivilegeEscalation: false
         readOnlyRootFilesystem: true

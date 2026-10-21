@@ -1,7 +1,7 @@
 // Spike: uruchamianie skryptow uzytkownika w JS po stronie serwera.
 //
 // Pytanie, na ktore odpowiada ten program: jak dzialaja te "skrypty w JS"
-// w narzedziach typu Datadog on-call czy Workflow Automation - jak wstrzykuje
+// w narzedziach on-call i automatyzacji workflow - jak wstrzykuje
 // sie do nich dane i jak nie dac sie przy tym zabic.
 //
 // Dwie czesci:

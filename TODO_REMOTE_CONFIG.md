@@ -1,12 +1,12 @@
 # Remote Configuration
 
 The one channel where data flows **down**: the agent polls `config.<site>` and applies what
-comes back. Today `Routers/Config.fs` parses the poll, drops it and answers 404, so the agent
+comes back. Today `intake/src/routers/config.rs` parses the poll, drops it and answers 404, so the agent
 keeps the configuration it has. Nothing here is started.
 
 Sources: the agent's code at tag 7.84.0 (`pkg/config/remote`, `pkg/remoteconfig/state`), the
-schema in `api/src/Proto/protos/datadog-agent/datadog/remoteconfig/remoteconfig.proto`, and
-one experiment on agent 7.83.2 (`api/docs/zadania/remote-config-tuf.md`, which predates
+schema in `backend/proto/protos/datadog-agent/datadog/remoteconfig/remoteconfig.proto`, and
+one experiment on agent 7.83.2 (`docs/protocol/zadania/remote-config-tuf.md`, which predates
 the `.proto` files and is out of date where it says the exchange is unknown).
 
 ## What travels through it
@@ -69,7 +69,7 @@ poll carries every such client (service, env, version, the products it wants) in
 - [ ] **Store the poll.** No signing needed: which agents exist, their products, and every
       tracer client with service, env and version. Worth having on its own (it is the only
       place a tracer's presence is reported before it sends a span). A table, a decoder, a
-      real payload in `Fixtures/real/`.
+      real payload in `backend/intake/tests/fixtures/real/`.
 - [ ] **Answer `org` and `status`** truthfully: a stable UUID per tenant; `enabled` and
       `authorized` false until the rest exists.
 - [ ] **A signing service.** Our own roots for both repositories, the four roles each, keys

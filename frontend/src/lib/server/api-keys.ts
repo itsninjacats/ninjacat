@@ -20,7 +20,7 @@ export function keyPrefix(key: string): string {
 	return key.slice(0, 8);
 }
 
-// NOTIFY on the channel the intake listens on (api/src/Server/ApiKeysKeeper.fs).
+// NOTIFY on the channel the intake programs listen on (backend/intake/src/keys.rs).
 // Never throws: the key is stored, and the intake re-reads every 30s anyway.
 export async function refreshApiKeys(): Promise<boolean> {
 	try {

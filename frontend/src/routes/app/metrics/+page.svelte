@@ -256,7 +256,7 @@
 		<div class="min-w-0">
 			<h1 class="font-heading text-2xl font-semibold tracking-tight">Metrics</h1>
 			<p class="text-sm text-muted-foreground">
-				Datadog's query language: queries, formulas and functions, straight from ClickHouse.
+				Queries, formulas and functions, straight from ClickHouse.
 			</p>
 		</div>
 		<!-- The monitor editor starts from this view: its queries and first formula. -->

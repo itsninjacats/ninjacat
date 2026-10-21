@@ -3,10 +3,11 @@
 #   pull request      tests; images are built but not pushed
 #   push to main      tests; images pushed as `main` and `sha-<commit>`
 #   tag v1.2.3        tests; images pushed as `1.2.3`, `1.2` and `latest`
+#   run by hand       tests; images pushed as `<branch>` and `sha-<commit>`,
+#                     to deploy a branch before it is merged
 #
 # Images land at:
-#   ghcr.io/itsninjacats/ninjacat/api
-#   ghcr.io/itsninjacats/ninjacat/monitors
+#   ghcr.io/itsninjacats/ninjacat/server     every program of backend/
 #   ghcr.io/itsninjacats/ninjacat/frontend
 #
 # Built from ${{ github.repository }} rather than hardcoded, so a fork
@@ -23,6 +24,7 @@ on:
     tags: ['v*']
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   # A second push to the same branch makes the first run irrelevant. Tags are
@@ -35,17 +37,16 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  # Nothing in this build reports to anyone.
-  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
-  DOTNET_NOLOGO: '1'
+  CARGO_TERM_COLOR: always
 
 jobs:
-  api:
+  server:
     runs-on: ubuntu-latest
 
     services:
       # With it the round-trip tests insert every fixture's rows into a real
-      # ClickHouse; without it they are skipped.
+      # ClickHouse, and the query process's tests read it; without it they
+      # are skipped.
       clickhouse:
         image: clickhouse/clickhouse-server:26.8.6.5
         env:
@@ -61,8 +62,9 @@ jobs:
           --health-timeout 5s
           --health-retries 20
 
-      # For Monitors.Tests, which read `monitor` from the schema Drizzle migrates
-      # (skipped without it); the dev stack's address, the tests' default.
+      # For the monitor service's tests, which read `monitor` from the schema
+      # Drizzle migrates (skipped without it); the dev stack's address, the
+      # tests' default.
       postgres:
         image: postgres:18-alpine
         env:
@@ -82,25 +84,15 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+      # The runner's rustup, the toolchain the image builds with.
+      - name: Toolchain
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal --component clippy
+          rustup default 1.99.1
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          global-json-file: api/global.json
-
-      - name: Build
-        working-directory: api
-        run: dotnet build -warnaserror
-
-      - name: Engine tests
-        working-directory: api/tests/Engine.Tests
-        run: dotnet test --no-build
-
-      - name: Intake tests
-        working-directory: api/tests/Intake.Tests
-        run: dotnet test --no-build
-
-      - name: Query tests
-        working-directory: api/tests/Query.Tests
-        run: dotnet test --no-build
+          workspaces: backend
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
@@ -114,9 +106,13 @@ jobs:
           bun install --frozen-lockfile
           bun scripts/migrate.ts
 
-      - name: Monitors tests
-        working-directory: api/tests/Monitors.Tests
-        run: dotnet test --no-build
+      - name: Clippy
+        working-directory: backend
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: Tests
+        working-directory: backend
+        run: cargo test --locked --workspace
 
   frontend:
     runs-on: ubuntu-latest
@@ -197,14 +193,12 @@ jobs:
           fi
 
   images:
-    # All three images or none, and only from a tree whose tests pass.
-    needs: [api, frontend, chart]
+    # Both images or none, and only from a tree whose tests pass.
+    needs: [server, frontend, chart]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    env:
-      VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '0.0.0' }}
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -226,21 +220,10 @@ jobs:
 
       # `latest` is the newest release and nothing else: the action adds it to
       # a version tag by itself, and main is published as `main`.
-      - id: meta-api
+      - id: meta-server
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}/api
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=long
-
-      - id: meta-monitors
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}/monitors
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/server
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -263,27 +246,15 @@ jobs:
       # amd64 only, deliberately: an arm64 image built under QEMU emulation
       # turns a two-minute build into twenty. Add linux/arm64 when something
       # needs it.
-      - name: Build api
+      # The `dist` profile: link-time optimisation across every crate.
+      - name: Build server
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
-          context: ./api
-          target: api
-          build-args: VERSION=${{ env.VERSION }}
+          context: ./backend
           push: false
           platforms: linux/amd64
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,mode=max,scope=api
-
-      - name: Build monitors
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: ./api
-          target: monitors
-          build-args: VERSION=${{ env.VERSION }}
-          push: false
-          platforms: linux/amd64
-          cache-from: type=gha,scope=monitors
-          cache-to: type=gha,mode=max,scope=monitors
+          cache-from: type=gha,scope=server
+          cache-to: type=gha,mode=max,scope=server
 
       - name: Build frontend
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
@@ -294,35 +265,18 @@ jobs:
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
-      - name: Push api
+      - name: Push server
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
-          context: ./api
-          target: api
-          build-args: VERSION=${{ env.VERSION }}
+          context: ./backend
           push: true
-          tags: ${{ steps.meta-api.outputs.tags }}
-          labels: ${{ steps.meta-api.outputs.labels }}
+          tags: ${{ steps.meta-server.outputs.tags }}
+          labels: ${{ steps.meta-server.outputs.labels }}
           platforms: linux/amd64
           provenance: mode=max
           sbom: true
-          cache-from: type=gha,scope=api
-
-      - name: Push monitors
-        if: github.event_name != 'pull_request'
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: ./api
-          target: monitors
-          build-args: VERSION=${{ env.VERSION }}
-          push: true
-          tags: ${{ steps.meta-monitors.outputs.tags }}
-          labels: ${{ steps.meta-monitors.outputs.labels }}
-          platforms: linux/amd64
-          provenance: mode=max
-          sbom: true
-          cache-from: type=gha,scope=monitors
+          cache-from: type=gha,scope=server
 
       - name: Push frontend
         if: github.event_name != 'pull_request'

@@ -22,6 +22,7 @@
 	<MonitorEditor
 		initial={data.initial}
 		metrics={data.metrics}
+		checks={data.checks}
 		tenantId={data.tenant?.id ?? ''}
 		submitLabel={m.monitor_create()}
 		cancelHref={resolve('/app/monitors')}

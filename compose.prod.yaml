@@ -13,6 +13,24 @@ name: ninjacat-prod
 # The images are built here and named so that they cannot be pulled: a name
 # with a slash would be looked up on Docker Hub under someone else's account.
 
+x-server-environment: &server-environment
+  DATABASE_URL: postgres://${POSTGRES_USER:-ninjacat}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ninjacat}
+  CLICKHOUSE_HTTP_ADDR: clickhouse:8123
+  CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ninjacat}
+  CLICKHOUSE_USER: ${CLICKHOUSE_USER:-ninjacat}
+  CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+
+# One intake program per host, all from the server's image.
+x-intake: &intake
+  image: ninjapaws:local
+  restart: unless-stopped
+  environment:
+    <<: *server-environment
+    NINJACAT_ADDR: ":8080"
+  depends_on:
+    schema: { condition: service_completed_successfully }
+    migrate: { condition: service_completed_successfully }
+
 services:
   clickhouse:
     image: clickhouse/clickhouse-server:26.8.6.5
@@ -21,9 +39,9 @@ services:
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ninjacat}
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-ninjacat}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD}
-    # No docker-entrypoint-initdb.d mount: the server applies its embedded
-    # ClickHouse migrations at startup (api/schema). CLICKHOUSE_DB still
-    # creates the (empty) database itself.
+    # No docker-entrypoint-initdb.d mount: `schema` applies the server's
+    # migrations (backend/schema). CLICKHOUSE_DB still creates the (empty)
+    # database itself.
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - clickhouse-logs:/var/log/clickhouse-server
@@ -69,74 +87,200 @@ services:
       postgres: { condition: service_healthy }
     restart: "no"
 
-  # The server is one image run as two processes, so that what agents can
-  # reach and what the panel reads from share neither a port nor a container.
-
-  # What agents send to. It owns every write to ClickHouse and its schema.
-  intake:
-    image: ninjacat-api:local
+  # One-shot: applies the ClickHouse migrations and the metrics retention, then exits. The server
+  # image, with every program, is built here.
+  schema:
+    image: ninjapaws:local
     build:
-      context: ./api
-      target: api
-    command: ["intake"]
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
+      context: ./backend
+    command: ["ninjapaws_migrate"]
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-ninjacat}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ninjacat}
-      CLICKHOUSE_HTTP_ADDR: clickhouse:8123
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ninjacat}
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-ninjacat}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
-      NINJACAT_ADDR: ":8080"
+      <<: *server-environment
     depends_on:
       clickhouse: { condition: service_healthy }
-      postgres: { condition: service_healthy }
-      migrate: { condition: service_completed_successfully }
+    restart: "no"
+
+  # What agents send to: each host name to its program (dev/intake-routes.yml).
+  intake:
+    image: traefik:v3.5.3
+    restart: unless-stopped
+    command:
+      - --entrypoints.intake.address=:8080
+      - --providers.file.filename=/etc/traefik/intake-routes.yml
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./dev/intake-routes.yml:/etc/traefik/intake-routes.yml:ro
+
+  intake-app:
+    <<: *intake
+    command: ["ninjapaws_app"]
+
+  intake-api:
+    <<: *intake
+    command: ["ninjapaws_api"]
+
+  intake-trace:
+    <<: *intake
+    command: ["ninjapaws_trace"]
+
+  intake-telemetry:
+    <<: *intake
+    command: ["ninjapaws_telemetry"]
+
+  intake-resources:
+    <<: *intake
+    command: ["ninjapaws_resources"]
+
+  intake-logs:
+    <<: *intake
+    command: ["ninjapaws_logs"]
+    ports:
+      - "10516:10516"   # logs over TCP
+
+  intake-profile:
+    <<: *intake
+    command: ["ninjapaws_profile"]
+
+  intake-debugger:
+    <<: *intake
+    command: ["ninjapaws_debugger"]
+
+  intake-sourcemap:
+    <<: *intake
+    command: ["ninjapaws_sourcemap"]
+
+  intake-browser:
+    <<: *intake
+    command: ["ninjapaws_browser"]
+
+  intake-processes:
+    <<: *intake
+    command: ["ninjapaws_processes"]
+
+  intake-kubeops:
+    <<: *intake
+    command: ["ninjapaws_kubeops"]
+
+  intake-containers:
+    <<: *intake
+    command: ["ninjapaws_containers"]
+
+  intake-remote-config:
+    <<: *intake
+    command: ["ninjapaws_remote_config"]
+
+  intake-dbm:
+    <<: *intake
+    command: ["ninjapaws_dbm"]
+
+  intake-ndm:
+    <<: *intake
+    command: ["ninjapaws_ndm"]
+
+  intake-cws:
+    <<: *intake
+    command: ["ninjapaws_cws"]
+
+  intake-runtime-security:
+    <<: *intake
+    command: ["ninjapaws_runtime_security"]
+
+  intake-cspm:
+    <<: *intake
+    command: ["ninjapaws_cspm"]
+
+  intake-sbom:
+    <<: *intake
+    command: ["ninjapaws_sbom"]
+
+  intake-sds:
+    <<: *intake
+    command: ["ninjapaws_sds"]
+
+  intake-agent-discovery:
+    <<: *intake
+    command: ["ninjapaws_agent_discovery"]
+
+  intake-agent-health:
+    <<: *intake
+    command: ["ninjapaws_agent_health"]
+
+  intake-event-management:
+    <<: *intake
+    command: ["ninjapaws_event_management"]
+
+  intake-software-inventory:
+    <<: *intake
+    command: ["ninjapaws_software_inventory"]
+
+  intake-synthetics-results:
+    <<: *intake
+    command: ["ninjapaws_synthetics_results"]
+
+  intake-synthetics-poller:
+    <<: *intake
+    command: ["ninjapaws_synthetics_poller"]
+
+  intake-data-obs:
+    <<: *intake
+    command: ["ninjapaws_data_obs"]
+
+  intake-ci-test-cycle:
+    <<: *intake
+    command: ["ninjapaws_ci_test_cycle"]
+
+  intake-ci-test-coverage:
+    <<: *intake
+    command: ["ninjapaws_ci_test_coverage"]
+
+  intake-ci-webhook:
+    <<: *intake
+    command: ["ninjapaws_ci_webhook"]
+
+  intake-ai-usage:
+    <<: *intake
+    command: ["ninjapaws_ai_usage"]
+
+  intake-llm-obs:
+    <<: *intake
+    command: ["ninjapaws_llm_obs"]
+
+  intake-install:
+    <<: *intake
+    command: ["ninjapaws_install"]
 
   # What the panel reads from. Its port is deliberately NOT published: only
   # the frontend container needs it, over the compose network, and it asks
   # for the frontend's token, not for an API key. It only reads, so it can be
   # given a ClickHouse user of its own that cannot write (CLICKHOUSE_QUERY_USER).
   query:
-    image: ninjacat-api:local
-    command: ["query"]
+    image: ninjapaws:local
+    command: ["ninjapaws_internal"]
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-ninjacat}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ninjacat}
-      CLICKHOUSE_HTTP_ADDR: clickhouse:8123
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ninjacat}
+      <<: *server-environment
       CLICKHOUSE_USER: ${CLICKHOUSE_QUERY_USER:-${CLICKHOUSE_USER:-ninjacat}}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_QUERY_PASSWORD:-${CLICKHOUSE_PASSWORD}}
       NINJACAT_INTERNAL_ADDR: ":8081"
       NINJACAT_QUERY_TOKEN_SECRET: ${NINJACAT_QUERY_TOKEN_SECRET:?set NINJACAT_QUERY_TOKEN_SECRET}
     depends_on:
-      clickhouse: { condition: service_healthy }
+      schema: { condition: service_completed_successfully }
       postgres: { condition: service_healthy }
-      # Built there, and it creates the tables this one reads.
-      intake: { condition: service_started }
 
-  # One Akka node that seeds itself; nothing outside reaches its ports.
+  # The monitor service; nothing outside reaches its ports.
   monitors:
-    image: ninjacat-monitors:local
-    build:
-      context: ./api
-      target: monitors
+    image: ninjapaws:local
+    command: ["ninjapaws_monitors"]
     restart: unless-stopped
-    # Docker's 10 s would cut the shutdown short; the process gives it 45 s.
-    stop_grace_period: 60s
     environment:
+      <<: *server-environment
       DATABASE_URL: ${MONITORS_DATABASE_URL:-postgres://${POSTGRES_USER:-ninjacat}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ninjacat}}
-      CLICKHOUSE_HTTP_ADDR: clickhouse:8123
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ninjacat}
       CLICKHOUSE_USER: ${CLICKHOUSE_MONITORS_USER:-${CLICKHOUSE_USER:-ninjacat}}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_MONITORS_PASSWORD:-${CLICKHOUSE_PASSWORD}}
     depends_on:
-      clickhouse: { condition: service_healthy }
-      postgres: { condition: service_healthy }
+      schema: { condition: service_completed_successfully }
       migrate: { condition: service_completed_successfully }
-      # It creates the tables this one reads and writes.
-      intake: { condition: service_started }
 
   frontend:
     image: ninjacat-frontend:local

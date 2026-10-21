@@ -1,17 +1,18 @@
 # NinjaCat — development stack.
 #
-#   docker compose up            everything, with hot reload
+#   docker compose up            everything
 #   docker compose up -d postgres clickhouse   just the databases, if you run the apps on the host
 #
-# The application services rebuild themselves on save: the server's two
-# processes and the monitor service through `dotnet watch`, the panel through
-# Vite's dev server. Source is bind-mounted, so an edit on the host is an edit
-# in the container.
+# The server is the Rust one (backend/): one image, one program per intake host, plus the query
+# process and the monitor service. `docker compose up --build` rebuilds it after a change; the
+# panel reloads on save through Vite's dev server.
 #
-# Databases and the query process publish on 127.0.0.1 only. The databases
-# have passwords, the query process asks for a token the panel signs (see
-# api/README.md to mint one for curl); exposing either on 0.0.0.0 is a
-# separate decision — drop the prefix if you mean to make it.
+# Agents send to :8080, where Traefik sends each host name to its program (dev/intake-routes.yml),
+# as the chart's ingress does on a cluster. Logs over TCP go to :10516.
+#
+# Databases and the query process publish on 127.0.0.1 only. The databases have passwords, the
+# query process asks for a token the panel signs (backend/README.md shows how to mint one for
+# curl); exposing either on 0.0.0.0 is a separate decision — drop the prefix if you mean to make it.
 
 name: ninjacat
 
@@ -21,15 +22,17 @@ x-server-environment: &server-environment
   CLICKHOUSE_DB: ninjacat
   CLICKHOUSE_USER: ninjacat
   CLICKHOUSE_PASSWORD: ninjacat
-  NINJACAT_ARTIFACTS_PATH: /artifacts
-  # Polling, because inotify events do not cross the bind mount everywhere.
-  DOTNET_USE_POLLING_FILE_WATCHER: "true"
-  # The .NET SDK reports its own usage to Microsoft unless told not to.
-  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
-  # The image presets port 8080 for ASP.NET; the server names its own ports
-  # (NINJACAT_ADDR, NINJACAT_INTERNAL_ADDR), and would warn at every start
-  # that it overrides the preset.
-  ASPNETCORE_HTTP_PORTS: ""
+
+# One intake program: the same image, environment and order of start for every host.
+x-intake: &intake
+  image: ninjapaws:dev
+  restart: unless-stopped
+  environment:
+    <<: *server-environment
+    NINJACAT_ADDR: ":8080"
+  depends_on:
+    schema: { condition: service_completed_successfully }
+    migrate: { condition: service_completed_successfully }
 
 services:
   clickhouse:
@@ -44,10 +47,8 @@ services:
       CLICKHOUSE_USER: ninjacat
       CLICKHOUSE_PASSWORD: ninjacat
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
-    # No docker-entrypoint-initdb.d mount: the server owns the schema and
-    # applies its embedded migrations at startup (api/schema). The
-    # entrypoint mechanism only ever fired on an empty data directory anyway.
-    # CLICKHOUSE_DB above still creates the (empty) database itself.
+    # No docker-entrypoint-initdb.d mount: the server owns the schema, and `schema` applies its
+    # migrations (backend/schema). CLICKHOUSE_DB above still creates the (empty) database.
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - clickhouse-logs:/var/log/clickhouse-server
@@ -99,48 +100,217 @@ services:
       postgres: { condition: service_healthy }
     restart: "no"
 
-  # The server is one program run as two processes, so that what agents can
-  # reach and what the panel reads from share neither a port nor a container.
-  # Both rebuild on save through `dotnet watch`, each into its own volume:
-  # two builds of the same tree must not write the same files.
-
-  # What agents send to. It owns every write to ClickHouse and its schema.
-  intake:
-    image: mcr.microsoft.com/dotnet/sdk:10.0
-    container_name: ninjacat-intake
-    restart: unless-stopped
-    working_dir: /app
-    command: ["dotnet", "watch", "--project", "src/Server", "run", "--non-interactive", "--", "intake"]
-    ports:
-      - "8080:8080"     # reachable from agent machines
-      - "10516:10516"   # logs over TCP, for agents with force_use_tcp
+  # One-shot: applies the ClickHouse migrations and the metrics retention, then exits. The
+  # programs wait for it; the image every server service runs is built here.
+  schema:
+    build:
+      context: ./backend
+      # Unoptimised: the dev stack rebuilds on every change, and the optimiser's time is for
+      # the images that are deployed.
+      args:
+        PROFILE: dev
+    image: ninjapaws:dev
+    container_name: ninjacat-schema
+    command: ["ninjapaws_migrate"]
     environment:
       <<: *server-environment
-      NINJACAT_ADDR: ":8080"
-      NINJACAT_CAPTURE_DIR: /data/captures
-      DEBUG: "true"
-    volumes:
-      - ./api:/app
-      - ./api/captures:/data/captures
-      # Build output lives here, not in the bind mount (see NINJACAT_ARTIFACTS_PATH),
-      # so host and container builds never collide.
-      - intake-artifacts:/artifacts
-      - nuget-cache:/root/.nuget/packages
     depends_on:
       clickhouse: { condition: service_healthy }
-      postgres: { condition: service_healthy }
-      migrate: { condition: service_completed_successfully }
+    restart: "no"
 
-  # What the panel reads from: the panel's and the query API. It only reads.
-  # Its port asks for the panel's token, not for an API key, and is published
-  # on the loopback alone; the panel's container reaches it over the compose
-  # network.
-  query:
-    image: mcr.microsoft.com/dotnet/sdk:10.0
-    container_name: ninjacat-query
+  # What agents send to: each host name to its program.
+  intake:
+    image: traefik:v3.5.3
+    container_name: ninjacat-intake
     restart: unless-stopped
-    working_dir: /app
-    command: ["dotnet", "watch", "--project", "src/Server", "run", "--non-interactive", "--", "query"]
+    command:
+      - --entrypoints.intake.address=:8080
+      - --providers.file.filename=/etc/traefik/intake-routes.yml
+    ports:
+      - "8080:8080"     # reachable from agent machines
+    volumes:
+      - ./dev/intake-routes.yml:/etc/traefik/intake-routes.yml:ro
+
+  intake-app:
+    <<: *intake
+    container_name: ninjacat-intake-app
+    command: ["ninjapaws_app"]
+
+  intake-api:
+    <<: *intake
+    container_name: ninjacat-intake-api
+    command: ["ninjapaws_api"]
+
+  intake-trace:
+    <<: *intake
+    container_name: ninjacat-intake-trace
+    command: ["ninjapaws_trace"]
+
+  intake-telemetry:
+    <<: *intake
+    container_name: ninjacat-intake-telemetry
+    command: ["ninjapaws_telemetry"]
+
+  intake-resources:
+    <<: *intake
+    container_name: ninjacat-intake-resources
+    command: ["ninjapaws_resources"]
+
+  intake-logs:
+    <<: *intake
+    container_name: ninjacat-intake-logs
+    command: ["ninjapaws_logs"]
+    ports:
+      - "10516:10516"   # logs over TCP, for agents with force_use_tcp
+
+  intake-profile:
+    <<: *intake
+    container_name: ninjacat-intake-profile
+    command: ["ninjapaws_profile"]
+
+  intake-debugger:
+    <<: *intake
+    container_name: ninjacat-intake-debugger
+    command: ["ninjapaws_debugger"]
+
+  intake-sourcemap:
+    <<: *intake
+    container_name: ninjacat-intake-sourcemap
+    command: ["ninjapaws_sourcemap"]
+
+  intake-browser:
+    <<: *intake
+    container_name: ninjacat-intake-browser
+    command: ["ninjapaws_browser"]
+
+  intake-processes:
+    <<: *intake
+    container_name: ninjacat-intake-processes
+    command: ["ninjapaws_processes"]
+
+  intake-kubeops:
+    <<: *intake
+    container_name: ninjacat-intake-kubeops
+    command: ["ninjapaws_kubeops"]
+
+  intake-containers:
+    <<: *intake
+    container_name: ninjacat-intake-containers
+    command: ["ninjapaws_containers"]
+
+  intake-remote-config:
+    <<: *intake
+    container_name: ninjacat-intake-remote-config
+    command: ["ninjapaws_remote_config"]
+
+  intake-dbm:
+    <<: *intake
+    container_name: ninjacat-intake-dbm
+    command: ["ninjapaws_dbm"]
+
+  intake-ndm:
+    <<: *intake
+    container_name: ninjacat-intake-ndm
+    command: ["ninjapaws_ndm"]
+
+  intake-cws:
+    <<: *intake
+    container_name: ninjacat-intake-cws
+    command: ["ninjapaws_cws"]
+
+  intake-runtime-security:
+    <<: *intake
+    container_name: ninjacat-intake-runtime-security
+    command: ["ninjapaws_runtime_security"]
+
+  intake-cspm:
+    <<: *intake
+    container_name: ninjacat-intake-cspm
+    command: ["ninjapaws_cspm"]
+
+  intake-sbom:
+    <<: *intake
+    container_name: ninjacat-intake-sbom
+    command: ["ninjapaws_sbom"]
+
+  intake-sds:
+    <<: *intake
+    container_name: ninjacat-intake-sds
+    command: ["ninjapaws_sds"]
+
+  intake-agent-discovery:
+    <<: *intake
+    container_name: ninjacat-intake-agent-discovery
+    command: ["ninjapaws_agent_discovery"]
+
+  intake-agent-health:
+    <<: *intake
+    container_name: ninjacat-intake-agent-health
+    command: ["ninjapaws_agent_health"]
+
+  intake-event-management:
+    <<: *intake
+    container_name: ninjacat-intake-event-management
+    command: ["ninjapaws_event_management"]
+
+  intake-software-inventory:
+    <<: *intake
+    container_name: ninjacat-intake-software-inventory
+    command: ["ninjapaws_software_inventory"]
+
+  intake-synthetics-results:
+    <<: *intake
+    container_name: ninjacat-intake-synthetics-results
+    command: ["ninjapaws_synthetics_results"]
+
+  intake-synthetics-poller:
+    <<: *intake
+    container_name: ninjacat-intake-synthetics-poller
+    command: ["ninjapaws_synthetics_poller"]
+
+  intake-data-obs:
+    <<: *intake
+    container_name: ninjacat-intake-data-obs
+    command: ["ninjapaws_data_obs"]
+
+  intake-ci-test-cycle:
+    <<: *intake
+    container_name: ninjacat-intake-ci-test-cycle
+    command: ["ninjapaws_ci_test_cycle"]
+
+  intake-ci-test-coverage:
+    <<: *intake
+    container_name: ninjacat-intake-ci-test-coverage
+    command: ["ninjapaws_ci_test_coverage"]
+
+  intake-ci-webhook:
+    <<: *intake
+    container_name: ninjacat-intake-ci-webhook
+    command: ["ninjapaws_ci_webhook"]
+
+  intake-ai-usage:
+    <<: *intake
+    container_name: ninjacat-intake-ai-usage
+    command: ["ninjapaws_ai_usage"]
+
+  intake-llm-obs:
+    <<: *intake
+    container_name: ninjacat-intake-llm-obs
+    command: ["ninjapaws_llm_obs"]
+
+  intake-install:
+    <<: *intake
+    container_name: ninjacat-intake-install
+    command: ["ninjapaws_install"]
+
+  # What the panel reads from: the panel's and the query API. It only reads. Its port asks for
+  # the panel's token, not for an API key, and is published on the loopback alone; the panel's
+  # container reaches it over the compose network.
+  internal:
+    image: ninjapaws:dev
+    container_name: ninjacat-internal
+    command: ["ninjapaws_internal"]
+    restart: unless-stopped
     ports:
       - "127.0.0.1:8081:8081"
     environment:
@@ -148,32 +318,21 @@ services:
       NINJACAT_INTERNAL_ADDR: ":8081"
       # The same on the frontend: it signs, this checks.
       NINJACAT_QUERY_TOKEN_SECRET: dev-only-query-token-secret-change-me-32ch
-    volumes:
-      - ./api:/app
-      - query-artifacts:/artifacts
-      - nuget-cache:/root/.nuget/packages
     depends_on:
-      clickhouse: { condition: service_healthy }
+      schema: { condition: service_completed_successfully }
       postgres: { condition: service_healthy }
-      migrate: { condition: service_completed_successfully }
 
-  # One Akka node seeding itself. The intake creates the tables and has no
-  # healthcheck to wait on, so a table not there yet is read again later.
+  # The monitor service. Replicas share the monitors through Postgres advisory locks; here there
+  # is one.
   monitors:
-    image: mcr.microsoft.com/dotnet/sdk:10.0
+    image: ninjapaws:dev
     container_name: ninjacat-monitors
+    command: ["ninjapaws_monitors"]
     restart: unless-stopped
-    working_dir: /app
-    command: ["dotnet", "watch", "--project", "src/Monitors", "run", "--non-interactive"]
     environment:
       <<: *server-environment
-    volumes:
-      - ./api:/app
-      - monitors-artifacts:/artifacts
-      - nuget-cache:/root/.nuget/packages
     depends_on:
-      clickhouse: { condition: service_healthy }
-      postgres: { condition: service_healthy }
+      schema: { condition: service_completed_successfully }
       migrate: { condition: service_completed_successfully }
 
   frontend:
@@ -187,7 +346,7 @@ services:
     environment:
       DATABASE_URL: postgres://root:mysecretpassword@postgres:5432/local
       # The panel talks to the query process, never to the agent intake.
-      NINJACAT_INTERNAL_URL: http://query:8081
+      NINJACAT_INTERNAL_URL: http://internal:8081
       ORIGIN: http://localhost:5173
       BETTER_AUTH_SECRET: dev-only-secret-change-me-in-production-32ch
       NINJACAT_QUERY_TOKEN_SECRET: dev-only-query-token-secret-change-me-32ch
@@ -207,7 +366,3 @@ volumes:
   pgdata:
   frontend-node-modules:
   frontend-svelte-kit:
-  intake-artifacts:
-  query-artifacts:
-  monitors-artifacts:
-  nuget-cache:

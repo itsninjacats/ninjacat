@@ -1,0 +1,5 @@
+# Incremental builds keep a second copy of much of target/ and pay off only for small edits in a
+# long session; the many short builds here gain little from them. `CARGO_INCREMENTAL=1` turns them
+# back on for one shell.
+[build]
+incremental = false

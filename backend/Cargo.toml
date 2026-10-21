@@ -1,0 +1,34 @@
+[workspace]
+resolver = "3"
+members = ["anomaly", "api", "cli", "engine", "intake", "proto", "protogen", "storage"]
+# protogen runs only when asked: cargo run -p protogen
+default-members = ["anomaly", "api", "engine", "intake", "proto", "storage"]
+
+[workspace.dependencies]
+ninjapaws-anomaly = { path = "anomaly" }
+ninjapaws-engine = { path = "engine" }
+ninjapaws-intake = { path = "intake" }
+ninjapaws-proto = { path = "proto" }
+ninjapaws-storage = { path = "storage" }
+# One JSON for every crate: members in the order they came, a value's text kept as sent, and a
+# number's digits as written (1.50 stays 1.50), which a telemetry intake must not round.
+serde_json = { version = "1", features = ["arbitrary_precision", "preserve_order", "raw_value"] }
+
+# Builds while working (`cargo build`, `cargo test`): line numbers only in the debug info, which
+# keeps compiling and linking some thirty programs short; a backtrace still names the line.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+# `--release` on a workstation: optimised, without the whole-program pass.
+[profile.release]
+strip = true
+
+# The shipped images (Dockerfile, `--profile dist`): link-time optimisation across every crate.
+# Thin rather than fat: the 37 programs build in 7.5 minutes instead of 25 on 12 cores, which
+# is the difference between a CI run of twenty minutes and one of over an hour.
+[profile.dist]
+inherits = "release"
+lto = "thin"

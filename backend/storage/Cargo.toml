@@ -1,0 +1,17 @@
+[package]
+name = "ninjapaws-storage"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+base64 = "0.22"
+chrono = "0.4"
+clickhouse = { version = "0.15.3", features = ["uuid"] }
+include_dir = "0.7"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json.workspace = true
+tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+tracing = "0.1"
+uuid = { version = "1", features = ["v4"] }

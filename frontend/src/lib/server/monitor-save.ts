@@ -23,6 +23,8 @@ function unfilledMessage(what: Unfilled): string {
 			return m.monitor_unfilled_name();
 		case 'metric':
 			return m.monitor_unfilled_metric();
+		case 'check':
+			return m.monitor_unfilled_check();
 		case 'critical':
 			return m.monitor_unfilled_critical();
 		case 'formula':

@@ -1,0 +1,12 @@
+[package]
+name = "ninjapaws-anomaly"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+argmin = { version = "0.11.0", default-features = false }
+argmin-math = { version = "0.5.1", default-features = false, features = ["vec"] }
+stlrs = "0.4.0"
+
+[dev-dependencies]
+serde_json.workspace = true

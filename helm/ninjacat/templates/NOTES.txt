@@ -19,21 +19,21 @@ Intake hosts:
 {{- end }}
 
 Quick check from inside the cluster:
-  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ninjacat.fullname" . }}-intake {{ .Values.intake.service.port }}
-  curl -H 'Host: api.{{ (include "ninjacat.domainRoot" .) }}' localhost:{{ .Values.intake.service.port }}/ping
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ninjacat.fullname" . }}-intake-api {{ .Values.intake.service.port }}
+  curl localhost:{{ .Values.intake.service.port }}/ping
 
-The server runs as two Deployments: {{ include "ninjacat.fullname" . }}-intake (what agents reach)
-and {{ include "ninjacat.fullname" . }}-query (what the panel reads from, never exposed{{ if .Values.networkPolicy.enabled }}; a
-NetworkPolicy admits the panel's pods only{{ end }}).
-The monitors are evaluated by {{ include "ninjacat.fullname" . }}-monitors, {{ .Values.monitors.replicas }} pods forming one cluster.
+Each intake host is served by a program of its own, {{ include "ninjacat.fullname" . }}-intake-<name>
+(intake.programs). The panel reads from {{ include "ninjacat.fullname" . }}-query, never exposed{{ if .Values.networkPolicy.enabled }} (a
+NetworkPolicy admits the panel's pods only){{ end }}, and {{ include "ninjacat.fullname" . }}-monitors
+evaluates the monitors in {{ .Values.monitors.replicas }} pods that share them out.
 {{- if .Values.migrations.enabled }}
 
 Schemas: brought up to date by hook Jobs{{ if or .Values.postgres.create .Values.clickhouse.create }}, on the first install once the databases exist{{ else }} before the pods started{{ end }}.
 {{- else }}
 
-Schemas: migrations.enabled is off, so the intake applies the ClickHouse
-migrations when it starts (keep it at one replica), and the Postgres schema is
-yours to apply (the frontend image, `node migrate.js`).
+Schemas: migrations.enabled is off, so both are yours to apply: ClickHouse's
+with the server image's ninjapaws_migrate, Postgres's with the frontend
+image's `node migrate.js`.
 {{- end }}
 {{- if or .Values.postgres.create .Values.clickhouse.create }}
 {{- $ns := .Release.Namespace }}

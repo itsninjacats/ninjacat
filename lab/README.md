@@ -7,21 +7,65 @@ Two kinds:
   (its own README).
 - `server.sh`, `dbm/`, `net/` — single-purpose runs against the dev stack's
   databases, described here. They are how the payloads under
-  `api/tests/Intake.Tests/Fixtures/real/` were recorded.
+  `backend/intake/tests/fixtures/real/` were recorded.
 
 ## The server
 
 ```sh
 docker compose up -d postgres clickhouse migrate   # the dev stack's databases
-lab/server.sh up                                   # builds api/, starts its intake, mints a temporary key
+lab/server.sh up                                   # builds backend/, starts every intake program, mints a temporary key
 …runs…
 lab/server.sh down                                 # removes all of it
 ```
 
-The lab server is the shipping image on a network with **no route out**
-(`--internal`), so nothing can reach Datadog whatever the agent is told. It
-writes to a scratch ClickHouse database, `ninjacat_lab`, under the tenant
-`lab`, and dumps every request to `lab/captures/` (gitignored).
+The lab server is the server's image (built with `PROFILE=dev`), one container
+per intake program, behind a Traefik that routes each host name as the dev
+stack's does (`dev/intake-routes.yml`). The agents reach only that router, on a
+network with **no route out** (`--internal`), so nothing can reach Datadog
+whatever the agent is told. It writes to a scratch ClickHouse database,
+`ninjacat_lab` (migrated by `ninjapaws_migrate` first), under the tenant `lab`.
+
+Every program runs with `DEBUG=true` and dumps each request to `lab/captures/`
+(gitignored), as your own user, once it has been answered: one file per
+request, named `<time>_<method>_<path>_<n>.txt` (`n` counts each program's
+requests), and a line in `index.log`. A file holds the status, the time taken,
+the sender's address (behind the router, the router's), the request line and
+headers (an API key
+in a header, the query or the path is left out) and the body decompressed: JSON
+pretty-printed, protobuf walked field by field without a schema, text as it is,
+anything else as a hexdump. `backend/intake/src/capture.rs` writes them.
+
+```
+# time:     2026-10-21T00:50:01.790696Z
+# client:   172.18.0.1
+# status:   202
+# took:     2.8 ms
+# body:     61 B raw -> 48 B decompressed (zstd)
+
+POST /api/v2/series HTTP/1.1
+Host: app.ninjacat.lab:8080
+accept: */*
+dd-api-key: <redacted>
+content-type: application/x-protobuf
+content-encoding: zstd
+user-agent: datadog-agent/7.84.0
+content-length: 61
+
+---------------- BODY ----------------
+(protobuf, walked without a schema: field_number: value)
+
+1: {
+  1: {
+    1: "host"
+    2: "h1"
+  }
+  2: "system.cpu.idle"
+  4: {
+    1: 4602678819172646912 (f64 0.5)
+    2: 1790151330
+  }
+}
+```
 
 ## Database Monitoring
 

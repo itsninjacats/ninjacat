@@ -21,6 +21,8 @@
 	import { alertZone } from '$lib/monitors/definition';
 	import {
 		STATES,
+		checkStatusClass,
+		checkStatusText,
 		methodLabel,
 		reasonLabel,
 		severity,
@@ -51,6 +53,9 @@
 	const to = $derived(Date.parse(data.window.to));
 
 	const number = $derived(new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 4 }));
+	// A check's value is its worst status.
+	const valueText = (value: number | null) =>
+		data.monitor.isCheck ? checkStatusText(value) : value === null ? '—' : number.format(value);
 
 	// Each group's evaluated values; the monitor-wide rows (no group) carry none.
 	const evaluated = $derived.by(() => {
@@ -219,41 +224,101 @@
 		</div>
 	</div>
 
-	<!-- evaluated values -->
-	<Card.Root>
-		<Card.Header>
-			<Card.Title class="text-base">{m.monitor_evaluated_values()}</Card.Title>
-			<Card.Description>
-				{#if shownOf > data.maxLines}
-					{m.monitor_lines_shown({ shown: data.maxLines, total: shownOf })}
+	{#if data.monitor.isCheck}
+		<!-- recent check runs -->
+		<Card.Root>
+			<Card.Header>
+				<Card.Title class="text-base">{m.monitor_check_runs()}</Card.Title>
+				<Card.Description>{m.monitor_check_runs_hint()}</Card.Description>
+			</Card.Header>
+			<Card.Content>
+				{#if !data.runs || data.runs.length === 0}
+					<p class="text-sm text-muted-foreground">{m.monitor_check_runs_none()}</p>
 				{:else}
-					{m.monitor_evaluated_values_hint()}
+					<div class="@container">
+						<Table.Root>
+							<Table.Header>
+								<Table.Row>
+									<Table.Head class="w-28">{m.monitor_check_status()}</Table.Head>
+									<Table.Head>{m.monitor_check_message()}</Table.Head>
+									<Table.Head class="hidden @2xl:table-cell">{m.monitor_check_host()}</Table.Head>
+									<Table.Head class="hidden @2xl:table-cell">{m.monitor_check_tags()}</Table.Head>
+								</Table.Row>
+							</Table.Header>
+							<Table.Body>
+								{#each data.runs as run, i (i)}
+									<Table.Row>
+										<Table.Cell class="align-top">
+											<span
+												class="inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-xs font-medium"
+											>
+												<span class="size-2 shrink-0 rounded-full {checkStatusClass(run.status)}"
+												></span>
+												{run.status}
+											</span>
+										</Table.Cell>
+										<Table.Cell class="align-top text-xs wrap-anywhere whitespace-normal">
+											<span class="block text-muted-foreground"
+												><LocalTime at={run.at} seconds /></span
+											>
+											{run.message}
+											<span class="mt-1 block font-mono text-muted-foreground @2xl:hidden">
+												{[run.host, ...run.tags].filter(Boolean).join(', ')}
+											</span>
+										</Table.Cell>
+										<Table.Cell class="hidden align-top font-mono text-xs @2xl:table-cell">
+											{run.host || '—'}
+										</Table.Cell>
+										<Table.Cell
+											class="hidden align-top font-mono text-[11px] wrap-anywhere whitespace-normal @2xl:table-cell"
+										>
+											{run.tags.join(', ')}
+										</Table.Cell>
+									</Table.Row>
+								{/each}
+							</Table.Body>
+						</Table.Root>
+					</div>
 				{/if}
-				{#if data.evaluations?.truncated}
-					{m.monitor_evaluations_truncated()}
+			</Card.Content>
+		</Card.Root>
+	{:else}
+		<!-- evaluated values -->
+		<Card.Root>
+			<Card.Header>
+				<Card.Title class="text-base">{m.monitor_evaluated_values()}</Card.Title>
+				<Card.Description>
+					{#if shownOf > data.maxLines}
+						{m.monitor_lines_shown({ shown: data.maxLines, total: shownOf })}
+					{:else}
+						{m.monitor_evaluated_values_hint()}
+					{/if}
+					{#if data.evaluations?.truncated}
+						{m.monitor_evaluations_truncated()}
+					{/if}
+				</Card.Description>
+			</Card.Header>
+			<Card.Content>
+				{#if lines.length === 0}
+					<div
+						class="flex h-[200px] items-center justify-center rounded-md border border-dashed px-4 text-center text-sm text-muted-foreground"
+					>
+						{m.monitor_no_evaluations()}
+					</div>
+				{:else}
+					<MetricsChart
+						{lines}
+						window={{ from, to }}
+						display="line"
+						{rules}
+						{zone}
+						onzoom={zoom}
+						onreset={data.range === null ? reset : undefined}
+					/>
 				{/if}
-			</Card.Description>
-		</Card.Header>
-		<Card.Content>
-			{#if lines.length === 0}
-				<div
-					class="flex h-[200px] items-center justify-center rounded-md border border-dashed px-4 text-center text-sm text-muted-foreground"
-				>
-					{m.monitor_no_evaluations()}
-				</div>
-			{:else}
-				<MetricsChart
-					{lines}
-					window={{ from, to }}
-					display="line"
-					{rules}
-					{zone}
-					onzoom={zoom}
-					onreset={data.range === null ? reset : undefined}
-				/>
-			{/if}
-		</Card.Content>
-	</Card.Root>
+			</Card.Content>
+		</Card.Root>
+	{/if}
 
 	<!-- state timeline -->
 	<Card.Root>
@@ -336,13 +401,13 @@
 									<Table.Cell class="align-top font-mono text-xs wrap-anywhere whitespace-normal">
 										{groupLabel(g.group)}
 										<div class="mt-1 font-sans text-muted-foreground @2xl:hidden">
-											{g.value === null ? '—' : number.format(g.value)} ·
+											{valueText(g.value)} ·
 											{m.monitor_since()}
 											<LocalTime at={g.since} /> · {reasonLabel(g.reason)}
 										</div>
 									</Table.Cell>
 									<Table.Cell class="hidden align-top font-mono text-xs @2xl:table-cell">
-										{g.value === null ? '—' : number.format(g.value)}
+										{valueText(g.value)}
 									</Table.Cell>
 									<Table.Cell class="hidden align-top text-xs whitespace-normal @2xl:table-cell">
 										<LocalTime at={g.since} />
@@ -392,7 +457,7 @@
 								<span class="block font-mono wrap-anywhere">{groupLabel(t.group)}</span>
 								<span class="block text-muted-foreground">
 									{reasonLabel(t.reason)}
-									{#if t.value !== null}· {m.monitor_value()} {number.format(t.value)}{/if}
+									{#if t.value !== null}· {m.monitor_value()} {valueText(t.value)}{/if}
 									{#if t.crossed && t.crossed !== 'none'}· {t.crossed}{/if}
 								</span>
 							</span>

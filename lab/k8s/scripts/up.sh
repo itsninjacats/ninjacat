@@ -36,8 +36,7 @@ say "lab CA and wildcard certificate"
 # Built on the host and side-loaded. The manifests use imagePullPolicy
 # IfNotPresent so the node never tries a registry that has never heard of us.
 say "building images"
-docker build -q --target api      -t ninjacat/api:lab      "$ROOT/api" | sed 's/^/  api:      /'
-docker build -q --target monitors -t ninjacat/monitors:lab "$ROOT/api" | sed 's/^/  monitors: /'
+docker build -q --build-arg PROFILE=dev -t ninjacat/server:lab "$ROOT/backend" | sed 's/^/  server:   /'
 docker build -q -t ninjacat/frontend:lab "$ROOT/frontend" | sed 's/^/  frontend: /'
 
 # The databases' images (the chart's defaults) too, so the first install's
@@ -48,7 +47,7 @@ for image in "${DB_IMAGES[@]}"; do
 done
 
 say "loading images into the cluster"
-kind load docker-image --name "$CLUSTER" ninjacat/api:lab ninjacat/monitors:lab ninjacat/frontend:lab
+kind load docker-image --name "$CLUSTER" ninjacat/server:lab ninjacat/frontend:lab
 # A pulled image is multi-platform with only this host's layers present, which
 # `kind load docker-image` fails on; an archive of the one platform loads.
 PLATFORM="$(docker version --format '{{.Server.Os}}/{{.Server.Arch}}')"
@@ -102,7 +101,9 @@ helm --kube-context "$CTX" upgrade --install ninjacat "$ROOT/helm/ninjacat" \
   --set-string secrets.betterAuthSecret="$(openssl rand -hex 32)" \
   --set-string secrets.queryTokenSecret="$(openssl rand -hex 32)" \
   --wait --timeout 15m
-k -n "$NS" rollout status deployment/ninjacat-intake   --timeout=240s
+for intake in $(k -n "$NS" get deployment -o name | grep /ninjacat-intake-); do
+  k -n "$NS" rollout status "$intake" --timeout=240s
+done
 k -n "$NS" rollout status deployment/ninjacat-query    --timeout=240s
 k -n "$NS" rollout status deployment/ninjacat-monitors --timeout=240s
 k -n "$NS" rollout status deployment/ninjacat-frontend --timeout=240s

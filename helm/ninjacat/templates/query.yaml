@@ -1,6 +1,6 @@
 {{- $fullname := include "ninjacat.fullname" . -}}
 {{- $secret := include "ninjacat.secretName" . -}}
-# `ninjacat-api query`: what the panel reads from. Nothing on its port asks
+# `ninjapaws_internal`: what the panel reads from. Nothing on its port asks
 # for a key, so it has pods and a Service of its own that no Ingress names.
 apiVersion: apps/v1
 kind: Deployment
@@ -38,13 +38,13 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
-        runAsUser: 1654
-        runAsGroup: 1654
+        runAsUser: 65532
+        runAsGroup: 65532
       containers:
         - name: query
-          image: {{ include "ninjacat.apiImage" . | quote }}
-          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
-          args: ["query"]
+          image: {{ include "ninjacat.serverImage" . | quote }}
+          imagePullPolicy: {{ .Values.server.image.pullPolicy }}
+          command: ["ninjapaws_internal"]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -85,11 +85,8 @@ spec:
               port: query
             initialDelaySeconds: 10
             periodSeconds: 20
-          # The root filesystem is read-only; these are the two places the
-          # server may write: its working directory and /tmp.
+          # The root filesystem is read-only: /tmp is the one place it may write.
           volumeMounts:
-            - name: data
-              mountPath: /data
             - name: tmp
               mountPath: /tmp
           {{- with .Values.query.resources }}
@@ -97,8 +94,6 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
       volumes:
-        - name: data
-          emptyDir: {}
         - name: tmp
           emptyDir: {}
       {{- with .Values.query.nodeSelector }}

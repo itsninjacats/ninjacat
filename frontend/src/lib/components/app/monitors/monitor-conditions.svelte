@@ -49,12 +49,16 @@
 		}
 	};
 
+	const check = $derived(view.method === 'check');
+	// A check has no on_missing_data.
+	const missingOptions = $derived(check ? (['keep', 'notify'] as const) : MISSING);
+
 	const comparators = $derived(view.method === 'forecast' ? (['>=', '<='] as const) : COMPARATORS);
 </script>
 
 <div class="@container space-y-6">
 	<!-- what is evaluated -->
-	<div class="grid grid-cols-1 gap-3 @md:grid-cols-2 @3xl:grid-cols-4">
+	<div class="grid grid-cols-1 gap-3 @md:grid-cols-2 @3xl:grid-cols-4" class:hidden={check}>
 		{#if view.method === 'change'}
 			<div class="space-y-1">
 				<Label for="monitor-measure">{m.monitor_change_measure()}</Label>
@@ -287,6 +291,47 @@
 		<h3 class="text-sm font-medium">{m.monitor_thresholds()}</h3>
 		{#if view.method === 'outlier'}
 			<p class="text-xs text-muted-foreground">{m.monitor_outlier_explained()}</p>
+		{:else if check}
+			<p class="text-xs text-muted-foreground">{m.monitor_check_explained()}</p>
+			<div class="grid grid-cols-1 gap-3 @md:grid-cols-2 @3xl:grid-cols-4">
+				<div class="space-y-1">
+					<Label for="monitor-critical">{m.monitor_check_critical()}</Label>
+					<NumberInput id="monitor-critical" bind:value={view.critical} min="1" max="100" />
+					<p class="text-xs text-muted-foreground">{m.monitor_check_critical_hint()}</p>
+				</div>
+				<div class="space-y-1">
+					<Label for="monitor-warning">{m.monitor_check_warning()}</Label>
+					<NumberInput
+						id="monitor-warning"
+						bind:value={view.warning}
+						min="1"
+						max="100"
+						placeholder="1"
+					/>
+					<p class="text-xs text-muted-foreground">{m.monitor_check_warning_hint()}</p>
+				</div>
+				<div class="space-y-1">
+					<Label for="monitor-check-ok">{m.monitor_check_recover()}</Label>
+					<NumberInput
+						id="monitor-check-ok"
+						bind:value={view.check.ok}
+						min="1"
+						max="100"
+						placeholder="1"
+					/>
+					<p class="text-xs text-muted-foreground">{m.monitor_check_recover_hint()}</p>
+				</div>
+				<div class="space-y-1">
+					<Label for="monitor-check-unknown">{m.monitor_check_unknown()}</Label>
+					<NumberInput
+						id="monitor-check-unknown"
+						bind:value={view.check.unknown}
+						min="1"
+						max="100"
+					/>
+					<p class="text-xs text-muted-foreground">{m.monitor_check_unknown_hint()}</p>
+				</div>
+			</div>
 		{:else}
 			{#if fractions}
 				<p class="text-xs text-muted-foreground">{m.monitor_anomaly_thresholds_explained()}</p>
@@ -348,7 +393,7 @@
 				size="sm"
 				class="w-full [&>select]:text-xs"
 			>
-				{#each MISSING as option (option)}
+				{#each missingOptions as option (option)}
 					<NativeSelect.Option value={option}>{missingLabel[option]()}</NativeSelect.Option>
 				{/each}
 			</NativeSelect.Root>
@@ -360,7 +405,9 @@
 					id="monitor-no-data-timeframe"
 					bind:value={view.noDataTimeframe}
 					min="1"
-					placeholder={m.monitor_no_data_timeframe_default()}
+					placeholder={check
+						? m.monitor_no_data_timeframe_default_check()
+						: m.monitor_no_data_timeframe_default()}
 				/>
 			</div>
 		{/if}
@@ -402,12 +449,14 @@
 					placeholder={m.monitor_timeout_never()}
 				/>
 			</div>
-			<div class="flex items-center gap-2 self-end pb-1.5">
-				<Checkbox id="monitor-full-window" bind:checked={view.requireFullWindow} />
-				<Label for="monitor-full-window" class="text-xs font-normal">
-					{m.monitor_require_full_window()}
-				</Label>
-			</div>
+			{#if !check}
+				<div class="flex items-center gap-2 self-end pb-1.5">
+					<Checkbox id="monitor-full-window" bind:checked={view.requireFullWindow} />
+					<Label for="monitor-full-window" class="text-xs font-normal">
+						{m.monitor_require_full_window()}
+					</Label>
+				</div>
+			{/if}
 		</div>
 	</div>
 </div>

@@ -126,9 +126,8 @@ datadog:
   # workqueue_* family (controllers falling behind).
   #
   # This is filtered HERE, in the agent, and deliberately NOT in NinjaCat's
-  # writer. Dropping or rewriting what an agent sent would make NinjaCat a lossy
-  # approximation of Datadog rather than a replacement for it — the operator
-  # asked for this data by configuring the check, and an intake's job is to
+  # writer. Dropping or rewriting what an agent sent would make NinjaCat lose
+  # data the operator asked for by configuring the check, and an intake's job is to
   # store what arrives. Datadog puts this same knob in this same place.
   #
   # Delete this block to get the full firehose back, on purpose.

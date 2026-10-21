@@ -1,0 +1,245 @@
+# The dev stack's front door on :8080: which intake program each host name goes to, as the
+# chart's ingress does on a cluster. A host no rule names gets Traefik's 404. Read by the `intake`
+# service of compose.yaml; one line per program in backend/api/src/bin.
+
+http:
+  routers:
+    app:
+      rule: 'HostRegexp(`^app\.`) || HostRegexp(`-app\.agent\.`)'
+      service: app
+    api:
+      rule: 'HostRegexp(`^api\.`) || HostRegexp(`-flare\.agent\.`)'
+      service: api
+    trace:
+      rule: 'HostRegexp(`^trace\.agent\.`)'
+      service: trace
+    telemetry:
+      rule: 'HostRegexp(`^instrumentation-telemetry-intake\.`)'
+      service: telemetry
+    resources:
+      rule: 'HostRegexp(`^resources-intake\.`)'
+      service: resources
+    logs:
+      rule: 'HostRegexp(`^http-intake\.logs\.`) || HostRegexp(`^agent-http-intake\.logs\.`)'
+      service: logs
+    profile:
+      rule: 'HostRegexp(`^intake\.profile\.`)'
+      service: profile
+    debugger:
+      rule: 'HostRegexp(`^debugger-intake\.`)'
+      service: debugger
+    sourcemap:
+      rule: 'HostRegexp(`^sourcemap-intake\.`)'
+      service: sourcemap
+    browser:
+      rule: 'HostRegexp(`^browser-intake\.`)'
+      service: browser
+    processes:
+      rule: 'HostRegexp(`^process\.`)'
+      service: processes
+    kubeops:
+      rule: 'HostRegexp(`^orchestrator\.`) || HostRegexp(`^kubeops-intake\.`)'
+      service: kubeops
+    containers:
+      rule: 'HostRegexp(`^contlcycle-intake\.`) || HostRegexp(`^contimage-intake\.`)'
+      service: containers
+    remote_config:
+      rule: 'HostRegexp(`^config\.`)'
+      service: remote_config
+    dbm:
+      rule: 'HostRegexp(`^dbm-metrics-intake\.`)'
+      service: dbm
+    ndm:
+      rule: 'HostRegexp(`^ndm-intake\.`) || HostRegexp(`^snmp-traps-intake\.`) || HostRegexp(`^ndmflow-intake\.`) || HostRegexp(`^netpath-intake\.`)'
+      service: ndm
+    cws:
+      rule: 'HostRegexp(`^cws-intake\.`)'
+      service: cws
+    runtime_security:
+      rule: 'HostRegexp(`^runtime-security-http-intake\.logs\.`)'
+      service: runtime_security
+    cspm:
+      rule: 'HostRegexp(`^cspm-intake\.`)'
+      service: cspm
+    sbom:
+      rule: 'HostRegexp(`^sbom-intake\.`)'
+      service: sbom
+    sds:
+      rule: 'HostRegexp(`^sds-intake\.`)'
+      service: sds
+    agent_discovery:
+      rule: 'HostRegexp(`^agentdiscovery-intake\.`)'
+      service: agent_discovery
+    agent_health:
+      rule: 'HostRegexp(`^agenthealth-intake\.`)'
+      service: agent_health
+    event_management:
+      rule: 'HostRegexp(`^event-management-intake\.`)'
+      service: event_management
+    software_inventory:
+      rule: 'HostRegexp(`^softinv-intake\.`)'
+      service: software_inventory
+    synthetics_results:
+      rule: 'HostRegexp(`^http-synthetics\.`)'
+      service: synthetics_results
+    synthetics_poller:
+      rule: 'HostRegexp(`^intake\.synthetics\.`)'
+      service: synthetics_poller
+    data_obs:
+      rule: 'HostRegexp(`^data-obs-intake\.`)'
+      service: data_obs
+    ci_test_cycle:
+      rule: 'HostRegexp(`^citestcycle-intake\.`)'
+      service: ci_test_cycle
+    ci_test_coverage:
+      rule: 'HostRegexp(`^citestcov-intake\.`)'
+      service: ci_test_coverage
+    ci_webhook:
+      rule: 'HostRegexp(`^webhook-intake\.`)'
+      service: ci_webhook
+    ai_usage:
+      rule: 'HostRegexp(`^eudm-intake\.`)'
+      service: ai_usage
+    llm_obs:
+      rule: 'HostRegexp(`^llmobs-intake\.`)'
+      service: llm_obs
+    install:
+      rule: 'Host(`install.datadoghq.com`) || Host(`install.datad0g.com`)'
+      service: install
+  services:
+    app:
+      loadBalancer:
+        servers:
+          - url: http://intake-app:8080
+    api:
+      loadBalancer:
+        servers:
+          - url: http://intake-api:8080
+    trace:
+      loadBalancer:
+        servers:
+          - url: http://intake-trace:8080
+    telemetry:
+      loadBalancer:
+        servers:
+          - url: http://intake-telemetry:8080
+    resources:
+      loadBalancer:
+        servers:
+          - url: http://intake-resources:8080
+    logs:
+      loadBalancer:
+        servers:
+          - url: http://intake-logs:8080
+    profile:
+      loadBalancer:
+        servers:
+          - url: http://intake-profile:8080
+    debugger:
+      loadBalancer:
+        servers:
+          - url: http://intake-debugger:8080
+    sourcemap:
+      loadBalancer:
+        servers:
+          - url: http://intake-sourcemap:8080
+    browser:
+      loadBalancer:
+        servers:
+          - url: http://intake-browser:8080
+    processes:
+      loadBalancer:
+        servers:
+          - url: http://intake-processes:8080
+    kubeops:
+      loadBalancer:
+        servers:
+          - url: http://intake-kubeops:8080
+    containers:
+      loadBalancer:
+        servers:
+          - url: http://intake-containers:8080
+    remote_config:
+      loadBalancer:
+        servers:
+          - url: http://intake-remote-config:8080
+    dbm:
+      loadBalancer:
+        servers:
+          - url: http://intake-dbm:8080
+    ndm:
+      loadBalancer:
+        servers:
+          - url: http://intake-ndm:8080
+    cws:
+      loadBalancer:
+        servers:
+          - url: http://intake-cws:8080
+    runtime_security:
+      loadBalancer:
+        servers:
+          - url: http://intake-runtime-security:8080
+    cspm:
+      loadBalancer:
+        servers:
+          - url: http://intake-cspm:8080
+    sbom:
+      loadBalancer:
+        servers:
+          - url: http://intake-sbom:8080
+    sds:
+      loadBalancer:
+        servers:
+          - url: http://intake-sds:8080
+    agent_discovery:
+      loadBalancer:
+        servers:
+          - url: http://intake-agent-discovery:8080
+    agent_health:
+      loadBalancer:
+        servers:
+          - url: http://intake-agent-health:8080
+    event_management:
+      loadBalancer:
+        servers:
+          - url: http://intake-event-management:8080
+    software_inventory:
+      loadBalancer:
+        servers:
+          - url: http://intake-software-inventory:8080
+    synthetics_results:
+      loadBalancer:
+        servers:
+          - url: http://intake-synthetics-results:8080
+    synthetics_poller:
+      loadBalancer:
+        servers:
+          - url: http://intake-synthetics-poller:8080
+    data_obs:
+      loadBalancer:
+        servers:
+          - url: http://intake-data-obs:8080
+    ci_test_cycle:
+      loadBalancer:
+        servers:
+          - url: http://intake-ci-test-cycle:8080
+    ci_test_coverage:
+      loadBalancer:
+        servers:
+          - url: http://intake-ci-test-coverage:8080
+    ci_webhook:
+      loadBalancer:
+        servers:
+          - url: http://intake-ci-webhook:8080
+    ai_usage:
+      loadBalancer:
+        servers:
+          - url: http://intake-ai-usage:8080
+    llm_obs:
+      loadBalancer:
+        servers:
+          - url: http://intake-llm-obs:8080
+    install:
+      loadBalancer:
+        servers:
+          - url: http://intake-install:8080

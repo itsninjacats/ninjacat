@@ -134,35 +134,34 @@ secrets:
   queryTokenSecret: ""
 
 # -----------------------------------------------------------------------------
-# The server: one image, run as two processes that share nothing but the
-# databases. What agents can reach and what the panel reads from are separate
-# pods, with separate Services.
+# The server: one image with every program in it (backend/). Each intake host is
+# a program of its own, in pods of its own; the query process and the monitor
+# service are two more. They share nothing but the databases.
 # -----------------------------------------------------------------------------
 
-api:
+server:
   image:
-    # Where .github/workflows/ci.yml publishes. A bare `ninjacat/api` would
+    # Where .github/workflows/ci.yml publishes. A bare `ninjacat/server` would
     # be Docker Hub's, which is someone else's namespace.
-    repository: ghcr.io/itsninjacats/ninjacat/api
+    repository: ghcr.io/itsninjacats/ninjacat/server
     pullPolicy: IfNotPresent
     # Defaults to the chart appVersion.
     tag: ""
 
-# `ninjacat-api intake`: what agents send to. It owns every write to ClickHouse.
+# What agents send to: one Deployment and one Service per program, and the
+# Ingress sends each host name to its program. What is set here is every
+# program's; an entry under `programs` overrides replicas, resources, env and
+# extraEnv for its own pods.
 intake:
-  # More than one is safe only with migrations.enabled (below), which takes
-  # the ClickHouse migrations out of the pods' start-up.
   replicas: 1
 
-  # The Service the Ingress targets. Switch it to LoadBalancer only if agents
-  # should reach the intake without going through the Ingress.
   service:
     type: ClusterIP
     port: 8080
     annotations: {}
 
   # Extra non-secret environment (NINJACAT_MAX_BODY_BYTES, NINJACAT_ACK_UNKNOWN,
-  # NINJACAT_RUM_ALLOWED_ORIGINS, ...). See api/README.md.
+  # NINJACAT_RUM_ALLOWED_ORIGINS, ...). See backend/README.md.
   env: {}
 
   # Entries for the container's env list, as Kubernetes spells them: for what
@@ -173,19 +172,69 @@ intake:
   # One request may hold a 64 MiB body and as much again inflated; the rest is
   # the rows waiting to be written.
   resources:
-    requests: { cpu: 100m, memory: 256Mi }
-    limits: { memory: 1Gi }
+    requests: { cpu: 20m, memory: 32Mi }
+    limits: { memory: 512Mi }
   podAnnotations: {}
   # Beside the chart's own labels, which they must not repeat: the
-  # app.kubernetes.io/* keys are the selector. Datadog's admission controller
-  # takes its opt-in and service names from pod labels
-  # (admission.datadoghq.com/enabled, tags.datadoghq.com/service).
+  # app.kubernetes.io/* keys are the selector.
   podLabels: {}
   nodeSelector: {}
   tolerations: []
   affinity: {}
 
-# `ninjacat-api query`: what the panel reads from. It only reads, asks for no
+  # The programs, by the name of their binary (ninjapaws_<name>), and the
+  # hosts each serves: `hostPrefixes` are put in front of domainRoot, `hosts`
+  # are taken as they are (a Multi-Region Failover copy, app.mrf.<domainRoot>,
+  # if the agent dual-ships). Explicit rather than a wildcard because several
+  # hosts are two labels deep (trace.agent., http-intake.logs.) and neither
+  # Ingress nor a wildcard certificate matches across a dot. `enabled: false`
+  # leaves a program out.
+  #
+  # An agent given a site of your own asks for app.<site>. It prefixes its
+  # version (7-84-0-app.agent.<site>) only when the site is one of Datadog's
+  # own domains (pkg/config/utils/endpoints.go, the same in 7.70 to 7.84). Only
+  # an installation that answers under such a domain needs those in `hosts`.
+  programs:
+    app: { hostPrefixes: [app] }
+    api: { hostPrefixes: [api] }
+    trace: { hostPrefixes: [trace.agent] }
+    telemetry: { hostPrefixes: [instrumentation-telemetry-intake] }
+    resources: { hostPrefixes: [resources-intake] }
+    logs: { hostPrefixes: [http-intake.logs, agent-http-intake.logs] }
+    profile: { hostPrefixes: [intake.profile] }
+    debugger: { hostPrefixes: [debugger-intake] }
+    sourcemap: { hostPrefixes: [sourcemap-intake] }
+    # The browser SDKs (RUM, logs). Any origin may send, unless
+    # NINJACAT_RUM_ALLOWED_ORIGINS (its env) names the ones that may.
+    browser: { hostPrefixes: [browser-intake] }
+    processes: { hostPrefixes: [process] }
+    kubeops: { hostPrefixes: [orchestrator, kubeops-intake] }
+    containers: { hostPrefixes: [contlcycle-intake, contimage-intake] }
+    remote_config: { hostPrefixes: [config] }
+    dbm: { hostPrefixes: [dbm-metrics-intake] }
+    ndm: { hostPrefixes: [ndm-intake, snmp-traps-intake, ndmflow-intake, netpath-intake] }
+    cws: { hostPrefixes: [cws-intake] }
+    runtime_security: { hostPrefixes: [runtime-security-http-intake.logs] }
+    cspm: { hostPrefixes: [cspm-intake] }
+    sbom: { hostPrefixes: [sbom-intake] }
+    sds: { hostPrefixes: [sds-intake] }
+    agent_discovery: { hostPrefixes: [agentdiscovery-intake] }
+    agent_health: { hostPrefixes: [agenthealth-intake] }
+    event_management: { hostPrefixes: [event-management-intake] }
+    software_inventory: { hostPrefixes: [softinv-intake] }
+    synthetics_poller: { hostPrefixes: [intake.synthetics] }
+    synthetics_results: { hostPrefixes: [http-synthetics] }
+    ci_test_cycle: { hostPrefixes: [citestcycle-intake] }
+    ci_test_coverage: { hostPrefixes: [citestcov-intake] }
+    ci_webhook: { hostPrefixes: [webhook-intake] }
+    data_obs: { hostPrefixes: [data-obs-intake] }
+    ai_usage: { hostPrefixes: [eudm-intake] }
+    llm_obs: { hostPrefixes: [llmobs-intake] }
+    # The agent's installer and its BTF downloads ask install.datadoghq.com
+    # by name, whatever the site; off unless that name is pointed here.
+    install: { enabled: false, hosts: [install.datadoghq.com, install.datad0g.com] }
+
+# `ninjapaws_internal`: what the panel reads from. It only reads, asks for no
 # key, and is never exposed: its Service is ClusterIP and no Ingress names it.
 query:
   replicas: 1
@@ -197,7 +246,7 @@ query:
   extraEnv: []
 
   resources:
-    requests: { cpu: 50m, memory: 128Mi }
+    requests: { cpu: 50m, memory: 64Mi }
     limits: { memory: 512Mi }
   podAnnotations: {}
   podLabels: {}
@@ -206,21 +255,13 @@ query:
   affinity: {}
 
 # -----------------------------------------------------------------------------
-# `ninjacat-monitors`: evaluates the monitors; its pods form one Akka cluster.
+# `ninjapaws_monitors`: evaluates the monitors. Its pods share them out through
+# Postgres advisory locks, so any number of them works; two keep evaluating
+# through a restart.
 # -----------------------------------------------------------------------------
 
 monitors:
-  image:
-    repository: ghcr.io/itsninjacats/ninjacat/monitors
-    pullPolicy: IfNotPresent
-    # Defaults to the chart appVersion.
-    tag: ""
-
-  # Three, so that losing one pod leaves a majority: the cluster's split-brain
-  # resolver keeps the side with more nodes and stops the other. At least
-  # two, which the cluster's first formation waits for. One pod per node
-  # unless `affinity` below says otherwise.
-  replicas: 3
+  replicas: 2
 
   # The monitors need only SELECT on Postgres's `monitor` table. Set this and
   # they read their own URL from the secret key MONITORS_DATABASE_URL
@@ -233,13 +274,13 @@ monitors:
   ownDatabaseUrl: false
 
   # Extra non-secret environment (NINJACAT_MONITOR_CONCURRENCY,
-  # NINJACAT_MONITOR_MAX_GROUPS, ...). See api/README.md.
+  # NINJACAT_MONITOR_MAX_GROUPS, ...). See backend/README.md.
   env: {}
   extraEnv: []
 
   resources:
-    requests: { cpu: 100m, memory: 256Mi }
-    limits: { memory: 768Mi }
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 512Mi }
   podAnnotations: {}
   podLabels: {}
   nodeSelector: {}
@@ -284,10 +325,8 @@ networkPolicy:
 
 # Both schemas are brought up to date before every install and upgrade, by
 # hook Jobs: Postgres by the frontend image's second entrypoint
-# (node migrate.js), ClickHouse by the server's (ninjacat-api migrate). The
-# intake pods are then told not to migrate at start-up, so several of them
-# cannot race. With this off, the intake migrates ClickHouse when it starts
-# and the Postgres schema is yours to apply.
+# (node migrate.js), ClickHouse by the server's ninjapaws_migrate. No other
+# program migrates: with this off, both schemas are yours to apply.
 migrations:
   enabled: true
   resources:
@@ -295,7 +334,7 @@ migrations:
     limits: { memory: 512Mi }
 
 # -----------------------------------------------------------------------------
-# Ingress: one for the panel, one for the intake.
+# Ingress: one for the panel, one for the intake's hosts.
 # -----------------------------------------------------------------------------
 
 ingress:
@@ -334,59 +373,4 @@ ingress:
     annotations: {}
     # Defaults to <fullname>-intake-tls.
     tlsSecretName: ""
-    # One host per Datadog product, prefixed onto domainRoot. The list mirrors
-    # the list in api/src/Intake/Routes.fs — keep the two in sync. Explicit
-    # rather than a wildcard because several hosts are two labels deep
-    # (trace.agent., http-intake.logs.) and neither Ingress nor a wildcard
-    # certificate matches across a dot.
-    hostPrefixes:
-      - app
-      - api
-      - trace.agent
-      - http-intake.logs
-      - agent-http-intake.logs
-      - process
-      - orchestrator
-      - kubeops-intake
-      - config
-      - contlcycle-intake
-      - contimage-intake
-      - dbm-metrics-intake
-      - ndm-intake
-      - snmp-traps-intake
-      - ndmflow-intake
-      - netpath-intake
-      - resources-intake
-      - instrumentation-telemetry-intake
-      - intake.profile
-      - debugger-intake
-      - sourcemap-intake
-      - cws-intake
-      - runtime-security-http-intake.logs
-      - cspm-intake
-      - sbom-intake
-      - sds-intake
-      - agentdiscovery-intake
-      - agenthealth-intake
-      - event-management-intake
-      - softinv-intake
-      - intake.synthetics
-      - http-synthetics
-      - citestcycle-intake
-      - citestcov-intake
-      - webhook-intake
-      - data-obs-intake
-      - eudm-intake
-      - llmobs-intake
-      # The browser SDKs (RUM, logs). Any origin may send, unless
-      # NINJACAT_RUM_ALLOWED_ORIGINS (intake.env) names the ones that may.
-      - browser-intake
-    # Full hostnames added verbatim, e.g. Multi-Region Failover copies
-    # (app.mrf.<domainRoot>) if the agent dual-ships.
-    #
-    # An agent given a site of your own asks for app.<site>, as listed above.
-    # It prefixes its version (7-84-0-app.agent.<site>) only when the site is
-    # one of Datadog's own domains (pkg/config/utils/endpoints.go, the same
-    # in 7.70 to 7.84). Only an installation that answers under such a domain
-    # needs "*.agent.<domain>" here.
-    extraHosts: []
+    # The hosts are each program's, under intake.programs.

@@ -7,6 +7,7 @@
 	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
 	import BuildingIcon from '@lucide/svelte/icons/building';
 	import UsersIcon from '@lucide/svelte/icons/users';
+	import UserRoundIcon from '@lucide/svelte/icons/user-round';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import NavMain from './nav-main.svelte';
 	import NavUser from './nav-user.svelte';
@@ -41,6 +42,7 @@
 
 	const settings = $derived([
 		{ title: m.api_keys(), url: '/app/settings/keys', icon: KeyRoundIcon },
+		{ title: m.account(), url: '/app/settings/account', icon: UserRoundIcon },
 		...(instanceAdmin
 			? [
 					{ title: m.tenants(), url: '/app/admin/tenants', icon: BuildingIcon },
@@ -50,9 +52,9 @@
 	]);
 </script>
 
-<!-- collapsible="icon" is the Datadog-shaped part: the rail shrinks to icons
-     rather than disappearing, so navigation stays one click away while a wide
-     chart or log table takes the screen. -->
+<!-- collapsible="icon": the rail shrinks to icons rather than disappearing, so
+     navigation stays one click away while a wide chart or log table takes the
+     screen. -->
 <Sidebar.Root bind:ref collapsible="icon" {...restProps}>
 	<Sidebar.Header>
 		<TenantSwitcher {tenant} {tenants} />

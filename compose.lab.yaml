@@ -3,8 +3,10 @@
 #   DD_API_KEY=<key> docker compose -f compose.yaml -f compose.lab.yaml up
 #
 # The key is one created in the panel (http://localhost:5173, Settings → API
-# keys); the intake answers 403 to anything else. Requests are dumped to
-# api/captures/ (DEBUG=true in compose.yaml).
+# keys); the intake answers 403 to anything else. What the agent sends lands in
+# the dev stack's database. The dev stack's programs run without DEBUG, so no
+# request is dumped here: for that, point the agent at the lab server
+# (lab/server.sh, lab/README.md), which writes every one to lab/captures/.
 #
 # The `lab` network is internal: containers on it have NO route out. That is
 # the one guarantee that nothing reaches Datadog — it does not depend on the
@@ -14,8 +16,9 @@ services:
   intake:
     networks:
       default: {}
-      # The intake routes on the Host header, so the agent needs Datadog-shaped
-      # hostnames: one alias per product it is pointed at below.
+      # The intake's router sends each Host to its program (dev/intake-routes.yml),
+      # so the agent needs Datadog-shaped hostnames: one alias per product it is
+      # pointed at below.
       lab:
         aliases:
           - app.ninjacat.lab
