@@ -6,10 +6,10 @@
 
 domainRoot: ninjacat.lab
 
-# The Deployments and Services become ninjacat-intake, ninjacat-query,
-# ninjacat-monitors and ninjacat-frontend. The names are load-bearing: up.sh
-# waits on all four and creates the TLS Secrets the chart looks for under
-# these names.
+# The Deployments and Services become ninjacat-intake-<name> (one per intake
+# program), ninjacat-query, ninjacat-monitors and ninjacat-frontend. The names
+# are load-bearing: up.sh waits on them and creates the TLS Secrets the chart
+# looks for under these names.
 fullnameOverride: ninjacat
 
 # Both databases made by the chart, with the query and monitors users exercised too.
@@ -31,36 +31,24 @@ secrets:
 # Built on the host and side-loaded with `kind load docker-image`; the images
 # exist in no registry, and IfNotPresent (the chart's default) is what keeps
 # the kubelet from trying to pull them.
-api:
+server:
   image:
-    repository: ninjacat/api
+    repository: ninjacat/server
     tag: lab
 
 # Traefik's pods are somewhere in kind's pod network.
 trustedProxies:
   - 10.244.0.0/16
 
-# Three pods on the lab's one node, where the chart's default (one per node)
-# would leave two of them pending.
-monitors:
-  image:
-    repository: ninjacat/monitors
-    tag: lab
-  affinity:
-    podAntiAffinity:
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            topologyKey: kubernetes.io/hostname
-            labelSelector:
-              matchLabels:
-                app.kubernetes.io/component: monitors
-
 intake:
   env:
-    # Dump every request, to see what a real agent sends:
-    #   kubectl --context kind-ninjacat-lab -n ninjacat-lab exec deploy/ninjacat-intake -- ls captures
+    # Dump every request, to see what a real agent sends, into /tmp (an emptyDir: the root
+    # filesystem is read-only). The image has no shell, so the dumps are read from a debug
+    # container that shares the program's processes and runs as its user (the pod's runAsUser):
+    #   kubectl --context kind-ninjacat-lab -n ninjacat-lab debug -it <pod> --image=busybox:1.37 \
+    #     --target=<container> --custom=<file with that securityContext> -- ls /proc/1/root/tmp/captures
     DEBUG: "true"
+    NINJACAT_CAPTURE_DIR: /tmp/captures
 
 frontend:
   image:

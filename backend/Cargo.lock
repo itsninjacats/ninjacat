@@ -1748,6 +1748,7 @@ dependencies = [
  "ninjapaws-proto",
  "ninjapaws-storage",
  "pbjson-types",
+ "percent-encoding",
  "prost",
  "prost-reflect",
  "rcgen",

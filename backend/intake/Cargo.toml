@@ -17,6 +17,7 @@ ipnet = "2"
 multer = "3"
 ninjapaws-proto.workspace = true
 ninjapaws-storage.workspace = true
+percent-encoding = "2"
 pbjson-types = "0.9.0"
 prost = "0.14.4"
 prost-reflect = { version = "0.16.5", features = ["serde"] }

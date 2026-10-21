@@ -24,6 +24,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
 use crate::auth::{self, Admitted, Scheme};
+use crate::capture;
 use crate::keys::{self, Store};
 use crate::raw;
 use crate::routers::flare;
@@ -354,7 +355,10 @@ pub async fn run_with(
         ack_unknown: var_or("NINJACAT_ACK_UNKNOWN", "") == "true",
         max_body_bytes,
     };
-    let router = around(router(intake, scheme, mount), &process)?;
+    let mut router = around(router(intake, scheme, mount), &process)?;
+    if var_or("DEBUG", "") == "true" {
+        router = capture::around(router, var_or("NINJACAT_CAPTURE_DIR", "captures").into(), max_body_bytes);
+    }
 
     let addr = var_or("NINJACAT_ADDR", ":8080");
     let listener = TcpListener::bind(listen_on(&addr)).await?;

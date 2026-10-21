@@ -29,7 +29,7 @@ const KEPT_HEADERS: [&str; 14] = [
 ];
 
 /// The query parameters that carry a key.
-const KEY_PARAMETERS: [&str; 2] = ["api_key", "dd-api-key"];
+pub const KEY_PARAMETERS: [&str; 2] = ["api_key", "dd-api-key"];
 
 /// The path without a key in it: older log clients put theirs in /v1/input/<key>.
 pub fn path_without_key(path: &str) -> String {

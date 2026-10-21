@@ -7,6 +7,7 @@
 
 pub mod auth;
 pub mod body;
+pub mod capture;
 pub mod ddsketch;
 pub mod fields;
 pub mod json;

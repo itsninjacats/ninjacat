@@ -53,7 +53,7 @@ API. `up.sh` then makes the first account (`lab@ninjacat.lab`, password
 
 The query process has no host port: the chart's NetworkPolicy admits the
 panel's pods only. To poke it, forward a port and mint a token with the secret
-`up.sh` generated, as `api/README.md` shows for the dev stack, then ask
+`up.sh` generated, as `backend/README.md` shows for the dev stack, then ask
 `127.0.0.1:18081`:
 
 ```sh

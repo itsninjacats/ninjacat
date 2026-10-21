@@ -6,7 +6,7 @@ Usage: export.py <name> <from> <to>, the times in UTC as ClickHouse writes them.
 import json, os, subprocess, sys, collections
 
 name, start, end = sys.argv[1], sys.argv[2], sys.argv[3]
-out = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'api', 'tests', 'Intake.Tests', 'Fixtures', 'real')
+out = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'backend', 'intake', 'tests', 'fixtures', 'real')
 
 def ch(query):
     return subprocess.run(['docker', 'exec', 'ninjacat-clickhouse', 'clickhouse-client', '-u', 'ninjacat', '--password', 'ninjacat',
