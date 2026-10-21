@@ -9,6 +9,7 @@ use std::sync::Arc;
 use base64::Engine;
 use http_body_util::BodyExt;
 use ninjapaws_intake::auth::Scheme;
+use ninjapaws_intake::json;
 use ninjapaws_intake::keys::{self, Key, Store};
 use ninjapaws_intake::routers::ci_visibility::{
     AgentHeaders, Value, coverage_entries_msgpack, decode_any, read_config_request, test_event_row,
@@ -361,28 +362,35 @@ fn json_holding_half_a_surrogate_pair_or_bytes_that_are_not_utf8_still_decodes()
     assert!(decode_any("application/json", deep.as_bytes()).1.is_ok());
 }
 
-/// A body nested as deep as the parser allows, a few megabytes at the bottom: each decoder reads it
-/// a fixed number of times, not once per level, so a sender cannot buy seconds of CPU with nesting.
-fn deep(levels: usize, around: &str) -> String {
+/// `around` with its `{}` replaced by lists nested until the whole body is `depth` levels deep,
+/// and four megabytes of text at the bottom.
+fn deep(depth: usize, around: &str) -> String {
     let (before, after) = around.split_once("{}").unwrap();
-    let filler = "x".repeat(4 << 20);
-    format!("{before}{}\"{filler}\"{}{after}", "[".repeat(levels), "]".repeat(levels))
+    let levels = depth - before.matches(['{', '[']).count();
+    format!("{before}{}\"{}\"{}{after}", "[".repeat(levels), "x".repeat(4 << 20), "]".repeat(levels))
 }
 
+/// Bodies as deep as the parser goes, each a few megabytes: a decoder reads them a fixed number
+/// of times, not once per level, so a sender cannot buy seconds of CPU with nesting.
 #[tokio::test]
 async fn a_deeply_nested_body_is_decoded_in_linear_time() {
+    // serde_json takes 127 levels and refuses the 128th.
+    const DEEPEST: usize = 127;
+    let cycle = r#"{"events":[{"type":"test","content":{"meta":{"x":{}}}}]}"#;
+    assert!(json::try_parse(deep(DEEPEST + 1, cycle).as_bytes()).is_err());
+
     let started = std::time::Instant::now();
-    let cycle = deep(120, r#"{"events":[{"type":"test","content":{"meta":{"x":{}}}}]}"#);
-    assert!(decode_any("application/json", cycle.as_bytes()).1.is_ok());
-    let answer = post_json(ci_visibility::mount_test_cycle, "/api/v2/citestcycle", &cycle).await;
+    let answer = post_json(ci_visibility::mount_test_cycle, "/api/v2/citestcycle", &deep(DEEPEST, cycle)).await;
     assert_eq!(answer.rows("ci_test_events").len(), 1);
-    let batch = deep(120, r#"[{"level":"job","parameters":{"x":{}}}]"#);
-    let answer = webhook("/api/v2/webhook", &[], &batch).await;
+    let answer = webhook("/api/v2/webhook", &[], &deep(DEEPEST, r#"[{"level":"job","parameters":{"x":{}}}]"#)).await;
     assert_eq!(answer.rows("ci_webhook_events").len(), 1);
-    let settings = deep(120, r#"{"data":{"attributes":{"configurations":{}}}}"#);
+    let settings = deep(DEEPEST, r#"{"data":{"attributes":{"configurations":{}}}}"#);
     let answer = post_json(ci_visibility::mount_api, "/api/v2/libraries/tests/services/setting", &settings).await;
     assert_eq!(answer.rows("ci_settings_requests").len(), 1);
-    // Read once per level, each 4 MB body would be 120 passes over it.
+    let tags = deep(DEEPEST, r#"{"data":{"type":"t","attributes":{"tags":{}}}}"#);
+    let answer = post_json(ci_visibility::mount_api, "/api/v2/ci/pipeline/tags", &tags).await;
+    assert_eq!(answer.rows("ci_pipeline_events").len(), 1);
+    // Read once per level, each 4 MB body would be over a hundred passes.
     assert!(started.elapsed() < std::time::Duration::from_secs(10), "{:?}", started.elapsed());
 }
 
