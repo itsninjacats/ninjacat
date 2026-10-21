@@ -417,7 +417,7 @@ mod tests {
     /// posting to the intake, psql against Postgres, redis-cli against Redis.
     fn recorded(name: &str) -> Vec<u8> {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../api/tests/Intake.Tests/Fixtures/real")
+            .join("tests/fixtures/real")
             .join(name);
         std::fs::read(path).unwrap()
     }

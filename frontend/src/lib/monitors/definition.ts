@@ -1,4 +1,4 @@
-// The query is never parsed back here: api/src/Engine/Monitor/Parse.fs is the only parser.
+// The query is never parsed back here: backend/engine/src/monitor/parse.rs is the only parser.
 
 // Relative, not $lib: the e2e seed builds its monitors with this module, outside Vite.
 import { wrap } from '../metrics/functions';

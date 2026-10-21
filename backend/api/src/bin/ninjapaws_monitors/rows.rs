@@ -1,5 +1,5 @@
 //! The rows this process writes, field by field as the columns are named and typed
-//! (`api/schema/migrations`); the ClickHouse client checks each against the table before it
+//! (`backend/schema/migrations`); the ClickHouse client checks each against the table before it
 //! sends one. Instants are unix milliseconds, as a DateTime64(3) holds them. (F#:
 //! `Storage/Rows/Monitors.fs`, `Metrics.fs`.)
 

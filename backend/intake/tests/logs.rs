@@ -47,7 +47,7 @@ fn rows<'a>(writes: &'a [Batch], table: &str) -> Vec<&'a Value> {
 async fn logs_from_the_dotnet_tracer_which_have_no_message_field_become_log_rows() {
     let body = std::fs::read(
         Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../api/tests/Intake.Tests/Fixtures/real/dd-trace-dotnet-3.54.0-logs.json"),
+            .join("tests/fixtures/real/dd-trace-dotnet-3.54.0-logs.json"),
     )
     .unwrap();
     let writes = post("/api/v2/logs", &body).await;

@@ -33,9 +33,8 @@ spec:
                 port:
                   name: http
 ---
-# Agent intake: every product host lands on the same Service. The intake
-# itself picks the product from the Host header, so this Ingress only has to
-# let the name through unchanged.
+# Agent intake: each product's host names go to the Service of the program
+# that serves them (intake.programs).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -59,7 +58,10 @@ spec:
       secretName: {{ .Values.ingress.intake.tlsSecretName | default (printf "%s-intake-tls" $fullname) }}
   {{- end }}
   rules:
-    {{- range $intakeHosts }}
+    {{- range $name, $program := .Values.intake.programs }}
+    {{- if ne (toString $program.enabled) "false" }}
+    {{- $service := printf "%s-%s" $fullname (include "ninjacat.intakeComponent" $name) }}
+    {{- range (include "ninjacat.programHosts" (dict "ctx" $ "program" $program) | trim | splitList "\n") }}
     - host: {{ . | quote }}
       http:
         paths:
@@ -67,8 +69,10 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ $fullname }}-intake
+                name: {{ $service }}
                 port:
                   name: intake
+    {{- end }}
+    {{- end }}
     {{- end }}
 {{- end }}

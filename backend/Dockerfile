@@ -1,10 +1,7 @@
 # The production image of the Rust server: one image, every program in it. The command says which
 # one a container runs, `ninjapaws_internal`, `ninjapaws_api` or another; there is no default.
 #
-# The ClickHouse migrations are embedded in the programs from `api/schema/migrations`, outside this
-# directory, so they come in as a build context of their own:
-#
-#   docker build --build-context migrations=../api/schema/migrations -t ninjapaws .
+#   docker build -t ninjapaws .
 #   docker run ninjapaws ninjapaws_internal
 #
 # PROFILE is the Cargo profile: `dist` (the default) for an image that is deployed, `dev` for the
@@ -13,8 +10,6 @@ FROM rust:1.99.1-slim-trixie AS build
 ARG PROFILE=dist
 WORKDIR /src
 COPY . .
-# Where `storage` looks for them: ../../api/schema/migrations from its own directory.
-COPY --from=migrations . /api/schema/migrations/
 
 # Cache mounts keep the registry and the build between builds, so a change rebuilds only what
 # it touches. The target directory is a mount, so the programs are copied out in the same step,

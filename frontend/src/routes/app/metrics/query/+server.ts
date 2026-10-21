@@ -8,7 +8,7 @@ import {
 } from '$lib/server/ninjacat';
 import type { RequestHandler } from './$types';
 
-// Proxy between the explorer and the F# query API, for the same reason as
+// Proxy between the explorer and the server's query API, for the same reason as
 // data/+server.ts: the browser never learns :8081 exists. The session check is
 // repeated on purpose — the /app layout guard does not run for +server.ts.
 

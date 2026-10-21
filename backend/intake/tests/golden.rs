@@ -1,4 +1,4 @@
-//! The golden fixtures of the F# intake (`api/tests/Intake.Tests/Fixtures/go`): requests recorded
+//! The golden fixtures of the F# intake (`backend/intake/tests/fixtures/go`): requests recorded
 //! from the Go server, each with its answer and the rows it stored. Every fixture a ported host
 //! serves is replayed through that host's router, in memory, and compared field by field;
 //! `Fixtures/overrides.json` lists the accepted differences, as for the F# replay.
@@ -42,7 +42,7 @@ fn test_keys() -> Arc<Store> {
 }
 
 fn fixtures_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../api/tests/Intake.Tests/Fixtures")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
 
 /// A ported host's process as the fixtures need it: the key it asks for, its routes, and what its

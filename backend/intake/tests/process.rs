@@ -81,7 +81,7 @@ fn blob(value: &Value) -> Vec<u8> {
 
 fn frame(name: &str) -> Vec<u8> {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../api/tests/Intake.Tests/Fixtures/frames")
+        .join("tests/fixtures/frames")
         .join(name);
     std::fs::read(path).unwrap()
 }

@@ -61,7 +61,7 @@ export const reasonOf = (e: unknown) => (e instanceof NinjacatError ? e.message 
 
 /**
  * The query process answers only a token the panel signed, and runs every
- * query for the tenant it names (api/src/Server/QueryToken.fs). One is minted
+ * query for the tenant it names (backend/api/src/bin/ninjapaws_internal/token.rs). One is minted
  * per call, for the user and tenant of the request being served.
  */
 async function queryToken(): Promise<string> {
@@ -407,7 +407,7 @@ export async function fetchLogFacets(from: string, to?: string): Promise<LogFace
 
 // ---- monitors ----------------------------------------------------------------------
 
-// What the monitor service stored for the token's tenant (api/src/Server/MonitorHandlers.fs).
+// What the monitor service stored for the token's tenant (backend/api/src/bin/ninjapaws_internal/monitors.rs).
 // Times are RFC 3339 strings in UTC.
 
 /** Checks a monitor as it would be saved: its type, query and options. */

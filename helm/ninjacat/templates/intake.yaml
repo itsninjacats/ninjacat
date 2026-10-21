@@ -1,52 +1,55 @@
 {{- $fullname := include "ninjacat.fullname" . -}}
 {{- $secret := include "ninjacat.secretName" . -}}
-# `ninjacat-api intake`: what agents send to.
+{{- range $name, $program := .Values.intake.programs }}
+{{- if ne (toString $program.enabled) "false" }}
+{{- $component := include "ninjacat.intakeComponent" $name }}
+{{- $env := merge (dict) ($program.env | default dict) $.Values.intake.env }}
+# `ninjapaws_{{ $name }}`: the intake of {{ include "ninjacat.programHosts" (dict "ctx" $ "program" $program) | trim | splitList "\n" | join ", " }}.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $fullname }}-intake
+  name: {{ $fullname }}-{{ $component }}
   labels:
-    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "intake") | nindent 4 }}
+    {{- include "ninjacat.componentLabels" (dict "ctx" $ "component" $component) | nindent 4 }}
 spec:
-  replicas: {{ .Values.intake.replicas }}
+  replicas: {{ $program.replicas | default $.Values.intake.replicas }}
   selector:
     matchLabels:
-      {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "intake") | nindent 6 }}
+      {{- include "ninjacat.selectorLabels" (dict "ctx" $ "component" $component) | nindent 6 }}
   template:
     metadata:
       annotations:
         # Roll the pod when its configuration changes.
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        {{- if not .Values.secrets.existingSecret }}
-        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+        {{- if not $.Values.secrets.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") $ | sha256sum }}
         {{- end }}
-        {{- with .Values.intake.podAnnotations }}
+        {{- with $.Values.intake.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "intake") | nindent 8 }}
-        {{- with .Values.intake.podLabels }}
+        {{- include "ninjacat.componentLabels" (dict "ctx" $ "component" $component) | nindent 8 }}
+        {{- with $.Values.intake.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      {{- with .Values.imagePullSecrets }}
+      {{- with $.Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       automountServiceAccountToken: false
-      # The image runs as the named user "app"; the kubelet can only verify
-      # runAsNonRoot against a numeric UID.
+      # distroless's nonroot; the kubelet can only verify runAsNonRoot against a numeric UID.
       securityContext:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
-        runAsUser: 1654
-        runAsGroup: 1654
+        runAsUser: 65532
+        runAsGroup: 65532
       containers:
         - name: intake
-          image: {{ include "ninjacat.apiImage" . | quote }}
-          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
-          args: ["intake"]
+          image: {{ include "ninjacat.serverImage" $ | quote }}
+          imagePullPolicy: {{ $.Values.server.image.pullPolicy }}
+          command: ["ninjapaws_{{ $name }}"]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -54,7 +57,7 @@ spec:
               drop: ["ALL"]
           ports:
             - name: intake
-              containerPort: {{ .Values.intake.service.port }}
+              containerPort: {{ $.Values.intake.service.port }}
           envFrom:
             - configMapRef:
                 name: {{ $fullname }}-intake
@@ -62,79 +65,73 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  {{- include "ninjacat.databaseUrlRef" . | nindent 18 }}
+                  {{- include "ninjacat.databaseUrlRef" $ | nindent 18 }}
             - name: CLICKHOUSE_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ $secret }}
                   key: CLICKHOUSE_PASSWORD
-            {{- with .Values.intake.extraEnv }}
+            {{- range $k, $v := $env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+            {{- with (concat ($.Values.intake.extraEnv | default list) ($program.extraEnv | default list)) }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          # The intake routes on the Host header: a request for a host it
-          # does not know is a 404 by design, so both probes name one it does.
           readinessProbe:
             httpGet:
               path: /ping
               port: intake
-              httpHeaders:
-                - name: Host
-                  value: {{ printf "api.%s" (include "ninjacat.domainRoot" .) | quote }}
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /ping
               port: intake
-              httpHeaders:
-                - name: Host
-                  value: {{ printf "api.%s" (include "ninjacat.domainRoot" .) | quote }}
             initialDelaySeconds: 10
             periodSeconds: 20
-          # The root filesystem is read-only; these are the two places the
-          # server may write: its working directory and /tmp.
+          # The root filesystem is read-only: /tmp is the one place a program may write.
           volumeMounts:
-            - name: data
-              mountPath: /data
             - name: tmp
               mountPath: /tmp
-          {{- with .Values.intake.resources }}
+          {{- with ($program.resources | default $.Values.intake.resources) }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
       volumes:
-        - name: data
-          emptyDir: {}
         - name: tmp
           emptyDir: {}
-      {{- with .Values.intake.nodeSelector }}
+      {{- with $.Values.intake.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.intake.affinity }}
+      {{- with $.Values.intake.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.intake.tolerations }}
+      {{- with $.Values.intake.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
 ---
-# The Ingress targets this one.
+# The Ingress sends the program's hosts here.
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ $fullname }}-intake
+  name: {{ $fullname }}-{{ $component }}
   labels:
-    {{- include "ninjacat.componentLabels" (dict "ctx" . "component" "intake") | nindent 4 }}
-  {{- with .Values.intake.service.annotations }}
+    {{- include "ninjacat.componentLabels" (dict "ctx" $ "component" $component) | nindent 4 }}
+  {{- with $.Values.intake.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  type: {{ .Values.intake.service.type }}
+  type: {{ $.Values.intake.service.type }}
   ports:
     - name: intake
-      port: {{ .Values.intake.service.port }}
+      port: {{ $.Values.intake.service.port }}
       targetPort: intake
   selector:
-    {{- include "ninjacat.selectorLabels" (dict "ctx" . "component" "intake") | nindent 4 }}
+    {{- include "ninjacat.selectorLabels" (dict "ctx" $ "component" $component) | nindent 4 }}
+---
+{{- end }}
+{{- end }}

@@ -92,9 +92,8 @@ spec:
         - name: tmp
           emptyDir: {}
 ---
-# ClickHouse: the telemetry tables. `ninjacat-api migrate` applies the
-# migrations embedded in the server and exits. Doing it here, once, is what
-# lets the intake run as several replicas without racing at start-up.
+# ClickHouse: the telemetry tables. `ninjapaws_migrate` applies the
+# migrations embedded in the server, sets the metrics retention and exits.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -123,13 +122,13 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
-        runAsUser: 1654
-        runAsGroup: 1654
+        runAsUser: 65532
+        runAsGroup: 65532
       containers:
         - name: migrate
-          image: {{ include "ninjacat.apiImage" . | quote }}
-          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
-          args: ["migrate"]
+          image: {{ include "ninjacat.serverImage" . | quote }}
+          imagePullPolicy: {{ .Values.server.image.pullPolicy }}
+          command: ["ninjapaws_migrate"]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -147,23 +146,11 @@ spec:
                 secretKeyRef:
                   name: {{ $hookSecret }}
                   key: CLICKHOUSE_PASSWORD
-            # The server reads its whole configuration at start, this too.
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  {{- if .Values.postgres.create }}
-                  {{- include "ninjacat.databaseUrlRef" . | nindent 18 }}
-                  {{- else }}
-                  name: {{ $hookSecret }}
-                  key: DATABASE_URL
-                  {{- end }}
             {{- range $k, $v := include "ninjacat.retentionEnv" . | fromYaml }}
             - name: {{ $k }}
               value: {{ $v | quote }}
             {{- end }}
           volumeMounts:
-            - name: data
-              mountPath: /data
             - name: tmp
               mountPath: /tmp
           {{- with .Values.migrations.resources }}
@@ -171,8 +158,6 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
       volumes:
-        - name: data
-          emptyDir: {}
         - name: tmp
           emptyDir: {}
 {{- end }}

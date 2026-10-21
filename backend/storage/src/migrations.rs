@@ -1,4 +1,4 @@
-//! The ClickHouse schema: the numbered SQL files of `api/schema/migrations`, embedded in the
+//! The ClickHouse schema: the numbered SQL files of `backend/schema/migrations`, embedded in the
 //! binary, applied in order and recorded in `schema_migrations`. The F# server applies the same
 //! files into the same ledger, with the same checksums.
 //!
@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use include_dir::{Dir, include_dir};
 
-static FILES: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../api/schema/migrations");
+static FILES: Dir = include_dir!("$CARGO_MANIFEST_DIR/../schema/migrations");
 
 #[derive(Clone, Debug)]
 pub struct Migration {

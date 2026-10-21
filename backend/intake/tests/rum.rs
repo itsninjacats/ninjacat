@@ -941,7 +941,7 @@ fn a_replay_row_puts_the_bytes_in_the_column_that_says_what_they_are() {
 }
 
 fn real(name: &str) -> Vec<u8> {
-    std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../api/tests/Intake.Tests/Fixtures/real").join(name))
+    std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real").join(name))
         .unwrap()
 }
 

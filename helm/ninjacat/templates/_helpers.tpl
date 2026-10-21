@@ -45,12 +45,28 @@ app.kubernetes.io/component: {{ .component }}
 app.kubernetes.io/component: {{ .component }}
 {{- end }}
 
-{{- define "ninjacat.apiImage" -}}
-{{- printf "%s:%s" .Values.api.image.repository (.Values.api.image.tag | default .Chart.AppVersion) }}
+{{- define "ninjacat.serverImage" -}}
+{{- printf "%s:%s" .Values.server.image.repository (.Values.server.image.tag | default .Chart.AppVersion) }}
 {{- end }}
 
-{{- define "ninjacat.monitorsImage" -}}
-{{- printf "%s:%s" .Values.monitors.image.repository (.Values.monitors.image.tag | default .Chart.AppVersion) }}
+{{/*
+The component name of an intake program: intake-<name>, underscores as dashes.
+*/}}
+{{- define "ninjacat.intakeComponent" -}}
+{{- printf "intake-%s" (. | replace "_" "-") }}
+{{- end }}
+
+{{/*
+The hostnames one intake program serves, one per line. Call with
+(dict "ctx" $ "program" $program).
+*/}}
+{{- define "ninjacat.programHosts" -}}
+{{- range .program.hostPrefixes }}
+{{ printf "%s.%s" . (include "ninjacat.domainRoot" $.ctx) }}
+{{- end }}
+{{- range .program.hosts }}
+{{ . }}
+{{- end }}
 {{- end }}
 
 {{- define "ninjacat.retentionEnv" -}}
@@ -108,14 +124,13 @@ traefik.ingress.kubernetes.io/router.tls: "true"
 {{- end }}
 
 {{/*
-Every intake hostname, one per line.
+Every hostname of every intake program that is on, one per line.
 */}}
 {{- define "ninjacat.intakeHosts" -}}
-{{- range .Values.ingress.intake.hostPrefixes }}
-{{ printf "%s.%s" . (include "ninjacat.domainRoot" $) }}
+{{- range $name, $program := .Values.intake.programs }}
+{{- if ne (toString $program.enabled) "false" }}
+{{- include "ninjacat.programHosts" (dict "ctx" $ "program" $program) }}
 {{- end }}
-{{- range .Values.ingress.intake.extraHosts }}
-{{ . }}
 {{- end }}
 {{- end }}
 

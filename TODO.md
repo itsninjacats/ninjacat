@@ -1,7 +1,7 @@
 # TODO
 
 Open work, grouped by what it unblocks. Scoped write-ups of single items live in
-`api/docs/zadania/`; this file is the list.
+`docs/protocol/zadania/`; this file is the list.
 
 **Focus for now: infrastructure** — the agent, Kubernetes, network, databases — and the
 backend that receives it. What applications send (tracers, profiles, RUM, error tracking) and
@@ -87,9 +87,12 @@ Open, most urgent first:
       only when a whole frame has arrived.
 - [x] The panel sends security headers: a CSP with nonces (`kit.csp`), `frame-ancestors`, HSTS, nosniff (2026-10-15).
 - [ ] The server falls back to the ClickHouse password `ninjacat` when none is set
-      (`Config.fs`); the chart and `compose.prod.yaml` always set one. Fail instead.
+      (`backend/storage/src/lib.rs`); the chart and `compose.prod.yaml` always set one. Fail
+      instead.
 - [ ] `compose.prod.yaml`: the panel on every interface as plain HTTP, no health checks on
-      the three services, logs not JSON (`Logging__Console__FormatterName=json`).
+      the server's services.
+- [ ] The server's programs log text lines (tracing's default format), not one JSON object
+      per line: what a request puts in a path or a header can pass for a log line of its own.
 - [ ] What the query process says in an error (ClickHouse's text) reaches the browser.
 - [ ] The chart's NetworkPolicy covers the query port only. The intake and the panel still
       take a connection from any pod; admitting the Ingress controller alone needs to know
@@ -104,187 +107,40 @@ Open, most urgent first:
       at once. Any other clone has to be made again, not pulled.
 - [ ] The panel does not link to its source (AGPL section 13); `bun run lint` fails on 431
       files, so CI does not run it.
-- [ ] **Akka remoting between the monitor pods is plain TCP** (2552, and the bootstrap's
-      HTTP on 8558), trusted by whoever connects. The chart's NetworkPolicy admits only
-      monitor pods to those ports, which holds only with a network plugin that enforces
-      policies. TLS for remoting (`akka.remote.dot-netty.tcp.enable-ssl`) before relying on
-      anything else.
 - [ ] **The monitor service has not run at its capacity target** (1 000 monitors × 20
-      groups, windows under 24 h, 3 pods; `api/docs/zadania/monitors.md`, "Capacity"). On
-      a real cluster: load 1 000 monitors over 20 000 series; measure read latency
-      (`system.query_log`, the monitors user), `ninjacat.monitor.evaluation.lag`, the gate's
-      skip rate (with a monitor on it) and `monitor_evaluations` rows a day, into
-      `api/README.md`; check the default one-pod-per-node anti-affinity on three nodes.
+      groups, windows under 24 h; `docs/protocol/zadania/monitors.md`, "Capacity"). On a real
+      cluster: load 1 000 monitors over 20 000 series; measure read latency
+      (`system.query_log`, the monitors user), `ninjacat.monitor.evaluation.lag`, the skip
+      rate and `monitor_evaluations` rows a day, into `backend/README.md`.
 
-## 1. Finish the move to one server
+## 1. The server in Rust
 
-The F# server (`api/`) is the only server: the Go one was removed on 2026-10-02, and its
-notes moved to `api/docs/`. What still names it:
+The server is `backend/` (2026-10-21): one program per intake host (`ninjapaws_<host>`), the
+query process, the monitor service and `ninjapaws_migrate`, all in one image. It replaced the F#
+server, which had replaced the Go one; the golden fixtures recorded from Go are replayed against
+every host (`backend/intake/tests/golden.rs`) and their rows inserted into a scratch ClickHouse.
 
-- [x] `lab/k8s/`: builds `api/` and installs NinjaCat from `helm/ninjacat`
-      (`ninjacat-values.yaml`); its own manifests are only what the chart does not own
-      (data stores, the panel's NodePort), with Traefik in front and a NetworkPolicy that
-      lets nothing in the namespace reach the internet. Run on 2026-10-02 with agent 7.84.0: every table
-      of `verify.sh` filled except `container_events` (no container died), nothing in
-      `raw_payloads`. What it found is in section 3.
-- [x] `helm/ninjacat`: one image, two Deployments (`intake`, `query`), a hook Job per
-      schema (`node migrate.js`, `ninjacat-api migrate`), `CLICKHOUSE_HTTP_ADDR`, an
-      optional read-only ClickHouse user for `query`. Checked in the lab: install, upgrade,
-      `helm test`, two intake replicas.
-- [ ] `api/docs/**` describe Go files that no longer exist; say what the F# equivalent is
-      as each note is translated.
-- [x] Consolidate what the parallel port wrote several times: section 1a.
-- [x] Comments that explain a behaviour by "as Go did": say why the behaviour is right, or
-      change it.
-
-## 1a. One copy of each helper
-
-From an independent audit of `api/` on 2026-10-01, done on 2026-10-02: `src/Intake` went
-from 17 383 to 14 779 lines. Where the copies differed, the difference was a bug or a
-decision; each item says which way it went.
-
-- [x] **JSON parsing**: one parser, `Json` in `Common.fs` (`tryParse`, `tryParseFirst`,
-      `tryParseObject`, `tryParseList`), one depth limit, one repair. `Lenient.fs` and
-      the private parsers of `ApiPayloads`, `CiVisibility` and `GoCompat` are gone. Two
-      things changed with it: raw JSON kept in a column has half a surrogate pair repaired
-      (`\ufffd`) like everything else, and a time with a one-digit hour (`T1:30:00Z`) is
-      not RFC 3339 and is no longer read as one.
-- [x] **JSON of a protobuf message** is read by protobuf's own `JsonParser`
-      (`ProtoJson.tryParse`): `/api/v2/series` and `/api/beta/sketches` as JSON, and the
-      agent's health report. ~400 lines of field-by-field filling are gone. Its rules stand:
-      names as the schema spells them or in camelCase, an enum by number or name, unknown
-      keys passed over, and a null inside a list or a map refuses the payload (kept raw).
-- [x] **Reading an object field by field**: one reader, `JsonFields` (`JsonFields.fs`,
-      beside `Common.fs`), instead of five. Its rule, once: a member is found by its exact
-      name, the last of a repeated name counts, null is the same as absent, an integer is
-      read from its digits. Notes are one wording about the JSON (`series[2].points:
-      expected a list, got string`); nothing names a Go type any more. Dropped with the
-      copies: matching names without regard to case, an item refused because an unrelated
-      number overflows a float64, the two levels "is not"/"did not fit" of the v1 models.
-      An event with an invented `alert_type` or `priority` is now a row, with the sender's
-      word in `alert_type_raw`/`priority_raw`. The version of a JSON coverage payload is read leniently (0
-      when it cannot be read), as in the msgpack form.
-- [x] **Multipart**: one strict reader, `Multipart.tryParts` in `Http.fs`, on ASP.NET's
-      `MultipartReader`; the lenient "parts before the break" only for flares and the
-      security dump. Profiling's copy of Go's `mime.ParseMediaType` is gone
-      (`MediaTypeHeaderValue`). A part's name counts whatever its disposition type, and a
-      file name keeps its directories.
-- [x] **Time**: the repeated clamps and the dead `try/with` are gone; a protobuf
-      `Timestamp` is read by one function, `Time.ofTimestamp`, over the library's
-      `ToDateTime()` — an invalid one (nanos outside a second, a year past 9999) is None.
-- [x] **`JsonElement` accessors**: one set in `Json` (`Common.fs`): `field`, `child`, `at`
-      (a path), `lenientString`, `flag`, `text`, `textList`, `otherMembers`, …; the private
-      layers of eight routers are gone. `JsonFields.fs` is only `Fields`, the reader that
-      notes mismatches. Where a column keeps a member's JSON text, an explicit null stays `null`;
-      a typed column that is not Nullable holds `""` or 0 for null and absent alike.
-- [x] **Varints and wire walkers**: one `Varint.read` (through `CodedInputStream`);
-      `Security.wireLayout` walks with the library's reader. Capture's debug dump is the
-      other walker left, and does a different job.
-- [x] **Enum names**: `ProtoEnum.name` in `Common.fs`, for any generated enum, from the
-      `OriginalName` attribute the generator writes; a value the schema lacks is its number.
-      `ProcessEnum.fs`, three copies and Evp's hand-typed tables are gone.
-- [x] **Writing JSON**: one writer, `Json.write`; each output format once (`compact` as
-      sent, `compactSorted` with keys sorted and the last duplicate winning, `quoted`).
-- [x] Small ones: `accepted` once, in `Http.fs`; `Ctx.write ctx table rows` writes nothing
-      without a tenant and replaced 62 checks; Go's `%q` and `FormatFloat` copies are gone
-      (`Json.quoted`, `Text.ofFloat`); a body is split by `Json.tryParseList`,
-      `tryParseArray` or `tryParseElementBytes`.
-- [x] **Names**: no module is called `GoJson`; only the intake has a `Json` (the engine's
-      is `Serialization`); `Rows/ProcessExtra.fs` is folded into `Rows/Process.fs`,
-      `Rows/ApiExtra.fs` split into `Rows/Agent.fs` and `Rows/Runner.fs`. Left: routers and
-      table modules that share a name across projects (`Logs`, `Containers`, `Config`,
-      `Metrics`) need a naming rule first; `ProtoJson.message` and `Security.protoJson`
-      write protobuf JSON with different escaping (`\u003C` or `<`), and unifying them
-      changes stored text.
-- [x] **Tests**: one request sender, one multipart builder and one string → `JsonElement`
-      in `tests/Intake.Tests/Golden/Requests.fs`. Left: `RumTests.requestOf` still builds
-      its own context.
-- [x] **Engine**: one SQL parameter collector (`SqlParams` in `Sql.fs`), one tag-filter
-      model and SQL writer (`MetricQuery/Filter.fs`), one duration parser (`Duration.fs`),
-      one `maxPoints` (1500, in `Plan.fs`; that it is Datadog's cap is the comment's claim,
-      not a checked fact). `/internal/metrics/query` goes through the query engine's
-      planner, so the panel's series aggregate in time first and across series second, like
-      every other query; `Panel.querySeries` is gone. Checked against the live ClickHouse.
-- [x] **Dead code**: `Text.joinOrDash`, `ProcessFrame.typeName`, `DDSketch.bounds`,
-      `/internal/metrics/hosts` with its query. Left: `SyntheticsTestConfigs.table` in
-      `Rows/Ci.fs` has a table and no writer.
-- [x] **Parity machinery**: `TraceSketch.GoMath` is `System.Math` now (stored sketch
-      summaries differ from about the 13th digit; the sketch's accuracy is 1 %),
-      `hasUnknownFields` is gone, and no note names a Go type or quotes a Go library.
-- [x] Comments that cited Go as the reason say why in their own terms; the ones that
-      describe a Go library as the definition of a wire format stay.
-
-## 1b. Use what the framework and the libraries already do
-
-From a second audit on 2026-10-01, of home-made replacements for things .NET, ASP.NET or a
-referenced library provides. Done on 2026-10-02 unless ticked otherwise:
-
-- [x] The intake's own HTTP router → Oxpecker's routes, ASP.NET's matcher.
-- [x] **Pprof**: the hand-written protobuf decoder → the class generated from
-      `profile.proto`. Five verdicts on malformed input follow protobuf's rules now
-      (a field sent twice, a wrong wire type, a group, strings that are not UTF-8).
-- [x] **Protobuf to JSON**: the three hand writers → `JsonFormatter`, through `ProtoJson` in
-      `Common.fs`. Every JSON column of the Kubernetes, ECS and process tables is proto3's
-      JSON now: 64-bit integers are strings, enums are names, absent is "". Rows written
-      before hold the Go-shaped JSON; nothing rewrites them.
-- [x] **Logs over TCP**: own accept loop and TLS → a Kestrel endpoint with a connection
-      handler (`TcpLogs.Connection`). Checked live: plain, TLS, split frames, a wrong key,
-      a server stopping with connections open.
-- [x] **RUM CORS** → ASP.NET's CORS middleware. Checked in Chromium and Firefox. No
-      headers at all for a request that names no origin; Allow-Methods, Allow-Headers and
-      Max-Age only on preflights.
-- [x] **RUM client address** → `UseForwardedHeaders`, trusting the loopback and the
-      proxies named in `NINJACAT_TRUSTED_PROXIES`. `X-Real-Ip` is no longer read.
-- [x] **Engine request errors**: the regexes over the deserializer's exception text are
-      gone; its message is passed on as it is.
-- [x] **Kubeops**: the fields read by name string → one explicit function per kind.
-- [x] Small: `parseHex64`, `isSpace`, `formatIPv6`, `median`, `movingAverage`, `dist` use
-      the library; FNV-1a is one function (`Storage/Fnv.fs`); varints are read by
-      `CodedInputStream` (`Varint` in `Common.fs`, `Capture.fs`); `wrongWireType` is gone.
-- [x] **Native handlers**: the intake's handlers are Oxpecker's (`byte[] ->
-      EndpointHandler`, bound with `bindBody`), they answer with Oxpecker's own handlers,
-      and the key is an ASP.NET authentication scheme. `Request`, `Response`, `Deps` and
-      the adapter are gone. Query parameter names are matched as ASP.NET matches them,
-      without regard to case.
-- [ ] **ClickHouse inserts**: the driver already gets the rows (`InsertBinaryAsync` with
-      `object[]`); nothing is hand-built there. Inserting records instead is possible
-      (`InsertBinaryAsync<T>`, a `ClickHouseColumn` attribute per field) and would remove
-      the ~900 lines of `Values` lambdas and the pairing of columns by position, but 207
-      option fields would have to become `Nullable`/null, nested records be flattened, and
-      the driver cannot write nanosecond `DateTime64` at all. A migration, not a deletion.
-      Small things that can go now: `Table.Writer` (89 of 90 are `"storage_" + Name`), the
-      backtick trimming for one column, `WriterLimits`.
-
-Looked home-made, kept on purpose: body decompression (the middleware drops
-`Content-Encoding`, has no zstd, and throws on a mislabelled body), the migration runner
-(nothing referenced migrates ClickHouse), the Postgres URL parser (Npgsql refuses
-`postgres://` URLs), `Config.fs`, `Capture.fs`, DDSketch and the STL/DBSCAN/Huber code
-(MathNet has none of them), the RFC 3339 and half-surrogate handling.
-
-## 1c. The intake in Rust, one program per host
-
-`backend/` ports the intake host by host: one program per router of `Intake/Routes.fs`
-(`ninjapaws_<host>`), so each host can be deployed, scaled and stopped on its own, with
-whatever is in front of them sending each host name to its program. The shared part is
-`backend/storage` (rows, one writer per table, the migrations) and `backend/intake` (keys,
-auth, bodies, JSON, raw_payloads, the server); `ninjapaws_migrate` applies the schema. The
-golden fixtures are replayed against every ported host (`intake/tests/golden.rs`), and their
-rows inserted into a scratch ClickHouse.
-
-- [x] `api.` and `app.` (`ninjapaws_api`, `ninjapaws_app`), the flare and the probes on
-      every host, `ninjapaws_migrate` (2026-10-20).
-- [ ] The CI Visibility endpoints of `api.`, with the CI hosts.
-- [ ] The other hosts, in the order of section 1 of `Routes.fs`: trace, telemetry, profile,
-      debugger, sourcemap, logs (and logs over TCP), process, kubeops, containers, config,
-      dbm, ndm, resources, the security hosts, the event platform hosts, synthetics, CI,
-      webhook, data-obs, aiusage, llmobs, install, browser-intake (CORS, the `proxy` rewrite,
-      `NINJACAT_TRUSTED_PROXIES`).
-- [ ] Not ported yet on any host: self-monitoring (`ninjacat.node.*`, `SelfMetrics`), the
-      capture lab (`DEBUG=true` dumps), TLS to Postgres (the keeper connects without it).
-- [ ] Deploy: compose services and chart Deployments per host, and the ingress rules that
-      send each host name to its program; `ninjapaws_migrate` as the schema's hook Job.
-- [ ] serde_json nests at most 128 deep, System.Text.Json 512: a body between the two is
-      kept raw by the Rust intake and decoded by the F# one.
+- [x] Every host and route of the F# intake, the query process, the monitor service, the
+      ClickHouse migrations; compose and the chart with a program per host; CI.
+- [ ] **Run it.** Not yet in front of a real agent, nor on ninjapaw: the dev stack with
+      `compose.lab.yaml`, then the cluster, comparing table by table with what the F# intake
+      stored.
+- [ ] **Self-observability.** The F# processes were traced by Datadog's .NET tracer, injected
+      from outside (the old `compose.self.yaml`, `docs/self-observability.md` in the history).
+      The Rust programs send nothing about themselves: traces through OpenTelemetry (OTLP to
+      the agent), their logs, and `ninjacat.node.*`/`ninjacat.storage.*` from every program,
+      not only the monitor service.
+- [ ] **Postgres without TLS.** Every program connects with `NoTls`: a `DATABASE_URL` that asks
+      for TLS (`sslmode=require`) does not connect. tokio-postgres with rustls and the
+      operator's CA.
+- [ ] **An unknown host** gets the proxy's 404 (Traefik's, the Ingress controller's), not the
+      F# intake's `no intake for host "<name>"`, which told an operator what DD_SITE built.
+- [ ] **The hosts are listed three times**: `helm/ninjacat/values.yaml` (`intake.programs`),
+      `dev/intake-routes.yml` and `host_process` in `intake/tests/golden.rs`. One list.
+- [ ] serde_json nests at most 128 deep, System.Text.Json allowed 512: a body between the two
+      is kept raw now.
+- [ ] `docs/protocol/**` describe Go files that no longer exist; say what the Rust equivalent
+      is as each note is translated.
 
 ## 2. Intake: not served yet
 
@@ -360,7 +216,7 @@ far found something, so expect findings. How to record: `lab/README.md`.
         tracers' proxy, trace-agent onboarding, the cluster agent's patch events), and add
         the host alias; document both keys where the agent's settings are listed;
   - [ ] record a real payload of each producer into `Fixtures/real/` and hold the decoder
-        (`Routers/Misc.fs`) to them;
+        (`intake/src/routers/misc.rs`) to them;
   - [ ] the tracers' proxy passes any subpath through, not only `/api/v2/apmtelemetry`:
         serve the host by prefix;
   - [ ] the fleet installer's telemetry goes to the same host with no key to redirect it.
@@ -401,7 +257,7 @@ Stored whole today; the columns a product needs are still inside a blob.
       `category` of health events as columns.
 - [ ] **Profiles (pprof)**: samples and stacks. Today the profile is kept as bytes with a
       summary beside it (sample types, sample count, duration, number of functions);
-      `Routers/Pprof.fs` already walks samples, locations and functions to count them. Open
+      `intake/src/routers/pprof.rs` already walks samples, locations and functions to count them. Open
       is the table: one row per sample or per distinct stack, how a stack is encoded, the
       TTL. Record a real profile from a tracer first. Needed for flame graphs.
 - [ ] **Profiles (JFR)**: the Java tracer uploads Java Flight Recorder files, not pprof.
@@ -443,7 +299,7 @@ data is here; the product is not.
       and messages come in as **logs** with `source:sentry-sdk` and feed Error Tracking
       through its logs path; traces, attachments and sessions are not supported. Verified
       there against `@sentry/node` and `@sentry/browser` 9.13, `sentry-sdk` 2.26 (Python),
-      Java 8.6, .NET 5.5, Go 0.32, Ruby 5.23. For us: a new host in `Routes.fs`, Sentry's
+      Java 8.6, .NET 5.5, Go 0.32, Ruby 5.23. For us: a new program and host (`intake.programs`, `dev/intake-routes.yml`), Sentry's
       envelope endpoint (`POST /api/<project>/envelope/`, key in `X-Sentry-Auth` or
       `sentry_key`), event → log row. The protocol is Sentry's own and public; record a
       real SDK's envelope first. Fits on-prem well: many applications already carry a
@@ -470,7 +326,7 @@ data is here; the product is not.
       (`container_name`, `short_image`, `image_name`, `kube_namespace`). Fill the columns
       from the tags when the fields are empty. With the Kubernetes explorer, not before.
 - [ ] **A ClickHouse outage loses data silently.** The intake answers 202 before it writes,
-      and a batch whose insert fails is counted and dropped (`Storage/Writer.fs`), so the
+      and a batch whose insert fails is counted and dropped (`storage/src/writer.rs`), so the
       agent, already answered, never resends it. Every restart of ClickHouse (an upgrade,
       the operator rolling the pod, a crash) leaves a gap in every table as long as the
       outage. Needs a decision before anyone relies on NinjaCat: retry with backoff in the
@@ -532,11 +388,11 @@ data is here; the product is not.
       (`writeSorted`, `canonicalJson`, `Msgpack.value`) would have to become loops.
 
 - [ ] **`snmp_traps.timestamp` is `DateTime` (seconds)**, but the router reads the trap's
-      time in milliseconds (`Routers/Ndm.fs`), so the sub-second part is dropped. Found in
+      time in milliseconds (`intake/src/routers/ndm.rs`), so the sub-second part is dropped. Found in
       the squash of 2026-10-13, which had to keep the schema as it was.
 - [ ] **`processes.has_create_time` + `create_time`** would be one `Nullable(DateTime)`.
       The squash kept the pair to stay identical to the old chain; folding it changes the
-      row writers in `Rows/Process.fs`.
+      row writers in `storage/src/rows/process.rs`.
 - [ ] **0002 refills `metrics_1m` in one `INSERT … SELECT … GROUP BY`** over every raw
       point kept. Fine on the databases that exist; on a large `metrics` it could run past
       the migration client's hour or out of memory, and the next start would redo it. Batch
@@ -545,10 +401,10 @@ data is here; the product is not.
       They plan by the retention env vars; the chart passes `metrics.*` to all, the compose
       files rely on defaults. Reading `system.tables` at start would end the duplication.
 - [ ] **The intake's API-key keeper does not notice a LISTEN link that died silently.**
-      `api/src/Server/ApiKeysKeeper.fs` waits on its connection with no keepalive, so a
+      `backend/intake/src/keys.rs` waits on its connection with no keepalive, so a
       half-open link stops notifications until the process restarts; the 30 s re-read
-      keeps keys current meanwhile. The monitor manager opens its LISTEN connection from
-      a data source with Npgsql's `KeepAlive`; the keeper should do the same.
+      keeps keys current meanwhile. The monitor service sets TCP keepalives on its
+      connection; the keeper should do the same.
 - [ ] **The databases the chart makes (`postgres.create`, `clickhouse.create`) have no
       NetworkPolicy.** It must admit their operators from another namespace, or
       reconciliation stops silently.
@@ -558,14 +414,13 @@ data is here; the product is not.
       engines in the migrations and a Keeper (Altinity's `ClickHouseKeeperInstallation`).
 - [ ] **With `postgres.create` the monitors use the application's role.** A SELECT-only
       one needs a Drizzle migration for the GRANT and a role CloudNativePG manages.
-- [ ] **Nothing checks CloudNativePG's certificate.** The F# processes use its TLS without
-      verifying it, the panel connects in plain text; verifying means its `<cluster>-ca`
-      Secret.
+- [ ] **Nothing checks CloudNativePG's certificate.** The server connects in plain text
+      (section 1), and so does the panel; verifying means its `<cluster>-ca` Secret.
 - [ ] **An unaligned `to` older than the raw retention** loses its last part minute: the
       rollup stops at the minute holding `to`, and the raw points that would finish it
       are gone.
 - [ ] **Anomaly monitors keep their models in the entity's memory**
-      (`Monitor/Evaluate.fit`, `Monitors/Entity.fs`). So: a group that appears between
+      (`engine/src/monitor/evaluate.rs`, `ninjapaws_monitors/entity.rs`). So: a group that appears between
       refits is learning until the next refit (up to an hour); a hand-off or a restart
       refits every model; a seasonal forecast refits on every evaluation, as nothing
       caches it; and refits are not counted in `ninjacat.monitor.*`, so their cost is
@@ -582,9 +437,9 @@ data is here; the product is not.
 - [ ] Remove the unused `app/metrics/data` route and `fetchMetricSeries`.
 - [ ] Prettier: ignore shadcn and generated files.
 - [ ] Log search.
-- [x] Tenants (2026-10-13; planned in `api/docs/zadania/tenants.md`):
+- [x] Tenants (2026-10-13; planned in `docs/protocol/zadania/tenants.md`):
       `frontend/docs/auth-and-route-guard.md`.
-- [x] Monitors (2026-10-14; planned in `api/docs/zadania/monitors.md`): `api/README.md`,
+- [x] Monitors (2026-10-14; planned in `docs/protocol/zadania/monitors.md`): `backend/README.md`,
       "The monitor service"; what is left is section 7a.
 - [ ] **RBAC.** The tenant roles are the organization plugin's (owner, admin, member), and
       only Better Auth's own organization routes check them: the panel's pages do not, and
@@ -622,8 +477,8 @@ data is here; the product is not.
 
 ## 7a. Monitors
 
-What the first version of monitors left out, on purpose. TLS for Akka remoting and the run
-at the capacity target are in section 0; the anomaly model cache in section 6.
+What the first version of monitors left out, on purpose. The run at the capacity target is in
+section 0; the anomaly model cache in section 6.
 
 - [ ] **Notifications for real.** The notifier is a stub: it logs and writes a `stub` row.
       Missing: rendering the message template, channels (built in, external ones only as
@@ -643,19 +498,15 @@ at the capacity target are in section 0; the anomaly model cache in section 6.
       migrations (the monitor tables: 400 days of transitions and notifications, 7 of
       evaluations). Make it configurable as the metrics' is.
 - [ ] **Percentile and distribution monitors.** The `percentile` time aggregator is
-      refused by the monitor parser (`Monitor/Parse.fs`).
+      refused by the monitor parser (`engine/src/monitor/parse.rs`).
 - [ ] **A Datadog-compatible `/api/v1/monitor`** on the `app.` host, so Terraform and
       Datadog's clients can manage monitors. The stored shape is already Datadog's.
-- [ ] **Log monitors**, as a new shard region on a `logs` role.
-- [ ] **Akka.NET 1.6.** The service is on 1.5.73.
-- [ ] Deleting monitors logs dead letters: a `Delete` from the manager reaches an entity
-      that is already stopping (`Message [Delete] … was not delivered`, at info level in
-      the monitor service's log). Harmless, but noise that hides real dead letters.
+- [ ] **Log monitors.**
 - [ ] The monitor list loads every monitor of the tenant and asks for all their states in
       one call; no paging.
 
 ## 8. Language debt
 
 English is canonical; what is still Polish is listed in `CLAUDE.md` ("Language policy"):
-`api/docs/**`, `experiments/goja-sandbox/README.md` and the copy of the two home pages
+`docs/protocol/**`, `experiments/goja-sandbox/README.md` and the copy of the two home pages
 (`/`, `/app`). Translate when touched; rename routes in one deliberate batch.

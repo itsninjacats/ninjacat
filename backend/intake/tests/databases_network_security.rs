@@ -1,6 +1,6 @@
 //! The database, network device, security and event platform hosts through their routers: what
 //! the golden fixtures do not cover, and the payloads recorded from real senders
-//! (`api/tests/Intake.Tests/Fixtures/real`).
+//! (`backend/intake/tests/fixtures/real`).
 
 use std::path::Path;
 use std::sync::Arc;
@@ -64,7 +64,7 @@ async fn post(mount: fn(&mut Routes), path: &str, body: impl Into<Vec<u8>>) -> A
 }
 
 fn real(name: &str) -> Vec<u8> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../api/tests/Intake.Tests/Fixtures/real");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real");
     std::fs::read(root.join(name)).unwrap()
 }
 
@@ -76,7 +76,7 @@ fn text(value: &Value) -> &str {
 
 #[tokio::test]
 async fn what_a_real_dbm_integration_sends_is_stored_event_for_event_with_no_key_left_undecoded() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../api/tests/Intake.Tests/Fixtures/real");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real");
     let tracks = ["databasequery", "dbmactivity", "dbmhealth", "dbmmetadata", "dbmmetrics", "dbmcolumnstatistics"];
     let mut files: Vec<String> =
         std::fs::read_dir(root).unwrap().map(|f| f.unwrap().file_name().to_string_lossy().into_owned()).collect();

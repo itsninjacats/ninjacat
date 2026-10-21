@@ -61,9 +61,10 @@ spec:
         paths:
           - path: /
             pathType: Prefix
+            # Never reached: the middleware answers with the redirect first.
             backend:
               service:
-                name: {{ $fullname }}-intake
+                name: {{ $fullname }}-intake-api
                 port:
                   name: intake
     {{- end }}

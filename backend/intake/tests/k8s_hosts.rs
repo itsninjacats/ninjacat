@@ -225,7 +225,7 @@ async fn a_lifecycle_body_with_a_mistyped_field_is_kept_raw_not_stored_as_an_eve
     use base64::Engine;
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../api/tests/Intake.Tests/Fixtures/go/TestPortProbeContainers__images_on_lifecycle/001.json"
+        "/tests/fixtures/go/TestPortProbeContainers__images_on_lifecycle/001.json"
     );
     let fixture: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
     let body =

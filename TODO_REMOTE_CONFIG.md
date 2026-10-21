@@ -1,12 +1,12 @@
 # Remote Configuration
 
 The one channel where data flows **down**: the agent polls `config.<site>` and applies what
-comes back. Today `Routers/Config.fs` parses the poll, drops it and answers 404, so the agent
+comes back. Today `intake/src/routers/config.rs` parses the poll, drops it and answers 404, so the agent
 keeps the configuration it has. Nothing here is started.
 
 Sources: the agent's code at tag 7.84.0 (`pkg/config/remote`, `pkg/remoteconfig/state`), the
-schema in `api/src/Proto/protos/datadog-agent/datadog/remoteconfig/remoteconfig.proto`, and
-one experiment on agent 7.83.2 (`api/docs/zadania/remote-config-tuf.md`, which predates
+schema in `backend/proto/protos/datadog-agent/datadog/remoteconfig/remoteconfig.proto`, and
+one experiment on agent 7.83.2 (`docs/protocol/zadania/remote-config-tuf.md`, which predates
 the `.proto` files and is out of date where it says the exchange is unknown).
 
 ## What travels through it
