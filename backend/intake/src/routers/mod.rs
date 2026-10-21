@@ -4,11 +4,14 @@
 pub mod api;
 pub mod api_payloads;
 pub mod app;
+pub mod ci_visibility;
+pub mod ci_webhook;
 pub mod config;
 pub mod containers;
 pub mod dbm;
 pub mod evp;
 pub mod flare;
+pub mod install;
 pub mod kubeops;
 pub mod logs;
 pub mod misc;

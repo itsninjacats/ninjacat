@@ -4,6 +4,7 @@
 pub mod agent;
 pub mod apm_telemetry;
 pub mod checks;
+pub mod ci;
 pub mod containers;
 pub mod dbm;
 pub mod ecs;

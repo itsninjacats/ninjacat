@@ -52,6 +52,7 @@ use tako::types::Response;
 use uuid::Uuid;
 
 use super::api_payloads::*;
+use super::ci_visibility;
 use crate::body;
 use crate::ddsketch;
 use crate::json;
@@ -88,10 +89,10 @@ pub fn metrics_and_checks(routes: &mut Routes) {
     routes.get("/api/v2/on-prem-management-service/runner/health-check", handle_runner_health_check);
 }
 
-/// api.<site>, <version>-flare.agent.<site>. The CI Visibility endpoints Datadog also puts on
-/// this host are not ported yet.
+/// api.<site>, <version>-flare.agent.<site>
 pub fn mount(routes: &mut Routes) {
     metrics_and_checks(routes);
+    ci_visibility::mount_api(routes);
 }
 
 /// The reply the agent expects after a batch of metrics. It reads the body: an empty object would

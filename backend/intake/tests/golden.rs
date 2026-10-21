@@ -16,7 +16,8 @@ use http_body_util::BodyExt;
 use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::keys::{self, Key, Store};
 use ninjapaws_intake::routers::{
-    api, app, config, containers, dbm, evp, kubeops, logs, misc, ndm, process, profiling, rum, security, trace,
+    api, app, ci_visibility, ci_webhook, config, containers, dbm, evp, install, kubeops, logs, misc, ndm, process,
+    profiling, rum, security, trace,
 };
 use ninjapaws_intake::server::{Intake, Routes, router};
 use ninjapaws_storage::Sink;
@@ -43,21 +44,6 @@ fn test_keys() -> Arc<Store> {
 fn fixtures_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../api/tests/Intake.Tests/Fixtures")
 }
-
-/// What api.<site> serves in the F# intake and this port does not yet: the CI Visibility
-/// endpoints, ported with the CI hosts.
-const NOT_PORTED_ON_API: [&str; 10] = [
-    "/api/v2/libraries/tests/services/setting",
-    "/api/v2/ci/tests/skippable",
-    "/api/v2/ci/libraries/tests",
-    "/api/v2/ci/libraries/tests/flaky",
-    "/api/v2/test/libraries/test-management/tests",
-    "/api/v2/git/repository/search_commits",
-    "/api/v2/git/repository/packfile",
-    "/api/v2/ci/pipeline/tags",
-    "/api/v2/ci/pipeline/metrics",
-    "/api/intake/ci/custom_spans",
-];
 
 /// A ported host's process as the fixtures need it: the key it asks for, its routes, and what its
 /// binary puts above them.
@@ -116,6 +102,14 @@ fn route_set(name: &str) -> Option<Process> {
         "routeSoftwareInventory" => process(agent, evp::mount_software_inventory),
         "routeSynthetics" => process(agent, evp::mount_synthetics_results),
         "routeDataObs" => process(Some(Scheme::Lineage), evp::mount_data_obs),
+        "routeCIVisibilityAPI" => process(agent, ci_visibility::mount_api),
+        "routeCITestCycle" => process(agent, ci_visibility::mount_test_cycle),
+        "routeCITestCov" => process(agent, ci_visibility::mount_test_coverage),
+        "routeCIWebhook" => process(Some(Scheme::CiWebhook), ci_webhook::mount),
+        "routeSyntheticsAgent" => process(agent, ci_webhook::mount_synthetics_poller),
+        "routeAIUsage" => process(agent, install::mount_ai_usage),
+        "routeLLMObs" => process(agent, install::mount_llm_obs),
+        "routeInstall" => process(None, install::mount),
         _ => None,
     }
 }
@@ -123,6 +117,10 @@ fn route_set(name: &str) -> Option<Process> {
 /// The process an intake host name is sent to.
 fn host_process(host: &str) -> Option<Process> {
     let agent = Some(Scheme::Agent);
+    // The OCI registry, the BTF download and the HEAD probe are anonymous.
+    if host == "install.datadoghq.com" || host == "install.datad0g.com" {
+        return process(None, install::mount);
+    }
     if host.starts_with("app.") || host.contains("-app.agent.") {
         return process(agent, app::mount);
     }
@@ -205,6 +203,24 @@ fn host_process(host: &str) -> Option<Process> {
     if on("data-obs-intake.") {
         return process(Some(Scheme::Lineage), evp::mount_data_obs);
     }
+    if on("intake.synthetics.") {
+        return process(agent, ci_webhook::mount_synthetics_poller);
+    }
+    if on("citestcycle-intake.") {
+        return process(agent, ci_visibility::mount_test_cycle);
+    }
+    if on("citestcov-intake.") {
+        return process(agent, ci_visibility::mount_test_coverage);
+    }
+    if on("webhook-intake.") {
+        return process(Some(Scheme::CiWebhook), ci_webhook::mount);
+    }
+    if on("eudm-intake.") {
+        return process(agent, install::mount_ai_usage);
+    }
+    if on("llmobs-intake.") {
+        return process(agent, install::mount_llm_obs);
+    }
     None
 }
 
@@ -223,9 +239,6 @@ fn process_for(fixture: &Value) -> Option<Process> {
     // Most Go tests built one engine and sent to "example.com"; the ones that went through the
     // host dispatch carry a real intake host.
     if host != "example.com" {
-        if NOT_PORTED_ON_API.contains(&path) {
-            return None;
-        }
         return host_process(host);
     }
     if routes.is_empty() {
