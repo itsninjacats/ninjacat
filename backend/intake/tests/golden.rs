@@ -1,5 +1,5 @@
-//! The golden fixtures of the F# intake (`backend/intake/tests/fixtures/go`): requests recorded
-//! from the Go server, each with its answer and the rows it stored. Every fixture a ported host
+//! The golden fixtures (`backend/intake/tests/fixtures/go`): requests recorded from the Go
+//! server, each with its answer and the rows it stored. Every fixture a ported host
 //! serves is replayed through that host's router, in memory, and compared field by field;
 //! `fixtures/overrides.json` lists the accepted differences, each with its reason.
 //!

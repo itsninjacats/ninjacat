@@ -168,37 +168,26 @@ Decoders written from Datadog's source and never run against the real thing. Eve
 far found something, so expect findings. How to record: `lab/README.md`.
 
 - [ ] **Kubernetes**: orchestrator collections and manifests arrived and decoded in the
-      kind lab (2026-10-02, agent 7.84.0); record them into `Fixtures/real/`. Cluster-agent
+      kind lab (2026-10-02, agent 7.84.0); record them into `backend/intake/tests/fixtures/real/`. Cluster-agent
       actions and container lifecycle events were not produced by that run.
 - [x] The agent's connectivity check posts `{}` to every event-platform intake at start,
       and `sbom`, `contlcycle`, `contimage` and `data-streams` each logged a decode warning.
-      A kept payload is logged once now, by `Raw.store`, which already knew a probe; the
+      A kept payload is logged once now, by `raw::store`, which already knew a probe; the
       82 handler warnings that said the same thing first are gone.
 - [x] `HEAD /support/flare` answers 200 without a key: the agent's connectivity check
       (`pkg/diagnose/connectivity`, 7.84.0) sends it with none and takes anything but 200 or
       a redirect for a failure. The upload itself still asks for the key.
-- [x] `libgssapi-krb5-2` is in the shipping image: Npgsql loads it to try GSS encryption,
-      and printed `Cannot load library libgssapi_krb5.so.2` at every start without it.
 - [ ] **Containers**: lifecycle events, image inventory, SBOM.
 - [ ] **Tracers** — one small app with `dd-trace` covers: profiles, the debugger and symbol
       uploads, Data Streams Monitoring, tracer telemetry, CI Visibility (test cycle,
       coverage, git endpoints).
-- [x] **NinjaCat sending to NinjaCat** (`compose.self.yaml`, off unless named): the panel
-      through `@datadog/browser-rum` and `@datadog/browser-logs` with `proxy`, the server's
-      processes through `dd-trace-dotnet` 3.54.0 (traces, runtime metrics, the continuous
-      profiler, logs by direct submission, tracer telemetry) and an agent on a network with
-      no route out. Checked on 2026-10-01: the browser talks to the panel and the intake
-      only; a traced process asks DNS for `agent`, `clickhouse`, `postgres` and its own
-      intake alias and nothing else. First finding: the tracer's logs have no `message`
-      (Serilog's compact form), which the logs intake refused. Left:
+- [x] **NinjaCat sending to NinjaCat**, checked on 2026-10-01 with the F# server under
+      `dd-trace-dotnet` 3.54.0 and the panel under `@datadog/browser-rum`/`-logs`: the
+      browser talks to the panel and the intake only. First finding: the tracer's logs have
+      no `message` (Serilog's compact form), which the logs intake refused. The Rust server's
+      own telemetry is section 1's. Left:
   - [ ] `dd-trace` in the SvelteKit server, and `allowedTracingUrls` so a RUM resource
         links to the server span that answered it;
-  - [ ] the agent there sees only its own container: no container logs, no host metrics
-        (both need mounts from the host, which is the operator's call);
-  - [ ] `ninjacat.node.*` self-metrics come from `intake` and `ninjacat-monitors` only;
-        `query` holds no writer;
-  - [ ] `ninjacat-monitors` under the tracer has not been checked, nor whether
-        `DD_PROFILER_PROCESSES` takes `;` as its list separator;
   - [ ] the tracer's telemetry and profiles arrive, but nothing reads them yet (sections 3
         and 4).
 - [ ] **Agent and tracer telemetry** (`instrumentation-telemetry-intake`,
@@ -215,7 +204,7 @@ far found something, so expect findings. How to record: `lab/README.md`.
         own metrics, logs and message batches, zstd) and `apm_config.telemetry.dd_url` (the
         tracers' proxy, trace-agent onboarding, the cluster agent's patch events), and add
         the host alias; document both keys where the agent's settings are listed;
-  - [ ] record a real payload of each producer into `Fixtures/real/` and hold the decoder
+  - [ ] record a real payload of each producer into `backend/intake/tests/fixtures/real/` and hold the decoder
         (`intake/src/routers/misc.rs`) to them;
   - [ ] the tracers' proxy passes any subpath through, not only `/api/v2/apmtelemetry`:
         serve the host by prefix;
@@ -252,7 +241,7 @@ Stored whole today; the columns a product needs are still inside a blob.
     signature → statement);
   - whether the agent's rows are deltas or running totals for each database (the
     integrations compute the difference between two collections before sending — check).
-  Real events of seven databases are in `Fixtures/real/`.
+  Real events of seven databases are in `backend/intake/tests/fixtures/real/`.
 - [ ] **DBM, the rest**: one row per session from `<dbms>_activity`; `name`, `status`,
       `category` of health events as columns.
 - [ ] **Profiles (pprof)**: samples and stacks. Today the profile is kept as bytes with a
@@ -332,7 +321,7 @@ data is here; the product is not.
       outage. Needs a decision before anyone relies on NinjaCat: retry with backoff in the
       writer, a spill to local disk, or a durable queue between intake and the writers
       (NATS JetStream or similar), which would also let the writers restart on their own.
-- [x] The query port asks for the panel's HS256 token (`Server/QueryToken.fs`,
+- [x] The query port asks for the panel's HS256 token (`ninjapaws_internal/token.rs`,
       2026-10-13); its `tenant` claim is the only source of the tenant.
 - [ ] **Datadog's query API on the query port takes only the panel's token.**
       `/api/v1/metrics` and `/api/v2/query/timeseries|scalar` answer the panel alone, so no

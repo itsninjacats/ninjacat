@@ -128,7 +128,7 @@ cargo run -p protogen            # regenerate proto/src/generated from proto/pro
 `{name:Type}` placeholders + typed values) and the programs execute it. `proto/src/generated` is
 generated from the agent's `.proto` files (`proto/protos/README.md` lists their origin) — edit a
 schema or protogen, never the output. Profiles: `dev` (no debug info for dependencies, no
-incremental cache), `release` (optimised, no LTO), `dist` (fat LTO; the image's default).
+incremental cache), `release` (optimised, no LTO), `dist` (thin LTO; the image's default).
 
 ### Frontend (`cd frontend`, Bun)
 

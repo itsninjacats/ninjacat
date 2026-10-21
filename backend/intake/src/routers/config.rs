@@ -5,7 +5,7 @@
 //! The only intake where data flows DOWN: the agent polls it and applies what comes back —
 //! integration configs, sampling rates, and in Kubernetes the actions the cluster agent then
 //! performs. The agent verifies the answer against a TUF root, so nothing can be served before
-//! signing exists (api/docs/zadania/remote-config-tuf.md). Until then 404 is the honest answer:
+//! signing exists (docs/protocol/zadania/remote-config-tuf.md). Until then 404 is the honest answer:
 //! the agent keeps the configuration it has instead of acting on an empty one.
 //!
 //!   POST /api/v0.1/configurations  LatestConfigsRequest → LatestConfigsResponse

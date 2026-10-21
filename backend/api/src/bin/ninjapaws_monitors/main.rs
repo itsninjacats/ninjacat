@@ -1,9 +1,6 @@
 //! Evaluates the monitors. Replicas share the monitors through Postgres advisory
 //! locks (`shards.rs`); each runs the entities of the shards it holds, and one of them the
 //! notifier. Health is all it serves over HTTP.
-//!
-//! NINJACAT_MONITOR_HOST, _PORT, _DISCOVERY, _MANAGEMENT_PORT and _POD_SELECTOR configured the
-//! Akka cluster; they are accepted and ignored, so an environment made for it still starts.
 mod definitions;
 mod entity;
 mod manager;

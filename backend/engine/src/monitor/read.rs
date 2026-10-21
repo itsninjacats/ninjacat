@@ -26,7 +26,7 @@ fn closed() -> SqlValue {
 }
 
 /// The most monitors one status request may name: 200 ids of 19 digits and their encoded commas
-/// keep the request line under Kestrel's 8 KB.
+/// keep the request line under 8 KB, the limit common to servers and proxies.
 pub const MAX_IDS: usize = 200;
 
 /// The most rows a transitions or evaluations request returns.
@@ -437,7 +437,7 @@ mod tests {
     }
 
     #[test]
-    fn the_sql_is_the_fsharps() {
+    fn the_sql_is_what_it_was() {
         let s = status(&acme(), &[7, 8]);
         assert_eq!(
             s.text,

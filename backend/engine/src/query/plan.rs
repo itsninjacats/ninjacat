@@ -1976,7 +1976,7 @@ mod tests {
     }
 
     #[test]
-    fn floats_print_as_fsharp_strings() {
+    fn floats_print_in_the_shortest_round_trip_form() {
         assert_eq!(dotnet_number(3.0), "3");
         assert_eq!(dotnet_number(2.5), "2.5");
         assert_eq!(dotnet_number(0.0001), "0.0001");

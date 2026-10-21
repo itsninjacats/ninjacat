@@ -127,7 +127,7 @@ export type E2eMonitor = {
 	tenant: TenantKey;
 	view: MonitorView;
 	/**
-	 * State.monitorHash of the monitor (api/src/Engine/Monitor/State.fs).
+	 * The monitor hash of the monitor (backend/engine/src/monitor/state.rs).
 	 * The seeded transitions carry it: under another hash the monitor service
 	 * would take them for a query change and close the groups.
 	 */

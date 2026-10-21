@@ -26,9 +26,9 @@ debug = false
 [profile.release]
 strip = true
 
-# The shipped images (Dockerfile, `--profile dist`): link-time optimisation across every crate
-# and one code-generation unit per crate. Slow to build, so only for what is deployed.
+# The shipped images (Dockerfile, `--profile dist`): link-time optimisation across every crate.
+# Thin rather than fat: the 37 programs build in 7.5 minutes instead of 25 on 12 cores, which
+# is the difference between a CI run of twenty minutes and one of over an hour.
 [profile.dist]
 inherits = "release"
-lto = "fat"
-codegen-units = 1
+lto = "thin"
