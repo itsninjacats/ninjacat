@@ -144,8 +144,9 @@ struct Live {
     pool: deadpool_postgres::Pool,
     reader: ClickHouse,
     writer: clickhouse::Client,
-    /// The evaluation rows' inserts, which an entity does not wait for; the program waits for
-    /// them before it exits.
+    /// The evaluation rows' inserts, which an entity does not wait for: its handlers are
+    /// synchronous, and an insert awaited there would hold up its mailbox, the hand-off's Stop
+    /// included, for as long as ClickHouse takes. The program waits for them before it exits.
     records: TaskTracker,
 }
 

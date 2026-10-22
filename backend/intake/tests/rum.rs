@@ -13,7 +13,6 @@ mod programs;
 
 use std::io::Write;
 use std::path::Path;
-use std::sync::Arc;
 
 use bytes::Bytes;
 use chrono::Datelike;
@@ -21,9 +20,9 @@ use http_body_util::BodyExt;
 use ninjapaws_intake::auth::Admitted;
 use ninjapaws_intake::body::Part;
 use ninjapaws_intake::json;
-use ninjapaws_intake::keys::{self, Key, Store};
+use ninjapaws_intake::keys::Key;
 use ninjapaws_intake::routers::rum::{self, EventKind};
-use ninjapaws_intake::server::{Ctx, Settings, query_value};
+use ninjapaws_intake::server::{Ctx, query_value};
 use ninjapaws_intake::wire::time;
 use ninjapaws_storage::rows::rum::RumRequest;
 use serde_json::{Value, json};
@@ -38,8 +37,7 @@ const BOUNDARY: &str = "rum-tests-boundary";
 type Scratch = (clickhouse::Client, String);
 
 async fn begin() -> Option<Scratch> {
-    let database = db::scratch().await?;
-    Some((db::client(&database), db::tenant()))
+    Some((db::scratch_client().await?, db::tenant()))
 }
 
 struct Answer {
@@ -75,11 +73,8 @@ async fn serve(
     headers: &[(&str, &str)],
     body: &[u8],
 ) -> Answer {
-    let store = Store::default();
-    store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: scratch.1.clone() })]);
-    let settings = Settings { ack_unknown: false, max_body_bytes: 64 * 1024 * 1024 };
     let gate = rum::above(
-        programs::router_of(programs::browser, scratch.0.clone(), Arc::new(store), settings),
+        programs::router_for(programs::browser, &scratch.0, KEY, &scratch.1),
         allowed_origins,
         rum::trusted_proxies("192.0.2.1").unwrap(),
     );
@@ -617,7 +612,8 @@ async fn a_batch_sent_through_ddforward_is_routed_admitted_and_stored() {
 /// the POST and sees the 404.
 #[tokio::test]
 async fn a_preflight_is_answered_204_with_the_access_control_headers_and_needs_no_key() {
-    let Some(t) = begin().await else { return };
+    // Nothing here is stored.
+    let t = (db::unconnected(), db::tenant());
     for path in ["/api/v2/rum", "/api/v2/not-invented-yet"] {
         let answer = serve(
             &t,
@@ -648,7 +644,8 @@ async fn a_preflight_is_answered_204_with_the_access_control_headers_and_needs_n
 /// online, counts the batch as delivered and drops it.
 #[tokio::test]
 async fn every_answer_carries_the_origin_the_refusals_included() {
-    let Some(t) = begin().await else { return };
+    // Nothing here is stored.
+    let t = (db::unconnected(), db::tenant());
     for (method, url, status) in [
         ("POST", "/api/v2/rum?ddsource=browser&dd-api-key=wrong", 403),
         ("POST", "/api/v2/not-invented-yet", 404),
@@ -679,7 +676,8 @@ fn no_allowlist_an_empty_one_or_a_star_all_mean_any_origin() {
 /// that is not gets no header at all.
 #[tokio::test]
 async fn an_allowlist_admits_its_origins_and_gives_the_others_no_header() {
-    let Some(t) = begin().await else { return };
+    // Nothing here is stored.
+    let t = (db::unconnected(), db::tenant());
     let allowed = rum::parse_allowed_origins("https://shop.example, https://admin.example");
     assert_eq!(allowed, ["https://shop.example", "https://admin.example"]);
     for (origin, expected) in [

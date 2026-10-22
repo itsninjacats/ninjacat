@@ -10,8 +10,8 @@ use base64::Engine;
 use serde_json::Value;
 use tokio::sync::OnceCell;
 
-/// What every scratch database's name starts with; the sweep drops only these.
-const PREFIX: &str = "ninjacat_test";
+/// What this file's databases are named with; every test database's name starts "ninjacat_test_".
+const PREFIX: &str = "ninjacat_test_intake";
 
 /// Tables a materialized view fills, and the migrations' ledger: no handler inserts into them.
 pub const DERIVED: &[&str] = &[
@@ -24,15 +24,18 @@ pub const DERIVED: &[&str] = &[
     "schema_migrations",
 ];
 
-/// What a test inserts with: async inserts as in production, each flushed at once, so the next
-/// SELECT sees it.
+/// What a test inserts with: production's client, with each async insert flushed at once.
 pub fn client(database: &str) -> clickhouse::Client {
     ninjapaws_storage::client_from_env()
         .with_database(database)
-        .with_setting("async_insert", "1")
-        .with_setting("wait_for_async_insert", "1")
         .with_setting("async_insert_busy_timeout_min_ms", "1")
         .with_setting("async_insert_busy_timeout_max_ms", "1")
+}
+
+/// A client of no server, for a request that must store nothing: an insert fails at once instead
+/// of reaching a real database.
+pub fn unconnected() -> clickhouse::Client {
+    clickhouse::Client::default().with_url("http://127.0.0.1:1")
 }
 
 /// This binary's database, built from the migrations by the first test that asks. None when
@@ -41,6 +44,11 @@ pub fn client(database: &str) -> clickhouse::Client {
 pub async fn scratch() -> Option<String> {
     static DATABASE: OnceCell<Option<String>> = OnceCell::const_new();
     DATABASE.get_or_init(build).await.clone()
+}
+
+/// A client of this binary's database; None when ClickHouse is not running.
+pub async fn scratch_client() -> Option<clickhouse::Client> {
+    Some(client(&scratch().await?))
 }
 
 async fn build() -> Option<String> {
@@ -75,20 +83,32 @@ async fn build() -> Option<String> {
     Some(database)
 }
 
-/// A database outlives its run, since a static is never dropped: the ones over an hour old go.
+/// A database outlives its run, since a static is never dropped. This file's go once their process
+/// has ended, and any test database once its tables are over an hour old. The pid is taken as one
+/// of this machine's: the ClickHouse tests use is the developer's or the CI job's own.
 async fn sweep(server: &clickhouse::Client) {
-    let old: Vec<String> = server
+    let found: Vec<(String, bool)> = server
         .query(
-            "SELECT database FROM system.tables WHERE startsWith(database, ?) GROUP BY database \
-             HAVING min(metadata_modification_time) < now() - INTERVAL 1 HOUR",
+            "SELECT d.name, toBool(t.oldest != toDateTime(0) AND t.oldest < now() - INTERVAL 1 HOUR) \
+             FROM system.databases AS d LEFT JOIN \
+             (SELECT database, min(metadata_modification_time) AS oldest FROM system.tables GROUP BY database) AS t \
+             ON t.database = d.name WHERE startsWith(d.name, 'ninjacat_test_')",
         )
-        .bind(format!("{PREFIX}_"))
         .fetch_all()
         .await
         .unwrap_or_default();
-    for database in old {
-        let _ = server.query(&format!("DROP DATABASE IF EXISTS `{database}` SYNC")).execute().await;
+    for (database, old) in found {
+        let ended = database.starts_with(PREFIX) && database.rsplit('_').next().is_some_and(|pid| !alive(pid));
+        if old || ended {
+            let _ = server.query(&format!("DROP DATABASE IF EXISTS `{database}` SYNC")).execute().await;
+        }
     }
+}
+
+/// Whether a process with this pid runs here: `kill -0` checks without sending a signal.
+fn alive(pid: &str) -> bool {
+    let check = std::process::Command::new("kill").args(["-0", pid]).stderr(std::process::Stdio::null()).status();
+    check.map_or(true, |status| status.success())
 }
 
 /// A tenant no other test of the binary has: they share its database, and every row carries its

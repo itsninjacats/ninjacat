@@ -4,10 +4,6 @@
 mod db;
 mod programs;
 
-use std::sync::Arc;
-
-use ninjapaws_intake::keys::{self, Key, Store};
-use ninjapaws_intake::server::Settings;
 use serde_json::Value;
 
 const KEY: &str = "00000000000000000000000000000001";
@@ -21,13 +17,9 @@ struct Scratch {
 /// Posts a body to the api host with a key of a tenant of the test's own. None when ClickHouse is
 /// not running.
 async fn post(path: &str, body: &str) -> Option<Scratch> {
-    let database = db::scratch().await?;
-    let client = db::client(&database);
+    let client = db::scratch_client().await?;
     let tenant = db::tenant();
-    let store = Store::default();
-    store.publish([(keys::hash(KEY), Key { id: "k".into(), name: "test".into(), tenant_id: tenant.clone() })]);
-    let settings = Settings { ack_unknown: false, max_body_bytes: 1 << 20 };
-    let router = programs::router_of(programs::api, client.clone(), Arc::new(store), settings);
+    let router = programs::router_for(programs::api, &client, KEY, &tenant);
     let request = http::Request::builder()
         .method("POST")
         .uri(path)

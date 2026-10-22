@@ -8,16 +8,19 @@ use std::sync::Arc;
 
 use base64::Engine;
 use http_body_util::BodyExt;
-use ninjapaws_intake::keys::{self, Key, Store};
+use ninjapaws_intake::keys::Store;
 use ninjapaws_intake::process_frame;
+use ninjapaws_intake::raw;
 use ninjapaws_intake::routers::process::REPLY_FRAME;
-use ninjapaws_intake::server::Settings;
+use ninjapaws_intake::server::{self, Body, Ctx, accepted};
 use ninjapaws_proto::datadog::process_agent::{
     Addr, CollectorConnections, CollectorPod, CollectorProc, CollectorProcDiscovery, Connection, HttpAggregations,
     HttpMethod, HttpStats, Process, http_stats,
 };
 use prost::Message;
 use serde_json::Value;
+use tako::extractors::state::State;
+use tako::router::Router;
 
 const KEY: &str = "00000000000000000000000000000001";
 
@@ -29,15 +32,11 @@ struct Answer {
 
 /// The scratch database's client and a tenant of the test's own.
 async fn begin() -> Option<(clickhouse::Client, String)> {
-    let database = db::scratch().await?;
-    Some((db::client(&database), db::tenant()))
+    Some((db::scratch_client().await?, db::tenant()))
 }
 
 /// Posts a frame as the test agent would.
 async fn post(client: &clickhouse::Client, tenant: &str, path: &str, body: Vec<u8>) -> Answer {
-    let store = Store::default();
-    store.publish([(keys::hash(KEY), Key { id: "k".into(), name: "test".into(), tenant_id: tenant.into() })]);
-    let settings = Settings { ack_unknown: false, max_body_bytes: 1 << 24 };
     let request = http::Request::builder()
         .method("POST")
         .uri(path)
@@ -45,7 +44,7 @@ async fn post(client: &clickhouse::Client, tenant: &str, path: &str, body: Vec<u
         .header("x-dd-processagentversion", "7.58.2")
         .body(body.into())
         .unwrap();
-    let router = programs::router_of(programs::processes, client.clone(), Arc::new(store), settings);
+    let router = programs::router_for(programs::processes, client, KEY, tenant);
     let response = router.dispatch(request).await;
     let status = response.status().as_u16();
     let content_type =
@@ -131,6 +130,24 @@ async fn a_frame_whose_body_is_not_its_types_protobuf_is_kept_raw() {
     let raw = single(&client, &tenant, "raw_payloads").await;
     assert_eq!(raw["reason"], "decode_error");
     assert!(raw["note"].as_str().unwrap().starts_with("collector: "));
+}
+
+/// tenant_id leads every table's ORDER BY, so a payload kept under no tenant is one no query finds.
+#[tokio::test]
+async fn without_a_tenant_a_payload_is_not_kept_and_the_sender_still_gets_its_answer() {
+    let Some(client) = db::scratch_client().await else { return };
+    // No route stores without a key; this one, made for the test, would.
+    let unguarded = |router: &mut Router| {
+        router.post("/unguarded", |ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body| async move {
+            raw::store(&clickhouse, &ctx, "process", "decode_error", "test", &body).await;
+            accepted()
+        });
+    };
+    let settings = server::Settings { ack_unknown: false, max_body_bytes: 1 << 20 };
+    let router = programs::router_of(unguarded, client.clone(), Arc::new(Store::default()), settings);
+    let request = http::Request::builder().method("POST").uri("/unguarded").body(proc_frame().into()).unwrap();
+    assert_eq!(router.dispatch(request).await.status(), 202);
+    assert!(db::rows(&client, "raw_payloads", "").await.is_empty());
 }
 
 #[tokio::test]

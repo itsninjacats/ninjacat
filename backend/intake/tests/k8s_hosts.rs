@@ -5,12 +5,9 @@ mod db;
 mod programs;
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 use http_body_util::BodyExt;
-use ninjapaws_intake::keys::{self, Key, Store};
 use ninjapaws_intake::process_frame;
-use ninjapaws_intake::server::Settings;
 use ninjapaws_proto::datadog::config::{Client, LatestConfigsRequest};
 use ninjapaws_proto::datadog::contimage::{ContainerImage, ContainerImagePayload};
 use ninjapaws_proto::datadog::process_agent::{
@@ -41,11 +38,6 @@ impl Answer {
     }
 }
 
-/// The client of this binary's scratch database. None when ClickHouse is not running.
-async fn scratch() -> Option<clickhouse::Client> {
-    Some(db::client(&db::scratch().await?))
-}
-
 async fn send(
     client: &clickhouse::Client,
     mount: fn(&mut Router),
@@ -55,14 +47,11 @@ async fn send(
     body: Vec<u8>,
 ) -> Answer {
     let tenant = db::tenant();
-    let store = Store::default();
-    store.publish([(keys::hash(KEY), Key { id: "k".into(), name: "test".into(), tenant_id: tenant.clone() })]);
-    let settings = Settings { ack_unknown: false, max_body_bytes: 1 << 20 };
     let mut request = http::Request::builder().method(method).uri(path);
     if let Some(key) = key {
         request = request.header("dd-api-key", key);
     }
-    let router = programs::router_of(mount, client.clone(), Arc::new(store), settings);
+    let router = programs::router_for(mount, client, KEY, &tenant);
     let response = router.dispatch(request.body(body.into()).unwrap()).await;
     let status = response.status().as_u16();
     let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
@@ -84,7 +73,7 @@ const NOT_SERVED: &str = r#"{"error":"remote configuration not served"}"#;
 
 #[tokio::test]
 async fn a_configuration_poll_is_answered_404_so_the_agent_keeps_the_config_it_has() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let request = LatestConfigsRequest {
         hostname: "web-01".into(),
         agent_version: "7.60.0".into(),
@@ -101,7 +90,7 @@ async fn a_configuration_poll_is_answered_404_so_the_agent_keeps_the_config_it_h
 
 #[tokio::test]
 async fn a_poll_that_is_not_protobuf_or_decodes_to_nothing_gets_the_same_404() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     for body in [vec![0xff; 4], Vec::new()] {
         let answer = post(&client, programs::remote_config, "/api/v0.1/configurations", body).await;
         assert_eq!((answer.status, answer.body.as_str()), (404, NOT_SERVED));
@@ -111,7 +100,7 @@ async fn a_poll_that_is_not_protobuf_or_decodes_to_nothing_gets_the_same_404() {
 
 #[tokio::test]
 async fn the_org_and_status_lookups_are_answered_404() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     for (method, path) in
         [("GET", "/api/v0.1/org"), ("POST", "/api/v0.1/org"), ("GET", "/api/v0.1/status"), ("POST", "/api/v0.1/status")]
     {
@@ -123,7 +112,7 @@ async fn the_org_and_status_lookups_are_answered_404() {
 
 #[tokio::test]
 async fn remote_configuration_needs_an_api_key() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     assert_eq!(send(&client, programs::remote_config, "GET", "/api/v0.1/org", None, Vec::new()).await.status, 403);
 }
 
@@ -131,7 +120,7 @@ async fn remote_configuration_needs_an_api_key() {
 
 #[tokio::test]
 async fn skipped_images_are_counted_as_a_metric_of_the_intake_itself_then_the_rest_are_stored() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let image = |id: &str, name: &str| ContainerImage { id: id.into(), name: name.into(), ..Default::default() };
     let payload = ContainerImagePayload {
         host: "node-9".into(),
@@ -157,7 +146,7 @@ async fn skipped_images_are_counted_as_a_metric_of_the_intake_itself_then_the_re
 
 #[tokio::test]
 async fn an_inventory_of_only_unidentifiable_images_stores_the_metric_and_no_rows() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let payload = ContainerImagePayload {
         images: vec![ContainerImage { name: "x".into(), ..Default::default() }],
         ..Default::default()
@@ -170,7 +159,7 @@ async fn an_inventory_of_only_unidentifiable_images_stores_the_metric_and_no_row
 
 #[tokio::test]
 async fn post_orchmanif_stores_a_crd_frames_manifests_with_the_wrappers_tags() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let inner = CollectorManifest {
         cluster_name: "prod".into(),
         manifests: vec![Manifest {
@@ -199,7 +188,7 @@ async fn post_orchmanif_stores_a_crd_frames_manifests_with_the_wrappers_tags() {
 
 #[tokio::test]
 async fn a_cr_frame_with_nothing_inside_it_is_accepted_and_stores_nothing() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let frame = process_frame::encode(82, 0, &CollectorManifestCr::default());
     let answer = post(&client, programs::kubeops, "/api/v2/orchmanif", frame).await;
     assert_eq!(answer.status, 202);
@@ -208,7 +197,7 @@ async fn a_cr_frame_with_nothing_inside_it_is_accepted_and_stores_nothing() {
 
 #[tokio::test]
 async fn post_api_v1_orchestrator_the_legacy_path_stores_a_cluster_frame() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let collector = CollectorCluster {
         cluster_name: "prod".into(),
         cluster_id: "cid".into(),
@@ -231,7 +220,7 @@ async fn post_api_v1_orchestrator_the_legacy_path_stores_a_cluster_frame() {
 
 #[tokio::test]
 async fn one_bad_action_in_a_batch_is_kept_raw_while_the_rest_become_rows() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let body = br#"[{"action_id":"a-1"}, {"action_id": 5}, {"action_id":"a-3"}]"#.to_vec();
     let answer = post(&client, programs::kubeops, "/api/v2/kubeactions", body).await;
 
@@ -250,7 +239,7 @@ async fn one_bad_action_in_a_batch_is_kept_raw_while_the_rest_become_rows() {
 
 #[tokio::test]
 async fn a_kubeactions_body_of_null_or_an_empty_array_stores_nothing() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     for body in ["null", "[]"] {
         let answer = post(&client, programs::kubeops, "/api/v2/kubeactions", body.as_bytes().to_vec()).await;
         assert_eq!(answer.status, 202);
@@ -263,7 +252,7 @@ async fn a_kubeactions_body_of_null_or_an_empty_array_stores_nothing() {
 /// refuses the message, and the body is kept whole (overrides.json names the fixture).
 #[tokio::test]
 async fn a_lifecycle_body_with_a_mistyped_field_is_kept_raw_not_stored_as_an_event() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     use base64::Engine;
     let path =
         concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/go/TestPortProbeContainers__images_on_lifecycle/001.json");

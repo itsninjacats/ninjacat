@@ -5,17 +5,14 @@ mod programs;
 
 use std::collections::BTreeMap;
 use std::io::Write;
-use std::sync::Arc;
 
 use base64::Engine;
 use bytes::Bytes;
 use chrono::{DateTime, SecondsFormat, Utc};
 use http_body_util::BodyExt;
 use ninjapaws_intake::json;
-use ninjapaws_intake::keys::{self, Key, Store};
 use ninjapaws_intake::routers::pprof::{self, Summary};
 use ninjapaws_intake::routers::profiling;
-use ninjapaws_intake::server::Settings;
 use ninjapaws_proto::perftools::profiles::{Function, Line, Location, Profile, Sample, ValueType};
 use prost::Message;
 use serde_json::Value;
@@ -70,8 +67,7 @@ fn multipart(parts: &[(&str, &[u8])]) -> (String, Vec<u8>) {
 type Scratch = (clickhouse::Client, String);
 
 async fn begin() -> Option<Scratch> {
-    let database = db::scratch().await?;
-    Some((db::client(&database), db::tenant()))
+    Some((db::scratch_client().await?, db::tenant()))
 }
 
 /// One POST with the test key to a host's routes: the status and the body.
@@ -82,10 +78,7 @@ async fn post(
     content_type: &str,
     body: &[u8],
 ) -> (u16, Vec<u8>) {
-    let store = Store::default();
-    store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: tenant.clone() })]);
-    let settings = Settings { ack_unknown: false, max_body_bytes: 64 * 1024 * 1024 };
-    let router = programs::router_of(mount, client.clone(), Arc::new(store), settings);
+    let router = programs::router_for(mount, client, KEY, tenant);
     let mut request = http::Request::builder().method("POST").uri(url).header("dd-api-key", KEY);
     if !content_type.is_empty() {
         request = request.header("content-type", content_type);

@@ -690,24 +690,23 @@ async fn intake_events(
     ctx: &Ctx,
     envelope: &BTreeMap<String, Value>,
     sent: &Sent<'_>,
-) -> Result<(), String> {
+) -> Vec<Event> {
     let events = &envelope["events"];
     match events_by_source(events) {
         Err(error) => {
             raw::store(clickhouse, ctx, "intake", "unexpected_shape", &error, sent_text(sent, "events").as_bytes())
                 .await;
-            Ok(())
+            Vec::new()
         }
         Ok(by_source) => {
             let host = json::lenient_string(envelope.get("internalHostname"));
             // By source in sorted order, so two replays of one payload give the same rows.
-            let rows: Vec<_> = by_source
+            by_source
                 .iter()
                 .flat_map(|(source, list)| {
                     list.iter().map(|event| intake_event_row(ctx.tenant(), source, &host, event))
                 })
-                .collect();
-            storage::insert(clickhouse, &rows).await
+                .collect()
         }
     }
 }
@@ -750,7 +749,7 @@ async fn intake_agent_checks(
     ctx: &Ctx,
     envelope: &BTreeMap<String, Value>,
     sent: &Sent<'_>,
-) -> Result<(), String> {
+) -> (Vec<AgentCheck>, Vec<ExternalHostTags>) {
     let elements = |name: &str| sent.get(name).map(|t| json::raw::elements(t)).unwrap_or_default();
     let check_texts = elements("agent_checks");
     let tag_texts = elements("external_host_tags");
@@ -799,7 +798,6 @@ async fn intake_agent_checks(
             }
         }
     }
-    storage::insert(clickhouse, &check_rows).await?;
 
     // One row per SOURCE: a host carries several at once, and flattening them would lose which
     // of them said what.
@@ -815,7 +813,7 @@ async fn intake_agent_checks(
             })
         })
         .collect();
-    storage::insert(clickhouse, &tag_rows).await
+    (check_rows, tag_rows)
 }
 
 /// The envelope keys intake_host reads by name; the rest go to intake_extra. apiKey is in the list so
@@ -862,15 +860,10 @@ const GOHAI_KNOWN_SECTIONS: [&str; 4] = ["platform", "cpu", "memory", "filesyste
 ///   anything else                        intake_extra
 ///
 /// The payload is loose and shifts between agent versions, so fields are read by name.
-async fn intake_host(
-    clickhouse: &clickhouse::Client,
-    ctx: &Ctx,
-    envelope: &BTreeMap<String, Value>,
-    envelope_text: &str,
-) -> Result<(), String> {
+fn intake_host(ctx: &Ctx, envelope: &BTreeMap<String, Value>, envelope_text: &str) -> Option<Host> {
     let hostname = json::lenient_string(envelope.get("internalHostname"));
     if hostname.is_empty() {
-        return Ok(());
+        return None;
     }
     // The text of gohai's own document, which the envelope carries as a string.
     let gohai_text = json::lenient_string(envelope.get("gohai"));
@@ -885,7 +878,7 @@ async fn intake_host(
     let sent = json::raw::members(envelope_text);
     let gohai_sent = json::raw::members(&gohai_text);
     let object_map = |name: &str| sent.get(name).map(|t| extra_sent(&[], t)).unwrap_or_default();
-    let row = Host {
+    Some(Host {
         tenant_id: ctx.tenant().into(),
         host: hostname,
         seen_at: Utc::now(),
@@ -913,8 +906,7 @@ async fn intake_host(
         gohai_extra: extra_sent(&GOHAI_KNOWN_SECTIONS, &gohai_text),
         intake_extra: extra_sent(&HOST_KNOWN_KEYS, envelope_text),
         resources: sent_text(&sent, "resources"),
-    };
-    storage::insert(clickhouse, &[row]).await
+    })
 }
 
 /// One row of a resources snapshot, as gohai writes it:
@@ -950,11 +942,11 @@ async fn intake_resources(
     ctx: &Ctx,
     body: &[u8],
     resources: &Value,
-) -> Result<(), String> {
+) -> Vec<ProcessGroup> {
     let host = json::at(&["meta", "host"], resources).and_then(json::string_of).unwrap_or_default();
     let Some(snaps) = json::at(&["processes", "snaps"], resources).and_then(Value::as_array) else {
         raw::store(clickhouse, ctx, "intake", "unexpected_shape", "resources without processes.snaps", body).await;
-        return Ok(());
+        return Vec::new();
     };
     let mut rows = Vec::new();
     let mut unread = 0;
@@ -988,7 +980,24 @@ async fn intake_resources(
         )
         .await;
     }
-    storage::insert(clickhouse, &rows).await
+    rows
+}
+
+/// The body as a JSON object (null reads as an empty one), or None when it is not one; then it
+/// is kept raw.
+async fn json_object(clickhouse: &clickhouse::Client, ctx: &Ctx, intake: &str, body: &[u8]) -> Option<Value> {
+    match json::try_parse(body) {
+        Err(error) => {
+            raw::store(clickhouse, ctx, intake, "decode_error", &error, body).await;
+            None
+        }
+        Ok(root) if !root.is_object() && !root.is_null() => {
+            let note = format!("expected an object, got {}", json::kind(&root));
+            raw::store(clickhouse, ctx, intake, "decode_error", &note, body).await;
+            None
+        }
+        Ok(root) => Some(root),
+    }
 }
 
 /// Four producers share /intake/ and nothing but the path; they are told apart by their top-level
@@ -998,56 +1007,43 @@ async fn intake_resources(
 ///   agent_checks           the V5 collector: check statuses, external host tags
 ///   gohai or systemStats   host metadata
 ///   resources alone        the resources check's process groups
-async fn decode_intake(clickhouse: &clickhouse::Client, ctx: &Ctx, body: &[u8]) -> Result<(), String> {
-    let root = match json::try_parse(body) {
-        Err(error) => {
-            raw::store(clickhouse, ctx, "intake", "decode_error", &error, body).await;
-            return Ok(());
-        }
-        Ok(root) if !root.is_object() && !root.is_null() => {
-            raw::store(
-                clickhouse,
-                ctx,
-                "intake",
-                "decode_error",
-                &format!("expected an object, got {}", json::kind(&root)),
-                body,
-            )
-            .await;
-            return Ok(());
-        }
-        Ok(root) => root,
+pub async fn handle_intake(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
+    if ctx.is_sweep() {
+        return status_ok();
+    }
+    let Some(root) = json_object(&clickhouse, &ctx, "intake", &body).await else {
+        return status_ok();
     };
     let envelope = json::members(&root);
-    let text = json::raw::text(body);
+    let text = json::raw::text(&body);
     let sent = json::raw::members(&text);
     if envelope.contains_key("events") {
-        intake_events(clickhouse, ctx, &envelope, &sent).await
+        let rows = intake_events(&clickhouse, &ctx, &envelope, &sent).await;
+        if let Err(e) = storage::insert(&clickhouse, &rows).await {
+            return storage_failed(e);
+        }
     } else if envelope.contains_key("agent_checks") {
-        intake_agent_checks(clickhouse, ctx, &envelope, &sent).await
+        let (checks, external_tags) = intake_agent_checks(&clickhouse, &ctx, &envelope, &sent).await;
+        if let Err(e) = storage::insert(&clickhouse, &checks).await {
+            return storage_failed(e);
+        }
+        if let Err(e) = storage::insert(&clickhouse, &external_tags).await {
+            return storage_failed(e);
+        }
     } else if envelope.contains_key("gohai") || envelope.contains_key("systemStats") {
-        intake_host(clickhouse, ctx, &envelope, &text).await
+        if let Some(row) = intake_host(&ctx, &envelope, &text)
+            && let Err(e) = storage::insert(&clickhouse, &[row]).await
+        {
+            return storage_failed(e);
+        }
     } else if envelope.contains_key("resources") && envelope.len() == 1 {
-        intake_resources(clickhouse, ctx, body, &envelope["resources"]).await
+        let rows = intake_resources(&clickhouse, &ctx, &body, &envelope["resources"]).await;
+        if let Err(e) = storage::insert(&clickhouse, &rows).await {
+            return storage_failed(e);
+        }
     } else {
-        raw::store(
-            clickhouse,
-            ctx,
-            "intake",
-            "unexpected_shape",
-            &format!("no known /intake/ variant key, keys: {}", key_list(&envelope)),
-            body,
-        )
-        .await;
-        Ok(())
-    }
-}
-
-pub async fn handle_intake(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
-    if !ctx.is_sweep()
-        && let Err(e) = decode_intake(&clickhouse, &ctx, &body).await
-    {
-        return storage_failed(e);
+        let note = format!("no known /intake/ variant key, keys: {}", key_list(&envelope));
+        raw::store(&clickhouse, &ctx, "intake", "unexpected_shape", &note, &body).await;
     }
     status_ok()
 }
@@ -1075,25 +1071,11 @@ const METADATA_VARIANTS: [&str; 13] = [
 
 const METADATA_ENVELOPE_KEYS: [&str; 5] = ["hostname", "clustername", "cluster_id", "timestamp", "uuid"];
 
-async fn store_metadata(clickhouse: &clickhouse::Client, ctx: &Ctx, body: &[u8]) -> Result<(), String> {
-    let root = match json::try_parse(body) {
-        Err(error) => {
-            raw::store(clickhouse, ctx, "metadata", "decode_error", &error, body).await;
-            return Ok(());
-        }
-        Ok(root) if !root.is_object() && !root.is_null() => {
-            raw::store(
-                clickhouse,
-                ctx,
-                "metadata",
-                "decode_error",
-                &format!("expected an object, got {}", json::kind(&root)),
-                body,
-            )
-            .await;
-            return Ok(());
-        }
-        Ok(root) => root,
+/// One row per variant key present: `variant` stays a real filter. What does not decode is kept
+/// raw, so the client is needed here.
+async fn metadata_rows(clickhouse: &clickhouse::Client, ctx: &Ctx, body: &[u8]) -> Vec<AgentMetadata> {
+    let Some(root) = json_object(clickhouse, ctx, "metadata", body).await else {
+        return Vec::new();
     };
     let envelope = json::members(&root);
     let found: Vec<&str> = METADATA_VARIANTS.iter().copied().filter(|v| envelope.contains_key(*v)).collect();
@@ -1108,7 +1090,7 @@ async fn store_metadata(clickhouse: &clickhouse::Client, ctx: &Ctx, body: &[u8])
             body,
         )
         .await;
-        return Ok(());
+        return Vec::new();
     }
     let timestamp = json::lenient_int64(json::field("timestamp", &root));
     let now = Utc::now();
@@ -1119,8 +1101,7 @@ async fn store_metadata(clickhouse: &clickhouse::Client, ctx: &Ctx, body: &[u8])
     let sent = json::raw::members(&text);
     let extra = extra_sent(&skip, &text);
 
-    // One row per variant key present: `variant` stays a real filter.
-    let rows: Vec<_> = found
+    found
         .iter()
         .map(|variant| AgentMetadata {
             tenant_id: ctx.tenant().into(),
@@ -1134,17 +1115,18 @@ async fn store_metadata(clickhouse: &clickhouse::Client, ctx: &Ctx, body: &[u8])
             payload: sent_text(&sent, variant),
             envelope_extra: extra.clone(),
         })
-        .collect();
-    storage::insert(clickhouse, &rows).await
+        .collect()
 }
 
 /// /api/v1/metadata: the inventory payloads. Each is an envelope of hostname, timestamp and uuid
 /// plus ONE variant key; the cluster-agent's carry clustername and cluster_id instead of hostname.
 /// None of the variants has a published type, so each is stored as its JSON under its key.
 pub async fn handle_metadata(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
-    if !ctx.is_sweep()
-        && let Err(e) = store_metadata(&clickhouse, &ctx, &body).await
-    {
+    if ctx.is_sweep() {
+        return status_ok();
+    }
+    let rows = metadata_rows(&clickhouse, &ctx, &body).await;
+    if let Err(e) = storage::insert(&clickhouse, &rows).await {
         return storage_failed(e);
     }
     status_ok()

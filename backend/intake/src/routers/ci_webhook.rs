@@ -217,18 +217,19 @@ fn elements<'a>(root: &'a serde_json::Value, written: &'a RawValue) -> Vec<(&'a 
     }
 }
 
-async fn store(clickhouse: &clickhouse::Client, ctx: &Ctx, body: &[u8]) -> Result<(), String> {
+/// The batch's rows. What does not decode is kept raw, so the client is needed here.
+async fn webhook_rows(clickhouse: &clickhouse::Client, ctx: &Ctx, body: &[u8]) -> Vec<CiWebhookEvent> {
     let root = match json::try_parse(body) {
         Ok(root) => root,
         Err(e) => {
             raw::store(clickhouse, ctx, "webhook", "decode_error", &format!("batch: {e}"), body).await;
-            return Ok(());
+            return Vec::new();
         }
     };
     // The text of what parsed, for each element's `body`.
     let repaired = json::repair(body);
     let Ok(written) = raw_root(&repaired) else {
-        return Ok(());
+        return Vec::new();
     };
     let delivery = Delivery {
         provider: ctx.header("dd-ci-provider-name").trim().to_lowercase(),
@@ -266,7 +267,7 @@ async fn store(clickhouse: &clickhouse::Client, ctx: &Ctx, body: &[u8]) -> Resul
             }
         }
     }
-    storage::insert(clickhouse, &rows).await
+    rows
 }
 
 /// A batch of CI pipeline, stage and job events.
@@ -274,9 +275,11 @@ async fn store(clickhouse: &clickhouse::Client, ctx: &Ctx, body: &[u8]) -> Resul
 /// The Jenkins plugin only tells 2xx from everything else, so 202 with an empty object is the
 /// whole contract.
 pub async fn handle(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
-    if !body.is_empty()
-        && let Err(e) = store(&clickhouse, &ctx, &body).await
-    {
+    if body.is_empty() {
+        return accepted();
+    }
+    let rows = webhook_rows(&clickhouse, &ctx, &body).await;
+    if let Err(e) = storage::insert(&clickhouse, &rows).await {
         return storage_failed(e);
     }
     accepted()

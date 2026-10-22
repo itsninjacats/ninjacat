@@ -626,8 +626,7 @@ async fn run(
 
 #[tokio::test]
 async fn every_fixture_of_a_ported_host_is_answered_and_stored_as_it_says() {
-    let Some(database) = db::scratch().await else { return };
-    let clickhouse = db::client(&database);
+    let Some(clickhouse) = db::scratch_client().await else { return };
     let types = column_types(&clickhouse).await;
     let root = fixtures_root();
     let overrides: Value = serde_json::from_slice(&std::fs::read(root.join("overrides.json")).unwrap()).unwrap();

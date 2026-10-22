@@ -6,16 +6,13 @@ mod programs;
 
 use std::collections::BTreeMap;
 use std::io::Write;
-use std::sync::Arc;
 
 use base64::Engine;
 use http_body_util::BodyExt;
 use ninjapaws_intake::json;
-use ninjapaws_intake::keys::{self, Key, Store};
 use ninjapaws_intake::routers::ci_visibility::{
     AgentHeaders, Value, coverage_entries_msgpack, decode_any, read_config_request, test_event_row,
 };
-use ninjapaws_intake::server::Settings;
 use serde_json::{Value as Json, json};
 use tako::router::Router;
 
@@ -54,11 +51,6 @@ impl Answer {
     }
 }
 
-/// The client of this binary's scratch database. None when ClickHouse is not running.
-async fn scratch() -> Option<clickhouse::Client> {
-    Some(db::client(&db::scratch().await?))
-}
-
 async fn serve(
     client: &clickhouse::Client,
     mount: fn(&mut Router),
@@ -68,10 +60,7 @@ async fn serve(
     body: &[u8],
 ) -> Answer {
     let tenant = db::tenant();
-    let store = Store::default();
-    store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: tenant.clone() })]);
-    let settings = Settings { ack_unknown: false, max_body_bytes: 64 * 1024 * 1024 };
-    let router = programs::router_of(mount, client.clone(), Arc::new(store), settings);
+    let router = programs::router_for(mount, client, KEY, &tenant);
     let mut request = http::Request::builder().method(method).uri(url);
     for (name, value) in headers {
         request = request.header(*name, *value);
@@ -398,7 +387,7 @@ fn deep(depth: usize, around: &str) -> String {
 /// of times, not once per level, so a sender cannot buy seconds of CPU with nesting.
 #[tokio::test]
 async fn a_deeply_nested_body_is_decoded_in_linear_time() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     // serde_json takes 127 levels and refuses the 128th.
     const DEEPEST: usize = 127;
     let cycle = r#"{"events":[{"type":"test","content":{"meta":{"x":{}}}}]}"#;
@@ -464,7 +453,7 @@ fn a_coverage_envelope_whose_key_is_not_a_string_does_not_decode() {
 
 #[tokio::test]
 async fn a_truncated_coverage_upload_is_kept_raw_not_stored_in_part() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let (content_type, body) = multipart(&[
         ("event", "application/json", br#"{"dummy": true}"#),
         ("coveragex", "application/json", br#"{"version":2,"coverages":[{"test_suite_id":9}]}"#),
@@ -483,7 +472,7 @@ async fn a_truncated_coverage_upload_is_kept_raw_not_stored_in_part() {
 
 #[tokio::test]
 async fn a_json_coverage_payload_of_the_wrong_shape_is_kept_raw() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     for payload in ["[1,2]", r#"{"version":2,"coverages":{"not":"an array"}}"#] {
         let answer = coverage(&client, &[("coverage1", "application/json", payload.as_bytes())]).await;
         assert_eq!(answer.status, 202);
@@ -494,7 +483,7 @@ async fn a_json_coverage_payload_of_the_wrong_shape_is_kept_raw() {
 
 #[tokio::test]
 async fn a_json_coverage_version_that_cannot_be_read_is_0_and_costs_no_coverage() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     for (version, expected) in [("2", 2), ("\"2\"", 2), ("2.0", 0), ("99999999999999999999", 0), ("\"two\"", 0)] {
         let payload = format!(r#"{{"version":{version},"coverages":[{{}}]}}"#);
         let answer = coverage(&client, &[("c", "application/json", payload.as_bytes())]).await;
@@ -505,7 +494,7 @@ async fn a_json_coverage_version_that_cannot_be_read_is_0_and_costs_no_coverage(
 
 #[tokio::test]
 async fn a_json_coverage_entry_keeps_the_base64_text_of_its_bitmap_and_its_unknown_keys() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let payload = br#"{"version":2,"coverages":[{"test_session_id":1,"span_id":0,"files":[{"filename":"a.go","bitmap":"AQID"}],"later":[1]}]}"#;
     let answer = coverage(&client, &[("coverage1", "", payload)]).await;
     let row = answer.row("ci_coverage");
@@ -520,7 +509,7 @@ async fn a_json_coverage_entry_keeps_the_base64_text_of_its_bitmap_and_its_unkno
 
 #[tokio::test]
 async fn a_json_coverage_entry_is_stored_as_the_text_it_arrived_in() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let entry = r#"{ "test_suite_id" : 9,  "files": [ {"filename": "a.go", "weight": 1.50} ] }"#;
     let payload = format!(r#"{{"version":2,"coverages":[ {entry} , {{"span_id":1}}]}}"#);
     let answer = coverage(
@@ -541,7 +530,7 @@ async fn a_json_coverage_entry_is_stored_as_the_text_it_arrived_in() {
 
 #[tokio::test]
 async fn an_empty_test_cycle_body_is_answered_and_nothing_is_stored() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer =
         post(&client, programs::ci_test_cycle, "/api/v2/citestcycle", &[("content-type", "application/msgpack")], b"")
             .await;
@@ -551,7 +540,7 @@ async fn an_empty_test_cycle_body_is_answered_and_nothing_is_stored() {
 
 #[tokio::test]
 async fn events_that_are_not_maps_keep_the_body_raw_once_the_others_become_rows() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let body = r#"{"version":3,"events":[5,{"type":"test","version":2,"content":{"service":"s","meta":{"test.is_new":" YES "}}},"x"]}"#;
     let answer = post_json(&client, programs::ci_test_cycle, "/api/v2/citestcycle", body).await;
     assert_eq!(answer.status, 202);
@@ -567,7 +556,7 @@ async fn events_that_are_not_maps_keep_the_body_raw_once_the_others_become_rows(
 
 #[tokio::test]
 async fn an_events_content_keeps_each_number_as_it_was_written() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let body =
         r#"{"events":[{"type":"test","content":{ "span_id" : 12345678901234567890, "metrics": {"cpu": 1.50} }}]}"#;
     let answer = post_json(&client, programs::ci_test_cycle, "/api/v2/citestcycle", body).await;
@@ -591,7 +580,7 @@ fn a_source_line_is_taken_from_metrics_first_then_from_meta() {
 
 #[tokio::test]
 async fn the_agents_own_headers_win_over_the_fallbacks() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let body = br#"{"events":[{"type":"test","content":{}}]}"#;
     let answer = post(
         &client,
@@ -694,7 +683,7 @@ fn of_a_repeated_key_the_last_one_counts() {
 
 #[tokio::test]
 async fn the_configurations_are_stored_as_the_text_they_arrived_in() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let configurations = r#"{ "os.platform" : "linux",  "weight": 1.50 }"#;
     let body = format!(r#"{{"data":{{"id":"a","attributes":{{"service":"s","configurations":{configurations}}}}}}}"#);
     let answer = post_json(&client, programs::api, "/api/v2/libraries/tests/services/setting", &body).await;
@@ -705,7 +694,7 @@ async fn the_configurations_are_stored_as_the_text_they_arrived_in() {
 
 #[tokio::test]
 async fn an_id_that_needs_escaping_is_echoed_as_valid_json() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = post_json(&client, programs::api, "/api/v2/ci/libraries/tests", r#"{"data":{"id":"a\"b\\c"}}"#).await;
     let answer_json: Json = serde_json::from_slice(&answer.body).unwrap();
     assert_eq!(answer_json["data"]["id"], "a\"b\\c");
@@ -714,7 +703,7 @@ async fn an_id_that_needs_escaping_is_echoed_as_valid_json() {
 
 #[tokio::test]
 async fn a_commit_search_that_does_not_decode_still_gets_an_empty_json_answer() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     for body in [r#"{"data":"#, r#"{"data":{"id":"a"}}"#, r#"{"data":[5]}"#, r#"{"data":[{"id":7}]}"#, r#"{"meta":[]}"#]
     {
         let answer = post_json(&client, programs::api, "/api/v2/git/repository/search_commits", body).await;
@@ -728,7 +717,7 @@ async fn a_commit_search_that_does_not_decode_still_gets_an_empty_json_answer() 
 
 #[tokio::test]
 async fn a_commit_without_an_id_is_not_stored() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let body = r#"{"data":[{"id":"aaa"},null,{"type":"commit"},{"id":""}],"meta":{"repository_url":"r"}}"#;
     let answer = post_json(&client, programs::api, "/api/v2/git/repository/search_commits", body).await;
     assert_eq!(answer.status, 200);
@@ -738,7 +727,7 @@ async fn a_commit_without_an_id_is_not_stored() {
 
 #[tokio::test]
 async fn a_packfile_upload_that_is_not_multipart_is_kept_raw_and_still_answered_204() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = post(
         &client,
         programs::api,
@@ -765,7 +754,7 @@ async fn packfile(client: &clickhouse::Client, parts: &[(&str, &str, &[u8])]) ->
 
 #[tokio::test]
 async fn a_packfile_upload_without_a_packfile_part_is_kept_raw_and_stores_no_pack() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = packfile(&client, &[("pushedSha", "application/json", br#"{"data":{"id":"abc"}}"#)]).await;
     assert_eq!(answer.status, 204);
     let raw = answer.row("raw_payloads");
@@ -779,7 +768,7 @@ async fn a_packfile_upload_without_a_packfile_part_is_kept_raw_and_stores_no_pac
 
 #[tokio::test]
 async fn a_pushed_sha_part_that_does_not_decode_is_kept_beside_the_pack() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let pushed_sha = br#"{"data":{"id":"abc"},"meta":5}"#;
     let answer = packfile(
         &client,
@@ -806,7 +795,7 @@ async fn a_pushed_sha_part_that_does_not_decode_is_kept_beside_the_pack() {
 
 #[tokio::test]
 async fn a_repeated_pushed_sha_part_changes_only_what_it_sets() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = packfile(
         &client,
         &[
@@ -827,7 +816,7 @@ async fn a_repeated_pushed_sha_part_changes_only_what_it_sets() {
 
 #[tokio::test]
 async fn measures_fill_the_metrics_column_only_when_metrics_are_absent() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let body = r#"{"data":{"type":"t","attributes":{"metrics":{"a":1},"measures":{"b":2},"ci_level":"2"}}}"#;
     let answer = post_json(&client, programs::api, "/api/intake/ci/custom_spans", body).await;
     let row = answer.row("ci_pipeline_events");
@@ -839,7 +828,7 @@ async fn measures_fill_the_metrics_column_only_when_metrics_are_absent() {
 
 #[tokio::test]
 async fn a_datadog_ci_call_whose_attributes_are_not_an_object_is_still_a_row() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     for body in [r#"{"data":{"type":"t","attributes":[1,2]}}"#, "null", r#"{"data":null}"#] {
         let answer = post_json(&client, programs::api, "/api/v2/ci/pipeline/tags", body).await;
         assert_eq!(answer.status, 202);
@@ -853,7 +842,7 @@ async fn a_datadog_ci_call_whose_attributes_are_not_an_object_is_still_a_row() {
 
 #[tokio::test]
 async fn a_datadog_ci_envelope_of_the_wrong_shape_is_kept_raw() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     for body in ["[1]", r#"{"data":5}"#, r#"{"data":{"type":7}}"#] {
         let answer = post_json(&client, programs::api, "/api/v2/ci/pipeline/metrics", body).await;
         assert_eq!(answer.status, 202);
@@ -864,7 +853,7 @@ async fn a_datadog_ci_envelope_of_the_wrong_shape_is_kept_raw() {
 
 #[tokio::test]
 async fn a_datadog_ci_calls_attributes_are_stored_as_the_text_they_arrived_in() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let attributes = r#"{ "tags" : {"team": "ci"},  "metrics": {"binary.size": 1.50} }"#;
     let body = format!(r#"{{"data":{{"type":"ci_custom_metric","attributes":{attributes}}}}}"#);
     let answer = post_json(&client, programs::api, "/api/v2/ci/pipeline/metrics", &body).await;
@@ -890,7 +879,7 @@ async fn webhook(client: &clickhouse::Client, url: &str, headers: &[(&str, &str)
 
 #[tokio::test]
 async fn a_bare_null_is_an_empty_batch() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = webhook(&client, "/api/v2/webhook", &[], "null").await;
     assert_eq!(answer.status, 202);
     assert!(answer.stored.is_empty());
@@ -898,7 +887,7 @@ async fn a_bare_null_is_an_empty_batch() {
 
 #[tokio::test]
 async fn an_empty_webhook_body_is_answered_and_nothing_is_stored() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = webhook(&client, "/api/v2/webhook/", &[], "").await;
     assert_eq!(answer.status, 202);
     assert!(answer.stored.is_empty());
@@ -906,7 +895,7 @@ async fn an_empty_webhook_body_is_answered_and_nothing_is_stored() {
 
 #[tokio::test]
 async fn an_element_that_is_not_an_object_goes_raw_the_others_become_rows() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = webhook(&client, "/api/v2/webhook", &[], r#"[null, 7, {"level":"job","name":"x"}]"#).await;
     assert_eq!(answer.status, 202);
     let mut raw = answer.rows("raw_payloads");
@@ -922,7 +911,7 @@ async fn an_element_that_is_not_an_object_goes_raw_the_others_become_rows() {
 
 #[tokio::test]
 async fn a_bare_string_or_number_is_a_batch_of_one_element_that_is_not_an_object() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = webhook(&client, "/api/v2/webhook", &[], "\"pipeline\"").await;
     assert!(answer.rows("ci_webhook_events").is_empty());
     assert_eq!(answer.row("raw_payloads")["reason"], "unexpected_shape");
@@ -930,7 +919,7 @@ async fn a_bare_string_or_number_is_a_batch_of_one_element_that_is_not_an_object
 
 #[tokio::test]
 async fn the_elements_own_provider_wins_over_the_header_the_header_over_the_shape() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = webhook(
         &client,
         "/api/v2/webhook",
@@ -949,7 +938,7 @@ async fn the_elements_own_provider_wins_over_the_header_the_header_over_the_shap
 
 #[tokio::test]
 async fn a_numeric_id_keeps_every_digit_and_absent_is_not_false() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let body = r#"{"level":"pipeline","trace_id":5678901234567890123,"span_id":1.50,"payload_version":"2",
             "queue_time":1500,"partial_retry":"false","is_manual":false,"unique_id":true}"#;
     let answer = webhook(&client, "/api/v2/webhook", &[], body).await;
@@ -968,7 +957,7 @@ async fn a_numeric_id_keeps_every_digit_and_absent_is_not_false() {
 
 #[tokio::test]
 async fn each_element_of_a_batch_is_stored_as_the_text_it_arrived_in() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let first = r#"{ "level" : "job",  "queue_time": 1.50 }"#;
     let answer = webhook(&client, "/api/v2/webhook", &[], &format!("[ {first} ,\n {{\"level\":\"stage\"}} ]")).await;
     let mut expected = [first, r#"{"level":"stage"}"#];
@@ -978,7 +967,7 @@ async fn each_element_of_a_batch_is_stored_as_the_text_it_arrived_in() {
 
 #[tokio::test]
 async fn a_time_that_is_not_rfc_3339_keeps_its_text_and_has_no_parse() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = webhook(
         &client,
         "/api/v2/webhook",
@@ -994,7 +983,7 @@ async fn a_time_that_is_not_rfc_3339_keeps_its_text_and_has_no_parse() {
 
 #[tokio::test]
 async fn a_single_label_or_tag_sent_unwrapped_still_counts() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = webhook(
         &client,
         "/api/v2/webhook",
@@ -1010,7 +999,7 @@ async fn a_single_label_or_tag_sent_unwrapped_still_counts() {
 
 #[tokio::test]
 async fn the_delivery_id_falls_back_from_gitlab_to_github_to_datadogs_request_id() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     async fn delivery(client: &clickhouse::Client, headers: &[(&str, &str)]) -> String {
         let answer = webhook(client, "/api/v2/webhook", headers, r#"{"level":"job"}"#).await;
         answer.row("ci_webhook_events")["delivery_id"].as_str().unwrap().to_string()
@@ -1026,7 +1015,7 @@ async fn the_delivery_id_falls_back_from_gitlab_to_github_to_datadogs_request_id
 
 #[tokio::test]
 async fn the_synthetics_pollers_answer_does_not_depend_on_its_query() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = serve(
         &client,
         programs::synthetics_poller,
@@ -1049,7 +1038,7 @@ async fn install(client: &clickhouse::Client, method: &str, url: &str) -> Answer
 
 #[tokio::test]
 async fn an_unhosted_blob_is_the_registrys_own_blob_unknown_with_no_api_key_asked() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = install(&client, "GET", "/v2/datadog-agent/blobs/sha256:abc").await;
     assert_eq!(answer.status, 404);
     assert_eq!(answer.headers["docker-distribution-api-version"], "registry/2.0");
@@ -1064,7 +1053,7 @@ async fn an_unhosted_blob_is_the_registrys_own_blob_unknown_with_no_api_key_aske
 
 #[tokio::test]
 async fn a_host_that_asks_for_no_key_takes_no_upload_and_answers_no_key_check() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     // What every keyed host also serves (a flare, /api/v1/validate) is not served here: it would
     // be a body anyone could make the intake read.
     let flare = install(&client, "POST", "/support/flare").await;
@@ -1076,7 +1065,7 @@ async fn a_host_that_asks_for_no_key_takes_no_upload_and_answers_no_key_check() 
 
 #[tokio::test]
 async fn a_btf_archive_is_not_hosted_so_system_probe_falls_back_to_its_next_source() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = install(&client, "GET", "/btfs/ubuntu/22.04/x86_64/5.15.0-91-generic.btf.tar.xz").await;
     assert_eq!(answer.status, 404);
     assert_eq!(answer.text(), r#"{"errors":["BTF archives are not hosted here"]}"#);
@@ -1086,7 +1075,7 @@ async fn a_btf_archive_is_not_hosted_so_system_probe_falls_back_to_its_next_sour
 
 #[tokio::test]
 async fn an_llmobs_body_sent_by_the_diagnose_sweep_is_a_probe_not_a_payload() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = post(
         &client,
         programs::llm_obs,
@@ -1101,7 +1090,7 @@ async fn an_llmobs_body_sent_by_the_diagnose_sweep_is_a_probe_not_a_payload() {
 
 #[tokio::test]
 async fn the_note_of_an_aiusage_payload_quotes_the_proxys_origin_headers() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = post(
         &client,
         programs::ai_usage,

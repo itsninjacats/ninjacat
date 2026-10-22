@@ -59,78 +59,56 @@ async fn main() -> Result<(), BoxError> {
     router
         .post(
             "/api/v2/libraries/tests/services/setting",
-            |ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body| async move {
-                ci_visibility::answer_config(&clickhouse, "settings", ci_visibility::settings_answer, &ctx, &body).await
+            |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+                ci_visibility::answer_config("settings", ci_visibility::settings_answer, ctx, clickhouse, body)
             },
         )
         .middleware(auth::agent);
     router
-        .post(
-            "/api/v2/ci/tests/skippable",
-            |ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body| async move {
-                ci_visibility::answer_config(&clickhouse, "skippable", ci_visibility::skippable_answer, &ctx, &body)
-                    .await
-            },
-        )
+        .post("/api/v2/ci/tests/skippable", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            ci_visibility::answer_config("skippable", ci_visibility::skippable_answer, ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
     router
-        .post(
-            "/api/v2/ci/libraries/tests",
-            |ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body| async move {
-                ci_visibility::answer_config(&clickhouse, "known_tests", ci_visibility::test_list_answer, &ctx, &body)
-                    .await
-            },
-        )
+        .post("/api/v2/ci/libraries/tests", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            ci_visibility::answer_config("known_tests", ci_visibility::test_list_answer, ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
     router
-        .post(
-            "/api/v2/ci/libraries/tests/flaky",
-            |ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body| async move {
-                ci_visibility::answer_config(&clickhouse, "flaky_tests", ci_visibility::test_list_answer, &ctx, &body)
-                    .await
-            },
-        )
+        .post("/api/v2/ci/libraries/tests/flaky", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            ci_visibility::answer_config("flaky_tests", ci_visibility::test_list_answer, ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
     router
         .post(
             "/api/v2/test/libraries/test-management/tests",
-            |ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body| async move {
+            |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
                 ci_visibility::answer_config(
-                    &clickhouse,
                     "test_management",
                     ci_visibility::test_management_answer,
-                    &ctx,
-                    &body,
+                    ctx,
+                    clickhouse,
+                    body,
                 )
-                .await
             },
         )
         .middleware(auth::agent);
     router.post("/api/v2/git/repository/search_commits", ci_visibility::handle_search_commits).middleware(auth::agent);
     router.post("/api/v2/git/repository/packfile", ci_visibility::handle_packfile).middleware(auth::agent);
     router
-        .post(
-            "/api/v2/ci/pipeline/tags",
-            |ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body| async move {
-                ci_visibility::handle_pipeline_event(&clickhouse, "tag", &ctx, &body).await
-            },
-        )
+        .post("/api/v2/ci/pipeline/tags", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            ci_visibility::handle_pipeline_event("tag", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
     router
-        .post(
-            "/api/v2/ci/pipeline/metrics",
-            |ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body| async move {
-                ci_visibility::handle_pipeline_event(&clickhouse, "measure", &ctx, &body).await
-            },
-        )
+        .post("/api/v2/ci/pipeline/metrics", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            ci_visibility::handle_pipeline_event("measure", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
     router
-        .post(
-            "/api/intake/ci/custom_spans",
-            |ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body| async move {
-                ci_visibility::handle_pipeline_event(&clickhouse, "custom_span", &ctx, &body).await
-            },
-        )
+        .post("/api/intake/ci/custom_spans", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            ci_visibility::handle_pipeline_event("custom_span", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
 
     // What the agent sweeps at startup on whatever host it talks to, and a flare, which goes to

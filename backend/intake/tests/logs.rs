@@ -9,11 +9,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{TimeZone, Utc};
+use http_body_util::BodyExt;
 use ninjapaws_intake::keys::{self, Key, Store};
-use ninjapaws_intake::server::Settings;
 use ninjapaws_intake::tcp_logs::{self, FrameResult, Framing};
 use ninjapaws_proto::pb;
 use prost::Message;
+use serde_json::json;
 use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_util::sync::CancellationToken;
@@ -21,7 +22,7 @@ use tokio_util::task::TaskTracker;
 
 const KEY: &str = "00000000000000000000000000000001";
 
-/// A key store with `KEY` published for `tenant`.
+/// A key store with `KEY` published for `tenant`, for the TCP listener.
 fn store(tenant: &str) -> Arc<Store> {
     let store = Store::default();
     store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: tenant.into() })]);
@@ -30,16 +31,31 @@ fn store(tenant: &str) -> Arc<Store> {
 
 /// One POST of a body to the logs host with the test key; returns the status.
 async fn post(client: &clickhouse::Client, tenant: &str, path: &str, body: &[u8]) -> u16 {
-    let settings = Settings { ack_unknown: false, max_body_bytes: 64 * 1024 * 1024 };
     let request = http::Request::builder().method("POST").uri(path).header("dd-api-key", KEY);
-    let router = programs::router_of(programs::logs, client.clone(), store(tenant), settings);
+    let router = programs::router_for(programs::logs, client, KEY, tenant);
     router.dispatch(request.body(body.to_vec().into()).unwrap()).await.status().as_u16()
+}
+
+/// A refused insert is answered 503, which the agent retries; a request that stores nothing does
+/// not need ClickHouse at all.
+#[tokio::test]
+async fn without_clickhouse_a_write_is_answered_503_and_a_request_that_stores_nothing_is_not() {
+    let router = programs::router_for(programs::logs, &db::unconnected(), KEY, "test");
+    let send = |method: &str, path: &str, body: &str| {
+        let request = http::Request::builder().method(method).uri(path).header("dd-api-key", KEY);
+        router.dispatch(request.body(body.to_string().into()).unwrap())
+    };
+    let refused = send("POST", "/api/v2/logs", r#"[{"message":"m"}]"#).await;
+    assert_eq!(refused.status(), 503);
+    let body = refused.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(serde_json::from_slice::<serde_json::Value>(&body).unwrap(), json!({"errors": ["storage unavailable"]}));
+    assert_eq!(send("POST", "/api/v2/logs", "[]").await.status(), 202);
+    assert_eq!(send("GET", "/ping", "").await.status(), 200);
 }
 
 #[tokio::test]
 async fn logs_from_the_dotnet_tracer_which_have_no_message_field_become_log_rows() {
-    let Some(database) = db::scratch().await else { return };
-    let client = db::client(&database);
+    let Some(client) = db::scratch_client().await else { return };
     let tenant = db::tenant();
     let body = std::fs::read(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real/dd-trace-dotnet-3.54.0-logs.json"),
@@ -70,8 +86,7 @@ async fn logs_from_the_dotnet_tracer_which_have_no_message_field_become_log_rows
 
 #[tokio::test]
 async fn an_empty_object_among_the_logs_is_not_stored() {
-    let Some(database) = db::scratch().await else { return };
-    let client = db::client(&database);
+    let Some(client) = db::scratch_client().await else { return };
     let tenant = db::tenant();
     assert_eq!(post(&client, &tenant, "/api/v2/logs", br#"[{}, {"message":"kept"}]"#).await, 202);
 
@@ -82,8 +97,7 @@ async fn an_empty_object_among_the_logs_is_not_stored() {
 /// The JSON reader nests 128 deep; the rule is the same on both sides of it.
 #[tokio::test]
 async fn a_body_nested_deeper_than_any_telemetry_is_kept_raw_and_one_inside_the_limit_is_stored() {
-    let Some(database) = db::scratch().await else { return };
-    let client = db::client(&database);
+    let Some(client) = db::scratch_client().await else { return };
     let send = |depth: usize| {
         let client = client.clone();
         async move {
@@ -264,8 +278,7 @@ async fn rows_after(
 
 #[tokio::test]
 async fn length_prefixed_frames_over_a_real_connection() {
-    let Some(database) = db::scratch().await else { return };
-    let client = db::client(&database);
+    let Some(client) = db::scratch_client().await else { return };
     let tenant = db::tenant();
     let (port, stopping, tasks) = listening(&client, &tenant, None).await;
     let payload = [prefixed(KEY, &proto_log("one", 0)), prefixed(KEY, &proto_log("two", 0))].concat();
@@ -279,8 +292,7 @@ async fn length_prefixed_frames_over_a_real_connection() {
 
 #[tokio::test]
 async fn lines_over_a_real_connection_and_rows_before_an_unknown_key_are_kept() {
-    let Some(database) = db::scratch().await else { return };
-    let client = db::client(&database);
+    let Some(client) = db::scratch_client().await else { return };
     let tenant = db::tenant();
     let (port, stopping, tasks) = listening(&client, &tenant, None).await;
     let payload = format!("{KEY} first\n{KEY} second\nffffffffffffffffffffffffffffffff third\n{KEY} never read\n");
@@ -294,8 +306,7 @@ async fn lines_over_a_real_connection_and_rows_before_an_unknown_key_are_kept() 
 /// is already stored.
 #[tokio::test]
 async fn a_connection_held_open_keeps_its_rows_when_the_process_stops() {
-    let Some(database) = db::scratch().await else { return };
-    let client = db::client(&database);
+    let Some(client) = db::scratch_client().await else { return };
     let tenant = db::tenant();
     let (port, stopping, tasks) = listening(&client, &tenant, None).await;
     let mut sender = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
@@ -311,8 +322,7 @@ async fn frames_over_tls() {
     use tokio_rustls::rustls::pki_types::{CertificateDer, ServerName};
     use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 
-    let Some(database) = db::scratch().await else { return };
-    let client = db::client(&database);
+    let Some(client) = db::scratch_client().await else { return };
     let tenant = db::tenant();
     let certified = rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
     let directory = std::env::temp_dir().join(format!("ninjapaws-tls-{}", std::process::id()));

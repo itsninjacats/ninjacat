@@ -4,19 +4,10 @@
 mod db;
 mod programs;
 
-use std::sync::Arc;
-
-use ninjapaws_intake::keys::{self, Key, Store};
-use ninjapaws_intake::server::Settings;
 use serde_json::Value;
 use tako::router::Router;
 
 const KEY: &str = "00000000000000000000000000000001";
-
-/// The client of this binary's scratch database. None when ClickHouse is not running.
-async fn scratch() -> Option<clickhouse::Client> {
-    Some(db::client(&db::scratch().await?))
-}
 
 /// What one request left behind: its status, and the tenant its rows are under.
 struct Sent {
@@ -33,10 +24,7 @@ async fn post(
     body: &str,
 ) -> Sent {
     let tenant = db::tenant();
-    let store = Store::default();
-    store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: tenant.clone() })]);
-    let settings = Settings { ack_unknown: false, max_body_bytes: 1 << 20 };
-    let router = programs::router_of(mount, client.clone(), Arc::new(store), settings);
+    let router = programs::router_for(mount, client, KEY, &tenant);
     let mut request = http::Request::builder().method("POST").uri(path).header("dd-api-key", KEY);
     for (name, value) in headers {
         request = request.header(*name, *value);
@@ -58,7 +46,7 @@ async fn telemetry(client: &clickhouse::Client, body: &str) -> Vec<Value> {
 
 #[tokio::test]
 async fn the_producer_is_named_from_request_type_then_from_the_keys_only_one_producer_sets() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     for (body, producer) in [
         (r#"{"request_type":"apm-onboarding-event"}"#, "trace-agent"),
         (r#"{"request_type":"apm-remote-config-event"}"#, "cluster-agent"),
@@ -77,7 +65,7 @@ async fn the_producer_is_named_from_request_type_then_from_the_keys_only_one_pro
 
 #[tokio::test]
 async fn the_proxys_headers_are_stored_and_a_malformed_application_block_lands_in_extra() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let sent = post(
         &client,
         programs::telemetry,
@@ -105,7 +93,7 @@ async fn the_proxys_headers_are_stored_and_a_malformed_application_block_lands_i
 
 #[tokio::test]
 async fn a_batch_that_is_not_a_list_of_objects_is_kept_only_on_the_requests_row() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let not_a_list = telemetry(&client, r#"{"request_type":"message-batch","payload":{"request_type":"logs"}}"#).await;
     assert_eq!(not_a_list.len(), 1);
     assert_eq!(not_a_list[0]["payload"], r#"{"request_type":"logs"}"#);
@@ -122,7 +110,7 @@ async fn a_batch_that_is_not_a_list_of_objects_is_kept_only_on_the_requests_row(
 
 #[tokio::test]
 async fn a_null_batch_entry_is_still_an_entry_with_nothing_in_it() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let mut found = telemetry(
         &client,
         r#"{"request_type":"message-batch","runtime_id":"r","payload":[null,{"request_type":"logs","payload":1}]}"#,
@@ -140,7 +128,7 @@ async fn a_null_batch_entry_is_still_an_entry_with_nothing_in_it() {
 /// What is stored as JSON is the text the tracer sent, digits and spaces included.
 #[tokio::test]
 async fn the_payload_debug_times_and_extra_keep_the_text_as_sent() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let mut found = telemetry(
         &client,
         r#"{"request_type":"message-batch","tracer_time": 1.50 ,"debug":{ "x" : 1.0e3 },"future":[ 1.50 ],
@@ -157,7 +145,7 @@ async fn the_payload_debug_times_and_extra_keep_the_text_as_sent() {
 
 #[tokio::test]
 async fn a_null_body_is_an_empty_envelope_and_still_a_row() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let found = telemetry(&client, "null").await;
     assert_eq!(found.len(), 1);
     assert_eq!(found[0]["request_type"], "");
@@ -166,7 +154,7 @@ async fn a_null_body_is_an_empty_envelope_and_still_a_row() {
 
 #[tokio::test]
 async fn a_body_that_is_json_but_not_an_object_goes_to_raw_payloads() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let sent = post(&client, programs::telemetry, "/api/v2/apmtelemetry", &[], "[1,2,3]").await;
     assert!(rows(&client, &sent, "apm_telemetry").await.is_empty());
     let raw = rows(&client, &sent, "raw_payloads").await;
@@ -178,7 +166,7 @@ async fn a_body_that_is_json_but_not_an_object_goes_to_raw_payloads() {
 
 #[tokio::test]
 async fn genresources_quotes_the_origin_headers_in_the_note() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let sent = post(
         &client,
         programs::resources,

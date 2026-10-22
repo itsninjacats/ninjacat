@@ -7,11 +7,8 @@ mod programs;
 
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::Arc;
 
 use http_body_util::BodyExt;
-use ninjapaws_intake::keys::{self, Key, Store};
-use ninjapaws_intake::server::Settings;
 use ninjapaws_proto::datadog::agentdiscovery::{AgentDiscoveryPayload, AgentDiscoveryPayloadBatch};
 use ninjapaws_proto::datadog::sbom::{SbomEntity, SbomPayload};
 use prost::Message;
@@ -45,11 +42,6 @@ impl Answer {
     }
 }
 
-/// The client of this binary's scratch database. None when ClickHouse is not running.
-async fn scratch() -> Option<clickhouse::Client> {
-    Some(db::client(&db::scratch().await?))
-}
-
 async fn send(
     client: &clickhouse::Client,
     mount: fn(&mut Router),
@@ -58,10 +50,7 @@ async fn send(
     body: Vec<u8>,
 ) -> Answer {
     let tenant = db::tenant();
-    let store = Store::default();
-    store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: tenant.clone() })]);
-    let settings = Settings { ack_unknown: false, max_body_bytes: 64 * 1024 * 1024 };
-    let router = programs::router_of(mount, client.clone(), Arc::new(store), settings);
+    let router = programs::router_for(mount, client, KEY, &tenant);
     let mut request = http::Request::builder().method("POST").uri(path);
     for (name, value) in headers {
         request = request.header(*name, *value);
@@ -97,7 +86,7 @@ fn text(value: &Value) -> &str {
 
 #[tokio::test]
 async fn what_a_real_dbm_integration_sends_is_stored_event_for_event_with_no_key_left_undecoded() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real");
     let tracks = ["databasequery", "dbmactivity", "dbmhealth", "dbmmetadata", "dbmmetrics", "dbmcolumnstatistics"];
     let mut files: Vec<String> =
@@ -137,7 +126,7 @@ async fn what_a_real_dbm_integration_sends_is_stored_event_for_event_with_no_key
 
 #[tokio::test]
 async fn an_oracle_plan_is_a_list_of_steps_and_they_are_counted() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = post(
         &client,
         programs::dbm,
@@ -153,7 +142,7 @@ async fn an_oracle_plan_is_a_list_of_steps_and_they_are_counted() {
 
 #[tokio::test]
 async fn a_postgres_plan_is_explain_output_in_a_string_or_null_when_none_could_be_collected() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer =
         post(&client, programs::dbm, "/api/v2/databasequery", real("postgres-check-23.12.0-databasequery.json")).await;
     let mut shown: Vec<(String, bool)> = answer
@@ -167,7 +156,7 @@ async fn a_postgres_plan_is_explain_output_in_a_string_or_null_when_none_could_b
 
 #[tokio::test]
 async fn the_agents_empty_dbm_probe_stores_nothing() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     for body in ["{}", "[]", ""] {
         assert!(post(&client, programs::dbm, "/api/v2/dbmmetrics", body).await.tables().is_empty(), "{body}");
     }
@@ -175,7 +164,7 @@ async fn the_agents_empty_dbm_probe_stores_nothing() {
 
 #[tokio::test]
 async fn a_bare_dbm_object_is_a_batch_of_one_stored_with_its_text_as_sent() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let body = " {\"host\": \"db1\",\n  \"status\": \"ok\"}\n";
     let answer = post(&client, programs::dbm, "/api/v2/dbmhealth", body).await;
     let rows = answer.rows("dbm_events");
@@ -188,7 +177,7 @@ async fn a_bare_dbm_object_is_a_batch_of_one_stored_with_its_text_as_sent() {
 
 #[tokio::test]
 async fn what_the_agents_snmp_check_learns_about_a_device_becomes_devices_interfaces_and_addresses() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = post(&client, programs::ndm, "/api/v2/ndm", real("agent-7.84.0-ndm.json")).await;
     assert!(answer.raw().is_empty());
     let devices = answer.rows("ndm_devices");
@@ -216,7 +205,7 @@ async fn what_the_agents_snmp_check_learns_about_a_device_becomes_devices_interf
 
 #[tokio::test]
 async fn traps_arrive_with_the_names_the_agents_own_trap_database_gave_them_or_as_bare_oids() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = post(&client, programs::ndm, "/api/v2/ndmtraps", real("agent-7.84.0-ndmtraps.json")).await;
     assert!(answer.raw().is_empty());
     let traps = answer.rows("snmp_traps");
@@ -245,7 +234,7 @@ async fn traps_arrive_with_the_names_the_agents_own_trap_database_gave_them_or_a
 
 #[tokio::test]
 async fn netflow_v5_records_the_agent_aggregated_become_flows() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = post(&client, programs::ndm, "/api/v2/ndmflow", real("agent-7.84.0-ndmflow.json")).await;
     assert!(answer.raw().is_empty());
     let flows = answer.rows("netflow_flows");
@@ -260,7 +249,7 @@ async fn netflow_v5_records_the_agent_aggregated_become_flows() {
 
 #[tokio::test]
 async fn a_traceroute_the_agent_ran_becomes_one_network_path_with_its_hops() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = post(&client, programs::ndm, "/api/v2/netpath", real("agent-7.84.0-netpath.json")).await;
     assert!(answer.raw().is_empty());
     let paths = answer.rows("network_paths");
@@ -275,7 +264,7 @@ async fn a_traceroute_the_agent_ran_becomes_one_network_path_with_its_hops() {
 
 #[tokio::test]
 async fn one_value_of_the_wrong_type_refuses_the_whole_batch_of_flows_and_the_body_is_kept_raw() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let body = r#"[{"type":"netflow9","bytes":1},{"type":"netflow9","bytes":"many"}]"#;
     let answer = post(&client, programs::ndm, "/api/v2/ndmflow", body).await;
     assert!(answer.rows("netflow_flows").is_empty());
@@ -289,7 +278,7 @@ async fn one_value_of_the_wrong_type_refuses_the_whole_batch_of_flows_and_the_bo
 
 #[tokio::test]
 async fn an_ndm_entry_with_a_value_of_the_wrong_type_is_kept_raw_and_the_entries_beside_it_are_stored() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let good = r#"{"namespace":"default","devices":[{"id":"default:10.0.0.1","status":1}]}"#;
     let bad = r#"{"namespace":"default","devices":[{"id":17}]}"#;
     let answer = post(&client, programs::ndm, "/api/v2/ndm", format!("[{good},{bad}]")).await;
@@ -305,7 +294,7 @@ async fn an_ndm_entry_with_a_value_of_the_wrong_type_is_kept_raw_and_the_entries
 
 #[tokio::test]
 async fn an_entry_without_a_trap_is_an_unexpected_shape_a_broken_trap_a_decode_error() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = post(
         &client,
         programs::ndm,
@@ -329,7 +318,7 @@ async fn an_entry_without_a_trap_is_an_unexpected_shape_a_broken_trap_a_decode_e
 /// A batch entry kept raw is the text that was sent, numbers and spacing included.
 #[tokio::test]
 async fn an_entry_kept_raw_is_the_text_as_sent() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let bad = r#"{"namespace" : "x", "n": 1.50, "devices":[{"id":17}]}"#;
     let answer = post(&client, programs::ndm, "/api/v2/ndm", format!("[ {bad} ]")).await;
     assert_eq!(text(&answer.raw()[0]["body"]), bad);
@@ -349,7 +338,7 @@ async fn an_entry_kept_raw_is_the_text_as_sent() {
 
 #[tokio::test]
 async fn an_address_that_is_not_one_refuses_the_batch_of_paths() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = post(
         &client,
         programs::ndm,
@@ -390,7 +379,7 @@ async fn post_dump(client: &clickhouse::Client, content_type: &str, body: Vec<u8
 
 #[tokio::test]
 async fn a_dump_with_a_header_only_is_stored_without_nodes() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let content_type = format!("multipart/form-data; boundary={BOUNDARY}");
     let answer = post_dump(&client, &content_type, multipart(&[("event", br#"{"host":"h1"}"#)])).await;
     assert_eq!(answer.tables(), ["cws_activity_dumps"]);
@@ -399,7 +388,7 @@ async fn a_dump_with_a_header_only_is_stored_without_nodes() {
 
 #[tokio::test]
 async fn a_dump_request_with_nothing_to_decode_is_kept_raw() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let body = multipart(&[("event", b"[1]"), ("dump", b""), ("other", b"x")]);
     for (content_type, note) in [
         ("application/json".to_string(), "content-type is not multipart/form-data"),
@@ -420,7 +409,7 @@ async fn a_dump_request_with_nothing_to_decode_is_kept_raw() {
 
 #[tokio::test]
 async fn each_track_stores_its_envelopes_under_its_own_name() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let body = r#"[{"hostname":"h1","message":"{\"kind\":\"remediation\"}"}]"#;
     for (mount, path, track) in [
         (programs::runtime_security as fn(&mut Router), "/api/v2/secruntime", "secruntime"),
@@ -438,7 +427,7 @@ async fn each_track_stores_its_envelopes_under_its_own_name() {
 
 #[tokio::test]
 async fn a_batch_that_is_not_a_list_of_envelopes_is_kept_raw_under_its_track() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     for (body, note) in [
         (r#"{"hostname":"h1"}"#, "the body is not a list of envelopes: expected a list, got object"),
         ("\"text\"", "the body is not a list of envelopes: expected a list, got string"),
@@ -460,7 +449,7 @@ async fn a_batch_that_is_not_a_list_of_envelopes_is_kept_raw_under_its_track() {
 
 #[tokio::test]
 async fn an_empty_batch_or_a_probe_stores_nothing() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     for body in ["null", "[]", "", "{}"] {
         assert!(
             post(&client, programs::runtime_security, "/api/v2/secruntime", body).await.tables().is_empty(),
@@ -472,7 +461,7 @@ async fn an_empty_batch_or_a_probe_stores_nothing() {
 /// Go's decoder puts U+FFFD where a string is not text and carries on.
 #[tokio::test]
 async fn an_envelope_with_text_that_is_not_valid_unicode_keeps_its_row() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let body = [
         &b"[{\"hostname\":\"h"[..],
         &[0xff],
@@ -495,7 +484,7 @@ async fn an_envelope_with_text_that_is_not_valid_unicode_keeps_its_row() {
 
 #[tokio::test]
 async fn an_sbom_that_is_not_protobuf_or_has_no_entities_is_kept_raw() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = post(&client, programs::sbom, "/api/v2/sbom", "definitely not protobuf").await;
     let raw = answer.raw();
     assert_eq!(answer.tables(), ["raw_payloads"]);
@@ -512,7 +501,7 @@ async fn an_sbom_that_is_not_protobuf_or_has_no_entities_is_kept_raw() {
 
 #[tokio::test]
 async fn an_entity_without_components_writes_only_the_entity() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let body = SbomPayload {
         version: 1,
         host: "h1".into(),
@@ -529,7 +518,7 @@ fn hex(text: &str) -> Vec<u8> {
 
 #[tokio::test]
 async fn bytes_that_are_not_a_scanner_result_are_kept_raw_the_note_saying_what_was_there() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     for (body, reason, note) in [
         ("08010802", "unexpected_shape", "not an SdsResultPayload: no resource and no results; 1:varintx2"),
         // A known field in another wire type (2, the timestamp, as bytes): prost refuses the
@@ -566,7 +555,7 @@ async fn scanned(client: &clickhouse::Client, file: &str) -> Answer {
 
 #[tokio::test]
 async fn a_real_scan_that_found_sensitive_data_says_which_rule_matched_in_which_column() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = scanned(&client, "agent-7.84.0-sdsresult-matches.bin").await;
     let scan = answer.rows("sds_scans")[0];
     assert_eq!(
@@ -620,7 +609,7 @@ async fn a_real_scan_that_found_sensitive_data_says_which_rule_matched_in_which_
 
 #[tokio::test]
 async fn a_real_scan_that_found_nothing_still_records_the_table_it_scanned() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = scanned(&client, "agent-7.84.0-sdsresult-clean.bin").await;
     let result = answer.rows("sds_results")[0];
     assert_eq!((text(&result["table_name"]), text(&result["task_status"])), ("orders", "SUCCESS"));
@@ -630,7 +619,7 @@ async fn a_real_scan_that_found_nothing_still_records_the_table_it_scanned() {
 
 #[tokio::test]
 async fn a_real_scan_that_failed_carries_the_scanners_reason() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let answer = scanned(&client, "agent-7.84.0-sdsresult-failed.bin").await;
     let result = answer.rows("sds_results")[0];
     assert_eq!((text(&result["table_name"]), text(&result["task_status"])), ("no_such_table", "ERROR"));
@@ -642,7 +631,7 @@ async fn a_real_scan_that_failed_carries_the_scanners_reason() {
 
 #[tokio::test]
 async fn every_event_platform_route_answers_an_empty_body_with_202_and_stores_nothing() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     for (mount, path) in [
         (programs::agent_discovery as fn(&mut Router), "/api/v2/agentdiscovery"),
         (programs::agent_health, "/api/v2/agenthealth"),
@@ -661,7 +650,7 @@ async fn every_event_platform_route_answers_an_empty_body_with_202_and_stores_no
 
 #[tokio::test]
 async fn a_discovery_batch_is_stored_a_body_that_is_not_protobuf_kept_raw_and_an_empty_batch_dropped() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let batch = AgentDiscoveryPayloadBatch {
         host_id: "host-1".into(),
         payloads: vec![AgentDiscoveryPayload { integration: "postgres".into(), ..Default::default() }],
@@ -687,7 +676,7 @@ async fn a_discovery_batch_is_stored_a_body_that_is_not_protobuf_kept_raw_and_an
 
 #[tokio::test]
 async fn a_health_report_is_stored_with_its_issues() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let body = r#"{"schema_version": "1.0", "host": {"hostname": "web-1"},
         "issues": {"b": {"id": "b", "severity": 1, "extra": {"pid": 9007199254740993}}, "a": {"id": "a"}}}"#;
     let answer = post(&client, programs::agent_health, "/api/v2/agenthealth", body).await;
@@ -718,7 +707,7 @@ async fn a_health_report_is_stored_with_its_issues() {
 
 #[tokio::test]
 async fn an_event_is_stored_and_a_body_that_is_not_one_object_kept_raw() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let body = r#"{"data":{"attributes":{"title":"a\ud800","attributes":{}}}}"#;
     let answer = post(&client, programs::event_management, "/api/v2/events", body).await;
     assert_eq!(answer.tables(), ["event_management_events"]);
@@ -744,7 +733,7 @@ async fn an_event_is_stored_and_a_body_that_is_not_one_object_kept_raw() {
 
 #[tokio::test]
 async fn synthetics_results_are_stored_and_a_bad_item_kept_raw() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let body = r#"[{"test": {"id": "t-1"}}, 42, {"test": {"id": "t-2"}}]"#;
     let answer = post(&client, programs::synthetics_results, "/api/v2/synthetics", body).await;
     assert_eq!(answer.tables(), ["raw_payloads", "synthetics_results"]);
@@ -762,7 +751,7 @@ async fn synthetics_results_are_stored_and_a_bad_item_kept_raw() {
 
 #[tokio::test]
 async fn a_lineage_event_sent_with_a_bearer_key_is_stored_with_the_querys_api_version_and_the_via_header() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let bearer = format!("Bearer {KEY}");
     let headers = [("authorization", bearer.as_str()), ("via", "trace-agent 7.83.0")];
     let body = br#"{"eventType": "COMPLETE", "run": {"runId": "run-1"}}"#.to_vec();
@@ -782,7 +771,7 @@ async fn a_lineage_event_sent_with_a_bearer_key_is_stored_with_the_querys_api_ve
 
 #[tokio::test]
 async fn a_lineage_batch_stores_every_event_and_keeps_an_item_that_is_not_an_object_raw() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let body = br#"[{"eventType": "START"}, "text", {"eventType": "COMPLETE"}]"#.to_vec();
     let answer = send(&client, programs::data_obs, "/api/v1/lineage", &[("dd-api-key", KEY)], body).await;
     let mut types: Vec<&str> = answer.rows("openlineage_events").iter().map(|r| text(&r["event_type"])).collect();
@@ -797,7 +786,7 @@ async fn a_lineage_batch_stores_every_event_and_keeps_an_item_that_is_not_an_obj
 
 #[tokio::test]
 async fn a_batched_body_that_is_not_json_is_kept_raw_and_one_of_null_holds_no_items() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     for (mount, path, intake) in [
         (programs::software_inventory as fn(&mut Router), "/api/v2/softinv", "softinv"),
         (programs::synthetics_results, "/api/v2/synthetics", "synthetics"),
@@ -819,7 +808,7 @@ async fn a_batched_body_that_is_not_json_is_kept_raw_and_one_of_null_holds_no_it
 
 #[tokio::test]
 async fn a_query_action_entry_is_stored_whole_with_its_sorted_keys_and_the_senders_origin_headers() {
-    let Some(client) = scratch().await else { return };
+    let Some(client) = db::scratch_client().await else { return };
     let headers = [("dd-api-key", KEY), ("dd-evp-origin", "python-integration"), ("dd-evp-origin-version", "1.2.3")];
     let body = br#"[{"b": 9007199254740993, "a": {"z": 15, "y": null}}, {"only": "<tag> & more"}, null]"#.to_vec();
     let answer = send(&client, programs::data_obs, "/api/v2/query-actions", &headers, body).await;
