@@ -8,6 +8,8 @@ use std::collections::HashMap;
 
 use include_dir::{Dir, include_dir};
 
+use crate::fnv;
+
 static FILES: Dir = include_dir!("$CARGO_MANIFEST_DIR/../schema/migrations");
 
 #[derive(Clone, Debug)]
@@ -25,12 +27,6 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
     applied_at DateTime64(3, 'UTC') DEFAULT now64(3),
     checksum   UInt64
 ) ENGINE = ReplacingMergeTree(applied_at) ORDER BY version";
-
-/// A migration file's checksum. Ledgers already hold checksums written with this function, so it
-/// cannot change.
-pub fn checksum(data: &[u8]) -> u64 {
-    crate::fnv::hash64(data)
-}
 
 pub fn parse_filename(name: &str) -> Result<(u32, String), String> {
     let pattern = regex::Regex::new(r"^(\d{4})_([a-z0-9][a-z0-9_]*)\.sql$").unwrap();
@@ -113,7 +109,7 @@ pub fn load() -> Result<Vec<Migration>, String> {
         let name = file.path().file_name().and_then(|n| n.to_str()).unwrap_or_default();
         let (version, title) = parse_filename(name)?;
         let sql = String::from_utf8(file.contents().to_vec()).map_err(|_| format!("schema: {name} is not UTF-8"))?;
-        migrations.push(Migration { version, name: title, sql, checksum: checksum(file.contents()) });
+        migrations.push(Migration { version, name: title, sql, checksum: fnv::hash64(file.contents()) });
     }
     migrations.sort_by_key(|m| m.version);
     if let Some(pair) = migrations.windows(2).find(|pair| pair[0].version == pair[1].version) {
@@ -231,7 +227,7 @@ mod tests {
 
     #[test]
     fn the_checksum_is_fnv_1a() {
-        assert_eq!(checksum(b""), 14695981039346656037);
-        assert_eq!(checksum(b"a"), 0xaf63dc4c8601ec8c);
+        assert_eq!(fnv::hash64(b""), 14695981039346656037);
+        assert_eq!(fnv::hash64(b"a"), 0xaf63dc4c8601ec8c);
     }
 }

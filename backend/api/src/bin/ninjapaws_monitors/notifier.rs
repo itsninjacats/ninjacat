@@ -7,12 +7,14 @@ use std::time::Duration;
 use api::reads::ClickHouse;
 use ninjapaws_engine::monitor::state::NEVER_NOTIFIED;
 use ninjapaws_engine::{Sql, SqlValue};
+use serde::Deserialize;
 use tokio::time::MissedTickBehavior;
 
 use crate::rows::NotificationRow;
 use crate::telemetry::Counters;
 
-#[derive(Clone, Debug, PartialEq)]
+/// Read by position: the fields follow the order `due` selects its columns in.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Due {
     pub tenant: String,
     pub monitor_id: u64,
@@ -91,25 +93,7 @@ pub async fn due(reader: &ClickHouse, since: i64) -> Result<Polled, String> {
         ),
         parameters,
     };
-    type Found = (String, u64, String, i64, i64, String, String, String, Option<f64>);
-    let found: Vec<Found> = reader.read(&found).await?;
-    Ok(Polled {
-        found: found
-            .into_iter()
-            .map(|(tenant, monitor_id, group_key, at, inserted_at, from_state, to_state, reason, value)| Due {
-                tenant,
-                monitor_id,
-                group_key,
-                at,
-                inserted_at,
-                from_state,
-                to_state,
-                reason,
-                value,
-            })
-            .collect(),
-        newest: newest.first().and_then(|r| r.0),
-    })
+    Ok(Polled { found: reader.read::<Due>(&found).await?, newest: newest.first().and_then(|r| r.0) })
 }
 
 fn stub(now: i64, d: &Due) -> NotificationRow {

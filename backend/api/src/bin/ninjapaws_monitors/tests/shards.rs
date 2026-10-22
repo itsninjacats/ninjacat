@@ -7,12 +7,13 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use ninjapaws_storage::fnv;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 
 use super::{connect, dev_postgres_url, eventually, unique};
 use crate::definitions::MonitorKey;
-use crate::shards::{Balancer, NOTIFIER_LOCK, Order, SHARDS, fnv1a, shard_of};
+use crate::shards::{Balancer, NOTIFIER_LOCK, Order, SHARDS, shard_of};
 use crate::telemetry::Counters;
 
 const PATIENCE: Duration = Duration::from_secs(20);
@@ -21,8 +22,8 @@ const INTERVAL: Duration = Duration::from_millis(200);
 #[test]
 fn a_shard_is_a_stable_hash_of_the_key_and_the_keys_spread_over_every_shard() {
     // FNV-1a's published test vectors.
-    assert_eq!(fnv1a(""), 0xcbf2_9ce4_8422_2325);
-    assert_eq!(fnv1a("a"), 0xaf63_dc4c_8601_ec8c);
+    assert_eq!(fnv::hash64(b""), 0xcbf2_9ce4_8422_2325);
+    assert_eq!(fnv::hash64(b"a"), 0xaf63_dc4c_8601_ec8c);
 
     let mut per_shard = BTreeMap::new();
     for id in 1..=10_000 {
@@ -52,7 +53,7 @@ impl Lab {
                 return None;
             }
         };
-        let class = 1_000_000 + (fnv1a(&unique("class")) % 1_000_000_000) as i32;
+        let class = 1_000_000 + (fnv::hash64(unique("class").as_bytes()) % 1_000_000_000) as i32;
         Some(Lab { config, admin, class, application: unique("monitors_test") })
     }
 
