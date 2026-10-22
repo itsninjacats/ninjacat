@@ -1,25 +1,28 @@
 //! The golden fixtures (`backend/intake/tests/fixtures/go`): requests recorded from the Go
-//! server, each with its answer and the rows it stored. Every fixture a ported host
-//! serves is replayed through that host's router, in memory, and compared field by field;
-//! `fixtures/overrides.json` lists the accepted differences, each with its reason.
+//! server, each with its answer and the rows it stored. Every fixture a ported host serves is
+//! replayed through that host's router into a scratch ClickHouse database; its answer and the rows
+//! read back from each table are compared field by field with Go's. `fixtures/overrides.json`
+//! lists the accepted differences, each with its reason.
 //!
 //! Equal means equal in meaning: object key order does not matter, a number is a number however
-//! it is written, a timestamp may lose digits past 100 ns, and a string that is itself JSON is
-//! compared as JSON.
+//! it is written, a timestamp may lose digits past 100 ns or past what its column keeps, and a
+//! string that is itself JSON is compared as JSON. A table's rows are matched in any order: a
+//! table keeps them in its sort order, and which batch carried a row is not stored.
 
+mod db;
 mod programs;
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use base64::Engine;
 use http_body_util::BodyExt;
 use ninjapaws_intake::auth;
 use ninjapaws_intake::keys::{self, Key, Store};
 use ninjapaws_intake::routers::{flare, rum};
-use ninjapaws_intake::server::Intake;
-use ninjapaws_storage::Sink;
+use ninjapaws_intake::server::Settings;
+use regex::Regex;
 use serde_json::Value;
 use tako::conn_info::ConnInfo;
 use tako::router::Router;
@@ -275,16 +278,9 @@ struct Answer {
     body: Vec<u8>,
 }
 
-fn router_of(process: &Process, sink: Sink) -> Router {
-    let intake = Intake {
-        sink,
-        keys: test_keys(),
-        ack_unknown: false,
-        max_body_bytes: 64 * 1024 * 1024,
-        stopping: Default::default(),
-        tasks: Default::default(),
-    };
-    let router = programs::router_of(process.program, intake);
+fn router_of(process: &Process, clickhouse: clickhouse::Client) -> Router {
+    let settings = Settings { ack_unknown: false, max_body_bytes: 64 * 1024 * 1024 };
+    let router = programs::router_of(process.program, clickhouse, test_keys(), settings);
     match process.above {
         Some(above) => above(router),
         None => router,
@@ -310,26 +306,52 @@ fn request_of(fixture: &Value) -> tako::types::Request {
     request
 }
 
-async fn send(fixture: &Value, process: &Process) -> (Answer, Vec<ninjapaws_storage::Write>) {
-    let (sink, capture) = Sink::capture();
-    let router = router_of(process, sink);
-    let response = router.dispatch(request_of(fixture)).await;
+async fn send(fixture: &Value, process: &Process, clickhouse: &clickhouse::Client) -> Answer {
+    let response = router_of(process, clickhouse.clone()).dispatch(request_of(fixture)).await;
     let status = response.status().as_u16();
     let headers = response.headers().clone();
     let body = response.into_body().collect().await.unwrap().to_bytes().to_vec();
-    (Answer { status, headers, body }, capture.writes())
+    Answer { status, headers, body }
 }
 
 fn strings(node: &Value) -> Vec<String> {
     node.as_array().map(|items| items.iter().filter_map(|i| i.as_str().map(String::from)).collect()).unwrap_or_default()
 }
 
+/// Compiled once: every expected row is compared with many stored ones.
+static TIMESTAMP: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?Z$").unwrap());
+
 /// A timestamp cut to 100 ns, or None when the text is not one.
 fn timestamp_to_100ns(text: &str) -> Option<String> {
-    let pattern = regex::Regex::new(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(\.\d+)?Z$").unwrap();
-    let found = pattern.captures(text)?;
-    let digits = found.get(2).map_or("", |m| &m.as_str()[1..]);
+    let found = TIMESTAMP.captures(text)?;
+    let digits = found.get(2).map_or("", |m| m.as_str());
     Some(format!("{}.{:0<7}", &found[1], &digits[..digits.len().min(7)]))
+}
+
+/// Go's time as its column keeps it: cut to the fraction digits the stored text has (none for
+/// DateTime, 3 for DateTime64(3), 9 for DateTime64(9)), and a time outside the column's range
+/// held at the bound the row's serialiser clamps it to.
+fn same_stored_time(expected: &str, stored: &str) -> bool {
+    let (Some(e), Some(s)) = (TIMESTAMP.captures(expected), TIMESTAMP.captures(stored)) else {
+        return false;
+    };
+    let digits = s.get(2).map_or(0, |m| m.as_str().len());
+    let cut = |found: &regex::Captures| {
+        let fraction = found.get(2).map_or("", |m| m.as_str());
+        format!("{}.{:0<digits$}", &found[1], &fraction[..fraction.len().min(digits)])
+    };
+    let (expected, stored) = (cut(&e), cut(&s));
+    if expected == stored {
+        return true;
+    }
+    let (earliest, latest) = match digits {
+        0 => ("1970-01-01T00:00:00.", "2105-12-31T23:59:59."),
+        _ => ("1900-01-01T00:00:00.", "2262-04-11T23:47:16."),
+    };
+    let earliest = format!("{earliest:0<w$}", w = 20 + digits);
+    let latest = format!("{latest:0<w$}", w = 20 + digits);
+    (expected < earliest && stored == earliest) || (expected > latest && stored == latest)
 }
 
 fn same_number(expected: &Value, actual: &Value) -> bool {
@@ -396,6 +418,7 @@ fn differences(ignored: &HashSet<String>, path: &str, expected: &Value, actual: 
         }
         (Value::String(e), Value::String(a)) if e != a => match (timestamp_to_100ns(e), timestamp_to_100ns(a)) {
             (Some(et), Some(at)) if et == at => {}
+            _ if same_stored_time(e, a) => {}
             _ => match (json_container(e), json_container(a)) {
                 (Some(ej), Some(aj)) => differences(ignored, &format!("{path}~json"), &ej, &aj, found),
                 _ => found.push(format!("{path}: Go {}, Rust {}", show(expected), show(actual))),
@@ -409,17 +432,93 @@ fn differences(ignored: &HashSet<String>, path: &str, expected: &Value, actual: 
     }
 }
 
+/// The table an INSERT statement writes to.
+fn insert_table(insert: &str) -> String {
+    let rest = insert.trim_start().trim_start_matches("INSERT INTO").trim_start();
+    rest.split(|c: char| c.is_whitespace() || c == '(').next().unwrap().trim_matches('`').to_string()
+}
+
 /// The column names of an INSERT statement's column list. A name the statement quoted (`group`, a
-/// keyword) is the same column unquoted: the driver quotes every name itself.
+/// keyword) is the same column unquoted.
 fn insert_columns(insert: &str) -> Vec<String> {
     let opening = insert.find('(').unwrap();
     let closing = opening + insert[opening..].find(')').unwrap();
     insert[opening + 1..closing].split(',').map(|c| c.trim().trim_matches('`').to_string()).collect()
 }
 
+/// The type of every column of every table, by (table, column).
+async fn column_types(clickhouse: &clickhouse::Client) -> HashMap<(String, String), String> {
+    let sql = "SELECT table, name, type FROM system.columns WHERE database = currentDatabase()";
+    let columns = clickhouse.query(sql).fetch_all::<(String, String, String)>().await.unwrap();
+    columns.into_iter().map(|(table, name, kind)| ((table, name), kind)).collect()
+}
+
+/// How many rows each table holds, the empty ones left out.
+async fn tables_with_rows(clickhouse: &clickhouse::Client) -> BTreeMap<String, u64> {
+    let sql = "SELECT table, sum(rows) FROM system.parts WHERE database = currentDatabase() AND active GROUP BY table";
+    clickhouse.query(sql).fetch_all::<(String, u64)>().await.unwrap().into_iter().collect()
+}
+
+/// The rows of `table`, each as the array of `columns`, spelled as Go's recorder wrote its args.
+async fn stored_rows(
+    clickhouse: &clickhouse::Client,
+    types: &HashMap<(String, String), String>,
+    table: &str,
+    columns: &[String],
+) -> Vec<Value> {
+    let kinds: Vec<&str> =
+        columns.iter().map(|c| types.get(&(table.to_string(), c.clone())).map_or("", String::as_str)).collect();
+    let select: Vec<String> = columns
+        .iter()
+        .zip(&kinds)
+        .map(|(c, kind)| match kind.starts_with("JSON") {
+            // A JSON column comes back as the object; Go's recorder has its text.
+            true => format!("toJSONString(`{c}`)"),
+            false => format!("`{c}`"),
+        })
+        .collect();
+    let sql = format!("SELECT {} FROM `{table}`", select.join(", "));
+    let mut rows = db::json_lines(clickhouse.query(&sql), "JSONCompactEachRow").await;
+    for row in &mut rows {
+        for (value, kind) in row.as_array_mut().unwrap().iter_mut().zip(&kinds) {
+            if kind.starts_with("Map(") && kind.ends_with("Float64)") {
+                float_map_as_go(value);
+            }
+        }
+    }
+    rows
+}
+
+/// NaN and the infinities of a Map(String, Float64) as ClickHouse writes them ("nan", "inf"),
+/// spelled as a row's serde JSON does.
+fn float_map_as_go(map: &mut Value) {
+    for value in map.as_object_mut().into_iter().flat_map(|m| m.values_mut()) {
+        let go = match value.as_str() {
+            Some("nan") => "NaN",
+            Some("inf") => "+Inf",
+            Some("-inf") => "-Inf",
+            _ => continue,
+        };
+        *value = Value::String(go.into());
+    }
+}
+
 /// Runs the fixture's request; returns the differences from what Go did.
-async fn run(id: &str, fixture: &Value, process: &Process, overrides: &Value) -> Vec<String> {
-    let (response, writes) = send(fixture, process).await;
+async fn run(
+    id: &str,
+    fixture: &Value,
+    process: &Process,
+    overrides: &Value,
+    clickhouse: &clickhouse::Client,
+    types: &HashMap<(String, String), String>,
+) -> Vec<String> {
+    // Each fixture starts from empty tables, so what is read back is what its request stored.
+    for table in tables_with_rows(clickhouse).await.keys() {
+        if table != "schema_migrations" {
+            clickhouse.query(&format!("TRUNCATE TABLE `{table}`")).execute().await.unwrap();
+        }
+    }
+    let response = send(fixture, process, clickhouse).await;
     let mut ignored: HashSet<String> = strings(&fixture["volatile"]).into_iter().collect();
     ignored.extend(strings(&overrides[id]["ignore"]));
     let mut found = Vec::new();
@@ -457,7 +556,7 @@ async fn run(id: &str, fixture: &Value, process: &Process, overrides: &Value) ->
         ));
     }
 
-    // --- what was sent to storage ---
+    // --- what was stored ---
 
     // Null means the Go test ran without a capturing node: nothing to compare. An override that
     // ignores "/sends" says this intake stores something else on purpose; a test of its own pins
@@ -468,35 +567,68 @@ async fn run(id: &str, fixture: &Value, process: &Process, overrides: &Value) ->
     if ignored.contains("/sends") {
         return found;
     }
-    if sends.len() != writes.len() {
-        let go: Vec<&str> = sends.iter().filter_map(|s| s["to"].as_str()).collect();
-        let rust: Vec<&str> = writes.iter().map(|w| w.writer).collect();
-        found.push(format!("/sends: Go wrote {} batches {go:?}, Rust wrote {} {rust:?}", sends.len(), writes.len()));
-        return found;
+    // Go's rows by table, each with its own path in the fixture, so the overrides apply to it.
+    let mut columns_of: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut expected: BTreeMap<String, Vec<(String, &Value)>> = BTreeMap::new();
+    for (i, send) in sends.iter().enumerate() {
+        let insert = send["insert"].as_str().unwrap();
+        let table = insert_table(insert);
+        let columns = insert_columns(insert);
+        if *columns_of.entry(table.clone()).or_insert_with(|| columns.clone()) != columns {
+            found.push(format!("/sends/{i}/insert: Go wrote two column lists into one table"));
+        }
+        let rows = expected.entry(table).or_default();
+        for (j, row) in send["args"].as_array().unwrap().iter().enumerate() {
+            rows.push((format!("/sends/{i}/args/{j}"), row));
+        }
     }
-    for (i, (send, write)) in sends.iter().zip(&writes).enumerate() {
-        let path = format!("/sends/{i}");
-        if send["to"].as_str() != Some(write.writer) {
-            found.push(format!("{path}/to: Go {}, Rust {}", send["to"], write.writer));
+    let mut stored = tables_with_rows(clickhouse).await;
+    stored.retain(|table, _| !db::DERIVED.contains(&table.as_str()));
+    let go: BTreeMap<&str, u64> = expected.iter().map(|(t, rows)| (t.as_str(), rows.len() as u64)).collect();
+    let rust: BTreeMap<&str, u64> = stored.iter().map(|(t, n)| (t.as_str(), *n)).collect();
+    if go != rust {
+        found.push(format!("/sends: Go stored {go:?}, Rust stored {rust:?}"));
+    }
+    for (table, rows) in &expected {
+        if !stored.contains_key(table) {
             continue;
         }
-        let columns = insert_columns(send["insert"].as_str().unwrap());
-        if columns != write.columns {
-            found.push(format!("{path}/insert: Go columns {columns:?}, Rust columns {:?}", write.columns));
-            continue;
+        let mut unused: Vec<Option<Value>> =
+            stored_rows(clickhouse, types, table, &columns_of[table]).await.into_iter().map(Some).collect();
+        let n = unused.len();
+        for (position, (path, want)) in rows.iter().enumerate() {
+            // The first unused stored row equal to Go's, looked for from its own position on; else
+            // the closest one, whose differences are reported.
+            let mut best: Option<(usize, Vec<String>)> = None;
+            for k in (0..n).map(|k| (k + position) % n) {
+                let Some(candidate) = &unused[k] else { continue };
+                let mut diffs = Vec::new();
+                differences(&ignored, path, want, candidate, &mut diffs);
+                let equal = diffs.is_empty();
+                if best.as_ref().is_none_or(|(_, b)| diffs.len() < b.len()) {
+                    best = Some((k, diffs));
+                }
+                if equal {
+                    break;
+                }
+            }
+            match best {
+                Some((k, diffs)) => {
+                    unused[k] = None;
+                    found.extend(diffs);
+                }
+                None => found.push(format!("{path}: no stored row of {table} left to match")),
+            }
         }
-        let args: Vec<Value> = write
-            .rows
-            .iter()
-            .map(|row| Value::Array(write.columns.iter().map(|c| row[*c].clone()).collect()))
-            .collect();
-        differences(&ignored, &format!("{path}/args"), &send["args"], &Value::Array(args), &mut found);
     }
     found
 }
 
 #[tokio::test]
 async fn every_fixture_of_a_ported_host_is_answered_and_stored_as_it_says() {
+    let Some(database) = db::scratch().await else { return };
+    let clickhouse = db::client(&database);
+    let types = column_types(&clickhouse).await;
     let root = fixtures_root();
     let overrides: Value = serde_json::from_slice(&std::fs::read(root.join("overrides.json")).unwrap()).unwrap();
     let mut paths = fixture_paths(&root);
@@ -515,58 +647,11 @@ async fn every_fixture_of_a_ported_host_is_answered_and_stored_as_it_says() {
             continue;
         };
         replayed += 1;
-        let found = run(&id, &fixture, &process, &overrides).await;
+        let found = run(&id, &fixture, &process, &overrides, &clickhouse, &types).await;
         if !found.is_empty() {
             failures.push(format!("{id}\n  {}", found.join("\n  ")));
         }
     }
     assert!(replayed > 0, "no fixture found under {}", root.display());
     assert!(failures.is_empty(), "{} of {replayed} fixtures differ:\n{}", failures.len(), failures.join("\n"));
-}
-
-/// Every fixture's rows inserted through the real writers into a scratch database built from the
-/// migrations, so each row type is checked against its table. Passes without asserting when
-/// ClickHouse is not running.
-#[tokio::test]
-async fn every_fixture_row_goes_into_its_clickhouse_table() {
-    let server = ninjapaws_storage::client_from_env().with_database("default");
-    if server.query("SELECT 1").execute().await.is_err() {
-        eprintln!("ClickHouse is not running: the round trip is skipped");
-        return;
-    }
-    let database = format!("ninjapaws_roundtrip_{}", std::process::id());
-    server.query(&format!("CREATE DATABASE {database}")).execute().await.unwrap();
-    let client = ninjapaws_storage::client_from_env().with_database(&database);
-    ninjapaws_storage::migrations::apply(&client).await.unwrap();
-
-    let root = fixtures_root();
-    let mut expected: std::collections::BTreeMap<&str, u64> = std::collections::BTreeMap::new();
-    let sink = Sink::clickhouse(client.clone());
-    for path in fixture_paths(&root) {
-        let fixture: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
-        let Some(process) = process_for(&fixture) else {
-            continue;
-        };
-        let (_, writes) = send(&fixture, &process).await;
-        for write in writes {
-            *expected.entry(write.table).or_default() += write.rows.len() as u64;
-        }
-        router_of(&process, sink.clone()).dispatch(request_of(&fixture)).await;
-    }
-    sink.stop().await;
-    server.query(&format!("DROP DATABASE {database}")).execute().await.unwrap();
-
-    // Rows past a table's TTL vanish on the way in, so what is checked is that ClickHouse took
-    // every batch, not what it kept.
-    let mut wrong = Vec::new();
-    for stats in sink.stats() {
-        let rows = expected.get(stats.table).copied().unwrap_or_default();
-        if stats.failed > 0 || stats.written != rows {
-            wrong.push(format!(
-                "{}: {rows} rows written, {} taken, {} failed",
-                stats.table, stats.written, stats.failed
-            ));
-        }
-    }
-    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
