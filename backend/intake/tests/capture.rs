@@ -1,6 +1,7 @@
 //! The capture lab through a host's router: what DEBUG=true writes for a request, and what it
 //! leaves out.
 
+mod db;
 mod programs;
 
 use std::fs;
@@ -10,8 +11,7 @@ use std::sync::Arc;
 use bytes::Bytes;
 use ninjapaws_intake::capture;
 use ninjapaws_intake::keys::{self, Key, Store};
-use ninjapaws_intake::server::Intake;
-use ninjapaws_storage::Sink;
+use ninjapaws_intake::server::Settings;
 use tako::router::Router;
 
 const KEY: &str = "0123456789abcdef0123456789abcdef";
@@ -31,20 +31,18 @@ impl Drop for Scratch {
     }
 }
 
-/// Sends one request to `mount`'s host with captures on; returns the status.
-async fn send(directory: &Path, mount: fn(&mut Router), request: http::Request<Vec<u8>>) -> u16 {
+/// Sends one request to `mount`'s host with captures on, with a key of `tenant`; returns the status.
+async fn send(
+    directory: &Path,
+    clickhouse: clickhouse::Client,
+    tenant: &str,
+    mount: fn(&mut Router),
+    request: http::Request<Vec<u8>>,
+) -> u16 {
     let store = Store::default();
-    store.publish([(keys::hash(KEY), Key { id: "k".into(), name: "test".into(), tenant_id: "test".into() })]);
-    let (sink, _) = Sink::capture();
-    let intake = Intake {
-        sink,
-        keys: Arc::new(store),
-        ack_unknown: false,
-        max_body_bytes: 1 << 20,
-        stopping: Default::default(),
-        tasks: Default::default(),
-    };
-    let router = programs::router_of(mount, intake);
+    store.publish([(keys::hash(KEY), Key { id: "k".into(), name: "test".into(), tenant_id: tenant.into() })]);
+    let settings = Settings { ack_unknown: false, max_body_bytes: 1 << 20 };
+    let router = programs::router_of(mount, clickhouse, Arc::new(store), settings);
     let directory = directory.to_path_buf();
     router.middleware(move |req, next| capture::dump(directory.clone(), req, next));
     let (parts, body) = request.into_parts();
@@ -77,7 +75,9 @@ async fn a_capture_is_a_file_and_an_index_line_with_keys_left_out() {
         .header("Content-Type", "application/json")
         .body(br#"{"series":[]}"#.to_vec())
         .unwrap();
-    assert_eq!(202, send(&scratch.0, programs::api, request).await);
+    // No series, so nothing is inserted and the client is never used.
+    let unused = ninjapaws_storage::client_from_env();
+    assert_eq!(202, send(&scratch.0, unused, "test", programs::api, request).await);
 
     let (name, text, index) = only_capture(&scratch.0);
     assert!(name.contains("_POST_api_v2_series_") && name.ends_with(".txt"), "{name}");
@@ -109,7 +109,12 @@ async fn a_key_in_the_query_or_the_path_is_left_out_and_the_body_is_decompressed
         .header("Content-Type", "application/json")
         .body(compressed)
         .unwrap();
-    send(&scratch.0, programs::logs, request).await;
+    let Some(database) = db::scratch().await else { return };
+    let client = db::client(&database);
+    let tenant = db::tenant();
+    assert_eq!(202, send(&scratch.0, client.clone(), &tenant, programs::logs, request).await);
+    // The capture does not stand in the way of the write.
+    assert_eq!(db::tables(&client, &tenant).await, [("logs".to_string(), 1)].into());
 
     let (name, text, index) = only_capture(&scratch.0);
     assert!(!name.contains(KEY) && !text.contains(KEY) && !index.contains(KEY), "{name}\n{text}\n{index}");
@@ -126,7 +131,8 @@ async fn a_key_in_the_query_or_the_path_is_left_out_and_the_body_is_decompressed
 async fn a_request_nothing_serves_is_captured_too() {
     let scratch = Scratch::new("unknown");
     let request = http::Request::builder().method("PUT").uri("/api/v9/nothing").body(b"abc".to_vec()).unwrap();
-    assert_eq!(404, send(&scratch.0, programs::api, request).await);
+    let unused = ninjapaws_storage::client_from_env();
+    assert_eq!(404, send(&scratch.0, unused, "test", programs::api, request).await);
 
     let (name, text, _) = only_capture(&scratch.0);
     assert!(name.contains("_PUT_api_v9_nothing_"), "{name}");

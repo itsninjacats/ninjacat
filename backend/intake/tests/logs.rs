@@ -1,20 +1,19 @@
 //! Tests of the logs intake beyond the golden fixtures: real payloads, the host's own cases, and
 //! the agent's logs over TCP.
 
+mod db;
 mod programs;
 
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{TimeDelta, TimeZone, Utc};
+use chrono::{TimeZone, Utc};
 use ninjapaws_intake::keys::{self, Key, Store};
-use ninjapaws_intake::server::Intake;
+use ninjapaws_intake::server::Settings;
 use ninjapaws_intake::tcp_logs::{self, FrameResult, Framing};
 use ninjapaws_proto::pb;
-use ninjapaws_storage::{Capture, Sink, Write as Batch};
 use prost::Message;
-use serde_json::Value;
 use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_util::sync::CancellationToken;
@@ -22,84 +21,86 @@ use tokio_util::task::TaskTracker;
 
 const KEY: &str = "00000000000000000000000000000001";
 
-fn store() -> Arc<Store> {
+/// A key store with `KEY` published for `tenant`.
+fn store(tenant: &str) -> Arc<Store> {
     let store = Store::default();
-    store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: "test".into() })]);
+    store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: tenant.into() })]);
     Arc::new(store)
 }
 
-/// One POST of a body to the logs host with the test key: what was written.
-async fn post(path: &str, body: &[u8]) -> Vec<Batch> {
-    let (sink, capture) = Sink::capture();
-    let intake = Intake {
-        sink,
-        keys: store(),
-        ack_unknown: false,
-        max_body_bytes: 64 * 1024 * 1024,
-        stopping: Default::default(),
-        tasks: Default::default(),
-    };
+/// One POST of a body to the logs host with the test key; returns the status.
+async fn post(client: &clickhouse::Client, tenant: &str, path: &str, body: &[u8]) -> u16 {
+    let settings = Settings { ack_unknown: false, max_body_bytes: 64 * 1024 * 1024 };
     let request = http::Request::builder().method("POST").uri(path).header("dd-api-key", KEY);
-    let response =
-        programs::router_of(programs::logs, intake).dispatch(request.body(body.to_vec().into()).unwrap()).await;
-    assert_eq!(response.status(), 202);
-    capture.writes()
-}
-
-fn rows<'a>(writes: &'a [Batch], table: &str) -> Vec<&'a Value> {
-    writes.iter().filter(|w| w.table == table).flat_map(|w| &w.rows).collect()
+    let router = programs::router_of(programs::logs, client.clone(), store(tenant), settings);
+    router.dispatch(request.body(body.to_vec().into()).unwrap()).await.status().as_u16()
 }
 
 #[tokio::test]
 async fn logs_from_the_dotnet_tracer_which_have_no_message_field_become_log_rows() {
+    let Some(database) = db::scratch().await else { return };
+    let client = db::client(&database);
+    let tenant = db::tenant();
     let body = std::fs::read(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real/dd-trace-dotnet-3.54.0-logs.json"),
     )
     .unwrap();
-    let writes = post("/api/v2/logs", &body).await;
+    assert_eq!(post(&client, &tenant, "/api/v2/logs", &body).await, 202);
 
-    assert!(rows(&writes, "raw_payloads").is_empty());
-    let rows = rows(&writes, "logs");
-    assert_eq!(rows.len(), 2);
-    let (started, refused) = (rows[0], rows[1]);
+    assert_eq!(db::tables(&client, &tenant).await, [("logs".to_string(), 2)].into());
+    let rows = db::rows(&client, "logs", &tenant).await;
+    let started = rows.iter().find(|row| row["status"] == "info").unwrap();
+    let refused = rows.iter().find(|row| row["status"] == "warn").unwrap();
     assert_eq!(started["message"], "Now listening on: http://[::]:8080");
-    assert_eq!(started["status"], "info");
     assert_eq!(started["service"], "ninjacat-api");
     assert_eq!(started["source"], "csharp");
     assert_eq!(started["host"], "9f06fd4497f5");
-    let expected = Utc.with_ymd_and_hms(2026, 10, 1, 20, 43, 16).unwrap() + TimeDelta::nanoseconds(409_169_200);
-    assert_eq!(started["timestamp"], expected.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true));
+    // The column keeps milliseconds: the sender's 409169200 ns are cut to .409.
+    assert_eq!(started["timestamp"], "2026-10-01T20:43:16.409Z");
     assert_eq!(started["timestamp_source"], "compact_string");
     // What became a column is not repeated among the attributes.
-    let attributes = started["attributes"].as_str().unwrap();
-    assert!(!attributes.contains("\"@m\""));
-    assert!(!attributes.contains("\"@t\""));
-    assert!(!attributes.contains("dd_service"));
-    assert!(attributes.contains("\"Category\":\"Microsoft.Hosting.Lifetime\""));
+    let attributes = started["attributes"].as_object().unwrap();
+    assert!(!attributes.contains_key("@m"));
+    assert!(!attributes.contains_key("@t"));
+    assert!(!attributes.contains_key("dd_service"));
+    assert_eq!(attributes["Category"], "Microsoft.Hosting.Lifetime");
 
-    assert_eq!(refused["status"], "warn");
-    assert!(refused["attributes"].as_str().unwrap().contains("\"dd_trace_id\":\"6abec5e5000000002f9a60afb73b9615\""));
+    assert_eq!(refused["attributes"]["dd_trace_id"], "6abec5e5000000002f9a60afb73b9615");
 }
 
 #[tokio::test]
 async fn an_empty_object_among_the_logs_is_not_stored() {
-    let writes = post("/api/v2/logs", br#"[{}, {"message":"kept"}]"#).await;
-    assert!(rows(&writes, "raw_payloads").is_empty());
-    assert_eq!(rows(&writes, "logs").iter().map(|row| row["message"].as_str().unwrap()).collect::<Vec<_>>(), ["kept"]);
+    let Some(database) = db::scratch().await else { return };
+    let client = db::client(&database);
+    let tenant = db::tenant();
+    assert_eq!(post(&client, &tenant, "/api/v2/logs", br#"[{}, {"message":"kept"}]"#).await, 202);
+
+    assert_eq!(db::tables(&client, &tenant).await, [("logs".to_string(), 1)].into());
+    assert_eq!(db::rows(&client, "logs", &tenant).await[0]["message"], "kept");
 }
 
 /// The JSON reader nests 128 deep; the rule is the same on both sides of it.
 #[tokio::test]
 async fn a_body_nested_deeper_than_any_telemetry_is_kept_raw_and_one_inside_the_limit_is_stored() {
-    let send = |depth: usize| async move {
-        let deep = format!("{}{}", "[".repeat(depth), "]".repeat(depth));
-        let writes = post("/api/v2/logs", format!(r#"[{{"message":"m","deep":{deep}}}]"#).as_bytes()).await;
-        rows(&writes, "raw_payloads").iter().map(|raw| raw["reason"].as_str().unwrap().to_string()).collect::<Vec<_>>()
+    let Some(database) = db::scratch().await else { return };
+    let client = db::client(&database);
+    let send = |depth: usize| {
+        let client = client.clone();
+        async move {
+            let tenant = db::tenant();
+            let deep = format!("{}{}", "[".repeat(depth), "]".repeat(depth));
+            let body = format!(r#"[{{"message":"m","deep":{deep}}}]"#);
+            assert_eq!(post(&client, &tenant, "/api/v2/logs", body.as_bytes()).await, 202);
+            (db::tables(&client, &tenant).await, db::rows(&client, "raw_payloads", &tenant).await)
+        }
     };
     // Past the limit the body does not parse at all: kept whole, answered as usual.
-    assert_eq!(send(228).await, ["decode_error"]);
+    let (tables, raws) = send(228).await;
+    assert_eq!(tables, [("raw_payloads".to_string(), 1)].into());
+    assert_eq!(raws[0]["reason"], "decode_error");
     // Inside it: parsed, and writing it back into a column must not fail.
-    assert!(send(100).await.is_empty());
+    let (tables, _) = send(100).await;
+    assert_eq!(tables, [("logs".to_string(), 1)].into());
 }
 
 fn proto_log(message: &str, timestamp: i64) -> Vec<u8> {
@@ -122,7 +123,7 @@ fn prefixed(key: &str, payload: &[u8]) -> Vec<u8> {
 }
 
 fn handle(framing: Framing, frame: &[u8]) -> FrameResult {
-    tcp_logs::handle_frame(&store(), "10.0.0.1:5000", framing, frame)
+    tcp_logs::handle_frame(&store("test"), "10.0.0.1:5000", framing, frame)
 }
 
 fn keyed(payload: &[u8]) -> Vec<u8> {
@@ -218,79 +219,91 @@ fn an_unknown_key_closes_the_connection_a_frame_without_a_key_is_dropped() {
     assert!(matches!(handle(Framing::Lines, b""), FrameResult::Nothing));
 }
 
-/// A listener on a free port, as the logs binary starts it, and the rows it is handed.
-async fn listening(tls: Option<tokio_rustls::TlsAcceptor>) -> (u16, Intake, Arc<Capture>) {
-    let (sink, capture) = Sink::capture();
-    let intake = Intake {
-        keys: store(),
-        sink,
-        stopping: CancellationToken::new(),
-        tasks: TaskTracker::new(),
-        ack_unknown: false,
-        max_body_bytes: 1 << 20,
-    };
+/// A listener on a free port, as the logs binary starts it, inserting into `client` under
+/// `tenant`; with what stops it.
+async fn listening(
+    client: &clickhouse::Client,
+    tenant: &str,
+    tls: Option<tokio_rustls::TlsAcceptor>,
+) -> (u16, CancellationToken, TaskTracker) {
+    let (stopping, tasks) = (CancellationToken::new(), TaskTracker::new());
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
-    tcp_logs::serve(listener, tls, &intake);
-    (port, intake, capture)
+    tcp_logs::serve(listener, tls, client.clone(), store(tenant), stopping.clone(), tasks.clone());
+    (port, stopping, tasks)
 }
 
-fn messages(capture: &Capture) -> Vec<String> {
-    capture
-        .writes()
-        .iter()
-        .filter(|w| w.table == "logs")
-        .flat_map(|w| &w.rows)
-        .map(|row| row["message"].as_str().unwrap().to_string())
-        .collect()
+/// The tenant's log messages, in no particular order: the rows come back by sort key, and the
+/// lines of one test share a timestamp to the millisecond.
+async fn messages(client: &clickhouse::Client, tenant: &str) -> Vec<String> {
+    let rows = db::rows(client, "logs", tenant).await;
+    let mut messages: Vec<String> = rows.iter().map(|row| row["message"].as_str().unwrap().to_string()).collect();
+    messages.sort();
+    messages
 }
 
-/// Waits for the rows, then stops the process as the binary does and waits for its connections.
-async fn rows_after(intake: Intake, capture: &Capture, expected: usize) -> Vec<String> {
+/// Waits for the rows, then stops the process as the binary does and waits for its connections;
+/// returns what is stored after that.
+async fn rows_after(
+    client: &clickhouse::Client,
+    tenant: &str,
+    (stopping, tasks): (CancellationToken, TaskTracker),
+    expected: usize,
+) -> Vec<String> {
     for _ in 0..250 {
-        if messages(capture).len() >= expected {
+        if messages(client, tenant).await.len() >= expected {
             break;
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    intake.stopping.cancel();
-    intake.tasks.close();
-    intake.tasks.wait().await;
-    messages(capture)
+    stopping.cancel();
+    tasks.close();
+    tasks.wait().await;
+    messages(client, tenant).await
 }
 
 #[tokio::test]
 async fn length_prefixed_frames_over_a_real_connection() {
-    let (port, intake, capture) = listening(None).await;
+    let Some(database) = db::scratch().await else { return };
+    let client = db::client(&database);
+    let tenant = db::tenant();
+    let (port, stopping, tasks) = listening(&client, &tenant, None).await;
     let payload = [prefixed(KEY, &proto_log("one", 0)), prefixed(KEY, &proto_log("two", 0))].concat();
-    let mut client = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-    client.write_all(&payload).await.unwrap();
-    drop(client);
+    let mut sender = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    sender.write_all(&payload).await.unwrap();
+    drop(sender);
 
-    assert_eq!(rows_after(intake, &capture, 2).await, ["one", "two"]);
+    assert_eq!(rows_after(&client, &tenant, (stopping, tasks), 2).await, ["one", "two"]);
+    assert_eq!(db::tables(&client, &tenant).await, [("logs".to_string(), 2)].into());
 }
 
 #[tokio::test]
 async fn lines_over_a_real_connection_and_rows_before_an_unknown_key_are_kept() {
-    let (port, intake, capture) = listening(None).await;
+    let Some(database) = db::scratch().await else { return };
+    let client = db::client(&database);
+    let tenant = db::tenant();
+    let (port, stopping, tasks) = listening(&client, &tenant, None).await;
     let payload = format!("{KEY} first\n{KEY} second\nffffffffffffffffffffffffffffffff third\n{KEY} never read\n");
-    let mut client = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-    client.write_all(payload.as_bytes()).await.unwrap();
+    let mut sender = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    sender.write_all(payload.as_bytes()).await.unwrap();
 
-    assert_eq!(rows_after(intake, &capture, 2).await, ["first", "second"]);
+    assert_eq!(rows_after(&client, &tenant, (stopping, tasks), 2).await, ["first", "second"]);
 }
 
 /// The agent holds its connection open: a stopping process is the one to leave, and what was read
-/// is kept.
+/// is already stored.
 #[tokio::test]
-async fn a_connection_held_open_is_flushed_when_the_process_stops() {
-    let (port, intake, capture) = listening(None).await;
-    let mut client = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-    client.write_all(format!("{KEY} held\n").as_bytes()).await.unwrap();
+async fn a_connection_held_open_keeps_its_rows_when_the_process_stops() {
+    let Some(database) = db::scratch().await else { return };
+    let client = db::client(&database);
+    let tenant = db::tenant();
+    let (port, stopping, tasks) = listening(&client, &tenant, None).await;
+    let mut sender = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    sender.write_all(format!("{KEY} held\n").as_bytes()).await.unwrap();
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    assert_eq!(rows_after(intake, &capture, 1).await, ["held"]);
-    drop(client);
+    assert_eq!(rows_after(&client, &tenant, (stopping, tasks), 1).await, ["held"]);
+    drop(sender);
 }
 
 #[tokio::test]
@@ -298,6 +311,9 @@ async fn frames_over_tls() {
     use tokio_rustls::rustls::pki_types::{CertificateDer, ServerName};
     use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 
+    let Some(database) = db::scratch().await else { return };
+    let client = db::client(&database);
+    let tenant = db::tenant();
     let certified = rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
     let directory = std::env::temp_dir().join(format!("ninjapaws-tls-{}", std::process::id()));
     std::fs::create_dir_all(&directory).unwrap();
@@ -307,16 +323,16 @@ async fn frames_over_tls() {
     let acceptor = tcp_logs::tls_acceptor(cert_file.to_str().unwrap(), key_file.to_str().unwrap()).unwrap();
     std::fs::remove_dir_all(&directory).unwrap();
 
-    let (port, intake, capture) = listening(Some(acceptor)).await;
+    let (port, stopping, tasks) = listening(&client, &tenant, Some(acceptor)).await;
     let mut roots = RootCertStore::empty();
     roots.add(CertificateDer::from(certified.cert.der().to_vec())).unwrap();
     let connector = tokio_rustls::TlsConnector::from(Arc::new(
         ClientConfig::builder().with_root_certificates(roots).with_no_client_auth(),
     ));
     let tcp = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-    let mut client = connector.connect(ServerName::try_from("localhost").unwrap(), tcp).await.unwrap();
-    client.write_all(&prefixed(KEY, &proto_log("encrypted", 0))).await.unwrap();
-    client.shutdown().await.unwrap();
+    let mut sender = connector.connect(ServerName::try_from("localhost").unwrap(), tcp).await.unwrap();
+    sender.write_all(&prefixed(KEY, &proto_log("encrypted", 0))).await.unwrap();
+    sender.shutdown().await.unwrap();
 
-    assert_eq!(rows_after(intake, &capture, 1).await, ["encrypted"]);
+    assert_eq!(rows_after(&client, &tenant, (stopping, tasks), 1).await, ["encrypted"]);
 }

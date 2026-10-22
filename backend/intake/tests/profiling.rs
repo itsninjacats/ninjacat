@@ -1,5 +1,6 @@
 //! Tests of routers/profiling.rs beyond the golden fixtures.
 
+mod db;
 mod programs;
 
 use std::collections::BTreeMap;
@@ -14,9 +15,8 @@ use ninjapaws_intake::json;
 use ninjapaws_intake::keys::{self, Key, Store};
 use ninjapaws_intake::routers::pprof::{self, Summary};
 use ninjapaws_intake::routers::profiling;
-use ninjapaws_intake::server::Intake;
+use ninjapaws_intake::server::Settings;
 use ninjapaws_proto::perftools::profiles::{Function, Line, Location, Profile, Sample, ValueType};
-use ninjapaws_storage::{Sink, Write as Batch};
 use prost::Message;
 use serde_json::Value;
 use tako::router::Router;
@@ -66,20 +66,26 @@ fn multipart(parts: &[(&str, &[u8])]) -> (String, Vec<u8>) {
     (format!("multipart/form-data; boundary={BOUNDARY}"), body)
 }
 
-/// One POST with the test key to a host's routes: the status, the body and what was written.
-async fn post(mount: fn(&mut Router), url: &str, content_type: &str, body: &[u8]) -> (u16, Vec<u8>, Vec<Batch>) {
+/// The scratch database's client and a tenant of the test's own.
+type Scratch = (clickhouse::Client, String);
+
+async fn begin() -> Option<Scratch> {
+    let database = db::scratch().await?;
+    Some((db::client(&database), db::tenant()))
+}
+
+/// One POST with the test key to a host's routes: the status and the body.
+async fn post(
+    (client, tenant): &Scratch,
+    mount: fn(&mut Router),
+    url: &str,
+    content_type: &str,
+    body: &[u8],
+) -> (u16, Vec<u8>) {
     let store = Store::default();
-    store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: "test".into() })]);
-    let (sink, capture) = Sink::capture();
-    let intake = Intake {
-        sink,
-        keys: Arc::new(store),
-        ack_unknown: false,
-        max_body_bytes: 64 * 1024 * 1024,
-        stopping: Default::default(),
-        tasks: Default::default(),
-    };
-    let router = programs::router_of(mount, intake);
+    store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: tenant.clone() })]);
+    let settings = Settings { ack_unknown: false, max_body_bytes: 64 * 1024 * 1024 };
+    let router = programs::router_of(mount, client.clone(), Arc::new(store), settings);
     let mut request = http::Request::builder().method("POST").uri(url).header("dd-api-key", KEY);
     if !content_type.is_empty() {
         request = request.header("content-type", content_type);
@@ -87,11 +93,17 @@ async fn post(mount: fn(&mut Router), url: &str, content_type: &str, body: &[u8]
     let response = router.dispatch(request.body(body.to_vec().into()).unwrap()).await;
     let status = response.status().as_u16();
     let body = response.into_body().collect().await.unwrap().to_bytes().to_vec();
-    (status, body, capture.writes())
+    (status, body)
 }
 
-fn rows<'a>(writes: &'a [Batch], table: &str) -> Vec<&'a Value> {
-    writes.iter().filter(|w| w.table == table).flat_map(|w| &w.rows).collect()
+/// The tables the tenant has rows in, and how many.
+async fn stored((client, tenant): &Scratch) -> Vec<(String, u64)> {
+    db::tables(client, tenant).await.into_iter().collect()
+}
+
+/// The tenant's rows of `table`.
+async fn rows((client, tenant): &Scratch, table: &str) -> Vec<Value> {
+    db::rows(client, table, tenant).await
 }
 
 fn parts_of(parts: &[(&str, &[u8])]) -> BTreeMap<String, Bytes> {
@@ -474,21 +486,22 @@ fn an_empty_array_is_a_batch_with_no_entries_not_a_failure() {
 
 #[tokio::test]
 async fn ndjson_logs_are_stored_one_row_per_line() {
+    let Some(t) = begin().await else { return };
     let body = b"{\"service\":\"svc-a\",\"b\":1,\"a\":2,\"a\":3}\nnot json\n";
-    let (status, _, writes) =
-        post(programs::debugger, "/api/v2/debugger?ddtags=env:prod,env:dev", "text/plain", body).await;
+    let (status, _) =
+        post(&t, programs::debugger, "/api/v2/debugger?ddtags=env:prod,env:dev", "text/plain", body).await;
 
     assert_eq!(status, 202);
-    let rows = rows(&writes, "debugger_logs");
-    assert_eq!(rows.len(), 2);
-    assert_eq!(rows[0]["service"], "svc-a");
-    assert_eq!(rows[0]["extra_keys"], serde_json::json!(["a", "b"]));
-    assert_eq!(rows[0]["ddtags"]["env"], serde_json::json!(["prod", "dev"]));
+    assert_eq!(stored(&t).await, [("debugger_logs".to_string(), 2)]);
+    // Sorted by service: the line that is not an object has none.
+    let rows = rows(&t, "debugger_logs").await;
+    assert_eq!(rows[1]["service"], "svc-a");
+    assert_eq!(rows[1]["extra_keys"], serde_json::json!(["a", "b"]));
+    assert_eq!(rows[1]["ddtags"]["env"], serde_json::json!(["prod", "dev"]));
     // A line that is not an object keeps its bytes and has no columns.
-    assert_eq!(rows[1]["entry"], "not json");
-    assert_eq!(rows[1]["service"], "");
-    assert_eq!(rows[1]["extra_keys"], serde_json::json!([]));
-    assert!(writes.iter().all(|w| w.table != "raw_payloads"));
+    assert_eq!(rows[0]["entry"], "not json");
+    assert_eq!(rows[0]["service"], "");
+    assert_eq!(rows[0]["extra_keys"], serde_json::json!([]));
 }
 
 /// Lines are trimmed of what Go's bytes.TrimSpace takes for white space, which is Unicode's.
@@ -512,10 +525,11 @@ async fn text_that_is_not_valid_unicode_is_replaced_not_refused() {
     ]
     .concat();
     let body = [&b"["[..], &entry, b"]"].concat();
-    let (status, _, writes) = post(programs::debugger, "/api/v2/debugger", "application/json", &body).await;
+    let Some(t) = begin().await else { return };
+    let (status, _) = post(&t, programs::debugger, "/api/v2/debugger", "application/json", &body).await;
 
     assert_eq!(status, 202);
-    let rows = rows(&writes, "debugger_logs");
+    let rows = rows(&t, "debugger_logs").await;
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["service"], "a\u{FFFD}");
     assert_eq!(rows[0]["ddsource"], "x\u{FFFD}\n\"\u{e9}");
@@ -572,11 +586,12 @@ fn json_nested_deeply_is_still_read() {
 
 #[tokio::test]
 async fn logs_that_are_not_json_are_kept_raw() {
-    let (status, _, writes) = post(programs::debugger, "/api/v2/debugger", "text/plain", b"not json at all").await;
+    let Some(t) = begin().await else { return };
+    let (status, _) = post(&t, programs::debugger, "/api/v2/debugger", "text/plain", b"not json at all").await;
 
     assert_eq!(status, 202);
-    assert_eq!(writes.len(), 1);
-    let raw = &writes[0].rows[0];
+    assert_eq!(stored(&t).await, [("raw_payloads".to_string(), 1)]);
+    let raw = &rows(&t, "raw_payloads").await[0];
     assert_eq!((raw["intake"].as_str(), raw["reason"].as_str()), (Some("debugger"), Some("decode_error")));
     assert_eq!(raw["note"], "logs variant: not a JSON array or NDJSON, content-type text/plain");
 }
@@ -587,18 +602,20 @@ async fn a_diagnostics_entry_that_is_not_an_object_still_gets_its_row() {
         "event",
         br#"[{"service":"svc","timestamp":"2025-09-23T10:30:00Z","debugger":{"diagnostics":{"probeId":"p1"}}}, 42]"#,
     )]);
-    let (_, _, writes) = post(programs::debugger, "/api/v2/debugger", &content_type, &body).await;
+    let Some(t) = begin().await else { return };
+    post(&t, programs::debugger, "/api/v2/debugger", &content_type, &body).await;
 
-    let rows = rows(&writes, "debugger_diagnostics");
-    assert_eq!(rows.len(), 2);
-    assert_eq!(rows[0]["probe_id"], "p1");
-    assert_eq!(rows[0]["timestamp"], "2025-09-23T10:30:00Z");
+    assert_eq!(stored(&t).await, [("debugger_diagnostics".to_string(), 2)]);
+    // Sorted by service: the entry that is not an object has none.
+    let rows = rows(&t, "debugger_diagnostics").await;
+    assert_eq!(rows[1]["probe_id"], "p1");
+    assert_eq!(rows[1]["timestamp"], "2025-09-23T10:30:00.000Z");
     // No exception object: both are absent, not empty strings.
-    assert_eq!(rows[0]["exception_type"], Value::Null);
-    assert_eq!(rows[0]["exception_message"], Value::Null);
-    assert_eq!(rows[1]["message"], "42");
-    assert_eq!(rows[1]["service"], "");
-    assert_eq!(rows[1]["timestamp"], Value::Null);
+    assert_eq!(rows[1]["exception_type"], Value::Null);
+    assert_eq!(rows[1]["exception_message"], Value::Null);
+    assert_eq!(rows[0]["message"], "42");
+    assert_eq!(rows[0]["service"], "");
+    assert_eq!(rows[0]["timestamp"], Value::Null);
 }
 
 #[test]
@@ -614,10 +631,11 @@ fn an_exception_without_a_message_is_an_empty_message_not_an_absent_one() {
 #[tokio::test]
 async fn an_empty_diagnostics_batch_stores_nothing() {
     let (content_type, body) = multipart(&[("event", b"[]")]);
-    let (status, _, writes) = post(programs::debugger, "/api/v2/debugger", &content_type, &body).await;
+    let Some(t) = begin().await else { return };
+    let (status, _) = post(&t, programs::debugger, "/api/v2/debugger", &content_type, &body).await;
 
     assert_eq!(status, 202);
-    assert!(writes.is_empty());
+    assert!(stored(&t).await.is_empty());
 }
 
 #[test]
@@ -809,23 +827,25 @@ fn a_symbol_upload_without_an_elf_part_says_so() {
 async fn the_old_profile_path_stores_the_same_row_under_its_own_variant() {
     let cpu = pprof_bytes();
     let (content_type, body) = multipart(&[("event", br#"{"family":"go"}"#), ("cpu.pprof", &cpu)]);
-    let (status, answer, writes) = post(programs::profile, "/v1/input", &content_type, &body).await;
+    let Some(t) = begin().await else { return };
+    let (status, answer) = post(&t, programs::profile, "/v1/input", &content_type, &body).await;
 
     assert_eq!(status, 202);
     assert_eq!(answer, b"{}");
-    let rows = rows(&writes, "profiles");
-    assert_eq!(rows.len(), 1);
+    assert_eq!(stored(&t).await, [("profiles".to_string(), 1)]);
+    let rows = rows(&t, "profiles").await;
     assert_eq!(rows[0]["variant"], "profile-v1");
-    assert_eq!(rows[0]["tenant_id"], "test");
-    assert_eq!(rows[0]["attach_parsed"], "\u{1}");
+    assert_eq!(rows[0]["tenant_id"], t.1);
+    assert_eq!(rows[0]["attach_parsed"], serde_json::json!([1]));
 }
 
 #[tokio::test]
 async fn a_repeated_part_name_keeps_the_last_part() {
     let (content_type, body) = multipart(&[("notes", b"first"), ("event", b"{}"), ("notes", b"second")]);
-    let (_, _, writes) = post(programs::profile, "/api/v2/profile", &content_type, &body).await;
+    let Some(t) = begin().await else { return };
+    post(&t, programs::profile, "/api/v2/profile", &content_type, &body).await;
 
-    let rows = rows(&writes, "profiles");
+    let rows = rows(&t, "profiles").await;
     assert_eq!(rows[0]["attach_name"], serde_json::json!(["notes"]));
     assert_eq!(rows[0]["attach_bytes"], serde_json::json!(["second"]));
 }
@@ -851,18 +871,19 @@ async fn a_profile_that_is_not_multipart_is_kept_raw_with_the_reason() {
         ),
     ];
     for (content_type, note) in cases {
-        let (status, _, writes) = post(programs::profile, "/api/v2/profile", content_type, b"not multipart").await;
+        let Some(t) = begin().await else { return };
+        let (status, _) = post(&t, programs::profile, "/api/v2/profile", content_type, b"not multipart").await;
         assert_eq!(status, 202);
-        let raws = rows(&writes, "raw_payloads");
-        assert_eq!(raws.len(), 1, "{content_type}");
+        assert_eq!(stored(&t).await, [("raw_payloads".to_string(), 1)], "{content_type}");
+        let raws = rows(&t, "raw_payloads").await;
         assert_eq!((raws[0]["intake"].as_str(), raws[0]["reason"].as_str()), (Some("profiling"), Some("decode_error")));
         assert_eq!(raws[0]["note"], note);
         assert_eq!(raws[0]["body"], "not multipart");
     }
     // A boundary the body never reaches: the body breaks off.
-    let (_, _, writes) =
-        post(programs::profile, "/api/v2/profile", "multipart/form-data; boundary=x", b"not multipart").await;
-    let note = rows(&writes, "raw_payloads")[0]["note"].as_str().unwrap().to_string();
+    let Some(t) = begin().await else { return };
+    post(&t, programs::profile, "/api/v2/profile", "multipart/form-data; boundary=x", b"not multipart").await;
+    let note = rows(&t, "raw_payloads").await[0]["note"].as_str().unwrap().to_string();
     assert!(note.starts_with("not multipart, content-type multipart/form-data; boundary=x: "), "{note}");
 }
 
@@ -870,9 +891,10 @@ async fn a_profile_that_is_not_multipart_is_kept_raw_with_the_reason() {
 async fn a_quoted_boundary_and_a_boundary_in_other_letter_case_are_understood() {
     let (_, body) = multipart(&[("event", br#"{"family":"go"}"#)]);
     let content_type = format!("Multipart/Form-Data; Boundary=\"{BOUNDARY}\"");
-    let (_, _, writes) = post(programs::profile, "/api/v2/profile", &content_type, &body).await;
+    let Some(t) = begin().await else { return };
+    post(&t, programs::profile, "/api/v2/profile", &content_type, &body).await;
 
-    assert_eq!(rows(&writes, "profiles")[0]["family"], "go");
+    assert_eq!(rows(&t, "profiles").await[0]["family"], "go");
 }
 
 type Mount = fn(&mut Router);
@@ -889,10 +911,11 @@ async fn a_multipart_body_that_breaks_off_is_kept_raw() {
     let (content_type, body) = multipart(&[("event", br#"{"family":"go"}"#), ("cpu.pprof", &cpu)]);
     let cut = &body[..body.len() - 39];
     for (mount, path, intake, prefix) in cases {
-        let (status, _, writes) = post(mount, path, &content_type, cut).await;
+        let Some(t) = begin().await else { return };
+        let (status, _) = post(&t, mount, path, &content_type, cut).await;
         assert_eq!(status, 202);
-        assert_eq!(writes.len(), 1, "{path}");
-        let raw = &writes[0].rows[0];
+        assert_eq!(stored(&t).await, [("raw_payloads".to_string(), 1)], "{path}");
+        let raw = &rows(&t, "raw_payloads").await[0];
         assert_eq!((raw["intake"].as_str(), raw["reason"].as_str()), (Some(intake), Some("decode_error")));
         assert!(raw["note"].as_str().unwrap().starts_with(&format!("{prefix}{content_type}: ")), "{}", raw["note"]);
         assert_eq!(raw["body_bytes"], cut.len());
@@ -901,10 +924,12 @@ async fn a_multipart_body_that_breaks_off_is_kept_raw() {
 
 #[tokio::test]
 async fn a_symbol_upload_that_is_not_multipart_is_kept_raw() {
-    let (status, _, writes) = post(programs::sourcemap, "/api/v2/srcmap", "application/octet-stream", b"\x7fELF").await;
+    let Some(t) = begin().await else { return };
+    let (status, _) = post(&t, programs::sourcemap, "/api/v2/srcmap", "application/octet-stream", b"\x7fELF").await;
 
     assert_eq!(status, 202);
-    let raws = rows(&writes, "raw_payloads");
+    assert_eq!(stored(&t).await, [("raw_payloads".to_string(), 1)]);
+    let raws = rows(&t, "raw_payloads").await;
     assert_eq!(raws[0]["intake"], "srcmap");
     assert_eq!(
         raws[0]["note"],
@@ -916,9 +941,10 @@ async fn a_symbol_upload_that_is_not_multipart_is_kept_raw() {
 async fn a_symbol_upload_whose_event_is_not_json_still_stores_the_file() {
     let elf = fake_elf(2, 2);
     let (content_type, body) = multipart(&[("event", b"not json"), ("elf_symbol_file", &elf)]);
-    let (_, _, writes) = post(programs::sourcemap, "/api/v2/srcmap", &content_type, &body).await;
+    let Some(t) = begin().await else { return };
+    post(&t, programs::sourcemap, "/api/v2/srcmap", &content_type, &body).await;
 
-    let rows = rows(&writes, "symbol_uploads");
+    let rows = rows(&t, "symbol_uploads").await;
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["meta"], "not json");
     assert_eq!(rows[0]["type"], "");
