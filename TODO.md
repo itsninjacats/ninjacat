@@ -137,6 +137,12 @@ every host (`backend/intake/tests/golden.rs`) and their rows inserted into a scr
       F# intake's `no intake for host "<name>"`, which told an operator what DD_SITE built.
 - [ ] **The hosts are listed three times**: `helm/ninjacat/values.yaml` (`intake.programs`),
       `dev/intake-routes.yml` and `host_process` in `intake/tests/golden.rs`. One list.
+- [ ] **Database tests skip silently, in CI too.** A test that finds no ClickHouse or Postgres
+      prints `skipped:` and passes, and cargo hides that output for passing tests. The monitor
+      service's ClickHouse tests copy tables from the dev `ninjacat` database, which CI never
+      migrates, so they have never run there (found 2026-10-22). Build scratch databases from
+      the migrations; make a missing database a failure in CI; consider starting ClickHouse as
+      a side container for local runs, as CI does.
 - [ ] serde_json nests at most 128 deep, System.Text.Json allowed 512: a body between the two
       is kept raw now.
 - [ ] `docs/protocol/**` describe Go files that no longer exist; say what the Rust equivalent
