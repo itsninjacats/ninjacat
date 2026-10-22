@@ -3,7 +3,7 @@ use serde::Serialize;
 
 use super::Tags;
 use crate::column;
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 #[derive(clickhouse::Row, Serialize, Clone, Debug)]
 pub struct Log {
@@ -23,7 +23,5 @@ pub struct Log {
 }
 
 impl Table for Log {
-    const WRITER: &'static str = "storage_logs";
     const TABLE: &'static str = "logs";
-    const LIMITS: Limits = Limits { max_rows: 20_000, buffer_limit: 500_000, ..Limits::DEFAULT };
 }

@@ -16,16 +16,19 @@ use std::collections::{BTreeMap, HashMap};
 use base64::Engine;
 use chrono::{DateTime, Utc};
 use ninjapaws_proto::datadog::process_agent::*;
+use ninjapaws_storage as storage;
 use ninjapaws_storage::column::Blob;
 use ninjapaws_storage::rows::ecs::EcsTask as EcsTaskRow;
 use ninjapaws_storage::rows::k8s::{K8sAction, K8sCluster, K8sManifest, K8sResource};
 use serde_json::Value;
+use tako::extractors::state::State;
 use tako::types::Response;
 
 use crate::fields::{self, Fields, Mismatches};
 use crate::json;
 use crate::process_frame::{self, Body, Header};
-use crate::server::{self, Ctx, accepted};
+use crate::raw;
+use crate::server::{self, Ctx, accepted, storage_failed};
 use crate::wire::{enum_name, tags, text, time, version_spread};
 
 /// The frame header as the four columns every orchestrator row carries.
@@ -1331,10 +1334,21 @@ pub fn ecs_task_rows(
 
 // ---- the orchestrator handlers ----
 
-pub async fn handle_frame(label: &str, ctx: Ctx, body: server::Body) -> Response {
+pub async fn handle_frame(
+    label: &str,
+    ctx: Ctx,
+    State(clickhouse): State<clickhouse::Client>,
+    body: server::Body,
+) -> Response {
     let tenant = ctx.tenant();
     match process_frame::decode(&body) {
-        Err(e) => ctx.raw("orchestrator", "decode_error", &format!("{label}: {e}"), &body),
+        Err(e) => {
+            if let Err(error) =
+                raw::store(&clickhouse, &ctx, "orchestrator", "decode_error", &format!("{label}: {e}"), &body).await
+            {
+                return storage_failed(error);
+            }
+        }
         Ok(decoded) => {
             if std::env::var("NINJACAT_DUMP_K8S").is_ok_and(|v| v == "true") {
                 // The whole message: how to find out what a real cluster sends.
@@ -1343,17 +1357,45 @@ pub async fn handle_frame(label: &str, ctx: Ctx, body: server::Body) -> Response
             let frame = frame_columns(&decoded.header);
             let now = Utc::now();
             match decoded.body {
-                Body::Cluster(collector) => ctx.write(cluster_rows(tenant, now, &frame, &collector)),
-                Body::Manifest(collector) => ctx.write(manifest_rows(tenant, now, &frame, Some(collector), &[])),
+                Body::Cluster(collector) => {
+                    if let Err(e) = storage::insert(&clickhouse, &cluster_rows(tenant, now, &frame, &collector)).await {
+                        return storage_failed(e);
+                    }
+                }
+                Body::Manifest(collector) => {
+                    if let Err(e) =
+                        storage::insert(&clickhouse, &manifest_rows(tenant, now, &frame, Some(collector), &[])).await
+                    {
+                        return storage_failed(e);
+                    }
+                }
                 // The CRD and CR wrappers hold an inner CollectorManifest that may be missing,
                 // and tags of their own beside the inner one's.
                 Body::ManifestCrd(wrapper) => {
-                    ctx.write(manifest_rows(tenant, now, &frame, wrapper.manifest, &wrapper.tags))
+                    if let Err(e) = storage::insert(
+                        &clickhouse,
+                        &manifest_rows(tenant, now, &frame, wrapper.manifest, &wrapper.tags),
+                    )
+                    .await
+                    {
+                        return storage_failed(e);
+                    }
                 }
                 Body::ManifestCr(wrapper) => {
-                    ctx.write(manifest_rows(tenant, now, &frame, wrapper.manifest, &wrapper.tags))
+                    if let Err(e) = storage::insert(
+                        &clickhouse,
+                        &manifest_rows(tenant, now, &frame, wrapper.manifest, &wrapper.tags),
+                    )
+                    .await
+                    {
+                        return storage_failed(e);
+                    }
                 }
-                Body::EcsTask(collector) => ctx.write(ecs_task_rows(tenant, now, &frame, collector)),
+                Body::EcsTask(collector) => {
+                    if let Err(e) = storage::insert(&clickhouse, &ecs_task_rows(tenant, now, &frame, collector)).await {
+                        return storage_failed(e);
+                    }
+                }
                 // The process agent's own messages belong on /api/v1/collector. Here they mean a
                 // misconfigured agent: the frame decoded, but this router has nowhere to put it.
                 other @ (Body::Proc(_)
@@ -1363,13 +1405,26 @@ pub async fn handle_frame(label: &str, ctx: Ctx, body: server::Body) -> Response
                 | Body::Container(_)
                 | Body::ContainerRealTime(_)
                 | Body::ProcDiscovery(_)
-                | Body::ProcEvent(_)) => ctx.raw(
-                    "orchestrator",
-                    "unexpected_shape",
-                    &format!("{label}: {} on an orchestrator intake", other.name()),
-                    &body,
-                ),
-                collection => ctx.write(resource_rows(tenant, now, &frame, collection)),
+                | Body::ProcEvent(_)) => {
+                    if let Err(e) = raw::store(
+                        &clickhouse,
+                        &ctx,
+                        "orchestrator",
+                        "unexpected_shape",
+                        &format!("{label}: {} on an orchestrator intake", other.name()),
+                        &body,
+                    )
+                    .await
+                    {
+                        return storage_failed(e);
+                    }
+                }
+                collection => {
+                    if let Err(e) = storage::insert(&clickhouse, &resource_rows(tenant, now, &frame, collection)).await
+                    {
+                        return storage_failed(e);
+                    }
+                }
             }
         }
     }
@@ -1474,25 +1529,39 @@ pub fn decode_action(tenant: &str, arrival: DateTime<Utc>, path: &str, raw: &Val
 /// The cluster agent's reports on the actions it ran: the other half of remote configuration. One
 /// event when an action is received, one when it is executed. Event platform track
 /// "kubeactions": a JSON array of events.
-pub async fn handle_actions(ctx: Ctx, body: server::Body) -> Response {
+pub async fn handle_actions(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: server::Body) -> Response {
     match json::try_parse_array(&body) {
-        Err(e) => ctx.raw("kubeactions", "decode_error", &e, &body),
+        Err(e) => {
+            if let Err(error) = raw::store(&clickhouse, &ctx, "kubeactions", "decode_error", &e, &body).await {
+                return storage_failed(error);
+            }
+        }
         Ok(items) => {
             let text = json::raw::text(&body);
             let sent = json::raw::elements(&text);
             let arrival = Utc::now();
             let mut rows = Vec::new();
+            let mut kept = Vec::new();
             for (i, raw) in items.iter().enumerate() {
                 match decode_action(ctx.tenant(), arrival, &format!("[{i}]"), raw) {
                     Ok(row) => rows.push(row),
                     // One bad element must not cost the batch, nor itself: its own JSON is kept,
                     // as it was sent, while the rest become rows.
-                    Err(e) => {
-                        ctx.raw("kubeactions", "decode_error", &e, sent.get(i).copied().unwrap_or_default().as_bytes())
-                    }
+                    Err(e) => kept.extend(raw::row(
+                        &ctx,
+                        "kubeactions",
+                        "decode_error",
+                        &e,
+                        sent.get(i).copied().unwrap_or_default().as_bytes(),
+                    )),
                 }
             }
-            ctx.write(rows);
+            if let Err(e) = raw::keep(&clickhouse, &kept).await {
+                return storage_failed(e);
+            }
+            if let Err(e) = storage::insert(&clickhouse, &rows).await {
+                return storage_failed(e);
+            }
         }
     }
     accepted()

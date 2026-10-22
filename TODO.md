@@ -118,7 +118,8 @@ Open, most urgent first:
 The server is `backend/` (2026-10-21): one program per intake host (`ninjapaws_<host>`), the
 query process, the monitor service and `ninjapaws_migrate`, all in one image. It replaced the F#
 server, which had replaced the Go one; the golden fixtures recorded from Go are replayed against
-every host (`backend/intake/tests/golden.rs`) and their rows inserted into a scratch ClickHouse.
+every host (`backend/intake/tests/golden.rs`) through its handlers into a scratch ClickHouse, and
+the rows stored are compared with the ones recorded.
 
 - [x] Every host and route of the F# intake, the query process, the monitor service, the
       ClickHouse migrations; compose and the chart with a program per host; CI.
@@ -128,8 +129,9 @@ every host (`backend/intake/tests/golden.rs`) and their rows inserted into a scr
 - [ ] **Self-observability.** The F# processes were traced by Datadog's .NET tracer, injected
       from outside (the old `compose.self.yaml`, `docs/self-observability.md` in the history).
       The Rust programs send nothing about themselves: traces through OpenTelemetry (OTLP to
-      the agent), their logs, and `ninjacat.node.*`/`ninjacat.storage.*` from every program,
-      not only the monitor service.
+      the agent), their logs, and `ninjacat.node.*` from every program, not only the monitor
+      service. Insert counts and latencies (`ninjacat.storage.*`, which the writers reported)
+      need rebuilding around `storage::insert`.
 - [ ] **Postgres without TLS.** Every program connects with `NoTls`: a `DATABASE_URL` that asks
       for TLS (`sslmode=require`) does not connect. tokio-postgres with rustls and the
       operator's CA.
@@ -137,6 +139,11 @@ every host (`backend/intake/tests/golden.rs`) and their rows inserted into a scr
       F# intake's `no intake for host "<name>"`, which told an operator what DD_SITE built.
 - [ ] **The hosts are listed three times**: `helm/ninjacat/values.yaml` (`intake.programs`),
       `dev/intake-routes.yml` and `host_process` in `intake/tests/golden.rs`. One list.
+- [x] **Database tests skip silently in CI.** CI sets `NINJACAT_TEST_REQUIRE_DATABASES`, and a
+      test that finds no ClickHouse or Postgres then fails instead of printing `skipped:`.
+- [ ] **Database tests skip silently locally.** Without that variable a missing database is a
+      `skipped:` line cargo hides for passing tests; consider starting ClickHouse as a side
+      container for local runs, as CI does.
 - [ ] serde_json nests at most 128 deep, System.Text.Json allowed 512: a body between the two
       is kept raw now.
 - [ ] `docs/protocol/**` describe Go files that no longer exist; say what the Rust equivalent
@@ -314,13 +321,15 @@ data is here; the product is not.
       collector message no longer fills them; the values are in the tags
       (`container_name`, `short_image`, `image_name`, `kube_namespace`). Fill the columns
       from the tags when the fields are empty. With the Kubernetes explorer, not before.
-- [ ] **A ClickHouse outage loses data silently.** The intake answers 202 before it writes,
-      and a batch whose insert fails is counted and dropped (`storage/src/writer.rs`), so the
-      agent, already answered, never resends it. Every restart of ClickHouse (an upgrade,
-      the operator rolling the pod, a crash) leaves a gap in every table as long as the
-      outage. Needs a decision before anyone relies on NinjaCat: retry with backoff in the
-      writer, a spill to local disk, or a durable queue between intake and the writers
-      (NATS JetStream or similar), which would also let the writers restart on their own.
+- [ ] **A long ClickHouse outage still loses data.** A handler answers only after its insert,
+      and a refused one is answered 503, so the sender keeps the payload and retries. What is
+      still lost: an outage longer than the sender retries for (the agent's retry queue is
+      bounded); the logs that arrive over TCP, which have no answer to carry the failure and
+      are only logged; `raw::store`'s rows, logged and dropped; and the monitor service's
+      evaluation rows. Every restart of ClickHouse (an upgrade, the operator
+      rolling the pod) tests the first. Needs measuring against a real agent before anyone
+      relies on NinjaCat; a spill to local disk or a durable queue in front of ClickHouse
+      remain the options if the senders' retries are not enough.
 - [x] The query port asks for the panel's HS256 token (`ninjapaws_internal/token.rs`,
       2026-10-13); its `tenant` claim is the only source of the tenant.
 - [ ] **Datadog's query API on the query port takes only the panel's token.**

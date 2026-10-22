@@ -1,11 +1,9 @@
-use std::time::Duration;
-
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use super::Tags;
 use crate::column;
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// One container, pod or task lifecycle event: the restart and OOM history.
 ///
@@ -76,12 +74,7 @@ pub struct ContainerEvent {
 }
 
 impl Table for ContainerEvent {
-    const WRITER: &'static str = "storage_container_events";
     const TABLE: &'static str = "container_events";
-    // A bad rollout turns restarts into a storm, and each row is a crash somebody will look for:
-    // a deep buffer, two flushes.
-    const LIMITS: Limits =
-        Limits { max_rows: 1000, flush_interval: Duration::from_secs(5), buffer_limit: 50_000, max_in_flight: 2 };
 }
 
 /// One image as one host holds it. The table replaces on (tenant, image key, host), so host is
@@ -139,10 +132,5 @@ pub struct ContainerImage {
 }
 
 impl Table for ContainerImage {
-    const WRITER: &'static str = "storage_container_images";
     const TABLE: &'static str = "container_images";
-    // Every node re-announces every image it holds: bursty and repetitive. The table's engine
-    // absorbs the repetition.
-    const LIMITS: Limits =
-        Limits { max_rows: 500, flush_interval: Duration::from_secs(10), buffer_limit: 20_000, max_in_flight: 2 };
 }

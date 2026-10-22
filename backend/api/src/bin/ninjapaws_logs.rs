@@ -2,15 +2,21 @@
 //! TCP (`NINJACAT_LOGS_TCP_ADDR`).
 
 use ninjapaws_intake::auth;
+use ninjapaws_intake::keys;
 use ninjapaws_intake::routers::{flare, logs};
 use ninjapaws_intake::server;
 use ninjapaws_intake::tcp_logs;
 use tako::router::Router;
 use tako::types::BoxError;
+use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
-    let intake = server::start().await?;
+    server::init_tracing();
+    let clickhouse = ninjapaws_storage::client_from_env();
+    let keys = keys::start(&server::var_or("DATABASE_URL", "")).await?;
+    let settings = server::Settings::from_env();
 
     let mut router = Router::new();
     router.post("/api/v2/logs", logs::handle).middleware(auth::agent);
@@ -33,9 +39,20 @@ async fn main() -> Result<(), BoxError> {
     router.middleware(server::log_405);
     router.fallback(server::not_found);
 
-    // What the handlers write to and read from.
-    router.with_state(intake.clone());
-    // The agent's logs over TCP, beside the HTTP routes.
-    tcp_logs::listen(&intake)?;
-    server::serve("ninjapaws_logs", router, intake).await
+    // The agent's logs over TCP, beside the HTTP routes. Its connections end once the HTTP
+    // listener has stopped, and the program waits for them.
+    let stopping = CancellationToken::new();
+    let tcp = TaskTracker::new();
+    tcp_logs::listen(clickhouse.clone(), keys.clone(), stopping.clone(), tcp.clone())?;
+
+    // What the handlers and the middleware read.
+    router.with_state(clickhouse);
+    router.with_state(keys);
+    router.with_state(settings);
+    server::serve("ninjapaws_logs", router).await?;
+
+    stopping.cancel();
+    tcp.close();
+    tcp.wait().await;
+    Ok(())
 }

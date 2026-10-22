@@ -1,24 +1,33 @@
 //! intake.profile.<site>: the profiles the trace-agent forwards.
 
 use ninjapaws_intake::auth;
+use ninjapaws_intake::keys;
 use ninjapaws_intake::routers::{flare, profiling};
 use ninjapaws_intake::server::{self, Body, Ctx};
+use tako::extractors::state::State;
 use tako::router::Router;
 use tako::types::BoxError;
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
-    let intake = server::start().await?;
+    server::init_tracing();
+    let clickhouse = ninjapaws_storage::client_from_env();
+    let keys = keys::start(&server::var_or("DATABASE_URL", "")).await?;
+    let settings = server::Settings::from_env();
 
     let mut router = Router::new();
     // What the trace-agent forwards from /profiling/v1/input: the tracer's own multipart, byte for
     // byte.
     router
-        .post("/api/v2/profile", |ctx: Ctx, body: Body| profiling::handle_profile("profile", ctx, body))
+        .post("/api/v2/profile", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            profiling::handle_profile("profile", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
     // The old path, still used by the agent's internal profiling.
     router
-        .post("/v1/input", |ctx: Ctx, body: Body| profiling::handle_profile("profile-v1", ctx, body))
+        .post("/v1/input", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            profiling::handle_profile("profile-v1", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
 
     // What the agent sweeps at startup on whatever host it talks to, and a flare, which goes to
@@ -36,7 +45,9 @@ async fn main() -> Result<(), BoxError> {
     router.middleware(server::log_405);
     router.fallback(server::not_found);
 
-    // What the handlers write to and read from.
-    router.with_state(intake.clone());
-    server::serve("ninjapaws_profile", router, intake).await
+    // What the handlers and the middleware read.
+    router.with_state(clickhouse);
+    router.with_state(keys);
+    router.with_state(settings);
+    server::serve("ninjapaws_profile", router).await
 }

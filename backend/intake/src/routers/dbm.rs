@@ -10,14 +10,16 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
+use ninjapaws_storage as storage;
 use ninjapaws_storage::rows::dbm::DbmEvent;
 use serde_json::Value;
+use tako::extractors::state::State;
 use tako::types::Response;
 
 use crate::fields::{Mismatches, fields};
 use crate::json;
 use crate::raw;
-use crate::server::{Body, Ctx, accepted};
+use crate::server::{Body, Ctx, accepted, storage_failed};
 use crate::wire::{tags, time};
 
 /// The part of an event that every track shares. The wire is not consistent across tracks, and
@@ -265,25 +267,45 @@ pub fn to_row(tenant: &str, track: &str, received_at: DateTime<Utc>, event: &str
 }
 
 /// Stores one track's batch. `track` is the route's name, and what the rows say they arrived on.
-pub async fn handle(track: &'static str, ctx: Ctx, body: Body) -> Response {
+pub async fn handle(
+    track: &'static str,
+    ctx: Ctx,
+    State(clickhouse): State<clickhouse::Client>,
+    body: Body,
+) -> Response {
     // The agent's start-up probe: a row of it would be an event with nothing in it.
     if raw::is_probe(&body) {
         return accepted();
     }
     match split_events(&body) {
-        Err(e) => ctx.raw("dbm", "decode_error", &format!("[{track}] not a JSON array or object: {e}"), &body),
+        Err(e) => {
+            let note = format!("[{track}] not a JSON array or object: {e}");
+            if let Err(e) = raw::store(&clickhouse, &ctx, "dbm", "decode_error", &note, &body).await {
+                return storage_failed(e);
+            }
+        }
         Ok(events) => {
             let received_at = Utc::now();
             let mut rows = Vec::new();
+            let mut kept = Vec::new();
             for (i, event) in events.into_iter().enumerate() {
                 match decode_envelope(&event.json) {
-                    Err(e) => {
-                        ctx.raw("dbm", "decode_error", &format!("[{track}] event {i}: {e}"), event.text.as_bytes())
-                    }
+                    Err(e) => kept.extend(raw::row(
+                        &ctx,
+                        "dbm",
+                        "decode_error",
+                        &format!("[{track}] event {i}: {e}"),
+                        event.text.as_bytes(),
+                    )),
                     Ok(envelope) => rows.push(to_row(ctx.tenant(), track, received_at, &event.text, envelope)),
                 }
             }
-            ctx.write(rows);
+            if let Err(e) = raw::keep(&clickhouse, &kept).await {
+                return storage_failed(e);
+            }
+            if let Err(e) = storage::insert(&clickhouse, &rows).await {
+                return storage_failed(e);
+            }
         }
     }
     accepted()

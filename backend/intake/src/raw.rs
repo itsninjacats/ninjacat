@@ -55,7 +55,10 @@ pub fn origin_note(ctx: &Ctx) -> String {
     )
 }
 
-/// Keeps a request that could not be turned into rows.
+/// The row that keeps a request that could not be turned into rows; None when there is nothing
+/// to keep (no tenant, or a probe). [`store`] keeps one; a handler that rejects elements of a batch
+/// collects their rows and hands them to [`keep`] at once, so a batch is one insert however many
+/// of its elements did not fit.
 ///
 /// The rule of this project: a handler that cannot decode a body, or gets a shape it has no
 /// schema for, hands the bytes here. A payload that would show what an intake sends arrives once,
@@ -66,15 +69,15 @@ pub fn origin_note(ctx: &Ctx) -> String {
 ///   reason  "no_schema" | "decode_error" | "unexpected_shape"
 ///   note    the decoder's error, the field that was missing
 ///   body    what the handler tried to decode, already decompressed
-pub fn store(ctx: &Ctx, intake: &str, reason: &str, note: &str, body: &[u8]) {
+pub fn row(ctx: &Ctx, intake: &str, reason: &str, note: &str, body: &[u8]) -> Option<RawPayload> {
     let path = path_without_key(ctx.path());
     if ctx.tenant().is_empty() {
         tracing::warn!("[raw] {intake} {path}: no tenant, payload dropped ({} B)", body.len());
-        return;
+        return None;
     }
     if is_probe(body) {
         tracing::debug!("[raw] {intake} {path}: empty probe body, not stored");
-        return;
+        return None;
     }
 
     let headers = KEPT_HEADERS
@@ -93,7 +96,7 @@ pub fn store(ctx: &Ctx, intake: &str, reason: &str, note: &str, body: &[u8]) {
         }
     }
 
-    let row = RawPayload {
+    Some(RawPayload {
         tenant_id: ctx.tenant().into(),
         received_at: Utc::now(),
         intake: intake.into(),
@@ -104,7 +107,7 @@ pub fn store(ctx: &Ctx, intake: &str, reason: &str, note: &str, body: &[u8]) {
             "" => ctx.parts.uri.authority().map(|a| a.to_string()).unwrap_or_default(),
             host => host.into(),
         },
-        path: path.clone(),
+        path,
         query,
         content_type: ctx.header("content-type").into(),
         content_encoding: ctx.header("content-encoding").into(),
@@ -112,14 +115,44 @@ pub fn store(ctx: &Ctx, intake: &str, reason: &str, note: &str, body: &[u8]) {
         body: Blob(body.to_vec()),
         body_bytes: body.len() as u64,
         note: note.into(),
-    };
-    ctx.intake.sink.write(vec![row]);
+    })
+}
 
+/// Keeps one request that could not be turned into rows (see [`row`]). Fails when ClickHouse
+/// refuses, and the handler answers 503 as for any other insert: a payload that cannot be kept
+/// must be sent again, not acknowledged.
+pub async fn store(
+    clickhouse: &clickhouse::Client,
+    ctx: &Ctx,
+    intake: &str,
+    reason: &str,
+    note: &str,
+    body: &[u8],
+) -> Result<(), String> {
+    match row(ctx, intake, reason, note, body) {
+        Some(row) => keep(clickhouse, &[row]).await,
+        None => Ok(()),
+    }
+}
+
+/// Inserts a request's kept payloads at once.
+pub async fn keep(clickhouse: &clickhouse::Client, rows: &[RawPayload]) -> Result<(), String> {
+    if let Err(e) = ninjapaws_storage::insert(clickhouse, rows).await {
+        for row in rows {
+            let (intake, path, reason, note, size) = (&row.intake, &row.path, &row.reason, &row.note, row.body_bytes);
+            tracing::warn!("[raw] {intake} {path}: {reason}: {note} ({size} B), not kept: {e}");
+        }
+        return Err(e);
+    }
     // The one line about a kept payload; handlers do not log it again. An intake with no schema
     // keeps everything it gets, which is its ordinary work and not worth a warning each time.
-    if reason == "no_schema" {
-        tracing::debug!("[raw] {intake} {path}: {reason}: {note} ({} B)", body.len());
-    } else {
-        tracing::warn!("[raw] {intake} {path}: {reason}: {note} ({} B)", body.len());
+    for row in rows {
+        let (intake, path, reason, note, size) = (&row.intake, &row.path, &row.reason, &row.note, row.body_bytes);
+        if reason == "no_schema" {
+            tracing::debug!("[raw] {intake} {path}: {reason}: {note} ({size} B)");
+        } else {
+            tracing::warn!("[raw] {intake} {path}: {reason}: {note} ({size} B)");
+        }
     }
+    Ok(())
 }

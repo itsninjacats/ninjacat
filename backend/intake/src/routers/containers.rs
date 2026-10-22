@@ -14,13 +14,16 @@ use ninjapaws_proto::datadog::contlcycle::{
     MissedIntermediate, ObjectKind, PodStateTransition, PodStatusField, PodStatusValue, Precision, container_event,
     event, pod_status_value,
 };
+use ninjapaws_storage as storage;
 use ninjapaws_storage::rows::Tags;
 use ninjapaws_storage::rows::containers::{ContainerEvent as ContainerEventRow, ContainerImage as ContainerImageRow};
 use ninjapaws_storage::rows::metrics::MetricPoint;
 use prost::Message;
+use tako::extractors::state::State;
 use tako::types::Response;
 
-use crate::server::{Body, Ctx, accepted};
+use crate::raw;
+use crate::server::{Body, Ctx, accepted, storage_failed};
 use crate::wire::{enum_name, tags, text, time};
 
 // ---- lifecycle events ----
@@ -282,26 +285,50 @@ pub fn image_rows(
 
 /// Container, pod and task start/stop/OOM events. One payload covers one kind of object, named by
 /// object_kind.
-pub async fn handle_lifecycle(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_lifecycle(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     match EventsPayload::decode(body.as_ref()) {
-        Err(e) => ctx.raw("contlcycle", "decode_error", &e.to_string(), &body),
-        Ok(payload) if payload.events.is_empty() => {
-            ctx.raw("contlcycle", "unexpected_shape", "EventsPayload decoded with no events", &body)
+        Err(e) => {
+            if let Err(error) = raw::store(&clickhouse, &ctx, "contlcycle", "decode_error", &e.to_string(), &body).await
+            {
+                return storage_failed(error);
+            }
         }
-        Ok(payload) => ctx.write(event_rows(&payload, ctx.tenant(), Utc::now())),
+        Ok(payload) if payload.events.is_empty() => {
+            let note = "EventsPayload decoded with no events";
+            if let Err(e) = raw::store(&clickhouse, &ctx, "contlcycle", "unexpected_shape", note, &body).await {
+                return storage_failed(e);
+            }
+        }
+        Ok(payload) => {
+            if let Err(e) = storage::insert(&clickhouse, &event_rows(&payload, ctx.tenant(), Utc::now())).await {
+                return storage_failed(e);
+            }
+        }
     }
     accepted()
 }
 
 /// The container image inventory.
-pub async fn handle_images(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_images(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     match ContainerImagePayload::decode(body.as_ref()) {
-        Err(e) => ctx.raw("contimage", "decode_error", &e.to_string(), &body),
+        Err(e) => {
+            if let Err(error) = raw::store(&clickhouse, &ctx, "contimage", "decode_error", &e.to_string(), &body).await
+            {
+                return storage_failed(error);
+            }
+        }
         Ok(payload) if payload.images.is_empty() => {
-            ctx.raw("contimage", "unexpected_shape", "ContainerImagePayload decoded with no images", &body)
+            let note = "ContainerImagePayload decoded with no images";
+            if let Err(e) = raw::store(&clickhouse, &ctx, "contimage", "unexpected_shape", note, &body).await {
+                return storage_failed(e);
+            }
         }
         Ok(payload) => {
             let (rows, skipped) = image_rows(&payload, ctx.tenant(), Utc::now());
+            // The inventory before the counter derived from it.
+            if let Err(e) = storage::insert(&clickhouse, &rows).await {
+                return storage_failed(e);
+            }
             if skipped > 0 {
                 tracing::warn!(
                     "[contimage] {skipped} of {} images skipped: neither digest nor image id, so nothing to key on",
@@ -310,15 +337,17 @@ pub async fn handle_images(ctx: Ctx, body: Body) -> Response {
                 // The metric is what makes an incomplete inventory noticeable without going
                 // looking for a log line.
                 let reason = Tags::from([("reason".to_string(), vec!["no_identity".to_string()])]);
-                ctx.write(vec![MetricPoint {
+                let row = MetricPoint {
                     host: payload.host.clone(),
                     metric_type: "COUNT".into(),
                     source_type: "ninjacat".into(),
                     tags: reason,
                     ..MetricPoint::new(ctx.tenant(), Utc::now(), "ninjacat.intake.images.skipped", skipped as f64)
-                }]);
+                };
+                if let Err(e) = storage::insert(&clickhouse, &[row]).await {
+                    return storage_failed(e);
+                }
             }
-            ctx.write(rows);
         }
     }
     accepted()

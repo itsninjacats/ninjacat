@@ -1,12 +1,10 @@
-use std::time::Duration;
-
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use uuid::Uuid;
 
 use super::{Extra, Tags};
 use crate::column::{self, Blob};
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// One AgentDiscoveryPayload. The batch's host id repeats onto every row.
 #[derive(clickhouse::Row, Serialize, Clone, Debug)]
@@ -33,11 +31,7 @@ pub struct AgentDiscovery {
 }
 
 impl Table for AgentDiscovery {
-    const WRITER: &'static str = "storage_agent_discovery";
     const TABLE: &'static str = "agent_discovery";
-    // A row can carry whole config files.
-    const LIMITS: Limits =
-        Limits { max_rows: 200, flush_interval: Duration::from_secs(10), buffer_limit: 5_000, max_in_flight: 1 };
 }
 
 /// One HealthReport. The wire has no report id; report_id is minted at ingest and joins the
@@ -62,9 +56,7 @@ pub struct AgentHealthReport {
 }
 
 impl Table for AgentHealthReport {
-    const WRITER: &'static str = "storage_agent_health_reports";
     const TABLE: &'static str = "agent_health_reports";
-    const LIMITS: Limits = Limits { max_rows: 200, ..Limits::DEFAULT };
 }
 
 /// One entry of a HealthReport's issues map.
@@ -109,9 +101,7 @@ pub struct AgentHealthIssue {
 }
 
 impl Table for AgentHealthIssue {
-    const WRITER: &'static str = "storage_agent_health_issues";
     const TABLE: &'static str = "agent_health_issues";
-    const LIMITS: Limits = Limits { max_rows: 500, ..Limits::DEFAULT };
 }
 
 /// One envelope from /api/v2/events.
@@ -139,9 +129,7 @@ pub struct EventManagementEvent {
 }
 
 impl Table for EventManagementEvent {
-    const WRITER: &'static str = "storage_event_management_events";
     const TABLE: &'static str = "event_management_events";
-    const LIMITS: Limits = Limits { max_rows: 200, ..Limits::DEFAULT };
 }
 
 /// One software entry of a softinv payload: a row per package, so "every host running curl < 8.0"
@@ -171,11 +159,7 @@ pub struct HostSoftware {
 }
 
 impl Table for HostSoftware {
-    const WRITER: &'static str = "storage_host_software";
     const TABLE: &'static str = "host_software";
-    // A full inventory is a few hundred rows per host.
-    const LIMITS: Limits =
-        Limits { max_rows: 10_000, flush_interval: Duration::from_secs(5), buffer_limit: 100_000, max_in_flight: 2 };
 }
 
 /// One synthetic test result.
@@ -231,9 +215,7 @@ pub struct SyntheticsResult {
 }
 
 impl Table for SyntheticsResult {
-    const WRITER: &'static str = "storage_synthetics_results";
     const TABLE: &'static str = "synthetics_results";
-    const LIMITS: Limits = Limits { max_rows: 500, ..Limits::DEFAULT };
 }
 
 /// One OpenLineage RunEvent. Facets are the spec's own extension point, so they stay JSON text.
@@ -266,9 +248,7 @@ pub struct OpenLineageEvent {
 }
 
 impl Table for OpenLineageEvent {
-    const WRITER: &'static str = "storage_openlineage_events";
     const TABLE: &'static str = "openlineage_events";
-    const LIMITS: Limits = Limits { max_rows: 500, ..Limits::DEFAULT };
 }
 
 /// One entry of a query-actions batch. Nothing upstream names its fields, so the entry is kept
@@ -285,7 +265,5 @@ pub struct QueryActionResult {
 }
 
 impl Table for QueryActionResult {
-    const WRITER: &'static str = "storage_query_action_results";
     const TABLE: &'static str = "query_action_results";
-    const LIMITS: Limits = Limits { max_rows: 200, ..Limits::DEFAULT };
 }

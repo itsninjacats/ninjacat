@@ -1,9 +1,8 @@
 //! The groups an entity starts from, read back from transitions and evaluations stored through the
-//! real writes, in a scratch database.
+//! real inserts, in a scratch database.
 
 use ninjapaws_engine::monitor::evaluate::Period;
 use ninjapaws_engine::monitor::state::{Reason, Status, Transition};
-use ninjapaws_storage::Sink;
 
 use super::Scratch;
 use crate::definitions::MonitorKey;
@@ -41,9 +40,9 @@ fn transition(group: &str, at: i64, from: Option<Status>, to: Status, reason: Re
     }
 }
 
-async fn stored(sink: &Sink, hash: &str, t: Transition) {
+async fn stored(clickhouse: &clickhouse::Client, hash: &str, t: Transition) {
     let row = store::transition_row(&key(), 1, hash, None, None, &t);
-    sink.insert(vec![row]).await.unwrap();
+    ninjapaws_storage::insert(clickhouse, &[row]).await.unwrap();
 }
 
 fn evaluated(group: &str, at: i64) -> EvaluationRow {
@@ -62,34 +61,34 @@ fn evaluated(group: &str, at: i64) -> EvaluationRow {
 #[tokio::test]
 async fn open_groups_load_with_their_latest_transition_closed_ones_do_not() {
     let Some(scratch) = Scratch::new().await else { return };
-    let sink = scratch.sink();
+    let clickhouse = scratch.writer();
     use Status::*;
 
-    stored(&sink, "old", transition("host:a", minutes_ago(30), None, Alert, Reason::New)).await;
-    stored(&sink, "new", transition("host:a", minutes_ago(20), Some(Alert), Warn, Reason::Threshold)).await;
+    stored(&clickhouse, "old", transition("host:a", minutes_ago(30), None, Alert, Reason::New)).await;
+    stored(&clickhouse, "new", transition("host:a", minutes_ago(20), Some(Alert), Warn, Reason::Threshold)).await;
     // Stored twice, as a retried insert would.
-    stored(&sink, "old", transition("host:b", minutes_ago(25), None, Ok, Reason::New)).await;
-    stored(&sink, "old", transition("host:b", minutes_ago(25), None, Ok, Reason::New)).await;
-    stored(&sink, "old", transition("host:c", minutes_ago(30), None, Alert, Reason::New)).await;
-    stored(&sink, "old", transition("host:c", minutes_ago(10), Some(Alert), Ok, Reason::Expired)).await;
+    stored(&clickhouse, "old", transition("host:b", minutes_ago(25), None, Ok, Reason::New)).await;
+    stored(&clickhouse, "old", transition("host:b", minutes_ago(25), None, Ok, Reason::New)).await;
+    stored(&clickhouse, "old", transition("host:c", minutes_ago(30), None, Alert, Reason::New)).await;
+    stored(&clickhouse, "old", transition("host:c", minutes_ago(10), Some(Alert), Ok, Reason::Expired)).await;
     // The latest row has no trigger times; an older one has.
-    stored(&sink, "new", transition("host:d", minutes_ago(30), None, Alert, Reason::New)).await;
-    stored(&sink, "new", transition("host:d", minutes_ago(15), Some(Alert), NoData, Reason::NoData)).await;
+    stored(&clickhouse, "new", transition("host:d", minutes_ago(30), None, Alert, Reason::New)).await;
+    stored(&clickhouse, "new", transition("host:d", minutes_ago(15), Some(Alert), NoData, Reason::NoData)).await;
     // A No Data not notified remembers what it interrupted.
-    stored(&sink, "new", transition("host:e", minutes_ago(30), None, Warn, Reason::New)).await;
-    stored(&sink, "new", transition("host:e", minutes_ago(15), Some(Warn), NoData, Reason::NoDataShown)).await;
+    stored(&clickhouse, "new", transition("host:e", minutes_ago(30), None, Warn, Reason::New)).await;
+    stored(&clickhouse, "new", transition("host:e", minutes_ago(15), Some(Warn), NoData, Reason::NoDataShown)).await;
 
     // Another monitor's group is not this one's.
     let mut other =
         store::transition_row(&key(), 1, "x", None, None, &transition("host:z", now(), None, Alert, Reason::New));
     other.monitor_id = 8;
-    sink.insert(vec![other]).await.unwrap();
+    ninjapaws_storage::insert(&clickhouse, &[other]).await.unwrap();
 
     let mut monitor_level = evaluated("", now());
     monitor_level.outcome = "error".into();
     // A monitor-level row is no group's sighting.
     let evaluations = vec![evaluated("host:a", minutes_ago(2)), evaluated("host:a", minutes_ago(1)), monitor_level];
-    sink.insert(evaluations).await.unwrap();
+    ninjapaws_storage::insert(&clickhouse, &evaluations).await.unwrap();
 
     let history = store::history(&scratch.reader(), &key(), now()).await.unwrap();
 

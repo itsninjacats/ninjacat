@@ -3,8 +3,10 @@
 //! routes.
 
 use ninjapaws_intake::auth;
+use ninjapaws_intake::keys;
 use ninjapaws_intake::routers::{flare, logs, profiling, rum};
 use ninjapaws_intake::server::{self, Body, Ctx, var_or};
+use tako::extractors::state::State;
 use tako::router::Router;
 use tako::types::BoxError;
 
@@ -12,7 +14,10 @@ use tako::types::BoxError;
 async fn main() -> Result<(), BoxError> {
     let allowed_origins = rum::parse_allowed_origins(&var_or("NINJACAT_RUM_ALLOWED_ORIGINS", ""));
     let trusted = rum::trusted_proxies(&var_or("NINJACAT_TRUSTED_PROXIES", ""))?;
-    let intake = server::start().await?;
+    server::init_tracing();
+    let clickhouse = ninjapaws_storage::client_from_env();
+    let keys = keys::start(&server::var_or("DATABASE_URL", "")).await?;
+    let settings = server::Settings::from_env();
 
     let mut router = Router::new();
     router.post("/api/v2/rum", rum::handle_rum).middleware(auth::browser);
@@ -24,7 +29,9 @@ async fn main() -> Result<(), BoxError> {
     // The browser profiler's multipart is the envelope the tracers send, so it reuses that handler
     // under its own label.
     router
-        .post("/api/v2/profile", |ctx: Ctx, body: Body| profiling::handle_profile("profile-browser", ctx, body))
+        .post("/api/v2/profile", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            profiling::handle_profile("profile-browser", ctx, clickhouse, body)
+        })
         .middleware(auth::browser);
     router.post("/api/v2/debugger", profiling::handle_debugger).middleware(auth::browser);
     router.get("/api/v2/profiling/quota", rum::handle_profiling_quota).middleware(auth::browser);
@@ -44,9 +51,11 @@ async fn main() -> Result<(), BoxError> {
     router.middleware(server::log_405);
     router.fallback(server::not_found);
 
-    // What the handlers write to and read from.
-    router.with_state(intake.clone());
+    // What the handlers and the middleware read.
+    router.with_state(clickhouse);
+    router.with_state(keys);
+    router.with_state(settings);
     // CORS and the trusted proxies sit above every route.
     let router = rum::above(router, &allowed_origins, trusted);
-    server::serve("ninjapaws_browser", router, intake).await
+    server::serve("ninjapaws_browser", router).await
 }

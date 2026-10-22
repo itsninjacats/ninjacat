@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use ninjapaws_proto::pb;
-use ninjapaws_storage::Sink;
+use ninjapaws_storage as storage;
 use ninjapaws_storage::column::{self, Blob};
 use ninjapaws_storage::rows::Tags;
 use ninjapaws_storage::rows::logs::Log;
@@ -39,11 +39,12 @@ use tokio_rustls::rustls::ServerConfig;
 use tokio_rustls::rustls::pki_types::pem::PemObject;
 use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 
 use crate::json;
 use crate::keys::Store;
 use crate::routers::logs::{self, BatchDefaults};
-use crate::server::{Intake, listen_on, var_or};
+use crate::server::{listen_on, var_or};
 use crate::wire::{tags, text, time};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,9 +53,13 @@ pub enum Framing {
     LengthPrefixed,
 }
 
-/// A decoded row waits at most this long, or for this many others.
-const MAX_BATCH: usize = 500;
-const FLUSH_INTERVAL: Duration = Duration::from_secs(1);
+/// How long a connection's first bytes are waited for before its framing is taken for the default.
+const FRAMING_WAIT: Duration = Duration::from_secs(1);
+
+/// What one read asks for at least. Frames are inserted a read at a time and the socket is not
+/// read while an insert waits for ClickHouse's flush, so a read takes everything that arrived
+/// meanwhile: a smaller one would cap a busy connection at one read per flush.
+const READ_SIZE: usize = 1024 * 1024;
 
 /// A Datadog API key is 32 hex characters.
 const KEY_LENGTH: usize = 32;
@@ -203,23 +208,18 @@ pub fn take_frames(framing: Framing, buffer: &[u8]) -> Result<(Vec<&[u8]>, usize
     Ok((frames, consumed))
 }
 
-/// Owns one connection: decides its framing, then reads frames and stores what they give, in
-/// batches, until the peer leaves, a key is unknown or the process stops.
+/// Owns one connection: decides its framing, then reads frames and stores what each read gave,
+/// until the peer leaves, a key is unknown or the process stops. There is no one to answer, so a
+/// refused insert is only logged.
 async fn handle_connection(
+    clickhouse: clickhouse::Client,
     store: Arc<Store>,
-    sink: Sink,
     remote: String,
     mut input: impl AsyncRead + Unpin,
     stopping: CancellationToken,
 ) {
-    let mut logs = Vec::new();
-    let mut raws = Vec::new();
-    // One write per message would turn a busy connection into a storm of single-row batches.
-    let flush = |logs: &mut Vec<Log>, raws: &mut Vec<RawPayload>| {
-        sink.write(std::mem::take(logs));
-        sink.write(std::mem::take(raws));
-    };
-    let mut ticks = tokio::time::interval_at(tokio::time::Instant::now() + FLUSH_INTERVAL, FLUSH_INTERVAL);
+    // Wakes the loop, so that a sender slower than its first 33 bytes still gets a framing.
+    let mut ticks = tokio::time::interval_at(tokio::time::Instant::now() + FRAMING_WAIT, FRAMING_WAIT);
     // Everything received and not yet consumed, however many reads it took to arrive.
     let mut received = Vec::new();
     let mut framing = None;
@@ -230,8 +230,8 @@ async fn handle_connection(
             // An agent holds its connection open for good, so a stopping process has to be the
             // one to leave.
             _ = stopping.cancelled() => open = false,
-            _ = ticks.tick() => flush(&mut logs, &mut raws),
-            read = input.read_buf(&mut received) => match read {
+            _ = ticks.tick() => {}
+            read = { received.reserve(READ_SIZE); input.read_buf(&mut received) } => match read {
                 Ok(0) => open = false,
                 Ok(_) => {}
                 Err(e) => {
@@ -242,10 +242,12 @@ async fn handle_connection(
         }
         // The framing shows in the first 33 bytes. A sender slower than that is taken for the
         // default.
-        if framing.is_none() && (received.len() > KEY_LENGTH || connected_at.elapsed() > FLUSH_INTERVAL) {
+        if framing.is_none() && (received.len() > KEY_LENGTH || connected_at.elapsed() > FRAMING_WAIT) {
             framing = Some(detect_framing(&received));
         }
         let Some(framing) = framing else { continue };
+        let mut logs: Vec<Log> = Vec::new();
+        let mut raws: Vec<RawPayload> = Vec::new();
         let taken = match take_frames(framing, &received) {
             Err(e) => {
                 tracing::warn!("[logs-tcp] {remote}: closing connection: {e}");
@@ -268,12 +270,14 @@ async fn handle_connection(
         };
         // What was not a whole frame waits for the next read.
         received.drain(..taken);
-        if logs.len() >= MAX_BATCH || raws.len() >= MAX_BATCH {
-            flush(&mut logs, &mut raws);
+        // Rows already decoded are kept, whatever ends the connection.
+        if let Err(e) = storage::insert(&clickhouse, &logs).await {
+            tracing::warn!("[logs-tcp] {remote}: {} log lines lost: {e}", logs.len());
+        }
+        if let Err(e) = storage::insert(&clickhouse, &raws).await {
+            tracing::warn!("[logs-tcp] {remote}: {} undecodable frames lost: {e}", raws.len());
         }
     }
-    // Rows already decoded are kept, whatever ended the connection.
-    flush(&mut logs, &mut raws);
 }
 
 /// What makes the listener speak TLS: the certificate chain and key in two PEM files.
@@ -284,11 +288,17 @@ pub fn tls_acceptor(cert_file: &str, key_file: &str) -> Result<TlsAcceptor, BoxE
     Ok(TlsAcceptor::from(Arc::new(config)))
 }
 
-/// Accepts connections on `listener` until the process stops, each served as a task of its own.
-pub fn serve(listener: TcpListener, tls: Option<TlsAcceptor>, intake: &Intake) {
-    let (keys, sink, stopping, tasks) =
-        (intake.keys.clone(), intake.sink.clone(), intake.stopping.clone(), intake.tasks.clone());
-    intake.tasks.spawn(async move {
+/// Accepts connections on `listener` until `stopping` is cancelled, each served as a task of its
+/// own in `tasks`.
+pub fn serve(
+    listener: TcpListener,
+    tls: Option<TlsAcceptor>,
+    clickhouse: clickhouse::Client,
+    keys: Arc<Store>,
+    stopping: CancellationToken,
+    tasks: TaskTracker,
+) {
+    tasks.clone().spawn(async move {
         loop {
             let (stream, peer) = tokio::select! {
                 _ = stopping.cancelled() => return,
@@ -300,13 +310,13 @@ pub fn serve(listener: TcpListener, tls: Option<TlsAcceptor>, intake: &Intake) {
                     }
                 },
             };
-            let (keys, sink, stopping, tls) = (keys.clone(), sink.clone(), stopping.clone(), tls.clone());
+            let (clickhouse, keys, stopping, tls) = (clickhouse.clone(), keys.clone(), stopping.clone(), tls.clone());
             let remote = peer.to_string();
             tasks.spawn(async move {
                 match tls {
-                    None => handle_connection(keys, sink, remote, stream, stopping).await,
+                    None => handle_connection(clickhouse, keys, remote, stream, stopping).await,
                     Some(tls) => match tls.accept(stream).await {
-                        Ok(stream) => handle_connection(keys, sink, remote, stream, stopping).await,
+                        Ok(stream) => handle_connection(clickhouse, keys, remote, stream, stopping).await,
                         Err(e) => tracing::debug!("[logs-tcp] {remote}: TLS handshake failed: {e}"),
                     },
                 }
@@ -316,8 +326,14 @@ pub fn serve(listener: TcpListener, tls: Option<TlsAcceptor>, intake: &Intake) {
 }
 
 /// The listener as the environment configures it, started beside the HTTP one; nothing when
-/// `NINJACAT_LOGS_TCP_ADDR` is `off`. Called inside the runtime.
-pub fn listen(intake: &Intake) -> Result<(), BoxError> {
+/// `NINJACAT_LOGS_TCP_ADDR` is `off`. Its connections end when `stopping` is cancelled, and are
+/// done when `tasks` is. Called inside the runtime.
+pub fn listen(
+    clickhouse: clickhouse::Client,
+    keys: Arc<Store>,
+    stopping: CancellationToken,
+    tasks: TaskTracker,
+) -> Result<(), BoxError> {
     let addr = var_or("NINJACAT_LOGS_TCP_ADDR", ":10516");
     if addr == "off" {
         return Ok(());
@@ -329,6 +345,6 @@ pub fn listen(intake: &Intake) -> Result<(), BoxError> {
     listener.set_nonblocking(true)?;
     let listener = TcpListener::from_std(listener)?;
     tracing::info!("logs over TCP listening on {addr}{}", if tls.is_some() { " (TLS)" } else { "" });
-    serve(listener, tls, intake);
+    serve(listener, tls, clickhouse, keys, stopping, tasks);
     Ok(())
 }

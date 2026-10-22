@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use crate::column::{self, Blob};
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// A request that could not be turned into rows, kept as it arrived.
 #[derive(clickhouse::Row, Serialize, Clone, Debug)]
@@ -27,12 +27,5 @@ pub struct RawPayload {
 }
 
 impl Table for RawPayload {
-    const WRITER: &'static str = "storage_raw_payloads";
     const TABLE: &'static str = "raw_payloads";
-    const LIMITS: Limits = Limits {
-        max_rows: 200,
-        flush_interval: std::time::Duration::from_secs(10),
-        buffer_limit: 5_000,
-        max_in_flight: 1,
-    };
 }

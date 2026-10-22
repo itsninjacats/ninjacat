@@ -1,6 +1,6 @@
 //! NinjaCat's own vital signs, stored as ordinary metrics so they can be graphed and alerted on
-//! like any other: the process (`ninjacat.node.*`), each table's writer (`ninjacat.storage.*`) and
-//! the monitors' readings (`ninjacat.monitor.*`).
+//! like any other: the process (`ninjacat.node.*`) and the monitors' readings
+//! (`ninjacat.monitor.*`).
 //!
 //! The process is read from /proc, so on another system its points are left out. A Rust process
 //! has no garbage collector, so the .NET points of one (gc.cycles, cpu.gc_time, memory.alloc,
@@ -12,7 +12,8 @@ use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use ninjapaws_storage::rows::metrics::MetricPoint;
-use ninjapaws_storage::{Sink, WriterStats};
+use tokio::sync::watch;
+use tokio::time::MissedTickBehavior;
 
 use crate::telemetry::{self, Counters, Kind};
 
@@ -24,15 +25,14 @@ pub struct SelfMonitor {
     pub host: String,
     pub interval: Duration,
     pub counts: Arc<Counters>,
-    /// Its writers are sampled, and the points written through it.
-    pub sink: Sink,
+    /// Where the points are inserted.
+    pub clickhouse: clickhouse::Client,
 }
 
 /// What the last sample read, so counters are sent as what was added since.
 #[derive(Default)]
 pub struct Previous {
     cpu: Option<(f64, f64)>,
-    writers: BTreeMap<&'static str, WriterStats>,
     totals: BTreeMap<String, f64>,
 }
 
@@ -55,32 +55,29 @@ fn status_field(name: &str) -> Option<f64> {
 }
 
 impl SelfMonitor {
-    /// Samples every interval until the task is aborted.
-    pub async fn run(self) {
+    /// Samples every interval until `stopping` turns true. The stop is looked at only between
+    /// samples, so an insert under way is finished, not cut off.
+    pub async fn run(self, mut stopping: watch::Receiver<bool>) {
         let started = Instant::now();
         let mut previous = Previous::default();
         let mut every = tokio::time::interval(self.interval);
+        // An insert that outlasts the interval leaves a gap, not a burst of samples taken at once.
+        every.set_missed_tick_behavior(MissedTickBehavior::Skip);
         every.tick().await;
         loop {
-            every.tick().await;
+            tokio::select! {
+                _ = every.tick() => {}
+                _ = stopping.wait_for(|stop| *stop) => return,
+            }
             let points = self.sample(Utc::now(), started.elapsed(), &mut previous);
-            self.sink.write(points);
+            if let Err(e) = ninjapaws_storage::insert(&self.clickhouse, &points).await {
+                eprintln!("warning: self-monitoring points not stored: {e}");
+            }
         }
     }
 
-    fn point(
-        &self,
-        now: DateTime<Utc>,
-        metric_type: &str,
-        name: &str,
-        unit: &str,
-        value: f64,
-        table: Option<&str>,
-    ) -> MetricPoint {
-        let mut tags = BTreeMap::from([("runtime".to_string(), vec!["Rust".to_string()])]);
-        if let Some(table) = table {
-            tags.insert("table".to_string(), vec![table.to_string()]);
-        }
+    fn point(&self, now: DateTime<Utc>, metric_type: &str, name: &str, unit: &str, value: f64) -> MetricPoint {
+        let tags = BTreeMap::from([("runtime".to_string(), vec!["Rust".to_string()])]);
         MetricPoint {
             tenant_id: self.tenant.clone(),
             timestamp: now,
@@ -97,8 +94,8 @@ impl SelfMonitor {
     }
 
     pub fn sample(&self, now: DateTime<Utc>, uptime: Duration, previous: &mut Previous) -> Vec<MetricPoint> {
-        let gauge = |name: &str, unit: &str, value: f64| self.point(now, "GAUGE", name, unit, value, None);
-        let count = |name: &str, unit: &str, value: f64| self.point(now, "COUNT", name, unit, value.max(0.0), None);
+        let gauge = |name: &str, unit: &str, value: f64| self.point(now, "GAUGE", name, unit, value);
+        let count = |name: &str, unit: &str, value: f64| self.point(now, "COUNT", name, unit, value.max(0.0));
         let mut points = vec![gauge("ninjacat.node.uptime", "second", uptime.as_secs_f64())];
         if let Some(threads) = status_field("Threads:") {
             points.push(gauge("ninjacat.node.threads", "", threads));
@@ -114,45 +111,11 @@ impl SelfMonitor {
         }
         previous.cpu = cpu;
 
-        // A writer is made with its table's first write, so it shows from the sample after.
-        for w in self.sink.stats() {
-            let table = Some(w.table);
-            points.push(self.point(now, "GAUGE", "ninjacat.storage.rows.buffered", "", w.buffered as f64, table));
-            if let Some(last) = previous.writers.get(w.table) {
-                let added = |now: u64, last: u64| now.saturating_sub(last) as f64;
-                points.push(self.point(
-                    now,
-                    "COUNT",
-                    "ninjacat.storage.rows.written",
-                    "",
-                    added(w.written, last.written),
-                    table,
-                ));
-                points.push(self.point(
-                    now,
-                    "COUNT",
-                    "ninjacat.storage.rows.dropped",
-                    "",
-                    added(w.dropped, last.dropped),
-                    table,
-                ));
-                points.push(self.point(
-                    now,
-                    "COUNT",
-                    "ninjacat.storage.rows.failed",
-                    "",
-                    added(w.failed, last.failed),
-                    table,
-                ));
-            }
-            previous.writers.insert(w.table, w);
-        }
-
         for r in telemetry::readings(&self.counts) {
             if !r.value.is_finite() {
                 continue;
             }
-            let mut point = self.point(now, "GAUGE", &r.name, r.unit, r.value, None);
+            let mut point = self.point(now, "GAUGE", &r.name, r.unit, r.value);
             for (key, value) in &r.tags {
                 point.tags.insert(key.to_string(), vec![value.to_string()]);
             }

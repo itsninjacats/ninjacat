@@ -6,7 +6,6 @@
 //! 0001_initial.sql.
 
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -14,7 +13,7 @@ use uuid::Uuid;
 
 use super::Tags;
 use crate::column::{self, Blob};
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// One process from a process-agent snapshot.
 ///
@@ -151,10 +150,7 @@ pub struct Process {
 }
 
 impl Table for Process {
-    const WRITER: &'static str = "storage_processes";
     const TABLE: &'static str = "processes";
-    // A few hundred rows per host per snapshot, every ~10 s.
-    const LIMITS: Limits = Limits { max_rows: 10_000, flush_interval: Duration::from_secs(5), ..Limits::DEFAULT };
 }
 
 /// One received frame, whatever its type.
@@ -237,11 +233,7 @@ pub struct ProcessSnapshot {
 }
 
 impl Table for ProcessSnapshot {
-    const WRITER: &'static str = "storage_process_snapshots";
     const TABLE: &'static str = "process_snapshots";
-    // One row per frame, wide but tiny: the timer does the flushing.
-    const LIMITS: Limits =
-        Limits { max_rows: 500, flush_interval: Duration::from_secs(10), buffer_limit: 20_000, max_in_flight: 2 };
 }
 
 /// One ProcessStat from the 2-second realtime stream.
@@ -327,10 +319,7 @@ pub struct ProcessStat {
 }
 
 impl Table for ProcessStat {
-    const WRITER: &'static str = "storage_process_stats";
     const TABLE: &'static str = "process_stats";
-    // The shape of processes at five times the cadence (2 s, not 10 s).
-    const LIMITS: Limits = Limits { max_rows: 10_000, flush_interval: Duration::from_secs(5), ..Limits::DEFAULT };
 }
 
 /// One Container. source says which message it hung off (collector_proc, collector_container or
@@ -411,12 +400,7 @@ pub struct Container {
 }
 
 impl Table for Container {
-    const WRITER: &'static str = "storage_containers";
     const TABLE: &'static str = "containers";
-    // Tens to hundreds of rows per host per pass, each with tag maps and address arrays: the rows
-    // carry real memory.
-    const LIMITS: Limits =
-        Limits { max_rows: 2_000, flush_interval: Duration::from_secs(5), buffer_limit: 50_000, max_in_flight: 2 };
 }
 
 /// One ContainerStat. source is collector_realtime or collector_container_realtime; the two
@@ -476,10 +460,7 @@ pub struct ContainerStat {
 }
 
 impl Table for ContainerStat {
-    const WRITER: &'static str = "storage_container_stats";
     const TABLE: &'static str = "container_stats";
-    // Narrow numeric rows on the 2-second stream.
-    const LIMITS: Limits = Limits { max_rows: 10_000, flush_interval: Duration::from_secs(5), ..Limits::DEFAULT };
 }
 
 /// One ProcessDiscovery: pid, command and user, no resource usage. On hosts that run only the
@@ -527,10 +508,7 @@ pub struct ProcessDiscovery {
 }
 
 impl Table for ProcessDiscovery {
-    const WRITER: &'static str = "storage_process_discoveries";
     const TABLE: &'static str = "process_discoveries";
-    // A full process list per pass, like processes, with smaller rows.
-    const LIMITS: Limits = Limits { max_rows: 10_000, flush_interval: Duration::from_secs(5), ..Limits::DEFAULT };
 }
 
 /// The per-frame half of CollectorConnections: what describes the sender and its eBPF machinery
@@ -602,12 +580,7 @@ pub struct ConnectionsPayload {
 }
 
 impl Table for ConnectionsPayload {
-    const WRITER: &'static str = "storage_connections_payloads";
     const TABLE: &'static str = "connections_payloads";
-    // One row per frame, but each carries the packed tag and DNS buffers, kilobytes to megabytes:
-    // tight ceilings, one flush in flight.
-    const LIMITS: Limits =
-        Limits { max_rows: 200, flush_interval: Duration::from_secs(10), buffer_limit: 5_000, max_in_flight: 1 };
 }
 
 /// One Connection from the system-probe's connection table.
@@ -714,10 +687,5 @@ pub struct Connection {
 }
 
 impl Table for Connection {
-    const WRITER: &'static str = "storage_connections";
     const TABLE: &'static str = "connections";
-    // The highest-volume table of this intake: a busy host reports thousands of connections per
-    // frame.
-    const LIMITS: Limits =
-        Limits { max_rows: 20_000, flush_interval: Duration::from_secs(5), buffer_limit: 500_000, ..Limits::DEFAULT };
 }

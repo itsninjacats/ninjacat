@@ -4,12 +4,14 @@
 //!
 //! One function per place a host's clients put the key; the first place that holds one decides.
 
+use std::sync::Arc;
+
 use http::StatusCode;
 use tako::middleware::Next;
 use tako::types::{Request, Response};
 
-use crate::keys::Key;
-use crate::server::{intake_of, json, query_value};
+use crate::keys::{Key, Store};
+use crate::server::{json, query_value, state};
 
 /// The key a request was admitted with, in its extensions.
 #[derive(Clone, Debug)]
@@ -53,8 +55,8 @@ pub async fn lineage(req: Request, next: Next) -> Response {
 }
 
 async fn admit(key: Option<String>, mut req: Request, next: Next) -> Response {
-    let known = match (key, intake_of(req.extensions())) {
-        (Some(key), Some(intake)) => intake.keys.lookup(&key),
+    let known = match (key, state::<Arc<Store>>(req.extensions())) {
+        (Some(key), Some(keys)) => keys.lookup(&key),
         _ => None,
     };
     match known {

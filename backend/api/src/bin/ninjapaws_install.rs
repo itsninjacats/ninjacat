@@ -8,7 +8,8 @@ use tako::types::BoxError;
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
-    let intake = server::start().await?;
+    server::init_tracing();
+    let settings = server::Settings::from_env();
 
     let mut router = Router::new();
     router.head("/", install::handle_probe);
@@ -27,7 +28,7 @@ async fn main() -> Result<(), BoxError> {
     router.middleware(server::log_405);
     router.fallback(server::not_found);
 
-    // What the handlers write to and read from.
-    router.with_state(intake.clone());
-    server::serve("ninjapaws_install", router, intake).await
+    // Nothing here stores anything or asks for a key.
+    router.with_state(settings);
+    server::serve("ninjapaws_install", router).await
 }

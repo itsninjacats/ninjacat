@@ -6,15 +6,13 @@
 //! Each row starts with the nine columns it shares with the `connections` row it came from (see
 //! [`ConnectionKey`]) and ends with the eight of its latency sketch.
 
-use std::time::Duration;
-
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use uuid::Uuid;
 
 use super::traces::SketchState;
 use crate::column::{self, Blob};
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// The columns a stat row shares with the `connections` row it came from.
 #[derive(Clone, Debug, PartialEq)]
@@ -29,9 +27,6 @@ pub struct ConnectionKey {
     pub raddr_ip: String,
     pub raddr_port: i32,
 }
-
-const LIMITS: Limits =
-    Limits { max_rows: 2_000, flush_interval: Duration::from_secs(10), buffer_limit: 100_000, max_in_flight: 2 };
 
 /// One endpoint of one connection, under one response status.
 #[derive(clickhouse::Row, Serialize, Clone, Debug)]
@@ -73,9 +68,7 @@ pub struct ConnectionHttpStat {
 }
 
 impl Table for ConnectionHttpStat {
-    const WRITER: &'static str = "storage_connection_http_stats";
     const TABLE: &'static str = "connection_http_stats";
-    const LIMITS: Limits = LIMITS;
 }
 
 /// One Kafka request kind and topic of one connection, under one error code.
@@ -113,9 +106,7 @@ pub struct ConnectionKafkaStat {
 }
 
 impl Table for ConnectionKafkaStat {
-    const WRITER: &'static str = "storage_connection_kafka_stats";
     const TABLE: &'static str = "connection_kafka_stats";
-    const LIMITS: Limits = LIMITS;
 }
 
 /// One database operation of one connection: a Postgres operation on a table, or a Redis command
@@ -159,7 +150,5 @@ pub struct ConnectionDatabaseStat {
 }
 
 impl Table for ConnectionDatabaseStat {
-    const WRITER: &'static str = "storage_connection_database_stats";
     const TABLE: &'static str = "connection_database_stats";
-    const LIMITS: Limits = LIMITS;
 }

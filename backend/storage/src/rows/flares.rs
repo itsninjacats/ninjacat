@@ -1,11 +1,10 @@
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use crate::column::{self, Blob};
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// One `agent flare` upload: the archive and the form fields sent with it.
 #[derive(clickhouse::Row, Serialize, Clone, Debug)]
@@ -26,8 +25,5 @@ pub struct AgentFlare {
 }
 
 impl Table for AgentFlare {
-    const WRITER: &'static str = "storage_agent_flares";
     const TABLE: &'static str = "agent_flares";
-    const LIMITS: Limits =
-        Limits { max_rows: 200, flush_interval: Duration::from_secs(10), buffer_limit: 5_000, max_in_flight: 1 };
 }

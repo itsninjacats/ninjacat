@@ -3,14 +3,19 @@
 //! datadog-ci calls.
 
 use ninjapaws_intake::auth;
+use ninjapaws_intake::keys;
 use ninjapaws_intake::routers::{api, ci_visibility, flare};
 use ninjapaws_intake::server::{self, Body, Ctx};
+use tako::extractors::state::State;
 use tako::router::Router;
 use tako::types::BoxError;
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
-    let intake = server::start().await?;
+    server::init_tracing();
+    let clickhouse = ninjapaws_storage::client_from_env();
+    let keys = keys::start(&server::var_or("DATABASE_URL", "")).await?;
+    let settings = server::Settings::from_env();
 
     let mut router = Router::new();
     router.post("/intake/", api::handle_intake).middleware(auth::agent);
@@ -52,45 +57,57 @@ async fn main() -> Result<(), BoxError> {
     // after `setting` while every flag in the settings answer is false; they exist because a
     // tracer configured by hand must not get a 404 in the middle of a test run.
     router
-        .post("/api/v2/libraries/tests/services/setting", |ctx: Ctx, body: Body| async move {
-            ci_visibility::answer_config("settings", ci_visibility::settings_answer, &ctx, &body)
+        .post(
+            "/api/v2/libraries/tests/services/setting",
+            |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+                ci_visibility::answer_config("settings", ci_visibility::settings_answer, ctx, clickhouse, body)
+            },
+        )
+        .middleware(auth::agent);
+    router
+        .post("/api/v2/ci/tests/skippable", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            ci_visibility::answer_config("skippable", ci_visibility::skippable_answer, ctx, clickhouse, body)
         })
         .middleware(auth::agent);
     router
-        .post("/api/v2/ci/tests/skippable", |ctx: Ctx, body: Body| async move {
-            ci_visibility::answer_config("skippable", ci_visibility::skippable_answer, &ctx, &body)
+        .post("/api/v2/ci/libraries/tests", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            ci_visibility::answer_config("known_tests", ci_visibility::test_list_answer, ctx, clickhouse, body)
         })
         .middleware(auth::agent);
     router
-        .post("/api/v2/ci/libraries/tests", |ctx: Ctx, body: Body| async move {
-            ci_visibility::answer_config("known_tests", ci_visibility::test_list_answer, &ctx, &body)
+        .post("/api/v2/ci/libraries/tests/flaky", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            ci_visibility::answer_config("flaky_tests", ci_visibility::test_list_answer, ctx, clickhouse, body)
         })
         .middleware(auth::agent);
     router
-        .post("/api/v2/ci/libraries/tests/flaky", |ctx: Ctx, body: Body| async move {
-            ci_visibility::answer_config("flaky_tests", ci_visibility::test_list_answer, &ctx, &body)
-        })
-        .middleware(auth::agent);
-    router
-        .post("/api/v2/test/libraries/test-management/tests", |ctx: Ctx, body: Body| async move {
-            ci_visibility::answer_config("test_management", ci_visibility::test_management_answer, &ctx, &body)
-        })
+        .post(
+            "/api/v2/test/libraries/test-management/tests",
+            |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+                ci_visibility::answer_config(
+                    "test_management",
+                    ci_visibility::test_management_answer,
+                    ctx,
+                    clickhouse,
+                    body,
+                )
+            },
+        )
         .middleware(auth::agent);
     router.post("/api/v2/git/repository/search_commits", ci_visibility::handle_search_commits).middleware(auth::agent);
     router.post("/api/v2/git/repository/packfile", ci_visibility::handle_packfile).middleware(auth::agent);
     router
-        .post("/api/v2/ci/pipeline/tags", |ctx: Ctx, body: Body| async move {
-            ci_visibility::handle_pipeline_event("tag", &ctx, &body)
+        .post("/api/v2/ci/pipeline/tags", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            ci_visibility::handle_pipeline_event("tag", ctx, clickhouse, body)
         })
         .middleware(auth::agent);
     router
-        .post("/api/v2/ci/pipeline/metrics", |ctx: Ctx, body: Body| async move {
-            ci_visibility::handle_pipeline_event("measure", &ctx, &body)
+        .post("/api/v2/ci/pipeline/metrics", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            ci_visibility::handle_pipeline_event("measure", ctx, clickhouse, body)
         })
         .middleware(auth::agent);
     router
-        .post("/api/intake/ci/custom_spans", |ctx: Ctx, body: Body| async move {
-            ci_visibility::handle_pipeline_event("custom_span", &ctx, &body)
+        .post("/api/intake/ci/custom_spans", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            ci_visibility::handle_pipeline_event("custom_span", ctx, clickhouse, body)
         })
         .middleware(auth::agent);
 
@@ -109,7 +126,9 @@ async fn main() -> Result<(), BoxError> {
     router.middleware(server::log_405);
     router.fallback(server::not_found);
 
-    // What the handlers write to and read from.
-    router.with_state(intake.clone());
-    server::serve("ninjapaws_api", router, intake).await
+    // What the handlers and the middleware read.
+    router.with_state(clickhouse);
+    router.with_state(keys);
+    router.with_state(settings);
+    server::serve("ninjapaws_api", router).await
 }

@@ -29,6 +29,7 @@ use ninjapaws_proto::datadog::sds::sds_result_payload::scan_location::{ScanLocat
 use ninjapaws_proto::datadog::sds::sds_result_payload::scan_metadata::scan_task_metadata::Status;
 use ninjapaws_proto::datadog::sds::sds_result_payload::{self, ScanLocation as Location};
 use ninjapaws_proto::datadog::sds::{ScanStats, ScanningSource, SdsResultPayload, scanning_source};
+use ninjapaws_storage as storage;
 use ninjapaws_storage::column::Blob;
 use ninjapaws_storage::rows::Extra;
 use ninjapaws_storage::rows::sds::{SdsLocation, SdsMatch, SdsResult, SdsScan};
@@ -38,12 +39,14 @@ use ninjapaws_storage::rows::security::{
 use prost::Message;
 use prost::encoding::{DecodeContext, WireType};
 use serde_json::Value;
+use tako::extractors::state::State;
 use tako::types::Response;
 use uuid::Uuid;
 
 use crate::body;
 use crate::json;
-use crate::server::{Body, Ctx, accepted};
+use crate::raw;
+use crate::server::{Body, Ctx, accepted, storage_failed};
 use crate::wire::{enum_name, tags, text, time};
 
 /// Header keys with a column of their own; the rest go to header_extra.
@@ -207,9 +210,14 @@ fn walk(
 ///
 /// The parts are decoded independently: a broken "event" does not lose the "dump", and the other
 /// way round.
-pub async fn handle_sec_dump(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_sec_dump(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     let Some(boundary) = body::boundary(ctx.header("content-type")) else {
-        ctx.raw("secdump", "decode_error", "content-type is not multipart/form-data", &body);
+        if let Err(e) =
+            raw::store(&clickhouse, &ctx, "secdump", "decode_error", "content-type is not multipart/form-data", &body)
+                .await
+        {
+            return storage_failed(e);
+        }
         return accepted();
     };
     let parts = body::parts(&boundary, body.clone()).await;
@@ -232,7 +240,11 @@ pub async fn handle_sec_dump(ctx: Ctx, body: Body) -> Response {
     }
 
     if header.is_none() && dump.is_none() {
-        ctx.raw("secdump", "decode_error", "neither multipart part decoded", &body);
+        if let Err(e) =
+            raw::store(&clickhouse, &ctx, "secdump", "decode_error", "neither multipart part decoded", &body).await
+        {
+            return storage_failed(e);
+        }
         return accepted();
     }
     let received_at = Utc::now();
@@ -246,9 +258,12 @@ pub async fn handle_sec_dump(ctx: Ctx, body: Body) -> Response {
         dump.as_ref(),
         dump_bytes.as_deref().unwrap_or_default(),
     );
-    ctx.write(vec![row]);
-    if let Some(dump) = dump {
-        ctx.write(flatten_tree(ctx.tenant(), received_at, dump_id, dump.tree));
+    let nodes = dump.map(|dump| flatten_tree(ctx.tenant(), received_at, dump_id, dump.tree)).unwrap_or_default();
+    if let Err(e) = storage::insert(&clickhouse, &[row]).await {
+        return storage_failed(e);
+    }
+    if let Err(e) = storage::insert(&clickhouse, &nodes).await {
+        return storage_failed(e);
     }
     accepted()
 }
@@ -335,12 +350,33 @@ pub fn event_rows(tenant: &str, received_at: DateTime<Utc>, track: &str, envelop
 
 /// A logs-pipeline batch: a JSON array of envelopes. One handler serves three tracks; the rows
 /// share a table and carry the track.
-pub async fn handle_track(track: &'static str, ctx: Ctx, body: Body) -> Response {
+pub async fn handle_track(
+    track: &'static str,
+    ctx: Ctx,
+    State(clickhouse): State<clickhouse::Client>,
+    body: Body,
+) -> Response {
     match decode_envelopes(&body) {
         Err(problem) => {
-            ctx.raw(track, "unexpected_shape", &format!("the body is not a list of envelopes: {problem}"), &body)
+            if let Err(e) = raw::store(
+                &clickhouse,
+                &ctx,
+                track,
+                "unexpected_shape",
+                &format!("the body is not a list of envelopes: {problem}"),
+                &body,
+            )
+            .await
+            {
+                return storage_failed(e);
+            }
         }
-        Ok(envelopes) => ctx.write(event_rows(ctx.tenant(), Utc::now(), track, &envelopes)),
+        Ok(envelopes) => {
+            if let Err(e) = storage::insert(&clickhouse, &event_rows(ctx.tenant(), Utc::now(), track, &envelopes)).await
+            {
+                return storage_failed(e);
+            }
+        }
     }
     accepted()
 }
@@ -528,18 +564,32 @@ pub fn sbom_rows(
 }
 
 /// POST /api/v2/sbom: one SBOMPayload per request, protobuf.
-pub async fn handle_sbom(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_sbom(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     match SbomPayload::decode(&body[..]) {
-        Err(problem) => ctx.raw("sbom", "decode_error", &problem.to_string(), &body),
+        Err(problem) => {
+            if let Err(e) = raw::store(&clickhouse, &ctx, "sbom", "decode_error", &problem.to_string(), &body).await {
+                return storage_failed(e);
+            }
+        }
         // Protobuf reads almost any bytes as some message.
         Ok(payload) if payload.entities.is_empty() => {
-            ctx.raw("sbom", "unexpected_shape", "decoded to zero entities", &body)
+            if let Err(e) =
+                raw::store(&clickhouse, &ctx, "sbom", "unexpected_shape", "decoded to zero entities", &body).await
+            {
+                return storage_failed(e);
+            }
         }
         Ok(payload) => {
             let (entities, components, vulnerabilities) = sbom_rows(ctx.tenant(), Utc::now(), &payload);
-            ctx.write(entities);
-            ctx.write(components);
-            ctx.write(vulnerabilities);
+            if let Err(e) = storage::insert(&clickhouse, &entities).await {
+                return storage_failed(e);
+            }
+            if let Err(e) = storage::insert(&clickhouse, &components).await {
+                return storage_failed(e);
+            }
+            if let Err(e) = storage::insert(&clickhouse, &vulnerabilities).await {
+                return storage_failed(e);
+            }
         }
     }
     accepted()
@@ -856,7 +906,7 @@ fn sds_is_blank(payload: &SdsResultPayload) -> bool {
 /// A protobuf parser fails open: bytes meant for another endpoint decode into a message with
 /// nothing in it. A payload that names no resource and has no result is therefore kept raw, its
 /// wire layout in the note, instead of becoming an empty scan.
-pub async fn handle_sds_result(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_sds_result(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     let layout = || match wire_layout(&body).as_deref() {
         None => "protobuf did not parse as a sequence of top-level fields".to_string(),
         Some("") => "no fields (empty or wrong payload type?)".to_string(),
@@ -864,19 +914,44 @@ pub async fn handle_sds_result(ctx: Ctx, body: Body) -> Response {
     };
     match SdsResultPayload::decode(&body[..]) {
         Err(problem) => {
-            ctx.raw("sds", "decode_error", &format!("protobuf SdsResultPayload: {problem}; {}", layout()), &body)
+            if let Err(e) = raw::store(
+                &clickhouse,
+                &ctx,
+                "sds",
+                "decode_error",
+                &format!("protobuf SdsResultPayload: {problem}; {}", layout()),
+                &body,
+            )
+            .await
+            {
+                return storage_failed(e);
+            }
         }
-        Ok(payload) if sds_is_blank(&payload) => ctx.raw(
-            "sds",
-            "unexpected_shape",
-            &format!("not an SdsResultPayload: no resource and no results; {}", layout()),
-            &body,
-        ),
+        Ok(payload) if sds_is_blank(&payload) => {
+            if let Err(e) = raw::store(
+                &clickhouse,
+                &ctx,
+                "sds",
+                "unexpected_shape",
+                &format!("not an SdsResultPayload: no resource and no results; {}", layout()),
+                &body,
+            )
+            .await
+            {
+                return storage_failed(e);
+            }
+        }
         Ok(payload) => {
             let rows = sds_rows(ctx.tenant(), Utc::now(), Uuid::new_v4(), &payload);
-            ctx.write(vec![rows.scan]);
-            ctx.write(rows.results);
-            ctx.write(rows.matches);
+            if let Err(e) = storage::insert(&clickhouse, &[rows.scan]).await {
+                return storage_failed(e);
+            }
+            if let Err(e) = storage::insert(&clickhouse, &rows.results).await {
+                return storage_failed(e);
+            }
+            if let Err(e) = storage::insert(&clickhouse, &rows.matches).await {
+                return storage_failed(e);
+            }
         }
     }
     accepted()

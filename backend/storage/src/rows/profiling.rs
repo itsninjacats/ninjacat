@@ -1,12 +1,11 @@
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use super::Tags;
 use crate::column::{self, Blob};
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// One multipart submission to intake.profile.<site>.
 ///
@@ -57,12 +56,7 @@ pub struct Profile {
 }
 
 impl Table for Profile {
-    const WRITER: &'static str = "storage_profiles";
     const TABLE: &'static str = "profiles";
-    // A row is a whole submission with megabytes of pprof: few rows per batch, one flush at a
-    // time.
-    const LIMITS: Limits =
-        Limits { max_rows: 200, flush_interval: Duration::from_secs(10), buffer_limit: 5_000, max_in_flight: 1 };
 }
 
 /// One entry of a Dynamic Instrumentation logs batch.
@@ -82,9 +76,7 @@ pub struct DebuggerLog {
 }
 
 impl Table for DebuggerLog {
-    const WRITER: &'static str = "storage_debugger_logs";
     const TABLE: &'static str = "debugger_logs";
-    const LIMITS: Limits = Limits { max_rows: 500, ..Limits::DEFAULT };
 }
 
 /// One probe status message.
@@ -112,9 +104,7 @@ pub struct DebuggerDiagnostic {
 }
 
 impl Table for DebuggerDiagnostic {
-    const WRITER: &'static str = "storage_debugger_diagnostics";
     const TABLE: &'static str = "debugger_diagnostics";
-    const LIMITS: Limits = Limits { max_rows: 200, ..Limits::DEFAULT };
 }
 
 /// One symbol-database upload.
@@ -156,10 +146,7 @@ pub struct SymdbUpload {
 }
 
 impl Table for SymdbUpload {
-    const WRITER: &'static str = "storage_symdb_uploads";
     const TABLE: &'static str = "symdb_uploads";
-    const LIMITS: Limits =
-        Limits { max_rows: 200, flush_interval: Duration::from_secs(10), buffer_limit: 5_000, max_in_flight: 1 };
 }
 
 /// One native symbol upload from the host profiler.
@@ -191,10 +178,7 @@ pub struct SymbolUpload {
 }
 
 impl Table for SymbolUpload {
-    const WRITER: &'static str = "storage_symbol_uploads";
     const TABLE: &'static str = "symbol_uploads";
-    const LIMITS: Limits =
-        Limits { max_rows: 200, flush_interval: Duration::from_secs(10), buffer_limit: 5_000, max_in_flight: 1 };
 }
 
 /// One "which of these build ids do you hold?" from the profiler's symbol uploader. build_ids
@@ -210,8 +194,5 @@ pub struct SymbolQuery {
 }
 
 impl Table for SymbolQuery {
-    const WRITER: &'static str = "storage_symbol_queries";
     const TABLE: &'static str = "symbol_queries";
-    const LIMITS: Limits =
-        Limits { max_rows: 50, flush_interval: Duration::from_secs(15), buffer_limit: 1_000, max_in_flight: 1 };
 }

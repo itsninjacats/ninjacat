@@ -1,13 +1,11 @@
 //! The Private Action Runner: its enrolment, heartbeats and task traffic.
 
-use std::time::Duration;
-
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use super::{Extra, Tags};
 use crate::column;
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// One Private Action Runner identity. The table is a ReplacingMergeTree on (tenant_id,
 /// runner_id).
@@ -33,9 +31,7 @@ pub struct RunnerEnrollment {
 }
 
 impl Table for RunnerEnrollment {
-    const WRITER: &'static str = "storage_runner_enrollments";
     const TABLE: &'static str = "runner_enrollments";
-    const LIMITS: Limits = Limits { max_rows: 100, flush_interval: Duration::from_secs(10), ..Limits::DEFAULT };
 }
 
 /// The outcome of one action. outcome is "succeed_task" or "fail_task".
@@ -61,9 +57,7 @@ pub struct RunnerTaskUpdate {
 }
 
 impl Table for RunnerTaskUpdate {
-    const WRITER: &'static str = "storage_runner_task_updates";
     const TABLE: &'static str = "runner_task_updates";
-    const LIMITS: Limits = Limits { max_rows: 200, ..Limits::DEFAULT };
 }
 
 #[derive(clickhouse::Row, Serialize, Clone, Debug)]
@@ -78,9 +72,7 @@ pub struct RunnerHeartbeat {
 }
 
 impl Table for RunnerHeartbeat {
-    const WRITER: &'static str = "storage_runner_heartbeats";
     const TABLE: &'static str = "runner_heartbeats";
-    const LIMITS: Limits = Limits { max_rows: 500, ..Limits::DEFAULT };
 }
 
 /// One idle poll for work: the only liveness signal of a runner with no tasks. Both timestamps
@@ -97,9 +89,7 @@ pub struct RunnerDequeue {
 }
 
 impl Table for RunnerDequeue {
-    const WRITER: &'static str = "storage_runner_dequeues";
     const TABLE: &'static str = "runner_dequeues";
-    const LIMITS: Limits = Limits { max_rows: 500, ..Limits::DEFAULT };
 }
 
 /// A connection an action runner may use to reach a third-party system. SENSITIVE: credentials
@@ -118,8 +108,5 @@ pub struct ActionConnection {
 }
 
 impl Table for ActionConnection {
-    const WRITER: &'static str = "storage_action_connections";
     const TABLE: &'static str = "action_connections";
-    const LIMITS: Limits =
-        Limits { max_rows: 50, flush_interval: Duration::from_secs(15), buffer_limit: 1_000, max_in_flight: 1 };
 }

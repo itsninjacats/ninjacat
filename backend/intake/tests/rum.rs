@@ -8,11 +8,11 @@
 //! The fixtures recorded on Go's engine, through the wrapper and from Go's peer, are the golden
 //! replay's.
 
+mod db;
 mod programs;
 
 use std::io::Write;
 use std::path::Path;
-use std::sync::Arc;
 
 use bytes::Bytes;
 use chrono::Datelike;
@@ -20,12 +20,11 @@ use http_body_util::BodyExt;
 use ninjapaws_intake::auth::Admitted;
 use ninjapaws_intake::body::Part;
 use ninjapaws_intake::json;
-use ninjapaws_intake::keys::{self, Key, Store};
+use ninjapaws_intake::keys::Key;
 use ninjapaws_intake::routers::rum::{self, EventKind};
-use ninjapaws_intake::server::{Ctx, Intake, query_value};
+use ninjapaws_intake::server::{Ctx, query_value};
 use ninjapaws_intake::wire::time;
 use ninjapaws_storage::rows::rum::RumRequest;
-use ninjapaws_storage::{Sink, Write as Batch};
 use serde_json::{Value, json};
 use tako::conn_info::ConnInfo;
 
@@ -34,11 +33,18 @@ const KEY: &str = "00000000000000000000000000000001";
 const PEER: &str = "192.0.2.1:1234";
 const BOUNDARY: &str = "rum-tests-boundary";
 
+/// The scratch database's client and a tenant of the test's own.
+type Scratch = (clickhouse::Client, String);
+
+async fn begin() -> Option<Scratch> {
+    Some((db::scratch_client().await?, db::tenant()))
+}
+
 struct Answer {
     status: u16,
     headers: http::HeaderMap,
     body: Vec<u8>,
-    writes: Vec<Batch>,
+    scratch: Scratch,
 }
 
 impl Answer {
@@ -46,27 +52,29 @@ impl Answer {
         self.headers.get(name).and_then(|v| v.to_str().ok()).unwrap_or_default()
     }
 
-    fn rows(&self, table: &str) -> Vec<&Value> {
-        self.writes.iter().filter(|w| w.table == table).flat_map(|w| &w.rows).collect()
+    /// The tenant's rows of `table`, in the table's sort order.
+    async fn rows(&self, table: &str) -> Vec<Value> {
+        db::rows(&self.scratch.0, table, &self.scratch.1).await
+    }
+
+    /// The tables the tenant has rows in.
+    async fn tables(&self) -> Vec<(String, u64)> {
+        db::tables(&self.scratch.0, &self.scratch.1).await.into_iter().collect()
     }
 }
 
 /// browser-intake as it is served: the routes behind what sits above them, the peer a proxy it
 /// trusts.
-async fn serve(allowed_origins: &[String], method: &str, url: &str, headers: &[(&str, &str)], body: &[u8]) -> Answer {
-    let store = Store::default();
-    store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: "test".into() })]);
-    let (sink, capture) = Sink::capture();
-    let intake = Intake {
-        sink,
-        keys: Arc::new(store),
-        ack_unknown: false,
-        max_body_bytes: 64 * 1024 * 1024,
-        stopping: Default::default(),
-        tasks: Default::default(),
-    };
+async fn serve(
+    scratch: &Scratch,
+    allowed_origins: &[String],
+    method: &str,
+    url: &str,
+    headers: &[(&str, &str)],
+    body: &[u8],
+) -> Answer {
     let gate = rum::above(
-        programs::router_of(programs::browser, intake),
+        programs::router_for(programs::browser, &scratch.0, KEY, &scratch.1),
         allowed_origins,
         rum::trusted_proxies("192.0.2.1").unwrap(),
     );
@@ -80,14 +88,14 @@ async fn serve(allowed_origins: &[String], method: &str, url: &str, headers: &[(
     let status = response.status().as_u16();
     let headers = response.headers().clone();
     let body = response.into_body().collect().await.unwrap().to_bytes().to_vec();
-    Answer { status, headers, body, writes: capture.writes() }
+    Answer { status, headers, body, scratch: scratch.clone() }
 }
 
 /// A POST with the test key in the header, as the mobile SDKs send it.
-async fn post(url: &str, headers: &[(&str, &str)], body: &[u8]) -> Answer {
+async fn post(t: &Scratch, url: &str, headers: &[(&str, &str)], body: &[u8]) -> Answer {
     let mut with_key = vec![("dd-api-key", KEY)];
     with_key.extend_from_slice(headers);
-    serve(&[], "POST", url, &with_key, body).await
+    serve(t, &[], "POST", url, &with_key, body).await
 }
 
 /// A request as the handlers see it once a key of tenant "t" has admitted it.
@@ -99,18 +107,7 @@ fn request_of(url: &str, headers: &[(&str, &str)]) -> Ctx {
     let (mut parts, ()) = builder.body(()).unwrap().into_parts();
     parts.extensions.insert(Admitted(Key { id: "test".into(), name: "test".into(), tenant_id: "t".into() }));
     parts.extensions.insert(ConnInfo::tcp(PEER.parse().unwrap()));
-    let (sink, _) = Sink::capture();
-    Ctx {
-        parts,
-        intake: Arc::new(Intake {
-            sink,
-            keys: Arc::default(),
-            ack_unknown: false,
-            max_body_bytes: 0,
-            stopping: Default::default(),
-            tasks: Default::default(),
-        }),
-    }
+    Ctx { parts }
 }
 
 fn sender() -> RumRequest {
@@ -155,7 +152,9 @@ const VIEW: &str = r#"{"type":"view","date":1591283924940,
 
 #[tokio::test]
 async fn the_browser_profilers_quota_check_is_admitted_with_the_key_in_dd_client_token() {
+    let Some(t) = begin().await else { return };
     let answer = serve(
+        &t,
         &[],
         "GET",
         "/api/v2/profiling/quota?session_id=s-1",
@@ -163,12 +162,12 @@ async fn the_browser_profilers_quota_check_is_admitted_with_the_key_in_dd_client
         b"",
     )
     .await;
-    assert!(answer.writes.is_empty());
+    assert!(answer.tables().await.is_empty());
     assert_eq!(answer.status, 200);
     assert_eq!(answer.body, br#"{"data":{"attributes":{"admitted":true,"reason":"quota_ok"}}}"#);
 
     let refused =
-        serve(&[], "GET", "/api/v2/profiling/quota?session_id=s-1", &[("dd-client-token", "not-a-key")], b"").await;
+        serve(&t, &[], "GET", "/api/v2/profiling/quota?session_id=s-1", &[("dd-client-token", "not-a-key")], b"").await;
     assert_eq!(refused.status, 403);
 }
 
@@ -212,11 +211,12 @@ fn a_view_with_no_crash_object_has_not_measured_zero_crashes() {
 
 #[tokio::test]
 async fn a_view_update_lands_in_rum_views_under_the_same_identity() {
+    let Some(t) = begin().await else { return };
     let update = r#"{"type":"view_update","date":1712345678901,"application":{"id":"app"},"session":{"id":"s","type":"user"},"view":{"id":"v","url":"https://example.com/home","time_spent":245512755000},"_dd":{"document_version":2,"format_version":2}}"#;
-    let answer = post("/api/v2/rum?ddsource=browser", &[], update.as_bytes()).await;
+    let answer = post(&t, "/api/v2/rum?ddsource=browser", &[], update.as_bytes()).await;
 
     assert_eq!(answer.status, 202);
-    let rows = answer.rows("rum_views");
+    let rows = answer.rows("rum_views").await;
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["event_type"], "view_update");
     assert_eq!(
@@ -537,10 +537,11 @@ async fn the_address_forwarded_by_a_trusted_proxy_is_the_senders() {
         ("x-real-ip", "198.51.100.9", "192.0.2.1"),
         ("x-forwarded-for", "203.0.113.7, not-an-address", "192.0.2.1"),
     ] {
+        let Some(t) = begin().await else { return };
         let url = format!("/api/v2/rum?ddsource=browser&dd-api-key={KEY}");
-        let answer = serve(&[], "POST", &url, &[(name, forwarded)], ACTION.as_bytes()).await;
+        let answer = serve(&t, &[], "POST", &url, &[(name, forwarded)], ACTION.as_bytes()).await;
         assert_eq!(answer.status, 202);
-        assert_eq!(answer.rows("rum_events")[0]["remote_addr"], expected, "{name}: {forwarded}");
+        assert_eq!(answer.rows("rum_events").await[0]["remote_addr"], expected, "{name}: {forwarded}");
     }
 }
 
@@ -596,11 +597,12 @@ fn a_request_with_no_ddforward_or_one_that_is_not_a_path_is_left_as_it_came() {
 /// matters, the key included, is inside ddforward.
 #[tokio::test]
 async fn a_batch_sent_through_ddforward_is_routed_admitted_and_stored() {
+    let Some(t) = begin().await else { return };
     let target = forwarded(&format!("/api/v2/rum?ddsource=browser&dd-api-key={KEY}&dd-evp-origin=browser"));
-    let answer = serve(&[], "POST", &format!("/my-rum-proxy?ddforward={target}"), &[], ACTION.as_bytes()).await;
+    let answer = serve(&t, &[], "POST", &format!("/my-rum-proxy?ddforward={target}"), &[], ACTION.as_bytes()).await;
 
     assert_eq!(answer.status, 202);
-    let rows = answer.rows("rum_events");
+    let rows = answer.rows("rum_events").await;
     assert_eq!(rows.len(), 1);
     assert_eq!((&rows[0]["ddsource"], &rows[0]["evp_origin"]), (&json!("browser"), &json!("browser")));
     assert_eq!(rows[0]["query_extra"], "");
@@ -610,8 +612,11 @@ async fn a_batch_sent_through_ddforward_is_routed_admitted_and_stored() {
 /// the POST and sees the 404.
 #[tokio::test]
 async fn a_preflight_is_answered_204_with_the_access_control_headers_and_needs_no_key() {
+    // Nothing here is stored.
+    let t = (db::unconnected(), db::tenant());
     for path in ["/api/v2/rum", "/api/v2/not-invented-yet"] {
         let answer = serve(
+            &t,
             &[],
             "OPTIONS",
             path,
@@ -639,12 +644,14 @@ async fn a_preflight_is_answered_204_with_the_access_control_headers_and_needs_n
 /// online, counts the batch as delivered and drops it.
 #[tokio::test]
 async fn every_answer_carries_the_origin_the_refusals_included() {
+    // Nothing here is stored.
+    let t = (db::unconnected(), db::tenant());
     for (method, url, status) in [
         ("POST", "/api/v2/rum?ddsource=browser&dd-api-key=wrong", 403),
         ("POST", "/api/v2/not-invented-yet", 404),
         ("GET", "/ping", 200),
     ] {
-        let answer = serve(&[], method, url, &[("origin", "https://shop.example")], ACTION.as_bytes()).await;
+        let answer = serve(&t, &[], method, url, &[("origin", "https://shop.example")], ACTION.as_bytes()).await;
         assert_eq!(answer.status, status, "{url}");
         assert_eq!(answer.header("access-control-allow-origin"), "https://shop.example", "{url}");
     }
@@ -652,7 +659,8 @@ async fn every_answer_carries_the_origin_the_refusals_included() {
 
 #[tokio::test]
 async fn a_request_with_no_origin_is_not_a_browser_and_gets_no_access_control_headers() {
-    let answer = post("/api/v2/rum", &[], ACTION.as_bytes()).await;
+    let Some(t) = begin().await else { return };
+    let answer = post(&t, "/api/v2/rum", &[], ACTION.as_bytes()).await;
     assert_eq!(answer.status, 202);
     assert!(answer.headers.keys().all(|name| !name.as_str().starts_with("access-control-") && name != "vary"));
 }
@@ -668,6 +676,8 @@ fn no_allowlist_an_empty_one_or_a_star_all_mean_any_origin() {
 /// that is not gets no header at all.
 #[tokio::test]
 async fn an_allowlist_admits_its_origins_and_gives_the_others_no_header() {
+    // Nothing here is stored.
+    let t = (db::unconnected(), db::tenant());
     let allowed = rum::parse_allowed_origins("https://shop.example, https://admin.example");
     assert_eq!(allowed, ["https://shop.example", "https://admin.example"]);
     for (origin, expected) in [
@@ -676,6 +686,7 @@ async fn an_allowlist_admits_its_origins_and_gives_the_others_no_header() {
         ("https://evil.example", ""),
     ] {
         let answer = serve(
+            &t,
             &allowed,
             "OPTIONS",
             "/api/v2/rum",
@@ -741,52 +752,60 @@ fn an_events_table_is_decided_by_its_discriminator_fields() {
 
 #[tokio::test]
 async fn blank_lines_and_a_proxys_crlf_do_not_make_events() {
+    let Some(t) = begin().await else { return };
     let body = format!("\r\n{ACTION}\r\n\r\n  {ACTION}  \n\n");
-    let answer = post("/api/v2/rum?ddsource=browser", &[], body.as_bytes()).await;
+    let answer = post(&t, "/api/v2/rum?ddsource=browser", &[], body.as_bytes()).await;
 
     assert_eq!(answer.status, 202);
-    let rows = answer.rows("rum_events");
+    let rows = answer.rows("rum_events").await;
     assert_eq!(rows.len(), 2);
     assert!(rows.iter().all(|row| row["event"] == ACTION));
-    assert!(answer.rows("raw_payloads").is_empty());
+    assert!(answer.rows("raw_payloads").await.is_empty());
 }
 
 #[tokio::test]
 async fn a_line_that_is_not_an_object_is_kept_raw_and_the_rest_of_the_batch_is_stored() {
+    let Some(t) = begin().await else { return };
     let body = format!("[1,2]\nnull\n{{bad\n{ACTION}");
-    let answer = post("/api/v2/rum?ddsource=browser", &[], body.as_bytes()).await;
+    let answer = post(&t, "/api/v2/rum?ddsource=browser", &[], body.as_bytes()).await;
 
     assert_eq!(answer.status, 202);
-    assert_eq!(answer.rows("rum_events").len(), 1);
-    let raws = answer.rows("raw_payloads");
-    assert_eq!(raws.iter().map(|raw| raw["body"].as_str().unwrap()).collect::<Vec<_>>(), ["[1,2]", "null", "{bad"]);
+    assert_eq!(answer.rows("rum_events").await.len(), 1);
+    let raws = answer.rows("raw_payloads").await;
+    let mut bodies: Vec<&str> = raws.iter().map(|raw| raw["body"].as_str().unwrap()).collect();
+    bodies.sort();
+    assert_eq!(bodies, ["[1,2]", "null", "{bad"]);
     assert!(raws.iter().all(|raw| raw["intake"] == "rum" && raw["reason"] == "decode_error"));
 }
 
 /// 202 always: a 500 would make every SDK retry the same batch forever.
 #[tokio::test]
 async fn a_date_beyond_year_9999_and_a_string_that_is_not_utf8_are_stored_not_answered_with_a_500() {
+    let Some(t) = begin().await else { return };
     let far_future = r#"{"type":"action","date":999999999999999999,"application":{"id":"far"}}"#;
     let broken_text = [&br#"{"type":"action","date":1,"application":{"id":" "#[..], &[0xff, 0xfe], b"\"}}"].concat();
     let body = [far_future.as_bytes(), b"\n", &broken_text].concat();
-    let answer = post("/api/v2/rum?batch_time=999999999999999999", &[], &body).await;
+    let answer = post(&t, "/api/v2/rum?batch_time=999999999999999999", &[], &body).await;
 
     assert_eq!(answer.status, 202);
-    let rows = answer.rows("rum_events");
+    let rows = answer.rows("rum_events").await;
     assert_eq!(rows.len(), 2);
-    let date = chrono::DateTime::parse_from_rfc3339(rows[0]["date"].as_str().unwrap()).unwrap();
-    assert_eq!(date.year(), 9999);
-    assert!(rows[1]["application_id"].as_str().unwrap().contains('\u{FFFD}'));
+    let far = rows.iter().find(|row| row["application_id"] == "far").unwrap();
+    // The column ends in 2262: a date past it is stored as its last day.
+    let date = chrono::DateTime::parse_from_rfc3339(far["date"].as_str().unwrap()).unwrap();
+    assert_eq!(date.year(), 2262);
+    assert!(rows.iter().any(|row| row["application_id"].as_str().unwrap().contains('\u{FFFD}')));
 }
 
 #[tokio::test]
 async fn the_agents_diagnose_sweep_and_an_empty_body_store_nothing() {
+    let Some(t) = begin().await else { return };
     for url in ["/api/v2/rum", "/api/v2/replay", "/api/v2/spans"] {
-        let swept = post(url, &[("x-requested-with", "datadog-agent-diagnose")], ACTION.as_bytes()).await;
-        let empty = post(url, &[], b"").await;
+        let swept = post(&t, url, &[("x-requested-with", "datadog-agent-diagnose")], ACTION.as_bytes()).await;
+        let empty = post(&t, url, &[], b"").await;
         assert_eq!((swept.status, empty.status), (202, 202));
         assert_eq!(swept.body, b"{}");
-        assert!(swept.writes.is_empty() && empty.writes.is_empty());
+        assert!(swept.tables().await.is_empty());
     }
 }
 
@@ -807,15 +826,16 @@ fn a_replay_part_is_a_segment_or_a_resource() {
 
 #[tokio::test]
 async fn a_browser_segment_is_stored_untouched_with_its_metadata() {
+    let Some(t) = begin().await else { return };
     let meta = r#"{"application":{"id":"app"},"session":{"id":"s"},"view":{"id":"v"},"source":"browser","start":1591283924940,"end":1591283925940,"records_count":12,"has_full_snapshot":true,"index_in_view":3,"creation_reason":"init","raw_segment_size":4096,"compressed_segment_size":512}"#;
     let segment = [0x78, 0x9c, 0x00, 0xff];
     let (content_type, body) = multipart(&[("segment", "sess-1", &segment), ("event", "blob", meta.as_bytes())]);
-    let answer = post("/api/v2/replay?ddsource=browser", &[("content-type", &content_type)], &body).await;
+    let answer = post(&t, "/api/v2/replay?ddsource=browser", &[("content-type", &content_type)], &body).await;
 
     assert_eq!(answer.status, 202);
-    let rows = answer.rows("rum_replay_segments");
+    let rows = answer.rows("rum_replay_segments").await;
     assert_eq!(rows.len(), 1);
-    let row = rows[0];
+    let row = &rows[0];
     assert_eq!(
         (&row["variant"], &row["part_name"], &row["part_filename"]),
         (&json!("segment"), &json!("segment"), &json!("sess-1"))
@@ -836,12 +856,13 @@ async fn a_browser_segment_is_stored_untouched_with_its_metadata() {
 /// image and shuffle the pairing.
 #[tokio::test]
 async fn repeated_image_parts_each_get_a_row_paired_with_metadata_by_position() {
+    let Some(t) = begin().await else { return };
     let meta = r#"[{"type":"resource","application":{"id":"a0"}},{"type":"resource","application":{"id":"a1"}}]"#;
     let (content_type, body) =
         multipart(&[("image", "i0", b"img0"), ("image", "i1", b"img1"), ("event", "", meta.as_bytes())]);
-    let answer = post("/api/v2/replay?ddsource=android", &[("content-type", &content_type)], &body).await;
+    let answer = post(&t, "/api/v2/replay?ddsource=android", &[("content-type", &content_type)], &body).await;
 
-    let rows = answer.rows("rum_replay_segments");
+    let rows = answer.rows("rum_replay_segments").await;
     assert_eq!(rows.iter().map(|row| row["application_id"].as_str().unwrap()).collect::<Vec<_>>(), ["a0", "a1"]);
     assert_eq!(rows.iter().map(|row| row["image"].as_str().unwrap()).collect::<Vec<_>>(), ["img0", "img1"]);
     assert!(rows.iter().all(|row| row["variant"] == "resource"));
@@ -850,24 +871,27 @@ async fn repeated_image_parts_each_get_a_row_paired_with_metadata_by_position() 
 
 #[tokio::test]
 async fn a_blob_with_no_metadata_entry_is_still_stored() {
+    let Some(t) = begin().await else { return };
     let (content_type, body) =
         multipart(&[("file0", "file0", b"a"), ("file1", "file1", b"b"), ("event", "", br#"[{"view":{"id":"v0"}}]"#)]);
-    let answer = post("/api/v2/replay", &[("content-type", &content_type)], &body).await;
+    let answer = post(&t, "/api/v2/replay", &[("content-type", &content_type)], &body).await;
 
-    let rows = answer.rows("rum_replay_segments");
-    assert_eq!(rows.iter().map(|row| row["view_id"].as_str().unwrap()).collect::<Vec<_>>(), ["v0", ""]);
-    assert_eq!(rows[1]["event"], "");
+    let rows = answer.rows("rum_replay_segments").await;
+    // Sorted by view: the blob without metadata has no view.
+    assert_eq!(rows.iter().map(|row| row["view_id"].as_str().unwrap()).collect::<Vec<_>>(), ["", "v0"]);
+    assert_eq!(rows[0]["event"], "");
 }
 
 #[tokio::test]
 async fn an_event_part_that_is_neither_an_object_nor_an_array_is_kept_raw_and_the_blob_is_still_stored() {
+    let Some(t) = begin().await else { return };
     let (content_type, body) = multipart(&[("segment", "blob", b"zlib"), ("event", "", b"not json")]);
-    let answer = post("/api/v2/replay", &[("content-type", &content_type)], &body).await;
+    let answer = post(&t, "/api/v2/replay", &[("content-type", &content_type)], &body).await;
 
-    let raws = answer.rows("raw_payloads");
+    let raws = answer.rows("raw_payloads").await;
     assert_eq!(raws.len(), 1);
     assert_eq!((&raws[0]["reason"], &raws[0]["body"]), (&json!("decode_error"), &json!("not json")));
-    let rows = answer.rows("rum_replay_segments");
+    let rows = answer.rows("rum_replay_segments").await;
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["event"], "");
 }
@@ -879,59 +903,61 @@ async fn a_replay_body_that_is_not_multipart_is_kept_raw() {
         ("", "replay body is not multipart: the content type is not a media type"),
         ("multipart/form-data", "replay body is not multipart: the content type is multipart without a boundary"),
     ] {
+        let Some(t) = begin().await else { return };
         let headers: Vec<(&str, &str)> =
             if content_type.is_empty() { vec![] } else { vec![("content-type", content_type)] };
-        let answer = post("/api/v2/replay", &headers, br#"{"a":1}"#).await;
+        let answer = post(&t, "/api/v2/replay", &headers, br#"{"a":1}"#).await;
 
         assert_eq!(answer.status, 202);
-        let raws = answer.rows("raw_payloads");
+        let raws = answer.rows("raw_payloads").await;
         assert_eq!(raws.len(), 1);
         assert_eq!(
             [&raws[0]["intake"], &raws[0]["reason"], &raws[0]["note"]],
             [&json!("rum"), &json!("unexpected_shape"), &json!(note)]
         );
-        assert!(answer.rows("rum_replay_segments").is_empty());
+        assert!(answer.rows("rum_replay_segments").await.is_empty());
     }
 }
 
 #[tokio::test]
 async fn a_multipart_body_that_breaks_off_is_kept_raw_whole_not_stored_in_part() {
+    let Some(t) = begin().await else { return };
     let (content_type, body) = multipart(&[("segment", "blob", b"zlib"), ("event", "", br#"{"view":{"id":"v"}}"#)]);
     let truncated = &body[..body.len() - 20];
-    let answer = post("/api/v2/replay", &[("content-type", &content_type)], truncated).await;
+    let answer = post(&t, "/api/v2/replay", &[("content-type", &content_type)], truncated).await;
 
-    let raws = answer.rows("raw_payloads");
+    let raws = answer.rows("raw_payloads").await;
     assert_eq!(raws.len(), 1);
     assert_eq!(raws[0]["reason"], "unexpected_shape");
     assert_eq!(raws[0]["body_bytes"], truncated.len());
-    assert!(answer.rows("rum_replay_segments").is_empty());
+    assert!(answer.rows("rum_replay_segments").await.is_empty());
 }
 
 #[tokio::test]
 async fn an_envelope_without_spans_and_a_span_that_is_not_an_object_are_kept_raw() {
+    let Some(t) = begin().await else { return };
     let body = [
         r#"{"env":"prod"}"#,
         r#"{"spans":{"a":1}}"#,
         r#"{"spans":["str",{"trace_id":"t1"}],"env":"prod","new_key":{"x":1}}"#,
     ]
     .join("\n");
-    let answer = post("/api/v2/spans?ddsource=ios", &[], body.as_bytes()).await;
+    let answer = post(&t, "/api/v2/spans?ddsource=ios", &[], body.as_bytes()).await;
 
     assert_eq!(answer.status, 202);
-    let raws: Vec<(&str, &str)> = answer
-        .rows("raw_payloads")
-        .iter()
-        .map(|raw| (raw["reason"].as_str().unwrap(), raw["body"].as_str().unwrap()))
-        .collect();
+    let raw_rows = answer.rows("raw_payloads").await;
+    let mut raws: Vec<(&str, &str)> =
+        raw_rows.iter().map(|raw| (raw["reason"].as_str().unwrap(), raw["body"].as_str().unwrap())).collect();
+    raws.sort();
     assert_eq!(
         raws,
         [
-            ("unexpected_shape", r#"{"env":"prod"}"#),
+            ("decode_error", "\"str\""),
             ("decode_error", r#"{"spans":{"a":1}}"#),
-            ("decode_error", "\"str\"")
+            ("unexpected_shape", r#"{"env":"prod"}"#),
         ]
     );
-    let rows = answer.rows("rum_spans");
+    let rows = answer.rows("rum_spans").await;
     assert_eq!(rows.len(), 1);
     assert_eq!((&rows[0]["trace_id"], &rows[0]["env"]), (&json!("t1"), &json!("prod")));
     assert_eq!(rows[0]["envelope_extra"], r#"{"new_key":{"x":1}}"#);
@@ -976,13 +1002,18 @@ async fn a_batch_from_the_browser_sdk_becomes_views_and_events_with_nothing_left
         ("browser-sdk-7.15.0-chromium.ndjson", 2, "action:3,error:2,long_task:1,resource:10"),
         ("browser-sdk-7.15.0-firefox.ndjson", 2, "action:3,error:2,resource:9"),
     ] {
-        let answer =
-            post("/api/v2/rum?ddsource=browser&dd-evp-origin=browser&dd-evp-origin-version=7.15.0", &[], &real(file))
-                .await;
+        let Some(t) = begin().await else { return };
+        let answer = post(
+            &t,
+            "/api/v2/rum?ddsource=browser&dd-evp-origin=browser&dd-evp-origin-version=7.15.0",
+            &[],
+            &real(file),
+        )
+        .await;
         assert_eq!(answer.status, 202);
-        assert!(answer.rows("raw_payloads").is_empty(), "{file}");
-        assert_eq!(answer.rows("rum_views").len(), views, "{file}");
-        let rows = answer.rows("rum_events");
+        assert!(answer.rows("raw_payloads").await.is_empty(), "{file}");
+        assert_eq!(answer.rows("rum_views").await.len(), views, "{file}");
+        let rows = answer.rows("rum_events").await;
         assert_eq!(tally(rows.iter().map(|row| row["event_type"].as_str().unwrap())), events, "{file}");
         // What every event of a session carries, read from the real thing.
         for row in rows {
@@ -995,8 +1026,9 @@ async fn a_batch_from_the_browser_sdk_becomes_views_and_events_with_nothing_left
 
 #[tokio::test]
 async fn the_browser_sdks_telemetry_becomes_telemetry_rows() {
-    let answer = post("/api/v2/rum?ddsource=browser", &[], &real("browser-sdk-7.15.0-telemetry.ndjson")).await;
-    assert!(answer.rows("raw_payloads").is_empty());
-    let rows = answer.rows("rum_telemetry");
+    let Some(t) = begin().await else { return };
+    let answer = post(&t, "/api/v2/rum?ddsource=browser", &[], &real("browser-sdk-7.15.0-telemetry.ndjson")).await;
+    assert!(answer.rows("raw_payloads").await.is_empty());
+    let rows = answer.rows("rum_telemetry").await;
     assert_eq!(tally(rows.iter().map(|row| row["telemetry_type"].as_str().unwrap())), "configuration:1,usage:8");
 }

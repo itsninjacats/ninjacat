@@ -69,12 +69,6 @@ async fn get(router: &Router, path: &str) -> (StatusCode, Value) {
 
 const DEV_CLICKHOUSE: &str = "localhost:8123";
 
-/// What the panel reads, made like the dev stack's `ninjacat` tables, and the views that fill the
-/// rollup and the tag keys from `metrics`.
-const TABLES: [&str; 7] =
-    ["metrics", "metrics_1m", "metric_tag_keys", "logs", "check_runs", "monitor_transitions", "monitor_evaluations"];
-const VIEWS: [&str; 2] = ["metrics_1m_mv", "metric_tag_keys_mv"];
-
 fn admin() -> clickhouse::Client {
     clickhouse::Client::default()
         .with_url(format!("http://{DEV_CLICKHOUSE}"))
@@ -82,8 +76,8 @@ fn admin() -> clickhouse::Client {
         .with_password("ninjacat")
 }
 
-/// A database of its own on the dev ClickHouse, dropped afterwards. None when there is no
-/// ClickHouse with the dev stack's schema.
+/// A database of its own on the dev ClickHouse, built from the migrations and dropped afterwards.
+/// None when ClickHouse is not running.
 struct Scratch {
     admin: clickhouse::Client,
     database: String,
@@ -95,29 +89,20 @@ impl Scratch {
         static NEXT: AtomicU64 = AtomicU64::new(0);
 
         let admin = admin();
-        let database = format!("ninjacat_query_{}_{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
+        // The intake tests' prefix, so their sweep drops what a killed run left behind.
+        let database =
+            format!("ninjacat_test_internal_{}_{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
         if let Err(e) = admin.query(&format!("CREATE DATABASE {database}")).execute().await {
+            // CI sets it: there a missing database is a broken job, not a test to skip.
+            if std::env::var_os("NINJACAT_TEST_REQUIRE_DATABASES").is_some() {
+                panic!("ClickHouse is not reachable at {DEV_CLICKHOUSE}: {e}");
+            }
             eprintln!("skipped: ClickHouse is not reachable at {DEV_CLICKHOUSE}: {e}");
             return None;
         }
         let scratch = Scratch { admin, database };
-        for table in TABLES {
-            if let Err(e) = scratch.run(&format!("CREATE TABLE {{db}}.{table} AS ninjacat.{table}")).await {
-                eprintln!("skipped: the dev ClickHouse has no ninjacat.{table}: {e}");
-                return None;
-            }
-        }
-        for view in VIEWS {
-            let made = async {
-                let create: String =
-                    scratch.admin.query(&format!("SHOW CREATE TABLE ninjacat.{view}")).fetch_one().await?;
-                scratch.run(&create.replace("ninjacat.", "{db}.")).await
-            };
-            if let Err(e) = made.await {
-                eprintln!("skipped: the dev ClickHouse has no ninjacat.{view}: {e}");
-                return None;
-            }
-        }
+        let client = scratch.admin.clone().with_database(&scratch.database);
+        ninjapaws_storage::migrations::apply(&client).await.unwrap();
         Some(scratch)
     }
 

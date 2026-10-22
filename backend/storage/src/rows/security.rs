@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -7,7 +6,7 @@ use uuid::Uuid;
 
 use super::{Extra, Tags};
 use crate::column::{self, Blob};
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// One CWS activity dump request: the "event" header part, the envelope and metadata of the
 /// "dump" part, and the dump itself.
@@ -57,9 +56,7 @@ pub struct CwsActivityDump {
 }
 
 impl Table for CwsActivityDump {
-    const WRITER: &'static str = "storage_cws_activity_dumps";
     const TABLE: &'static str = "cws_activity_dumps";
-    const LIMITS: Limits = Limits { max_rows: 100, flush_interval: Duration::from_secs(10), ..Limits::DEFAULT };
 }
 
 /// One process node of a dump's tree, flattened depth-first.
@@ -92,11 +89,7 @@ pub struct CwsDumpNode {
 }
 
 impl Table for CwsDumpNode {
-    const WRITER: &'static str = "storage_cws_dump_nodes";
     const TABLE: &'static str = "cws_dump_nodes";
-    // One dump unpacks into thousands of nodes in a single request.
-    const LIMITS: Limits =
-        Limits { max_rows: 2000, flush_interval: Duration::from_secs(5), buffer_limit: 50_000, max_in_flight: 2 };
 }
 
 /// One logs-pipeline envelope from secruntime, secinfo or compliance, with the event inside its
@@ -132,15 +125,8 @@ pub struct SecurityEvent {
 }
 
 impl Table for SecurityEvent {
-    const WRITER: &'static str = "storage_security_events";
     const TABLE: &'static str = "security_events";
-    // Logs-shaped traffic, so the logs table's numbers.
-    const LIMITS: Limits = Limits { max_rows: 20_000, buffer_limit: 500_000, ..Limits::DEFAULT };
 }
-
-/// SBOM rows are bursty: one payload is a whole image.
-const SBOM: Limits =
-    Limits { max_rows: 2000, flush_interval: Duration::from_secs(10), buffer_limit: 50_000, max_in_flight: 2 };
 
 /// One entity of an SBOM payload. entity_id is minted on arrival, never taken from the wire's own
 /// id, and is what components and vulnerabilities join on.
@@ -181,9 +167,7 @@ pub struct SbomEntity {
 }
 
 impl Table for SbomEntity {
-    const WRITER: &'static str = "storage_sbom_entities";
     const TABLE: &'static str = "sbom_entities";
-    const LIMITS: Limits = Limits { max_rows: 500, buffer_limit: 20_000, ..SBOM };
 }
 
 /// One CycloneDX component; sub-components get rows of their own, linked by parent_bom_ref.
@@ -219,9 +203,7 @@ pub struct SbomComponent {
 }
 
 impl Table for SbomComponent {
-    const WRITER: &'static str = "storage_sbom_components";
     const TABLE: &'static str = "sbom_components";
-    const LIMITS: Limits = SBOM;
 }
 
 /// One CycloneDX vulnerability of an entity's BOM.
@@ -258,7 +240,5 @@ pub struct SbomVulnerability {
 }
 
 impl Table for SbomVulnerability {
-    const WRITER: &'static str = "storage_sbom_vulnerabilities";
     const TABLE: &'static str = "sbom_vulnerabilities";
-    const LIMITS: Limits = SBOM;
 }

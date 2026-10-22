@@ -3,7 +3,7 @@ use serde::{Serialize, Serializer};
 
 use super::{Extra, Tags};
 use crate::column;
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// One service check result.
 #[derive(clickhouse::Row, Serialize, Clone, Debug)]
@@ -60,7 +60,5 @@ impl Serialize for CheckStatus {
 }
 
 impl Table for CheckRun {
-    const WRITER: &'static str = "storage_checks";
     const TABLE: &'static str = "check_runs";
-    const LIMITS: Limits = Limits { max_rows: 500, ..Limits::DEFAULT };
 }

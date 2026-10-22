@@ -1,12 +1,11 @@
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use super::Tags;
 use crate::column;
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// Host metadata from /intake/. The table is a ReplacingMergeTree on (tenant_id, host): repeated
 /// writes collapse to the newest.
@@ -54,7 +53,5 @@ pub struct Host {
 }
 
 impl Table for Host {
-    const WRITER: &'static str = "storage_hosts";
     const TABLE: &'static str = "hosts";
-    const LIMITS: Limits = Limits { max_rows: 100, flush_interval: Duration::from_secs(10), ..Limits::DEFAULT };
 }

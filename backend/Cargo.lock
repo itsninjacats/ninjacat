@@ -107,6 +107,7 @@ dependencies = [
  "tako-rs",
  "tokio",
  "tokio-postgres",
+ "tokio-util",
  "tracing-subscriber",
 ]
 
@@ -1739,6 +1740,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "chrono",
+ "clickhouse",
  "flate2",
  "form_urlencoded",
  "futures",
@@ -1792,8 +1794,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "tokio-util",
- "tracing",
  "uuid",
 ]
 

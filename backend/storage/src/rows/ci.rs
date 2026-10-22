@@ -2,14 +2,13 @@
 //! product, but separate tables: each is a different wire format.
 
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use super::{Extra, Tags};
 use crate::column::{self, Blob};
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// One event of a citestcycle payload: a test, or the end of a suite, module or session.
 #[derive(clickhouse::Row, Serialize, Clone, Debug)]
@@ -106,10 +105,7 @@ pub struct CiTestEvent {
 }
 
 impl Table for CiTestEvent {
-    const WRITER: &'static str = "storage_ci_test_events";
     const TABLE: &'static str = "ci_test_events";
-    const LIMITS: Limits =
-        Limits { max_rows: 2000, flush_interval: Duration::from_secs(5), buffer_limit: 50_000, max_in_flight: 2 };
 }
 
 /// One entry of a citestcov payload's coverages[].
@@ -140,10 +136,7 @@ pub struct CiCoverage {
 }
 
 impl Table for CiCoverage {
-    const WRITER: &'static str = "storage_ci_coverage";
     const TABLE: &'static str = "ci_coverage";
-    const LIMITS: Limits =
-        Limits { max_rows: 500, flush_interval: Duration::from_secs(5), buffer_limit: 10_000, max_in_flight: 1 };
 }
 
 /// A sha that was mentioned for a repository. Not a claim that its objects are held: most rows
@@ -161,9 +154,7 @@ pub struct GitCommit {
 }
 
 impl Table for GitCommit {
-    const WRITER: &'static str = "storage_git_commits";
     const TABLE: &'static str = "git_commits";
-    const LIMITS: Limits = Limits { max_rows: 5000, flush_interval: Duration::from_secs(5), ..Limits::DEFAULT };
 }
 
 /// One .pack file upload.
@@ -184,10 +175,7 @@ pub struct GitPackfile {
 }
 
 impl Table for GitPackfile {
-    const WRITER: &'static str = "storage_git_packfiles";
     const TABLE: &'static str = "git_packfiles";
-    const LIMITS: Limits =
-        Limits { max_rows: 50, flush_interval: Duration::from_secs(10), buffer_limit: 2_000, max_in_flight: 1 };
 }
 
 /// One question a tracer asked about its configuration, and the answer it got. The answer is kept
@@ -216,9 +204,7 @@ pub struct CiSettingsRequest {
 }
 
 impl Table for CiSettingsRequest {
-    const WRITER: &'static str = "storage_ci_settings_requests";
     const TABLE: &'static str = "ci_settings_requests";
-    const LIMITS: Limits = Limits { max_rows: 200, flush_interval: Duration::from_secs(5), ..Limits::DEFAULT };
 }
 
 /// One element of a CI webhook batch: a pipeline, a stage or a job, told apart by level.
@@ -291,10 +277,7 @@ pub struct CiWebhookEvent {
 }
 
 impl Table for CiWebhookEvent {
-    const WRITER: &'static str = "storage_ci_webhook_events";
     const TABLE: &'static str = "ci_webhook_events";
-    const LIMITS: Limits =
-        Limits { max_rows: 1000, flush_interval: Duration::from_secs(5), buffer_limit: 20_000, max_in_flight: 2 };
 }
 
 /// One datadog-ci tag / measure / custom-span call.
@@ -321,9 +304,7 @@ pub struct CiPipelineEvent {
 }
 
 impl Table for CiPipelineEvent {
-    const WRITER: &'static str = "storage_ci_pipeline_events";
     const TABLE: &'static str = "ci_pipeline_events";
-    const LIMITS: Limits = Limits { max_rows: 200, flush_interval: Duration::from_secs(5), ..Limits::DEFAULT };
 }
 
 /// One synthetic test the agent's poller may be handed. Nothing writes these yet: the table is
@@ -350,7 +331,5 @@ pub struct SyntheticsTestConfig {
 }
 
 impl Table for SyntheticsTestConfig {
-    const WRITER: &'static str = "storage_synthetics_test_configs";
     const TABLE: &'static str = "synthetics_test_configs";
-    const LIMITS: Limits = Limits { max_rows: 100, flush_interval: Duration::from_secs(10), ..Limits::DEFAULT };
 }

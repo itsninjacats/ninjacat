@@ -49,6 +49,10 @@ impl Lab {
         let admin = match connect(&config).await {
             Ok(admin) => admin,
             Err(e) => {
+                // CI sets it: there a missing database is a broken job, not a test to skip.
+                if std::env::var_os("NINJACAT_TEST_REQUIRE_DATABASES").is_some() {
+                    panic!("Postgres is not reachable at {url}: {e}");
+                }
                 eprintln!("skipped: Postgres is not reachable at {url}: {e}");
                 return None;
             }

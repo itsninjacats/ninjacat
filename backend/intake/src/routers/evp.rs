@@ -26,6 +26,7 @@
 use chrono::{DateTime, Utc};
 use ninjapaws_proto::datadog::agentdiscovery::{AgentDiscoveryConfigFilePayloadFormat, AgentDiscoveryPayloadBatch};
 use ninjapaws_proto::datadog::healthplatform::{HealthReport, Issue, IssueSeverity, IssueState};
+use ninjapaws_storage as storage;
 use ninjapaws_storage::Table;
 use ninjapaws_storage::column::Blob;
 use ninjapaws_storage::rows::evp::{
@@ -34,12 +35,14 @@ use ninjapaws_storage::rows::evp::{
 };
 use prost::Message;
 use serde_json::Value;
+use tako::extractors::state::State;
 use tako::types::Response;
 use uuid::Uuid;
 
 use super::api::merge_extra;
 use crate::json;
-use crate::server::{Body, Ctx, accepted};
+use crate::raw;
+use crate::server::{Body, Ctx, accepted, storage_failed};
 use crate::wire::{enum_name, tags, text, time};
 
 // The JSON tracks are read generically, with the readers of `json` that note nothing: a value is
@@ -61,7 +64,8 @@ pub fn parse_object(body: &[u8]) -> Option<Value> {
 
 /// A batched track: each item becomes rows or is kept raw, so one bad item never takes the good
 /// ones with it.
-fn handle_batch<T: Table>(
+async fn handle_batch<T: Table>(
+    clickhouse: &clickhouse::Client,
     ctx: &Ctx,
     body: &[u8],
     intake: &str,
@@ -69,19 +73,36 @@ fn handle_batch<T: Table>(
 ) -> Response {
     if !body.is_empty() {
         match json::try_parse_list(body) {
-            Err(_) => ctx.raw(intake, "unexpected_shape", "body is not a JSON array or object", body),
+            Err(_) => {
+                let note = "body is not a JSON array or object";
+                if let Err(e) = raw::store(clickhouse, ctx, intake, "unexpected_shape", note, body).await {
+                    return storage_failed(e);
+                }
+            }
             Ok(items) => {
                 let now = Utc::now();
                 let text = json::raw::text(body);
                 let mut rows = Vec::new();
+                let mut kept = Vec::new();
                 for (item, item_text) in items.iter().zip(json::raw::list(&text)) {
                     if is_object_or_null(item) {
                         rows.extend(to_rows(now, item));
                     } else {
-                        ctx.raw(intake, "decode_error", "item is not a JSON object", item_text.as_bytes());
+                        kept.extend(raw::row(
+                            ctx,
+                            intake,
+                            "decode_error",
+                            "item is not a JSON object",
+                            item_text.as_bytes(),
+                        ));
                     }
                 }
-                ctx.write(rows);
+                if let Err(e) = raw::keep(clickhouse, &kept).await {
+                    return storage_failed(e);
+                }
+                if let Err(e) = storage::insert(clickhouse, &rows).await {
+                    return storage_failed(e);
+                }
             }
         }
     }
@@ -122,16 +143,28 @@ pub fn agent_discovery_rows(
 
 /// agentdiscovery-intake: which integration config files and env vars each agent runtime sees.
 /// One AgentDiscoveryPayloadBatch per request.
-pub async fn handle_agent_discovery(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_agent_discovery(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     if !body.is_empty() {
         match AgentDiscoveryPayloadBatch::decode(&body[..]) {
-            Err(e) => ctx.raw("agentdiscovery", "decode_error", &e.to_string(), &body),
+            Err(e) => {
+                if let Err(error) =
+                    raw::store(&clickhouse, &ctx, "agentdiscovery", "decode_error", &e.to_string(), &body).await
+                {
+                    return storage_failed(error);
+                }
+            }
             // Protobuf skips fields it does not know, so a payload meant for another endpoint
             // decodes into an empty batch. Not a decode error, so it is not kept raw.
             Ok(batch) if batch.payloads.is_empty() => {
                 tracing::warn!("[agentdiscovery] decoded to zero payloads ({} bytes) — wrong payload type?", body.len())
             }
-            Ok(batch) => ctx.write(agent_discovery_rows(ctx.tenant(), Utc::now(), &batch)),
+            Ok(batch) => {
+                if let Err(e) =
+                    storage::insert(&clickhouse, &agent_discovery_rows(ctx.tenant(), Utc::now(), &batch)).await
+                {
+                    return storage_failed(e);
+                }
+            }
         }
     }
     accepted()
@@ -272,17 +305,25 @@ pub fn health_report_rows(
 
 /// agenthealth-intake: issues the agent found with its own setup, one HealthReport per request.
 /// Not an event platform track.
-pub async fn handle_agent_health(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_agent_health(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     if !body.is_empty() {
         match decode_health_report(&body) {
-            Err(e) => ctx.raw("agenthealth", "decode_error", &e, &body),
+            Err(e) => {
+                if let Err(error) = raw::store(&clickhouse, &ctx, "agenthealth", "decode_error", &e, &body).await {
+                    return storage_failed(error);
+                }
+            }
             Ok(report) => {
                 // The wire has no report id; this one joins the two tables.
                 let raw_issues = health_issues_raw(&body);
                 let (report_row, issue_rows) =
                     health_report_rows(ctx.tenant(), Utc::now(), Uuid::new_v4(), &report, raw_issues.as_ref());
-                ctx.write(vec![report_row]);
-                ctx.write(issue_rows);
+                if let Err(e) = storage::insert(&clickhouse, &[report_row]).await {
+                    return storage_failed(e);
+                }
+                if let Err(e) = storage::insert(&clickhouse, &issue_rows).await {
+                    return storage_failed(e);
+                }
             }
         }
     }
@@ -360,18 +401,43 @@ pub fn event_management_row(
 
 /// event-management-intake: notable events, logon duration, anomaly notifications. A stream track,
 /// so one envelope per request.
-pub async fn handle_event_management(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_event_management(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     if !body.is_empty() {
         match parse_object(&body) {
-            None => ctx.raw(EVENT_MANAGEMENT_INTAKE, "decode_error", "body is not a JSON object", &body),
-            Some(envelope) => match event_management_row(ctx.tenant(), Utc::now(), &envelope) {
-                None => ctx.raw(
+            None => {
+                if let Err(e) = raw::store(
+                    &clickhouse,
+                    &ctx,
                     EVENT_MANAGEMENT_INTAKE,
-                    "unexpected_shape",
-                    "data.attributes is missing or not an object",
+                    "decode_error",
+                    "body is not a JSON object",
                     &body,
-                ),
-                Some(row) => ctx.write(vec![row]),
+                )
+                .await
+                {
+                    return storage_failed(e);
+                }
+            }
+            Some(envelope) => match event_management_row(ctx.tenant(), Utc::now(), &envelope) {
+                None => {
+                    if let Err(e) = raw::store(
+                        &clickhouse,
+                        &ctx,
+                        EVENT_MANAGEMENT_INTAKE,
+                        "unexpected_shape",
+                        "data.attributes is missing or not an object",
+                        &body,
+                    )
+                    .await
+                    {
+                        return storage_failed(e);
+                    }
+                }
+                Some(row) => {
+                    if let Err(e) = storage::insert(&clickhouse, &[row]).await {
+                        return storage_failed(e);
+                    }
+                }
             },
         }
     }
@@ -433,8 +499,8 @@ pub fn host_software_rows(tenant: &str, received_at: DateTime<Utc>, payload: &Va
 }
 
 /// softinv-intake: installed packages per host, batched.
-pub async fn handle_software_inventory(ctx: Ctx, body: Body) -> Response {
-    handle_batch(&ctx, &body, "softinv", |now, item| host_software_rows(ctx.tenant(), now, item))
+pub async fn handle_software_inventory(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
+    handle_batch(&clickhouse, &ctx, &body, "softinv", |now, item| host_software_rows(ctx.tenant(), now, item)).await
 }
 
 const SYNTHETICS_KEYS: &[&str] = &["test", "location", "result", "_dd", "enrichment", "v"];
@@ -535,8 +601,11 @@ pub fn synthetics_result_row(tenant: &str, received_at: DateTime<Utc>, item: &Va
 }
 
 /// http-synthetics: results of network tests the agent ran on the server's behalf, batched.
-pub async fn handle_synthetics(ctx: Ctx, body: Body) -> Response {
-    handle_batch(&ctx, &body, "synthetics", |now, item| vec![synthetics_result_row(ctx.tenant(), now, item)])
+pub async fn handle_synthetics(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
+    handle_batch(&clickhouse, &ctx, &body, "synthetics", |now, item| {
+        vec![synthetics_result_row(ctx.tenant(), now, item)]
+    })
+    .await
 }
 
 const LINEAGE_KEYS: &[&str] = &["eventType", "eventTime", "producer", "schemaURL", "run", "job", "inputs", "outputs"];
@@ -603,20 +672,21 @@ pub fn open_lineage_event_row(
 /// OpenLineage RunEvents, forwarded as they are by the trace-agent's reverse proxy, with
 /// ?api-version=2 when the agent is told to add it. The transport posts one RunEvent per request;
 /// an array is accepted in case a client batches.
-pub async fn handle_open_lineage(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_open_lineage(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     let api_version = ctx.query("api-version");
     let via = ctx.header("via").to_string();
-    handle_batch(&ctx, &body, "lineage", |now, event| {
+    handle_batch(&clickhouse, &ctx, &body, "lineage", |now, event| {
         vec![open_lineage_event_row(ctx.tenant(), now, &api_version, &via, event)]
     })
+    .await
 }
 
 /// Results of Data Observability query actions, batched. They come from Python integrations and
 /// no type documents them, so each entry is stored whole.
-pub async fn handle_query_actions(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_query_actions(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     let origin = ctx.header("dd-evp-origin").to_string();
     let origin_version = ctx.header("dd-evp-origin-version").to_string();
-    handle_batch(&ctx, &body, "query-actions", |now, entry| {
+    handle_batch(&clickhouse, &ctx, &body, "query-actions", |now, entry| {
         let keys = match entry {
             Value::Object(object) => {
                 let mut keys: Vec<String> = object.keys().cloned().collect();
@@ -634,6 +704,7 @@ pub async fn handle_query_actions(ctx: Ctx, body: Body) -> Response {
             dd_evp_origin_version: origin_version.clone(),
         }]
     })
+    .await
 }
 
 #[cfg(test)]

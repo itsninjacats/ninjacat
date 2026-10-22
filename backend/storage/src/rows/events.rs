@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use super::{Extra, Tags};
 use crate::column;
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// One event: a deploy, a restart, a config change.
 ///
@@ -40,7 +40,5 @@ pub struct Event {
 }
 
 impl Table for Event {
-    const WRITER: &'static str = "storage_events";
     const TABLE: &'static str = "events";
-    const LIMITS: Limits = Limits { max_rows: 200, ..Limits::DEFAULT };
 }

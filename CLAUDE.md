@@ -162,7 +162,7 @@ backend/proto     agent protobuf schemas → generated Rust (prost, prost-reflec
 backend/engine    query language → SQL text + typed parameters; the panel's queries;
                   monitor/: what a monitor means (parse, validate, evaluate, the group state machine)
 backend/anomaly   anomaly, forecast and outlier algorithms
-backend/storage   rows, one writer per table, the sink, migrations
+backend/storage   rows, `storage::insert`, migrations
 backend/intake    what every intake host shares: keys, auth, bodies, JSON, raw_payloads, the
                   server (server.rs); one router per Datadog product (routers/)
 backend/api       the programs: ninjapaws_<host>, ninjapaws_internal, ninjapaws_monitors,
@@ -172,8 +172,8 @@ backend/api       the programs: ninjapaws_<host>, ninjapaws_internal, ninjapaws_
 - **An intake program per host, :8080** (`NINJACAT_ADDR`) — reachable from agent machines; every
   route but the probes asks for an API key. `backend/api/src/bin/ninjapaws_<host>.rs` lists every
   route of its host in `main`, on a plain tako `Router`, then the probes, the 404, `with_state` and
-  `server::serve`, line by line.
-  Every write of what agents send goes through the table writers of its own process.
+  `server::serve`, line by line. Its state is three plain values: the ClickHouse client, the API
+  keys and `server::Settings`.
 - **`ninjapaws_internal`, :8081** (`NINJACAT_INTERNAL_ADDR`) — `/internal/*` for the panel and
   Datadog's query API (`/api/v1/metrics`, `/api/v2/query/*`). It only reads. Every route but the
   probes asks for the panel's JWT (`token.rs`); its `tenant` claim is the only source of the
@@ -191,6 +191,26 @@ port for the panel.
 
 ### The rules that shape this code
 
+**Flat first; this is not Java.** The owner reads this code and will keep reworking it, so what
+a piece of code does must be visible where it happens, top to bottom:
+
+- A program's `main` is a linear function: settings, then its routes on a plain tako `Router`,
+  then serve.
+- A handler's body does its work in the open: decode the payload (in its own function, the one
+  split that is wanted), then insert the rows.
+- State holds only what the code needs, as plain values; the handler takes it with tako's own
+  extractors. There is no app-wide object, and no "context" or request type that also writes,
+  stores or decides.
+- No trait with one implementation and no generic instantiated once. No wrapper that only
+  forwards, no factory returning closures, no registry or table of closures, no struct built to be
+  matched once. Two layers that do the same job are merged.
+- What tako, `http`, serde or the ClickHouse client already do is used as they ship it, never
+  wrapped in a layer of our own.
+- When in doubt, inline. A little repetition reads better than an indirection.
+
+Much of the server is still version 0.1, left over from the actor-era design ported from Go and
+F#. It is migration debt, not precedent: flatten it when you touch it, don't copy its shape.
+
 **A host is a program.** Datadog puts every product on its own hostname (`app.<site>`,
 `trace.agent.<site>`, `http-intake.logs.<site>`, ~40 more); here each router is a program of its
 own, and whatever is in front (the chart's Ingress, the dev stack's Traefik) sends each host name
@@ -205,41 +225,52 @@ binary cannot be imported).
 own. Where tako's behaviour differs from the old servers' (case, trailing slashes, 405), tako's stands.
 
 **Handlers take the request and its body.** Each is `async fn(Ctx, Body) -> Response`, both tako
-extractors from `intake/src/server.rs`: `Body` is the body read whole with its Content-Encoding
-undone. A handler reads the request from `Ctx` (`tenant`, `header`, `query`, `path`) and answers
+extractors from `intake/src/server.rs`, plus tako's `State<clickhouse::Client>` between them when
+it stores something: `Body` is the body read whole with its Content-Encoding undone. A handler
+reads the request from `Ctx` (`tenant`, `header`, `query`, `path`), which only reads, and answers
 with `server::json`, `status`, `accepted`. There is no other request or response type; do not add one.
 
 **One helper of each kind.** JSON is parsed, read and written through `intake/src/json.rs`
 (`json::raw` for the text a value was sent as, `json::proto` for protobuf as JSON); an object is
 read field by field with `fields::Fields` (exact names, the last of a repeated name, null the
 same as absent, mismatches noted). `body::try_parts`, `wire::time`, `wire::enum_name`,
-`server::accepted` and `Ctx::write` (writes nothing without a tenant) are the others. A router
-does not grow a private copy of any of them, and `raw::store` alone logs a kept payload.
+`server::accepted`, `server::storage_failed` and `storage::insert` are the others. A router
+does not grow a private copy of any of them, and `raw::keep` alone logs a kept payload.
 
 **Numbers and text are kept as sent.** serde_json runs with `arbitrary_precision` in the whole
-workspace, so a parsed number keeps its digits. Where a column holds a JSON value as it arrived,
-it holds the text that was sent (`json::raw`, RawValue), not a re-printed copy; the golden
+workspace, so a parsed number keeps its digits. Where a String column holds a JSON value as it
+arrived, it holds the text that was sent (`json::raw`, RawValue), not a re-printed copy; the golden
 comparison compares JSON by meaning and would not notice, so such a column has a test of its own.
+A `JSON`-type column normalises what it is given: `{"x":1,"y":null}` is stored as `{"x":1}`.
 
 **The API key is a route middleware.** `intake/src/auth.rs`: `auth::agent`, `browser`,
 `ci_webhook`, `lineage`, one per place a host's clients put the key; a known key goes on in the
 request's extensions (`Admitted`), anything else is a 403. An unknown path is answered before any key is asked for.
 
-**Writes are asynchronous, reads are not.** A handler turns the Datadog wire format into the
-plain rows in `storage/src/rows/*.rs` and hands them to the sink — the agent gets its 202
-immediately. `storage` knows nothing about HTTP or Datadog; that is what lets a second source
-(OTLP) be added without touching the write path.
+**A handler inserts its rows itself.** It turns the Datadog wire format into the plain rows in
+`storage/src/rows/*.rs` (in a function of its own) and awaits `storage::insert` for each table,
+one insert per table per request, before it answers. There is no buffer of our own: ClickHouse's
+`async_insert` (set on every client, with `wait_for_async_insert`) batches the many small inserts
+into parts on its side. When ClickHouse refuses an insert the handler answers 503
+(`server::storage_failed`), so the sender keeps the payload and sends it again. `storage` knows
+nothing about HTTP or Datadog; that is what lets a second source (OTLP) be added without touching
+the write path.
 
-**One writer per table, never a pool.** Separate buffers stop a burst of logs from
-delaying metrics; a pool for the *same* table would shrink batches and recreate ClickHouse's
-"Too many parts" problem. A slow flush is handled by flushing in the background (up to
-`max_in_flight`), not by adding writers. The rule holds per process.
+Delivery is therefore at least once: the tables are written one after another, so a refusal after
+the first leaves the earlier tables written and the resend writes them again (MergeTree, no
+deduplication), and an insert that timed out may still land. Readers tolerate a duplicate; a
+handler writes its kept payloads (`raw_payloads`) before its rows, so a refused keep stores nothing.
+The exception is an endpoint whose answer the client needs and storage does not decide (the CI
+tracers' configuration and search_commits, the intake key, the symbols query, the runner's dequeue
+and heartbeat): its rows are best-effort, logged when refused, and the answer is given anyway.
 
 **API key lookup takes no lock.** `intake/src/keys.rs` publishes an immutable snapshot
 (ArcSwap); its keeper alone replaces it, every 30s and when the panel asks.
 
 **What cannot be decoded is kept, not dropped.** `raw::store` puts the whole payload in
-`raw_payloads` with a reason, so an unhandled endpoint loses nothing.
+`raw_payloads` with a reason, so an unhandled endpoint loses nothing; a refused keep is a 503 like
+any other insert. A batch's rejected elements are collected with `raw::row` and kept with one
+`raw::keep`, never one insert per element.
 
 **Multi-tenancy is in from day one.** `tenant_id` is the first `ORDER BY` column everywhere;
 it is cheap to carry and expensive to add later. A tenant is a Better Auth organization, and
@@ -266,9 +297,16 @@ through the router of the program that serves its host and compares field by fie
 `fixtures/overrides.json` lists the accepted differences, each with a reason, and is not a place
 to hide a change in behaviour (an ignore of `/sends` marks a deliberate one, pinned by a test of
 its own). A deliberate change to what a route stores means updating its fixture by hand and
-saying why in an `edited` key inside it. The second test of `golden.rs` inserts every fixture's
-rows through the real writers into a scratch database built from the migrations (skipped when
-ClickHouse is not running).
+saying why in an `edited` key inside it. The fixtures go through the real handlers into a scratch
+ClickHouse database, and what is compared is what the tables hold.
+
+Tests that store need a running ClickHouse and skip, with one "skipped:" line, when it is down
+(and fail instead when `NINJACAT_TEST_REQUIRE_DATABASES` is set, as CI sets it).
+`intake/tests/db/mod.rs` gives each test binary one scratch database built from the migrations
+(every TTL removed, as ClickHouse drops an expired row already on insert) and each test a tenant
+of its own; `db::tables` and `db::rows` read back what a tenant has. Rows come back in sort-key
+order, not insert order, and times as the column keeps them (`DateTime64(3)`: milliseconds,
+`DateTime`: seconds). The dev database `ninjacat` is never touched by a test.
 
 `fixtures/real/` are payloads recorded from **real senders** against this server: the browser
 SDK, the agent's DBM integrations (seven databases), its network checks, its data security

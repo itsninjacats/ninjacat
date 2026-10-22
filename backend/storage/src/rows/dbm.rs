@@ -1,11 +1,9 @@
-use std::time::Duration;
-
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use super::Tags;
 use crate::column;
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// One Database Monitoring event. All six tracks and every database engine share the table: the
 /// engine-specific row arrays (oracle_rows, postgres_activity, …) have no published schema, so the
@@ -49,9 +47,5 @@ pub struct DbmEvent {
 }
 
 impl Table for DbmEvent {
-    const WRITER: &'static str = "storage_dbm_events";
     const TABLE: &'static str = "dbm_events";
-    // A row carries a whole event, which can hold hundreds of sessions.
-    const LIMITS: Limits =
-        Limits { max_rows: 500, flush_interval: Duration::from_secs(5), buffer_limit: 20_000, max_in_flight: 2 };
 }

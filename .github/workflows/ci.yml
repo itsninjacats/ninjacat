@@ -110,8 +110,11 @@ jobs:
         working-directory: backend
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
 
+      # A test that finds no database fails here instead of skipping.
       - name: Tests
         working-directory: backend
+        env:
+          NINJACAT_TEST_REQUIRE_DATABASES: "1"
         run: cargo test --locked --workspace
 
   frontend:

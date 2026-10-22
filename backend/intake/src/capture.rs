@@ -25,7 +25,7 @@ use tako::middleware::Next;
 use tako::types::{Request, Response};
 
 use crate::raw::{KEY_PARAMETERS, path_without_key};
-use crate::server::{intake_of, query_pairs, status};
+use crate::server::{Settings, query_pairs, state, status};
 use crate::{body, json};
 
 /// Text a person can read: valid UTF-8 with no control characters but newlines and tabs.
@@ -242,7 +242,7 @@ pub fn write(
 /// read here and handed on whole.
 pub async fn dump(directory: PathBuf, req: Request, next: Next) -> Response {
     let started = Utc::now();
-    let limit = intake_of(req.extensions()).map_or(0, |intake| intake.max_body_bytes);
+    let limit = state::<Settings>(req.extensions()).map_or(0, |settings| settings.max_body_bytes);
     let (parts, body) = req.into_parts();
     let raw: Bytes = match Limited::new(body, limit).collect().await {
         Ok(collected) => collected.to_bytes(),

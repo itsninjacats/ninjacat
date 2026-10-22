@@ -25,16 +25,19 @@ use ninjapaws_proto::datadog::trace::{
     Span, StatsPayload, TracerPayload, attribute_any_value::AttributeAnyValueType,
     attribute_array_value::AttributeArrayValueType, idx,
 };
+use ninjapaws_storage as storage;
 use ninjapaws_storage::column::Blob;
 use ninjapaws_storage::rows::traces::{self as rows, SketchState, TraceRoot};
 use prost::Message;
 use serde_json::{Map, Value};
+use tako::extractors::state::State;
 use tako::types::Response;
 
 use super::trace_sketch;
 use crate::json;
 use crate::msgpack::{self, MsgFields, MsgValue};
-use crate::server::{Body, Ctx, accepted, json};
+use crate::raw;
+use crate::server::{Body, Ctx, accepted, json, storage_failed};
 use crate::wire::{tags, text};
 
 /// The label of everything on this host in raw_payloads.
@@ -467,23 +470,42 @@ pub fn span_rows(tenant: &str, received_at: DateTime<Utc>, payload: &AgentPayloa
 /// What arrives is a sample: the agent runs its samplers before this writer. The complete counts
 /// are in the stats endpoint. The agent parses the answer (rate_by_service feeds its priority
 /// sampler), so it keeps exactly this shape.
-pub async fn handle_traces(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_traces(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     let answer = json(StatusCode::OK, &serde_json::json!({ "rate_by_service": {} }));
     if ctx.is_sweep() {
         return answer;
     }
     match AgentPayload::decode(&body[..]) {
-        Err(e) => ctx.raw(INTAKE, "decode_error", &format!("protobuf AgentPayload: {e}"), &body),
+        Err(e) => {
+            if let Err(e) =
+                raw::store(&clickhouse, &ctx, INTAKE, "decode_error", &format!("protobuf AgentPayload: {e}"), &body)
+                    .await
+            {
+                return storage_failed(e);
+            }
+        }
         // Protobuf carries no type marker and skips unknown fields, so a body meant for another
         // endpoint decodes "successfully" into an empty payload. Neither list being filled is the
         // one signal.
-        Ok(payload) if payload.tracer_payloads.is_empty() && payload.idx_tracer_payloads.is_empty() => ctx.raw(
-            INTAKE,
-            "unexpected_shape",
-            "AgentPayload decoded with no TracerPayloads and no IdxTracerPayloads",
-            &body,
-        ),
-        Ok(payload) => ctx.write(span_rows(ctx.tenant(), Utc::now(), &payload)),
+        Ok(payload) if payload.tracer_payloads.is_empty() && payload.idx_tracer_payloads.is_empty() => {
+            if let Err(e) = raw::store(
+                &clickhouse,
+                &ctx,
+                INTAKE,
+                "unexpected_shape",
+                "AgentPayload decoded with no TracerPayloads and no IdxTracerPayloads",
+                &body,
+            )
+            .await
+            {
+                return storage_failed(e);
+            }
+        }
+        Ok(payload) => {
+            if let Err(e) = storage::insert(&clickhouse, &span_rows(ctx.tenant(), Utc::now(), &payload)).await {
+                return storage_failed(e);
+            }
+        }
     }
     answer
 }
@@ -670,11 +692,28 @@ pub fn stat_rows(tenant: &str, received_at: DateTime<Utc>, payload: &StatsPayloa
 ///
 /// The Android SDK from 3.14 may post msgpack here that is not a StatsPayload; it fails the decode
 /// and goes to raw_payloads.
-pub async fn handle_stats(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_stats(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     if !ctx.is_sweep() {
         match decode_stats_payload(&body) {
-            Err(problem) => ctx.raw(INTAKE, "decode_error", &format!("msgpack StatsPayload: {problem}"), &body),
-            Ok(payload) => ctx.write(stat_rows(ctx.tenant(), Utc::now(), &payload)),
+            Err(problem) => {
+                if let Err(e) = raw::store(
+                    &clickhouse,
+                    &ctx,
+                    INTAKE,
+                    "decode_error",
+                    &format!("msgpack StatsPayload: {problem}"),
+                    &body,
+                )
+                .await
+                {
+                    return storage_failed(e);
+                }
+            }
+            Ok(payload) => {
+                if let Err(e) = storage::insert(&clickhouse, &stat_rows(ctx.tenant(), Utc::now(), &payload)).await {
+                    return storage_failed(e);
+                }
+            }
         }
     }
     json(StatusCode::OK, &serde_json::json!({}))
@@ -948,11 +987,22 @@ pub fn dsm_rows(tenant: &str, received_at: DateTime<Utc>, payload: &DsmPayload, 
 /// POST /api/v0.1/pipeline_stats: Data Streams Monitoring stats straight from the tracer. The
 /// trace-agent is a reverse proxy here: it adds Via, X-Datadog-Additional-Tags and
 /// X-Datadog-Container-Tags and forwards the body untouched.
-pub async fn handle_pipeline_stats(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_pipeline_stats(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     if !ctx.is_sweep() {
         match decode_dsm_payload(&body) {
             Err(problem) => {
-                ctx.raw(INTAKE, "decode_error", &format!("msgpack datastreams.StatsPayload: {problem}"), &body)
+                if let Err(e) = raw::store(
+                    &clickhouse,
+                    &ctx,
+                    INTAKE,
+                    "decode_error",
+                    &format!("msgpack datastreams.StatsPayload: {problem}"),
+                    &body,
+                )
+                .await
+                {
+                    return storage_failed(e);
+                }
             }
             Ok(payload) => {
                 let headers = DsmHeaders {
@@ -964,9 +1014,15 @@ pub async fn handle_pipeline_stats(ctx: Ctx, body: Body) -> Response {
                     content_encoding: ctx.header("Content-Encoding").into(),
                 };
                 let found = dsm_rows(ctx.tenant(), Utc::now(), &payload, &headers);
-                ctx.write(found.points);
-                ctx.write(found.backlogs);
-                ctx.write(found.transactions);
+                if let Err(e) = storage::insert(&clickhouse, &found.points).await {
+                    return storage_failed(e);
+                }
+                if let Err(e) = storage::insert(&clickhouse, &found.backlogs).await {
+                    return storage_failed(e);
+                }
+                if let Err(e) = storage::insert(&clickhouse, &found.transactions).await {
+                    return storage_failed(e);
+                }
             }
         }
     }
@@ -1015,14 +1071,26 @@ pub fn dsm_message_rows(
 
 /// POST /api/v2/data_streams_messages. Not the trace-agent at all: an Event Platform track that
 /// happens to live on this host. JSON, batched by the forwarder into one array.
-pub async fn handle_data_streams_messages(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_data_streams_messages(
+    ctx: Ctx,
+    State(clickhouse): State<clickhouse::Client>,
+    body: Body,
+) -> Response {
     match json::try_parse_element_bytes(&body) {
-        Err(problem) => ctx.raw(
-            INTAKE,
-            "unexpected_shape",
-            &format!("body is not the JSON array the forwarder sends: {problem}"),
-            &body,
-        ),
+        Err(problem) => {
+            if let Err(e) = raw::store(
+                &clickhouse,
+                &ctx,
+                INTAKE,
+                "unexpected_shape",
+                &format!("body is not the JSON array the forwarder sends: {problem}"),
+                &body,
+            )
+            .await
+            {
+                return storage_failed(e);
+            }
+        }
         Ok(messages) => {
             let found = dsm_message_rows(
                 ctx.tenant(),
@@ -1032,7 +1100,9 @@ pub async fn handle_data_streams_messages(ctx: Ctx, body: Body) -> Response {
                 ctx.header("Dd-Evp-Origin-Version"),
                 ctx.header("Content-Encoding"),
             );
-            ctx.write(found);
+            if let Err(e) = storage::insert(&clickhouse, &found).await {
+                return storage_failed(e);
+            }
         }
     }
     accepted()

@@ -8,14 +8,13 @@
 //!   dsm_messages             POST /api/v2/data_streams_messages
 
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Serializer};
 
 use super::Tags;
 use crate::column::{self, Blob};
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// One latency distribution: the bytes as the sender shipped them, plus what they decoded to.
 ///
@@ -169,7 +168,6 @@ pub struct Span {
 }
 
 impl Table for Span {
-    const WRITER: &'static str = "storage_spans";
     const TABLE: &'static str = "spans";
 }
 
@@ -289,10 +287,7 @@ pub struct ApmStat {
 }
 
 impl Table for ApmStat {
-    const WRITER: &'static str = "storage_apm_stats";
     const TABLE: &'static str = "apm_stats";
-    const LIMITS: Limits =
-        Limits { max_rows: 2_000, flush_interval: Duration::from_secs(5), buffer_limit: 50_000, max_in_flight: 2 };
 }
 
 /// One checkpoint in a queue pathway. Hash and parent_hash rebuild the pathway graph by
@@ -361,10 +356,7 @@ pub struct DsmPipelineStat {
 }
 
 impl Table for DsmPipelineStat {
-    const WRITER: &'static str = "storage_dsm_pipeline_stats";
     const TABLE: &'static str = "dsm_pipeline_stats";
-    const LIMITS: Limits =
-        Limits { max_rows: 2_000, flush_interval: Duration::from_secs(5), buffer_limit: 50_000, max_in_flight: 2 };
 }
 
 /// How far behind a consumer is. Tags stay an ordered array: the tracer hashes on the list, order
@@ -390,10 +382,7 @@ pub struct DsmBacklog {
 }
 
 impl Table for DsmBacklog {
-    const WRITER: &'static str = "storage_dsm_backlogs";
     const TABLE: &'static str = "dsm_backlogs";
-    const LIMITS: Limits =
-        Limits { max_rows: 500, flush_interval: Duration::from_secs(10), buffer_limit: 20_000, max_in_flight: 2 };
 }
 
 /// A bucket's two packed binary blobs, verbatim. The layout is hand-rolled and must match the Java
@@ -419,10 +408,7 @@ pub struct DsmBucketTransactions {
 }
 
 impl Table for DsmBucketTransactions {
-    const WRITER: &'static str = "storage_dsm_bucket_transactions";
     const TABLE: &'static str = "dsm_bucket_transactions";
-    const LIMITS: Limits =
-        Limits { max_rows: 200, flush_interval: Duration::from_secs(10), buffer_limit: 5_000, max_in_flight: 1 };
 }
 
 /// One element of the /api/v2/data_streams_messages array, as the JSON text it arrived as: its
@@ -444,8 +430,5 @@ pub struct DsmMessage {
 }
 
 impl Table for DsmMessage {
-    const WRITER: &'static str = "storage_dsm_messages";
     const TABLE: &'static str = "dsm_messages";
-    const LIMITS: Limits =
-        Limits { max_rows: 500, flush_interval: Duration::from_secs(10), buffer_limit: 20_000, max_in_flight: 2 };
 }
