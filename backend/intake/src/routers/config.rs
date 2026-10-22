@@ -12,28 +12,17 @@
 //!   GET  /api/v0.1/org             (no body)            → OrgDataResponse
 //!   GET  /api/v0.1/status          (no body)            → OrgStatusResponse
 
-use bytes::Bytes;
 use http::StatusCode;
 use ninjapaws_proto::datadog::config::LatestConfigsRequest;
 use prost::Message;
 use tako::types::Response;
 
-use crate::server::{Ctx, Routes, json};
-
-pub fn mount(routes: &mut Routes) {
-    routes.post("/api/v0.1/configurations", handle_configurations);
-    // The agent sends GET; POST is registered so anything else that tries gets the same explicit
-    // answer.
-    routes.post("/api/v0.1/org", not_served);
-    routes.post("/api/v0.1/status", not_served);
-    routes.get("/api/v0.1/org", not_served);
-    routes.get("/api/v0.1/status", not_served);
-}
+use crate::server::{Body, Ctx, json};
 
 /// The poll for new configuration. The request is the agent's full picture of itself: identity,
 /// the TUF versions it holds, the products it wants and every client registered with it. Nothing
 /// of it is stored yet.
-pub async fn handle_configurations(_: Ctx, body: Bytes) -> Response {
+pub async fn handle_configurations(_: Ctx, body: Body) -> Response {
     match LatestConfigsRequest::decode(body.as_ref()) {
         Ok(request)
             if request.hostname.is_empty() && request.products.is_empty() && request.active_clients.is_empty() =>
@@ -44,7 +33,9 @@ pub async fn handle_configurations(_: Ctx, body: Bytes) -> Response {
         }
         // The agent could not apply what it got last time. Worth hearing even while nothing is
         // served.
-        Ok(request) if request.has_error => tracing::warn!("[remote-config] agent reports error: {}", request.error),
+        Ok(request) if request.has_error => {
+            tracing::warn!("[remote-config] agent reports error: {}", request.error)
+        }
         Ok(_) => {}
         Err(e) => tracing::warn!("[remote-config] protobuf: {e} ({} bytes)", body.len()),
     }
@@ -52,6 +43,6 @@ pub async fn handle_configurations(_: Ctx, body: Bytes) -> Response {
 }
 
 /// The org identity lookup and the org/key status check: a GET with no body.
-pub async fn not_served(_: Ctx, _: Bytes) -> Response {
+pub async fn not_served(_: Ctx, _: Body) -> Response {
     json(StatusCode::NOT_FOUND, &serde_json::json!({ "error": "not served" }))
 }

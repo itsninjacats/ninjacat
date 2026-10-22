@@ -6,9 +6,8 @@
 //!   config: none for resources (an event platform track); telemetry is switched off wholesale
 //!           with DD_TELEMETRY_ENABLED.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
-use bytes::Bytes;
 use chrono::{DateTime, TimeDelta, Utc};
 use ninjapaws_storage::rows::Extra;
 use ninjapaws_storage::rows::apm_telemetry::ApmTelemetry;
@@ -17,23 +16,13 @@ use tako::types::Response;
 
 use crate::json;
 use crate::raw;
-use crate::server::{Ctx, Routes, accepted};
+use crate::server::{Body, Ctx, accepted};
 use crate::wire::time;
-
-/// resources-intake.<site>
-pub fn resources(routes: &mut Routes) {
-    routes.post("/api/v2/genresources", handle_gen_resources);
-}
-
-/// instrumentation-telemetry-intake.<site>    apm_config.telemetry.dd_url
-pub fn telemetry(routes: &mut Routes) {
-    routes.post("/api/v2/apmtelemetry", handle_telemetry);
-}
 
 /// One opaque integration payload per request. The agent never looks inside: an integration hands
 /// it bytes, and no schema for them is published anywhere. So the bytes are kept as they are, with
 /// the sender's identity, which the event platform carries in headers, in the note.
-pub async fn handle_gen_resources(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_gen_resources(ctx: Ctx, body: Body) -> Response {
     ctx.raw("genresources", "no_schema", &raw::origin_note(&ctx), &body);
     accepted()
 }
@@ -123,12 +112,11 @@ pub struct Host {
 /// sent, which its other keys are kept from.
 pub fn host(value: Option<&Value>, text: Option<&str>) -> Option<Host> {
     let fields = block(value)?;
-    let known = BTreeSet::from(["hostname", "os", "architecture"]);
     Some(Host {
         hostname: json::text(fields.get("hostname")),
         os: json::text(fields.get("os")),
         architecture: json::text(fields.get("architecture")),
-        extra: text.map(|t| json::raw::other_members(&known, t)).unwrap_or_default(),
+        extra: text.map(|t| json::raw::other_members(&["hostname", "os", "architecture"], t)).unwrap_or_default(),
     })
 }
 
@@ -149,7 +137,7 @@ const ENVELOPE_KEYS: [&str; 11] = [
 
 /// The envelope's keys without a column of their own, each as the text it was sent as.
 pub fn extra_keys(text: &str) -> Extra {
-    json::raw::other_members(&BTreeSet::from(ENVELOPE_KEYS), text)
+    json::raw::other_members(&ENVELOPE_KEYS, text)
 }
 
 /// Names the producer from request_type, falling back to the envelope keys that only one producer
@@ -251,7 +239,7 @@ fn batch_entries(payload: Option<&Value>) -> Option<Vec<BTreeMap<String, Value>>
 /// One row for the request, whoever sent it. A message-batch, whose payload is
 /// [{request_type, payload}, …], adds one row per entry on top of that row, which keeps the whole
 /// batch.
-pub async fn handle_telemetry(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_telemetry(ctx: Ctx, body: Body) -> Response {
     let refuse = |error: &str| ctx.raw("apmtelemetry", "decode_error", error, &body);
     match json::try_parse(&body) {
         Err(e) => refuse(&e),

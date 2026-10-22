@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use ninjapaws_storage::fnv;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio_postgres::NoTls;
@@ -28,13 +29,10 @@ pub const NOTIFIER_LOCK: i32 = SHARDS;
 /// The lock sessions' `application_name`: the replicas are the sessions that carry it.
 pub const APPLICATION_NAME: &str = "ninjacat-monitors";
 
-/// 64-bit FNV-1a, stable across processes and builds, as Rust's own hasher is not.
-pub fn fnv1a(text: &str) -> u64 {
-    text.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, b| (hash ^ b as u64).wrapping_mul(0x0100_0000_01b3))
-}
-
+/// FNV-1a, stable across processes and builds, as Rust's own hasher is not: every replica must
+/// put a monitor in the same shard.
 pub fn shard_of(key: &MonitorKey) -> i32 {
-    (fnv1a(&key.text()) % SHARDS as u64) as i32
+    (fnv::hash64(key.text().as_bytes()) % SHARDS as u64) as i32
 }
 
 /// What the balancer tells the manager.

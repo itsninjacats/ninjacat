@@ -28,10 +28,9 @@
 
 use std::collections::BTreeMap;
 
-use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use http::{HeaderValue, StatusCode};
-use ninjapaws_proto::datadog::agentpayload::CommonMetadata;
+use ninjapaws_proto::datadog::agentpayload::{CommonMetadata, MetricPayload, SketchPayload};
 use ninjapaws_storage::column;
 use ninjapaws_storage::fnv;
 use ninjapaws_storage::rows::agent::{
@@ -52,48 +51,11 @@ use tako::types::Response;
 use uuid::Uuid;
 
 use super::api_payloads::*;
-use super::ci_visibility;
 use crate::body;
 use crate::ddsketch;
 use crate::json;
-use crate::server::{Ctx, Routes, accepted, json, json_as, status};
+use crate::server::{Body, Ctx, accepted, json, json_as, status};
 use crate::wire::{metric_type_name, tags, text, time};
-
-/// What app.<site> and api.<site> both serve.
-pub fn metrics_and_checks(routes: &mut Routes) {
-    routes.post("/intake/", handle_intake);
-    routes.post("/api/v1/series", handle_series_v1);
-    routes.post("/api/v2/series", handle_series_v2);
-    routes.post("/api/v1/check_run", handle_check_run);
-    routes.post("/api/v1/metadata", handle_metadata);
-    routes.post("/api/beta/sketches", handle_sketches);
-
-    // Not sent by any agent: API clients only.
-    routes.post("/api/v1/events", handle_events);
-    routes.post("/api/v1/distribution_points", handle_distribution_points);
-
-    routes.post("/api/v2/intake-key", handle_intake_key);
-    routes.post("/api/v2/profiles/symbols/query", handle_symbols_query);
-    // The agent sends GET; POST gets the same answer.
-    routes.post("/api/v2/validate", handle_opm_validate);
-
-    routes.post("/api/unstable/on_prem_runners", handle_runner_enroll);
-    routes.post("/api/unstable/on_prem_runners/api_key_only", handle_runner_enroll);
-    routes.post("/api/v2/on-prem-management-service/workflow-tasks/dequeue", handle_runner_dequeue);
-    routes.post("/api/v2/on-prem-management-service/workflow-tasks/publish-task-update", handle_runner_task_update);
-    routes.post("/api/v2/on-prem-management-service/workflow-tasks/heartbeat", handle_runner_heartbeat);
-    routes.post("/api/v2/actions/connections", handle_action_connections);
-
-    routes.get("/api/v1/query", handle_query);
-    routes.get("/api/v2/validate", handle_opm_validate);
-    routes.get("/api/v2/on-prem-management-service/runner/health-check", handle_runner_health_check);
-}
-
-/// api.<site>, <version>-flare.agent.<site>
-pub fn mount(routes: &mut Routes) {
-    metrics_and_checks(routes);
-    ci_visibility::mount_api(routes);
-}
 
 /// The reply the agent expects after a batch of metrics. It reads the body: an empty object would
 /// be an API error to it.
@@ -139,7 +101,7 @@ fn sent_text(sent: &Sent, name: &str) -> String {
 /// For an `extra` column of a document kept as it came: the members not in `skip`, each as the
 /// text it was sent as.
 fn extra_sent(skip: &[&str], text: &str) -> Extra {
-    json::raw::other_members(&skip.iter().copied().collect(), text)
+    json::raw::other_members(skip, text)
 }
 
 /// Folds a nested object's extras into the outer ones under a prefix, so two levels of one
@@ -167,15 +129,11 @@ fn whole_seconds(value: f64) -> i64 {
 /// The host is a resource of type "host"; every other resource type (the agent writes one more,
 /// "device") goes into the row's resources map, so a device series stays distinguishable from a
 /// host one.
-pub async fn handle_series_v2(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_series_v2(ctx: Ctx, body: Body) -> Response {
     if ctx.is_sweep() {
         return ack_series();
     }
-    let decoded = if body::is_json(ctx.header("content-type"), &body) {
-        parse_series_v2_json(&body)
-    } else {
-        parse_series_v2_protobuf(&body)
-    };
+    let decoded = parse_message::<MetricPayload>(body::is_json(ctx.header("content-type"), &body), &body);
     match decoded {
         Err(error) => ctx.raw("series", "decode_error", &error, &body),
         Ok(payload) => {
@@ -232,7 +190,7 @@ pub fn normalize_type_word(word: &str) -> &'static str {
 /// source_type_name and unit, which the API does not have: the last two have columns, device goes
 /// into the resources map under the name v2 uses for it, anything else the API does not have into
 /// `extra`.
-pub async fn handle_series_v1(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_series_v1(ctx: Ctx, body: Body) -> Response {
     if ctx.is_sweep() {
         return ack_series();
     }
@@ -327,15 +285,11 @@ fn store_batch_metadata(ctx: &Ctx, intake: &str, sender: &CommonMetadata) {
 /// A sketch may also carry `distributions`, the pre-DDSketch encoding (raw values and ranks). The
 /// current agent never writes it and it cannot become a bucket row without inventing numbers, so
 /// such a sketch is kept raw, whole.
-pub async fn handle_sketches(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_sketches(ctx: Ctx, body: Body) -> Response {
     if ctx.is_sweep() {
         return ack_series();
     }
-    let decoded = if body::is_json(ctx.header("content-type"), &body) {
-        parse_sketches_json(&body)
-    } else {
-        parse_sketches_protobuf(&body)
-    };
+    let decoded = parse_message::<SketchPayload>(body::is_json(ctx.header("content-type"), &body), &body);
     match decoded {
         Err(error) => ctx.raw("sketches", "decode_error", &error, &body),
         Ok(payload) => {
@@ -401,7 +355,7 @@ pub fn distribution_point(items: &[DistributionItem]) -> Option<(DateTime<Utc>, 
 /// The raw values are not kept: a distribution exists to be merged with the agent's sketches,
 /// which arrive already bucketed. What does not fit is kept whole: a body with no series list, an
 /// element that is not a series, a pair that could not be split.
-pub async fn handle_distribution_points(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_distribution_points(ctx: Ctx, body: Body) -> Response {
     if ctx.is_sweep() {
         return ack_series();
     }
@@ -478,7 +432,7 @@ pub async fn handle_distribution_points(ctx: Ctx, body: Bytes) -> Response {
 
 /// /api/v1/check_run. A check answers "is this thing working", not "how much of it is there";
 /// monitors of the "service is down" kind are built on these.
-pub async fn handle_check_run(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_check_run(ctx: Ctx, body: Body) -> Response {
     if ctx.is_sweep() {
         return ack_series();
     }
@@ -534,7 +488,7 @@ fn new_event_id() -> (Uuid, u64) {
 
 /// POST /api/v1/events. Unlike every other endpoint this one MUST return a body: the client reads
 /// the reply into EventCreateResponse and keeps the id.
-pub async fn handle_events(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_events(ctx: Ctx, body: Body) -> Response {
     if ctx.is_sweep() {
         return json(StatusCode::ACCEPTED, &json!({ "status": "ok" }));
     }
@@ -670,7 +624,9 @@ fn events_by_source(events: &Value) -> Result<BTreeMap<String, Vec<Value>>, Stri
                             return Err(format!("events.{source}[{i}]: expected an object, got {}", json::kind(event)));
                         }
                     }
-                    other => return Err(format!("events.{source}: expected a list, got {}", json::kind(other))),
+                    other => {
+                        return Err(format!("events.{source}: expected a list, got {}", json::kind(other)));
+                    }
                 }
             }
             Ok(json::members(events)
@@ -798,7 +754,7 @@ fn intake_agent_checks(ctx: &Ctx, envelope: &BTreeMap<String, Value>, sent: &Sen
     ctx.write(tag_rows);
 }
 
-/// The envelope keys host_row reads by name; the rest go to intake_extra. apiKey is in the list so
+/// The envelope keys intake_host reads by name; the rest go to intake_extra. apiKey is in the list so
 /// that a credential cannot reach a column by way of a catch-all.
 const HOST_KNOWN_KEYS: [&str; 20] = [
     "apiKey",
@@ -840,31 +796,32 @@ const GOHAI_KNOWN_SECTIONS: [&str; 4] = ["platform", "cpu", "memory", "filesyste
 ///                                        flat maps, each value its JSON text as sent
 ///   apiKey                               the real key: never stored
 ///   anything else                        intake_extra
-#[allow(clippy::too_many_arguments)]
-pub fn host_row(
-    tenant: &str,
-    hostname: &str,
-    agent_version: &str,
-    os_name: &str,
-    seen_at: DateTime<Utc>,
-    envelope: &BTreeMap<String, Value>,
-    envelope_text: &str,
-    gohai: &BTreeMap<String, Value>,
-    gohai_text: &str,
-    host_tags: BTreeMap<String, Vec<String>>,
-) -> Host {
+///
+/// The payload is loose and shifts between agent versions, so fields are read by name.
+fn intake_host(ctx: &Ctx, envelope: &BTreeMap<String, Value>, envelope_text: &str) {
+    let hostname = json::lenient_string(envelope.get("internalHostname"));
+    if hostname.is_empty() {
+        return;
+    }
+    // The text of gohai's own document, which the envelope carries as a string.
+    let gohai_text = json::lenient_string(envelope.get("gohai"));
+    let gohai = match gohai_text.as_str() {
+        "" => BTreeMap::new(),
+        inner => json::try_parse(inner.as_bytes()).map(|sections| json::members(&sections)).unwrap_or_default(),
+    };
+    let host_tags = json::lenient_string_lists(envelope.get("host-tags"));
     // gohai reports every value as a string, even numbers. A section that is absent or shaped
     // differently is left empty rather than failing the row.
     let section = |name: &str| gohai.get(name).and_then(json::string_map_of).unwrap_or_default();
     let sent = json::raw::members(envelope_text);
-    let gohai_sent = json::raw::members(gohai_text);
+    let gohai_sent = json::raw::members(&gohai_text);
     let object_map = |name: &str| sent.get(name).map(|t| extra_sent(&[], t)).unwrap_or_default();
-    Host {
-        tenant_id: tenant.into(),
-        host: hostname.into(),
-        seen_at,
-        agent_version: agent_version.into(),
-        os: os_name.into(),
+    let row = Host {
+        tenant_id: ctx.tenant().into(),
+        host: hostname,
+        seen_at: Utc::now(),
+        agent_version: json::lenient_string(envelope.get("agentVersion")),
+        os: json::lenient_string(envelope.get("os")),
         platform: section("platform"),
         cpu: section("cpu"),
         memory: section("memory"),
@@ -884,37 +841,10 @@ pub fn host_row(
         fips_mode: json::flag(envelope.get("fips_mode")),
         fips_proxy_enabled: json::flag(envelope.get("fips_proxy_enabled")),
         host_tags,
-        gohai_extra: extra_sent(&GOHAI_KNOWN_SECTIONS, gohai_text),
+        gohai_extra: extra_sent(&GOHAI_KNOWN_SECTIONS, &gohai_text),
         intake_extra: extra_sent(&HOST_KNOWN_KEYS, envelope_text),
         resources: sent_text(&sent, "resources"),
-    }
-}
-
-/// The host metadata variant. The payload is loose and shifts between agent versions, so fields
-/// are read by name.
-fn intake_host(ctx: &Ctx, envelope: &BTreeMap<String, Value>, envelope_text: &str) {
-    let hostname = json::lenient_string(envelope.get("internalHostname"));
-    if hostname.is_empty() {
-        return;
-    }
-    // The text of gohai's own document, which the envelope carries as a string.
-    let gohai_text = json::lenient_string(envelope.get("gohai"));
-    let gohai = match gohai_text.as_str() {
-        "" => BTreeMap::new(),
-        inner => json::try_parse(inner.as_bytes()).map(|sections| json::members(&sections)).unwrap_or_default(),
     };
-    let row = host_row(
-        ctx.tenant(),
-        &hostname,
-        &json::lenient_string(envelope.get("agentVersion")),
-        &json::lenient_string(envelope.get("os")),
-        Utc::now(),
-        envelope,
-        envelope_text,
-        &gohai,
-        &gohai_text,
-        json::lenient_string_lists(envelope.get("host-tags")),
-    );
     ctx.write(vec![row]);
 }
 
@@ -1020,7 +950,7 @@ fn decode_intake(ctx: &Ctx, body: &[u8]) {
     }
 }
 
-pub async fn handle_intake(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_intake(ctx: Ctx, body: Body) -> Response {
     if !ctx.is_sweep() {
         decode_intake(&ctx, &body);
     }
@@ -1105,7 +1035,7 @@ fn store_metadata(ctx: &Ctx, body: &[u8]) {
 /// /api/v1/metadata: the inventory payloads. Each is an envelope of hostname, timestamp and uuid
 /// plus ONE variant key; the cluster-agent's carry clustername and cluster_id instead of hostname.
 /// None of the variants has a published type, so each is stored as its JSON under its key.
-pub async fn handle_metadata(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_metadata(ctx: Ctx, body: Body) -> Response {
     if !ctx.is_sweep() {
         store_metadata(&ctx, &body);
     }
@@ -1122,7 +1052,7 @@ pub async fn handle_metadata(ctx: Ctx, body: Bytes) -> Response {
 /// here it is derived from the tenant. Two installations that both use the tenant "default"
 /// therefore share a marker. After four failures the agent leaves the marker unset for the life of
 /// the process.
-pub async fn handle_opm_validate(ctx: Ctx, _: Bytes) -> Response {
+pub async fn handle_opm_validate(ctx: Ctx, _: Body) -> Response {
     let digest = Sha256::digest(format!("ninjacat-org:{}", ctx.tenant()).as_bytes());
     // The bytes read mixed-endian, as .NET's Guid did: the agents already hold this id.
     let id = Uuid::from_bytes_le(digest[..16].try_into().unwrap());
@@ -1143,7 +1073,7 @@ fn proof_fingerprint(proof: &str) -> String {
 /// api_key is an error on its side. The key that admitted the request is what it gets back,
 /// whether it came in the header or in the query. The proof IS the credential, so only its
 /// fingerprint is stored.
-pub async fn handle_intake_key(ctx: Ctx, _: Bytes) -> Response {
+pub async fn handle_intake_key(ctx: Ctx, _: Body) -> Response {
     let authorization = ctx.header("authorization");
     let (scheme, proof) = authorization.split_once(' ').unwrap_or((authorization, ""));
     // The key the request was admitted with, as the authentication left it.
@@ -1164,7 +1094,7 @@ pub async fn handle_intake_key(ctx: Ctx, _: Bytes) -> Response {
 /// GET /api/v1/query, for the cluster-agent's External Metrics Provider. Nothing is queryable here
 /// yet, so the answer is a well-formed EMPTY result: it marks each metric invalid on the agent's
 /// side, which is the truth, where a 202 would count as an API error.
-pub async fn handle_query(ctx: Ctx, _: Bytes) -> Response {
+pub async fn handle_query(ctx: Ctx, _: Body) -> Response {
     json(
         StatusCode::OK,
         &json!({ "status": "ok", "res_type": "time_series", "query": ctx.query("query"), "series": [] }),
@@ -1219,7 +1149,7 @@ fn decode_json_api(ctx: &Ctx, body: &[u8], intake: &str, note: &str) -> Option<J
 /// the build ids already held, and the uploader sends only what is missing; it reads the reply as
 /// a JSON:API array, so anything else stops all uploads. We hold nothing, so the array is empty.
 /// The question is kept: these build ids are the profiled binaries of the fleet.
-pub async fn handle_symbols_query(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_symbols_query(ctx: Ctx, body: Body) -> Response {
     if let Some(resource) = decode_json_api(&ctx, &body, "symbols", "not a JSON:API document") {
         ctx.write(vec![SymbolQuery {
             tenant_id: ctx.tenant().into(),
@@ -1253,7 +1183,7 @@ pub fn tenant_org_id(tenant: &str) -> i64 {
 /// splits it on ":" and signs every later request with the pair, so runner_id must not contain a
 /// colon. The status must be exactly 200 (anything else is retried forever) and the reply's type
 /// must be "createRunnerResponse".
-pub async fn handle_runner_enroll(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_runner_enroll(ctx: Ctx, body: Body) -> Response {
     let Some(resource) = decode_json_api(&ctx, &body, "par", "enroll: not a JSON:API document") else {
         return status(StatusCode::BAD_REQUEST);
     };
@@ -1295,7 +1225,7 @@ pub async fn handle_runner_enroll(ctx: Ctx, body: Bytes) -> Response {
 /// The runner's poll for work. An EMPTY 200 means "no task" and is the normal idle answer: a body
 /// would be parsed as a task, and any other status is an error on the runner's side. Every poll is
 /// also the only liveness signal a runner with no tasks produces.
-pub async fn handle_runner_dequeue(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_runner_dequeue(ctx: Ctx, body: Body) -> Response {
     if let Some(resource) = decode_json_api(&ctx, &body, "par", "dequeue: not a JSON:API document") {
         // Both timestamps stay strings: their format is undocumented and an unparseable value
         // must not become 1970.
@@ -1314,7 +1244,7 @@ pub async fn handle_runner_dequeue(ctx: Ctx, body: Bytes) -> Response {
 /// publish-task-update: the outcome of a task. The document id is "succeed_task" or "fail_task";
 /// `payload.outputs` is the action's own result, arbitrary JSON of any size. The runner accepts
 /// any status.
-pub async fn handle_runner_task_update(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_runner_task_update(ctx: Ctx, body: Body) -> Response {
     if let Some(resource) = decode_json_api(&ctx, &body, "par", "task-update: not a JSON:API document") {
         let payload = json::lenient_members(resource.attributes.get("payload"));
         let payload_text = resource.sent("payload");
@@ -1351,7 +1281,7 @@ pub async fn handle_runner_task_update(ctx: Ctx, body: Bytes) -> Response {
 /// The per-task heartbeat. It must be answered with exactly 200: a 404 tells the runner the job is
 /// gone and it stops heartbeating. The rows answer "when did this job stop making progress": a job
 /// that hangs never sends a task update.
-pub async fn handle_runner_heartbeat(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_runner_heartbeat(ctx: Ctx, body: Body) -> Response {
     if let Some(resource) = decode_json_api(&ctx, &body, "par", "heartbeat: not a JSON:API document") {
         ctx.write(vec![RunnerHeartbeat {
             tenant_id: ctx.tenant().into(),
@@ -1367,7 +1297,7 @@ pub async fn handle_runner_heartbeat(ctx: Ctx, body: Bytes) -> Response {
 
 /// GET runner/health-check. The runner ignores the body and reads X-Server-Time; with no
 /// X-Retry-After-Ms it polls at its default interval.
-pub async fn handle_runner_health_check(_: Ctx, _: Bytes) -> Response {
+pub async fn handle_runner_health_check(_: Ctx, _: Body) -> Response {
     let mut response = json(StatusCode::OK, &json!({}));
     let now = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
     response.headers_mut().insert("x-server-time", HeaderValue::from_str(&now).unwrap());
@@ -1377,7 +1307,7 @@ pub async fn handle_runner_health_check(_: Ctx, _: Bytes) -> Response {
 /// POST /api/v2/actions/connections: a connection a runner may use to reach a third-party system.
 /// SENSITIVE: `integration.credentials` holds secrets and is stored verbatim, because a connection
 /// without them cannot be used. It must never be logged.
-pub async fn handle_action_connections(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_action_connections(ctx: Ctx, body: Body) -> Response {
     if let Some(resource) = decode_json_api(&ctx, &body, "par", "connections: not a JSON:API document") {
         let integration = json::lenient_members(resource.attributes.get("integration"));
         let integration_text = resource.sent("integration");

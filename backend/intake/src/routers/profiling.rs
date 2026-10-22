@@ -25,27 +25,8 @@ use tako::types::Response;
 use super::pprof::{self, Summary};
 use crate::body;
 use crate::json;
-use crate::server::{Ctx, Routes, accepted};
+use crate::server::{Body, Ctx, accepted};
 use crate::wire::{tags, text, time};
-
-/// intake.profile.<site>    apm_config.profiling_dd_url
-pub fn mount_profile(routes: &mut Routes) {
-    // What the trace-agent forwards from /profiling/v1/input: the tracer's own multipart, byte for
-    // byte.
-    routes.post("/api/v2/profile", |ctx, body| handle_profile("profile", ctx, body));
-    // The old path, still used by the agent's internal profiling.
-    routes.post("/v1/input", |ctx, body| handle_profile("profile-v1", ctx, body));
-}
-
-/// debugger-intake.<site>    debugger_diagnostics_dd_url
-pub fn mount_debugger(routes: &mut Routes) {
-    routes.post("/api/v2/debugger", handle_debugger);
-}
-
-/// sourcemap-intake.<site>    symbol_endpoints[].site
-pub fn mount_sourcemap(routes: &mut Routes) {
-    routes.post("/api/v2/srcmap", handle_sourcemap);
-}
 
 /// An epoch number as a time. Producers send seconds, milliseconds, microseconds or nanoseconds;
 /// the magnitude says which, as it would to a person reading the number.
@@ -184,7 +165,7 @@ fn decode_object(what: &str, data: &[u8]) -> Option<Value> {
 }
 
 /// POST of a profile; `label` names the path it came by and is stored as the row's variant.
-pub async fn handle_profile(label: &'static str, ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_profile(label: &'static str, ctx: Ctx, body: Body) -> Response {
     match read_parts(&ctx, &body, label).await {
         Err(problem) => {
             let note = format!("not multipart, content-type {}: {problem}", or_unknown(ctx.header("content-type")));
@@ -307,7 +288,9 @@ pub struct SymdbFile {
 const SYMDB_MAX_INFLATED: u64 = 256 * 1024 * 1024;
 
 pub fn decode_symdb_file(file: &[u8]) -> SymdbFile {
-    let Some(inflated) = gunzip(SYMDB_MAX_INFLATED, file) else { return SymdbFile::default() };
+    let Some(inflated) = gunzip(SYMDB_MAX_INFLATED, file) else {
+        return SymdbFile::default();
+    };
     let envelope = json::try_parse_object(&inflated).map(Value::Object);
     let scope_count = match json::child("scopes", envelope.as_ref()) {
         Some(Value::Array(scopes)) if scopes.iter().all(|s| s.is_object() || s.is_null()) => Some(scopes.len()),
@@ -402,7 +385,7 @@ fn store_diagnostics(ctx: &Ctx, ddtags: &str, messages: Vec<&[u8]>) {
 ///   multipart: file+event  symbol database: gzip JSON, then its metadata
 ///
 /// Each variant has a table of its own.
-pub async fn handle_debugger(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_debugger(ctx: Ctx, body: Body) -> Response {
     let content_type = ctx.header("content-type");
     let ddtags = ctx.query("ddtags");
 
@@ -503,7 +486,7 @@ pub fn symbol_upload_row(tenant: &str, parts: &BTreeMap<String, Bytes>, meta: Op
 /// POST /api/v2/srcmap: an ELF symbol file (elf_symbol_file) and its metadata (event), usually
 /// zstd-compressed as a whole. The agent sends it only after /api/v2/profiles/symbols/query said
 /// the symbols are missing.
-pub async fn handle_sourcemap(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_sourcemap(ctx: Ctx, body: Body) -> Response {
     match read_parts(&ctx, &body, "srcmap").await {
         Err(problem) => {
             let note = format!("multipart, content-type {}: {problem}", or_unknown(ctx.header("content-type")));

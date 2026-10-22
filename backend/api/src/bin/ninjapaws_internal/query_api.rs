@@ -1,8 +1,9 @@
 //! Datadog's query API: `GET /api/v1/metrics`, `POST /api/v2/query/timeseries` and
 //! `POST /api/v2/query/scalar`. HTTP in, an engine call, JSON out; no SQL and no query logic here.
 
+use api::reads::ClickHouse;
 use ninjapaws_engine::api::v2::{scalar, timeseries};
-use ninjapaws_engine::metrics::{self, ActiveMetricsRequest};
+use ninjapaws_engine::metrics;
 use ninjapaws_engine::query::execute::{self, QueryError};
 use ninjapaws_engine::query::plan::{self, Retention};
 use ninjapaws_engine::unix_time;
@@ -16,7 +17,6 @@ use tako::responder::Responder;
 use tako::types::Response;
 
 use crate::panel::{now, run, tenant};
-use crate::reads::ClickHouse;
 use crate::token::Claims;
 
 /// Datadog's error envelope, so API clients report our errors the way they report Datadog's.
@@ -57,16 +57,16 @@ pub async fn active_metrics(
 ) -> Response {
     let from = match q.from.as_deref().map(|f| f.trim().parse::<i64>()) {
         None => return errors(StatusCode::BAD_REQUEST, vec!["'from' is required".into()]),
-        Some(Err(_)) => return errors(StatusCode::BAD_REQUEST, vec!["'from' must be a unix timestamp in seconds".into()]),
+        Some(Err(_)) => {
+            return errors(StatusCode::BAD_REQUEST, vec!["'from' must be a unix timestamp in seconds".into()]);
+        }
         Some(Ok(from)) => from,
     };
-    let req = ActiveMetricsRequest {
-        tenant: tenant(&claims),
-        from: unix_time::of_seconds(from),
-        host: Some(q.host).filter(|h| !h.is_empty()),
-    };
-    match run::<(String,)>(&clickhouse, &metrics::active_metrics(&req)).await {
-        Ok(found) => Json(ActiveMetrics { from: from.to_string(), metrics: found.into_iter().map(|(m,)| m).collect() }).into_response(),
+    let host = Some(q.host.as_str()).filter(|h| !h.is_empty());
+    let sql = metrics::active_metrics(&tenant(&claims), unix_time::of_seconds(from), host);
+    match run::<(String,)>(&clickhouse, &sql).await {
+        Ok(found) => Json(ActiveMetrics { from: from.to_string(), metrics: found.into_iter().map(|(m,)| m).collect() })
+            .into_response(),
         Err(e) => failed("active metrics", e),
     }
 }

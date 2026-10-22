@@ -170,9 +170,10 @@ backend/api       the programs: ninjapaws_<host>, ninjapaws_internal, ninjapaws_
 ```
 
 - **An intake program per host, :8080** (`NINJACAT_ADDR`) — reachable from agent machines; every
-  route but the probes asks for an API key. `backend/api/src/bin/ninjapaws_<host>.rs` names its router
-  and its key scheme and calls `server::run`. Every write of what agents send goes through the
-  table writers of its own process.
+  route but the probes asks for an API key. `backend/api/src/bin/ninjapaws_<host>.rs` lists every
+  route of its host in `main`, on a plain tako `Router`, then the probes, the 404, `with_state` and
+  `server::serve`, line by line.
+  Every write of what agents send goes through the table writers of its own process.
 - **`ninjapaws_internal`, :8081** (`NINJACAT_INTERNAL_ADDR`) — `/internal/*` for the panel and
   Datadog's query API (`/api/v1/metrics`, `/api/v2/query/*`). It only reads. Every route but the
   probes asks for the panel's JWT (`token.rs`); its `tenant` claim is the only source of the
@@ -195,16 +196,18 @@ port for the panel.
 own, and whatever is in front (the chart's Ingress, the dev stack's Traefik) sends each host name
 to its program. A program does not look at the host it was sent to. The hosts of each program are
 listed three times, and the three must agree: `helm/ninjacat/values.yaml` (`intake.programs`),
-`dev/intake-routes.yml` and `host_process` in `intake/tests/golden.rs`.
+`dev/intake-routes.yml` and `host_process` in `intake/tests/golden.rs`. A program's routes are
+listed twice: in its `main` and in `intake/tests/programs/mod.rs`, the copy the tests serve (a
+binary cannot be imported).
 
-**Paths are the framework's.** Every path is a tako route, registered through `Routes` in
-`intake/src/server.rs` (`post`, `get`, `head`); there is no matcher of our own. Where tako's
-behaviour differs from the old servers' (case, trailing slashes, 405), tako's stands.
+**Paths are the framework's.** Every path is a tako route, registered in the program's `main`
+(`router.post(path, handler).middleware(auth::agent)`); there is no matcher or route type of our
+own. Where tako's behaviour differs from the old servers' (case, trailing slashes, 405), tako's stands.
 
-**Handlers take the request and its body.** Each is `async fn(Ctx, Bytes) -> Response`: the
-route reads the body whole and undoes its Content-Encoding first. A handler reads the request
-from `Ctx` (`tenant`, `header`, `query`, `path`) and answers with `server::json`, `status`,
-`accepted`. There is no other request or response type; do not add one.
+**Handlers take the request and its body.** Each is `async fn(Ctx, Body) -> Response`, both tako
+extractors from `intake/src/server.rs`: `Body` is the body read whole with its Content-Encoding
+undone. A handler reads the request from `Ctx` (`tenant`, `header`, `query`, `path`) and answers
+with `server::json`, `status`, `accepted`. There is no other request or response type; do not add one.
 
 **One helper of each kind.** JSON is parsed, read and written through `intake/src/json.rs`
 (`json::raw` for the text a value was sent as, `json::proto` for protobuf as JSON); an object is
@@ -218,9 +221,9 @@ workspace, so a parsed number keeps its digits. Where a column holds a JSON valu
 it holds the text that was sent (`json::raw`, RawValue), not a re-printed copy; the golden
 comparison compares JSON by meaning and would not notice, so such a column has a test of its own.
 
-**The API key is a route middleware.** `intake/src/auth.rs`: a `Scheme` says where a host's
-clients put the key; a known key goes on in the request's extensions (`Admitted`), anything else
-is a 403. An unknown path is answered before any key is asked for.
+**The API key is a route middleware.** `intake/src/auth.rs`: `auth::agent`, `browser`,
+`ci_webhook`, `lineage`, one per place a host's clients put the key; a known key goes on in the
+request's extensions (`Admitted`), anything else is a 403. An unknown path is answered before any key is asked for.
 
 **Writes are asynchronous, reads are not.** A handler turns the Datadog wire format into the
 plain rows in `storage/src/rows/*.rs` and hands them to the sink — the agent gets its 202

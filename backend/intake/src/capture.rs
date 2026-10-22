@@ -10,8 +10,8 @@ use std::fmt::Write as _;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 
 use bytes::{Buf, Bytes};
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -21,11 +21,11 @@ use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use prost::encoding::WireType;
 use tako::body::TakoBody;
 use tako::extractors::ipaddr::IpAddr;
-use tako::router::Router;
-use tako::types::Request;
+use tako::middleware::Next;
+use tako::types::{Request, Response};
 
 use crate::raw::{KEY_PARAMETERS, path_without_key};
-use crate::server::{query_pairs, status};
+use crate::server::{intake_of, query_pairs, status};
 use crate::{body, json};
 
 /// Text a person can read: valid UTF-8 with no control characters but newlines and tabs.
@@ -237,32 +237,25 @@ pub fn write(
     Ok(file)
 }
 
-/// The capture lab: `router` behind a gate that dumps every request into `directory` once it has
-/// been answered, the ones nothing serves above all. The body is read here and handed on whole.
-pub fn around(router: Router, directory: PathBuf, max_body_bytes: usize) -> Router {
-    let router = Arc::new(router);
-    let mut gate = Router::new();
-    gate.fallback(move |req: Request| {
-        let (router, directory) = (router.clone(), directory.clone());
-        async move {
-            let started = Utc::now();
-            let (parts, body) = req.into_parts();
-            let raw: Bytes = match Limited::new(body, max_body_bytes).collect().await {
-                Ok(collected) => collected.to_bytes(),
-                Err(_) => return status(StatusCode::PAYLOAD_TOO_LARGE),
-            };
-            let response = router.dispatch(Request::from_parts(parts.clone(), TakoBody::from(raw.clone()))).await;
+/// The capture lab, a router middleware (DEBUG=true): every request is dumped into `directory`
+/// once it has been answered, the ones nothing serves above all. The body is
+/// read here and handed on whole.
+pub async fn dump(directory: PathBuf, req: Request, next: Next) -> Response {
+    let started = Utc::now();
+    let limit = intake_of(req.extensions()).map_or(0, |intake| intake.max_body_bytes);
+    let (parts, body) = req.into_parts();
+    let raw: Bytes = match Limited::new(body, limit).collect().await {
+        Ok(collected) => collected.to_bytes(),
+        Err(_) => return status(StatusCode::PAYLOAD_TOO_LARGE),
+    };
+    let response = next.run(Request::from_parts(parts.clone(), TakoBody::from(raw.clone()))).await;
 
-            let encoding =
-                parts.headers.get(http::header::CONTENT_ENCODING).and_then(|v| v.to_str().ok()).unwrap_or_default();
-            let decoded = body::decompress(encoding, raw.clone());
-            if let Err(e) = write(&directory, &parts, &raw, &decoded, response.status().as_u16(), started) {
-                tracing::warn!("capture not written: {e}");
-            }
-            response
-        }
-    });
-    gate
+    let encoding = parts.headers.get(http::header::CONTENT_ENCODING).and_then(|v| v.to_str().ok()).unwrap_or_default();
+    let decoded = body::decompress(encoding, raw.clone());
+    if let Err(e) = write(&directory, &parts, &raw, &decoded, response.status().as_u16(), started) {
+        tracing::warn!("capture not written: {e}");
+    }
+    response
 }
 
 #[cfg(test)]

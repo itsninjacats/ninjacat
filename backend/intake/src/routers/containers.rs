@@ -7,7 +7,6 @@
 //! Both carry protobuf. Lifecycle events land in container_events, the image inventory in
 //! container_images. A body that does not decode, or decodes to nothing, goes to raw_payloads.
 
-use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use ninjapaws_proto::datadog::contimage::{ContainerImage, ContainerImagePayload};
 use ninjapaws_proto::datadog::contlcycle::{
@@ -17,24 +16,21 @@ use ninjapaws_proto::datadog::contlcycle::{
 };
 use ninjapaws_storage::rows::Tags;
 use ninjapaws_storage::rows::containers::{ContainerEvent as ContainerEventRow, ContainerImage as ContainerImageRow};
+use ninjapaws_storage::rows::metrics::MetricPoint;
 use prost::Message;
 use tako::types::Response;
 
-use crate::self_metrics;
-use crate::server::{Ctx, Routes, accepted};
+use crate::server::{Body, Ctx, accepted};
 use crate::wire::{enum_name, tags, text, time};
-
-pub fn mount(routes: &mut Routes) {
-    routes.post("/api/v2/contlcycle", handle_lifecycle);
-    routes.post("/api/v2/contimage", handle_images);
-}
 
 // ---- lifecycle events ----
 
 /// A container state as one label: the kind, then reason, exit code and signal when the value
 /// carries them.
 fn container_state_label(state: Option<&ContainerStateValue>) -> String {
-    let Some(state) = state else { return "-".into() };
+    let Some(state) = state else {
+        return "-".into();
+    };
     let reason = state.reason.as_ref().map(|r| format!("/{r}")).unwrap_or_default();
     let exit_code = state.exit_code.map(|c| format!(" exit={c}")).unwrap_or_default();
     let signal = state.signal.map(|s| format!(" signal={s}")).unwrap_or_default();
@@ -92,7 +88,7 @@ fn with_container_transition(transition: Option<&ContainerStateTransition>, row:
 
     row.old_state = container_state_label(was);
     row.new_state = container_state_label(became);
-    row.transition_at = time::optional_seconds(true, transition.transition_timestamp);
+    row.transition_at = time::optional_seconds(transition.transition_timestamp);
     row.container_kind = enum_name(transition.container_kind, ContainerKind::as_str_name);
     row.precision = enum_name(transition.precision, Precision::as_str_name);
     row.missed_intermediate = enum_name(transition.missed_intermediate, MissedIntermediate::as_str_name);
@@ -113,7 +109,7 @@ fn with_pod_transition(transition: Option<&PodStateTransition>, row: &mut Contai
 
     row.old_state = pod_status_label(transition.last_observed_state.as_ref());
     row.new_state = pod_status_label(transition.new_state.as_ref());
-    row.transition_at = time::optional_seconds(true, transition.transition_timestamp);
+    row.transition_at = time::optional_seconds(transition.transition_timestamp);
     row.pod_status_field = enum_name(transition.field, PodStatusField::as_str_name);
     row.precision = enum_name(transition.precision, Precision::as_str_name);
     row.missed_intermediate = enum_name(transition.missed_intermediate, MissedIntermediate::as_str_name);
@@ -165,13 +161,12 @@ pub fn event_rows(payload: &EventsPayload, tenant: &str, now: DateTime<Utc>) -> 
                 // kill is 137.
                 row.exit_code = container.optional_exit_code.map(|container_event::OptionalExitCode::ExitCode(c)| c);
                 row.created_at = container.optional_creation_timestamp.and_then(
-                    |container_event::OptionalCreationTimestamp::CreationTimestamp(t)| time::optional_seconds(true, t),
+                    |container_event::OptionalCreationTimestamp::CreationTimestamp(t)| time::optional_seconds(t),
                 );
-                row.exited_at = container.optional_exit_timestamp.and_then(
-                    |container_event::OptionalExitTimestamp::ExitTimestamp(t)| time::optional_seconds(true, t),
-                );
-                row.owner_type =
-                    owner.map(|o| enum_name(o.owner_type, ObjectKind::as_str_name)).unwrap_or_default();
+                row.exited_at = container
+                    .optional_exit_timestamp
+                    .and_then(|container_event::OptionalExitTimestamp::ExitTimestamp(t)| time::optional_seconds(t));
+                row.owner_type = owner.map(|o| enum_name(o.owner_type, ObjectKind::as_str_name)).unwrap_or_default();
                 row.owner_uid = owner.map(|o| o.owner_uid.clone()).unwrap_or_default();
                 with_container_transition(container.transition.as_ref(), &mut row);
             }
@@ -179,15 +174,15 @@ pub fn event_rows(payload: &EventsPayload, tenant: &str, now: DateTime<Utc>) -> 
                 row.event_variant = "pod".into();
                 row.pod_uid = pod.pod_uid.clone();
                 row.source = pod.source.clone();
-                row.created_at = pod.creation_timestamp.and_then(|t| time::optional_seconds(true, t));
-                row.exited_at = pod.exit_timestamp.and_then(|t| time::optional_seconds(true, t));
+                row.created_at = pod.creation_timestamp.and_then(time::optional_seconds);
+                row.exited_at = pod.exit_timestamp.and_then(time::optional_seconds);
                 with_pod_transition(pod.transition.as_ref(), &mut row);
             }
             Some(event::TypedEvent::Task(task)) => {
                 row.event_variant = "task".into();
                 row.task_arn = task.task_arn.clone();
                 row.source = task.source.clone();
-                row.exited_at = task.exit_timestamp.and_then(|t| time::optional_seconds(true, t));
+                row.exited_at = task.exit_timestamp.and_then(time::optional_seconds);
             }
             // No typed detail, or a kind newer than this schema. A Delete with no detail is still
             // a Delete, so the row stands on the envelope alone.
@@ -287,7 +282,7 @@ pub fn image_rows(
 
 /// Container, pod and task start/stop/OOM events. One payload covers one kind of object, named by
 /// object_kind.
-pub async fn handle_lifecycle(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_lifecycle(ctx: Ctx, body: Body) -> Response {
     match EventsPayload::decode(body.as_ref()) {
         Err(e) => ctx.raw("contlcycle", "decode_error", &e.to_string(), &body),
         Ok(payload) if payload.events.is_empty() => {
@@ -299,7 +294,7 @@ pub async fn handle_lifecycle(ctx: Ctx, body: Bytes) -> Response {
 }
 
 /// The container image inventory.
-pub async fn handle_images(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_images(ctx: Ctx, body: Body) -> Response {
     match ContainerImagePayload::decode(body.as_ref()) {
         Err(e) => ctx.raw("contimage", "decode_error", &e.to_string(), &body),
         Ok(payload) if payload.images.is_empty() => {
@@ -315,7 +310,13 @@ pub async fn handle_images(ctx: Ctx, body: Bytes) -> Response {
                 // The metric is what makes an incomplete inventory noticeable without going
                 // looking for a log line.
                 let reason = Tags::from([("reason".to_string(), vec!["no_identity".to_string()])]);
-                self_metrics::count(&ctx, &payload.host, self_metrics::IMAGES_SKIPPED, skipped as f64, reason);
+                ctx.write(vec![MetricPoint {
+                    host: payload.host.clone(),
+                    metric_type: "COUNT".into(),
+                    source_type: "ninjacat".into(),
+                    tags: reason,
+                    ..MetricPoint::new(ctx.tenant(), Utc::now(), "ninjacat.intake.images.skipped", skipped as f64)
+                }]);
             }
             ctx.write(rows);
         }

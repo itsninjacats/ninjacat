@@ -18,18 +18,11 @@ pub fn raw_window(from: &str, until: &str) -> String {
     raw_since(from) + &format!(" AND timestamp < {until} AND toStartOfFifteenMinutes(timestamp) < {until}")
 }
 
-/// Datadog's `GET /api/v1/metrics`: metrics reported since `from`, optionally by one host.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ActiveMetricsRequest {
-    pub tenant: TenantId,
-    /// Unix milliseconds.
-    pub from: i64,
-    pub host: Option<String>,
-}
-
-pub fn active_metrics(req: &ActiveMetricsRequest) -> Sql {
-    let tenant = SqlValue::String(req.tenant.0.clone());
-    let from = SqlValue::Int64(req.from.div_euclid(1000));
+/// Datadog's `GET /api/v1/metrics`: metrics reported since `from_ms` (unix milliseconds),
+/// optionally by one host.
+pub fn active_metrics(tenant: &TenantId, from_ms: i64, host: Option<&str>) -> Sql {
+    let tenant = SqlValue::String(tenant.0.clone());
+    let from = SqlValue::Int64(from_ms.div_euclid(1000));
     let from_sql = format!("fromUnixTimestamp({})", param("from", &from));
     let mut text = format!(
         "SELECT DISTINCT metric\nFROM metrics\nWHERE tenant_id = {}\n  AND {}",
@@ -37,8 +30,8 @@ pub fn active_metrics(req: &ActiveMetricsRequest) -> Sql {
         raw_since(&from_sql)
     );
     let mut parameters = vec![("tenant".to_string(), tenant), ("from".to_string(), from)];
-    if let Some(host) = &req.host {
-        let host = SqlValue::String(host.clone());
+    if let Some(host) = host {
+        let host = SqlValue::String(host.to_string());
         text += &format!("\n  AND host = {}", param("host", &host));
         parameters.push(("host".to_string(), host));
     }
@@ -51,13 +44,13 @@ pub fn active_metrics(req: &ActiveMetricsRequest) -> Sql {
 mod tests {
     use super::*;
 
-    fn req(host: Option<&str>) -> ActiveMetricsRequest {
-        ActiveMetricsRequest { tenant: TenantId("acme".into()), from: 1_700_000_000_000, host: host.map(String::from) }
+    fn active(host: Option<&str>) -> Sql {
+        active_metrics(&TenantId("acme".into()), 1_700_000_000_000, host)
     }
 
     #[test]
     fn tenant_and_from_are_bound_never_inlined() {
-        let sql = active_metrics(&req(None));
+        let sql = active(None);
         assert!(sql.text.contains("tenant_id = {tenant:String}"));
         assert!(sql.text.contains("fromUnixTimestamp({from:Int64})"));
         // The key has the 15-minute bucket after the metric: this is what prunes.
@@ -76,15 +69,15 @@ mod tests {
 
     #[test]
     fn host_filter_appears_only_when_a_host_is_given() {
-        assert!(!active_metrics(&req(None)).text.contains("host"));
-        let sql = active_metrics(&req(Some("web-1")));
+        assert!(!active(None).text.contains("host"));
+        let sql = active(Some("web-1"));
         assert!(sql.text.contains("AND host = {host:String}"));
         assert!(sql.parameters.contains(&("host".to_string(), SqlValue::String("web-1".into()))));
     }
 
     #[test]
     fn every_placeholder_has_a_parameter_and_vice_versa() {
-        let sql = active_metrics(&req(Some("web-1")));
+        let sql = active(Some("web-1"));
         let placeholders: std::collections::BTreeSet<String> =
             regex::Regex::new(r"\{(\w+):").unwrap().captures_iter(&sql.text).map(|c| c[1].to_string()).collect();
         let names: std::collections::BTreeSet<String> = sql.parameters.iter().map(|(name, _)| name.clone()).collect();
@@ -94,7 +87,7 @@ mod tests {
     #[test]
     fn the_whole_text() {
         assert_eq!(
-            active_metrics(&req(Some("web-1"))).text,
+            active(Some("web-1")).text,
             "SELECT DISTINCT metric\nFROM metrics\nWHERE tenant_id = {tenant:String}\n  AND timestamp >= fromUnixTimestamp({from:Int64}) AND toStartOfFifteenMinutes(timestamp) >= toStartOfFifteenMinutes(fromUnixTimestamp({from:Int64}))\n  AND host = {host:String}\nORDER BY metric"
         );
         assert_eq!(

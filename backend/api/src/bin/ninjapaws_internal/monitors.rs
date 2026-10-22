@@ -1,12 +1,13 @@
 //! `/internal/monitors/*`: validation, and what the monitor service stored, for the token's
 //! tenant. The panel writes definitions to Postgres itself.
 
+use api::reads::ClickHouse;
+use ninjapaws_engine::Sql;
 use ninjapaws_engine::json;
 use ninjapaws_engine::monitor::read::{self, EvaluationRecord, GroupStatus, StatusRow, TransitionRecord};
 use ninjapaws_engine::monitor::state::Status;
 use ninjapaws_engine::monitor::{check, validate};
 use ninjapaws_engine::query::plan::Retention;
-use ninjapaws_engine::Sql;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tako::StatusCode;
@@ -19,7 +20,6 @@ use tako::responder::Responder;
 use tako::types::Response;
 
 use crate::panel::{fail, now, run, tenant, time_range};
-use crate::reads::ClickHouse;
 use crate::token::Claims;
 
 #[derive(Serialize)]
@@ -32,13 +32,18 @@ struct Validation {
 /// evaluated, and the options it carries that are not acted on.
 pub async fn validate(State(retention): State<Retention>, _: JwtClaimsVerified<Claims>, body: String) -> Response {
     match validate::monitor(*retention, now(), &body) {
-        Ok(monitor) => Json(Validation { not_acted_on: monitor.options().not_acted_on.clone(), problems: Vec::new() }).into_response(),
+        Ok(monitor) => Json(Validation { not_acted_on: monitor.options().not_acted_on.clone(), problems: Vec::new() })
+            .into_response(),
         Err(problems) => Json(Validation { not_acted_on: Vec::new(), problems }).into_response(),
     }
 }
 
 /// A query built from checked parameters: a failure is ours, not the caller's.
-async fn answer<T: DeserializeOwned, R: Serialize>(clickhouse: &ClickHouse, sql: &Sql, respond: impl FnOnce(Vec<T>) -> R) -> Response {
+async fn answer<T: DeserializeOwned, R: Serialize>(
+    clickhouse: &ClickHouse,
+    sql: &Sql,
+    respond: impl FnOnce(Vec<T>) -> R,
+) -> Response {
     match run(clickhouse, sql).await {
         Ok(rows) => Json(respond(rows)).into_response(),
         Err(e) => fail(StatusCode::INTERNAL_SERVER_ERROR, e),
@@ -82,7 +87,13 @@ pub async fn status(
     answer(&clickhouse, &read::status(&tenant(&claims), &ids), |rows: Vec<Row>| {
         let rows: Vec<StatusRow> = rows
             .into_iter()
-            .map(|(monitor, state, open, groups, last_triggered_at)| StatusRow { monitor, state, open: open != 0, groups, last_triggered_at })
+            .map(|(monitor, state, open, groups, last_triggered_at)| StatusRow {
+                monitor,
+                state,
+                open: open != 0,
+                groups,
+                last_triggered_at,
+            })
             .collect();
         Statuses { monitors: read::statuses(&ids, &rows) }
     })
@@ -207,7 +218,8 @@ pub async fn transitions(
     let tenant = tenant(&claims);
     let in_range = read::transitions(&tenant, monitor, from, until, &q.group);
     let before = read::initial(&tenant, monitor, from, &q.group);
-    let (in_range, before) = tokio::join!(run::<TransitionRow>(&clickhouse, &in_range), run::<TransitionRow>(&clickhouse, &before));
+    let (in_range, before) =
+        tokio::join!(run::<TransitionRow>(&clickhouse, &in_range), run::<TransitionRow>(&clickhouse, &before));
     match (in_range, before) {
         (Ok(rows), Ok(initial)) => {
             let (rows, truncated) = read::newest(rows);

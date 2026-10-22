@@ -196,9 +196,10 @@ pub mod time {
         (min_time()..=max_time()).contains(&time).then_some(time)
     }
 
-    /// A time that may be absent: None unless `present` and positive.
-    pub fn optional_seconds(present: bool, seconds: i64) -> Option<DateTime<Utc>> {
-        (present && seconds > 0).then(|| from_unix_seconds(seconds))
+    /// A time that may be absent: None unless positive. Zero means the sender did not report
+    /// one, and it must never become 1970.
+    pub fn optional_seconds(seconds: i64) -> Option<DateTime<Utc>> {
+        (seconds > 0).then(|| from_unix_seconds(seconds))
     }
 }
 

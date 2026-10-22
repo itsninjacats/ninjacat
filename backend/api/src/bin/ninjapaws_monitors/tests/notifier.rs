@@ -9,7 +9,6 @@ use super::{Scratch, WAIT, eventually};
 use crate::notifier::{self, BATCH, Backend, Due, Notifier, Polled};
 use crate::rows::{NotificationRow, TransitionRow};
 use crate::telemetry::Counters;
-use crate::writer;
 
 /// 2026-10-14T12:00:00Z.
 const T0: i64 = 1_791_979_200_000;
@@ -207,7 +206,7 @@ fn transition(monitor: u64, group: &str, at: i64, to: &str, reason: &str) -> Tra
 #[tokio::test]
 async fn due_leaves_out_what_is_never_notified_and_what_was_already_notified() {
     let Some(scratch) = Scratch::new().await else { return };
-    let (reader, writes) = (scratch.reader(), scratch.writes());
+    let (reader, sink) = (scratch.reader(), scratch.sink());
     let started = chrono::Utc::now().timestamp_millis();
     let at = started - 10_000;
 
@@ -222,9 +221,9 @@ async fn due_leaves_out_what_is_never_notified_and_what_was_already_notified() {
         transition(1, "host:h", at, "OK", "no_data"),
         transition(2, "*", at, "OK", "recovery"),
     ];
-    writer::insert(&writes, "monitor_transitions", &rows).await.unwrap();
+    sink.insert(rows.to_vec()).await.unwrap();
     // Retried, as after a timeout: the same key collapses.
-    writer::insert(&writes, "monitor_transitions", &rows[..1]).await.unwrap();
+    sink.insert(rows[..1].to_vec()).await.unwrap();
 
     // A list, not a set: a duplicate FINAL failed to collapse must show.
     let keys = |p: &Polled| {
@@ -259,7 +258,7 @@ async fn due_leaves_out_what_is_never_notified_and_what_was_already_notified() {
             handled_at: chrono::Utc::now().timestamp_millis(),
         })
         .collect();
-    writer::insert(&writes, "monitor_notifications", &notified).await.unwrap();
+    sink.insert(notified.clone()).await.unwrap();
 
     let rest = expected(&[(1, "host:c"), (1, "host:h"), (2, "*")]);
     assert_eq!(keys(&notifier::due(&reader, started - MINUTE).await.unwrap()), rest);

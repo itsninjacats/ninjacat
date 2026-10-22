@@ -1,14 +1,14 @@
 //! The Kubernetes and container hosts through their routers, as the cluster agent and the node
 //! agent send to them: what the golden fixtures do not cover.
 
+mod programs;
+
 use std::sync::Arc;
 
 use http_body_util::BodyExt;
-use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::keys::{self, Key, Store};
 use ninjapaws_intake::process_frame;
-use ninjapaws_intake::routers::{config, containers, kubeops};
-use ninjapaws_intake::server::{Intake, Routes, router};
+use ninjapaws_intake::server::Intake;
 use ninjapaws_proto::datadog::config::{Client, LatestConfigsRequest};
 use ninjapaws_proto::datadog::contimage::{ContainerImage, ContainerImagePayload};
 use ninjapaws_proto::datadog::process_agent::{
@@ -17,6 +17,7 @@ use ninjapaws_proto::datadog::process_agent::{
 use ninjapaws_storage::{Sink, Write};
 use prost::Message;
 use serde_json::{Value, json};
+use tako::router::Router;
 
 const KEY: &str = "00000000000000000000000000000001";
 const TENANT: &str = "test";
@@ -27,22 +28,29 @@ struct Answer {
     writes: Vec<Write>,
 }
 
-async fn send(mount: fn(&mut Routes), method: &str, path: &str, key: Option<&str>, body: Vec<u8>) -> Answer {
+async fn send(mount: fn(&mut Router), method: &str, path: &str, key: Option<&str>, body: Vec<u8>) -> Answer {
     let store = Store::default();
     store.publish([(keys::hash(KEY), Key { id: "k".into(), name: "test".into(), tenant_id: TENANT.into() })]);
     let (sink, capture) = Sink::capture();
-    let intake = Intake { sink, keys: Arc::new(store), ack_unknown: false, max_body_bytes: 1 << 20 };
+    let intake = Intake {
+        sink,
+        keys: Arc::new(store),
+        ack_unknown: false,
+        max_body_bytes: 1 << 20,
+        stopping: Default::default(),
+        tasks: Default::default(),
+    };
     let mut request = http::Request::builder().method(method).uri(path);
     if let Some(key) = key {
         request = request.header("dd-api-key", key);
     }
-    let response = router(intake, Some(Scheme::Agent), mount).dispatch(request.body(body.into()).unwrap()).await;
+    let response = programs::router_of(mount, intake).dispatch(request.body(body.into()).unwrap()).await;
     let status = response.status().as_u16();
     let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
     Answer { status, body, writes: capture.writes() }
 }
 
-async fn post(mount: fn(&mut Routes), path: &str, body: Vec<u8>) -> Answer {
+async fn post(mount: fn(&mut Router), path: &str, body: Vec<u8>) -> Answer {
     send(mount, "POST", path, Some(KEY), body).await
 }
 
@@ -69,7 +77,7 @@ async fn a_configuration_poll_is_answered_404_so_the_agent_keeps_the_config_it_h
         active_clients: vec![Client { id: "client-1".into(), is_agent: true, ..Default::default() }],
         ..Default::default()
     };
-    let answer = post(config::mount, "/api/v0.1/configurations", request.encode_to_vec()).await;
+    let answer = post(programs::remote_config, "/api/v0.1/configurations", request.encode_to_vec()).await;
     assert_eq!((answer.status, answer.body.as_str()), (404, NOT_SERVED));
     assert!(answer.writes.is_empty());
 }
@@ -77,7 +85,7 @@ async fn a_configuration_poll_is_answered_404_so_the_agent_keeps_the_config_it_h
 #[tokio::test]
 async fn a_poll_that_is_not_protobuf_or_decodes_to_nothing_gets_the_same_404() {
     for body in [vec![0xff; 4], Vec::new()] {
-        let answer = post(config::mount, "/api/v0.1/configurations", body).await;
+        let answer = post(programs::remote_config, "/api/v0.1/configurations", body).await;
         assert_eq!((answer.status, answer.body.as_str()), (404, NOT_SERVED));
         assert!(answer.writes.is_empty());
     }
@@ -88,7 +96,7 @@ async fn the_org_and_status_lookups_are_answered_404() {
     for (method, path) in
         [("GET", "/api/v0.1/org"), ("POST", "/api/v0.1/org"), ("GET", "/api/v0.1/status"), ("POST", "/api/v0.1/status")]
     {
-        let answer = send(config::mount, method, path, Some(KEY), Vec::new()).await;
+        let answer = send(programs::remote_config, method, path, Some(KEY), Vec::new()).await;
         assert_eq!((answer.status, answer.body.as_str()), (404, r#"{"error":"not served"}"#), "{method} {path}");
         assert!(answer.writes.is_empty());
     }
@@ -96,7 +104,7 @@ async fn the_org_and_status_lookups_are_answered_404() {
 
 #[tokio::test]
 async fn remote_configuration_needs_an_api_key() {
-    assert_eq!(send(config::mount, "GET", "/api/v0.1/org", None, Vec::new()).await.status, 403);
+    assert_eq!(send(programs::remote_config, "GET", "/api/v0.1/org", None, Vec::new()).await.status, 403);
 }
 
 // ---- containers ----
@@ -109,7 +117,7 @@ async fn skipped_images_are_counted_as_a_metric_of_the_intake_itself_then_the_re
         images: vec![image("img-a", ""), image("", "x"), image("", "y")],
         ..Default::default()
     };
-    let answer = post(containers::mount, "/api/v2/contimage", payload.encode_to_vec()).await;
+    let answer = post(programs::containers, "/api/v2/contimage", payload.encode_to_vec()).await;
 
     assert_eq!(answer.status, 202);
     assert_eq!(writers(&answer), ["storage_metrics", "storage_container_images"]);
@@ -132,7 +140,7 @@ async fn an_inventory_of_only_unidentifiable_images_stores_the_metric_and_no_row
         images: vec![ContainerImage { name: "x".into(), ..Default::default() }],
         ..Default::default()
     };
-    let answer = post(containers::mount, "/api/v2/contimage", payload.encode_to_vec()).await;
+    let answer = post(programs::containers, "/api/v2/contimage", payload.encode_to_vec()).await;
     assert_eq!(writers(&answer), ["storage_metrics"]);
 }
 
@@ -151,7 +159,7 @@ async fn post_orchmanif_stores_a_crd_frames_manifests_with_the_wrappers_tags() {
         ..Default::default()
     };
     let wrapper = CollectorManifestCrd { manifest: Some(inner), tags: vec!["source:crd".into()] };
-    let answer = post(kubeops::mount, "/api/v2/orchmanif", process_frame::encode(81, 0, &wrapper)).await;
+    let answer = post(programs::kubeops, "/api/v2/orchmanif", process_frame::encode(81, 0, &wrapper)).await;
 
     assert_eq!((answer.status, answer.body.as_str()), (202, "{}"));
     assert_eq!(writers(&answer), ["storage_k8s_manifests"]);
@@ -167,7 +175,8 @@ async fn post_orchmanif_stores_a_crd_frames_manifests_with_the_wrappers_tags() {
 #[tokio::test]
 async fn a_cr_frame_with_nothing_inside_it_is_accepted_and_stores_nothing() {
     let answer =
-        post(kubeops::mount, "/api/v2/orchmanif", process_frame::encode(82, 0, &CollectorManifestCr::default())).await;
+        post(programs::kubeops, "/api/v2/orchmanif", process_frame::encode(82, 0, &CollectorManifestCr::default()))
+            .await;
     assert_eq!(answer.status, 202);
     assert!(answer.writes.is_empty());
 }
@@ -180,7 +189,8 @@ async fn post_api_v1_orchestrator_the_legacy_path_stores_a_cluster_frame() {
         cluster: Some(Cluster { node_count: 3, ..Default::default() }),
         ..Default::default()
     };
-    let answer = post(kubeops::mount, "/api/v1/orchestrator", process_frame::encode(46, 1700000123, &collector)).await;
+    let answer =
+        post(programs::kubeops, "/api/v1/orchestrator", process_frame::encode(46, 1700000123, &collector)).await;
 
     assert_eq!(answer.status, 202);
     assert_eq!(writers(&answer), ["storage_k8s_cluster"]);
@@ -195,7 +205,7 @@ async fn post_api_v1_orchestrator_the_legacy_path_stores_a_cluster_frame() {
 #[tokio::test]
 async fn one_bad_action_in_a_batch_is_kept_raw_while_the_rest_become_rows() {
     let body = br#"[{"action_id":"a-1"}, {"action_id": 5}, {"action_id":"a-3"}]"#.to_vec();
-    let answer = post(kubeops::mount, "/api/v2/kubeactions", body).await;
+    let answer = post(programs::kubeops, "/api/v2/kubeactions", body).await;
 
     assert_eq!(answer.status, 202);
     assert_eq!(writers(&answer), ["storage_raw_payloads", "storage_k8s_actions"]);
@@ -211,7 +221,7 @@ async fn one_bad_action_in_a_batch_is_kept_raw_while_the_rest_become_rows() {
 #[tokio::test]
 async fn a_kubeactions_body_of_null_or_an_empty_array_stores_nothing() {
     for body in ["null", "[]"] {
-        let answer = post(kubeops::mount, "/api/v2/kubeactions", body.as_bytes().to_vec()).await;
+        let answer = post(programs::kubeops, "/api/v2/kubeactions", body.as_bytes().to_vec()).await;
         assert_eq!(answer.status, 202);
         assert!(answer.writes.is_empty(), "{body}");
     }
@@ -223,14 +233,12 @@ async fn a_kubeactions_body_of_null_or_an_empty_array_stores_nothing() {
 #[tokio::test]
 async fn a_lifecycle_body_with_a_mistyped_field_is_kept_raw_not_stored_as_an_event() {
     use base64::Engine;
-    let path = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/go/TestPortProbeContainers__images_on_lifecycle/001.json"
-    );
+    let path =
+        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/go/TestPortProbeContainers__images_on_lifecycle/001.json");
     let fixture: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
     let body =
         base64::engine::general_purpose::STANDARD.decode(fixture["request"]["body_b64"].as_str().unwrap()).unwrap();
-    let answer = post(containers::mount, "/api/v2/contlcycle", body).await;
+    let answer = post(programs::containers, "/api/v2/contlcycle", body).await;
     assert_eq!(answer.status, 202);
     assert_eq!(writers(&answer), vec!["storage_raw_payloads"]);
     assert_eq!(rows(&answer, "storage_raw_payloads")[0]["reason"], "decode_error");

@@ -14,6 +14,7 @@ use ninjapaws_engine::monitor::state::{self, Group, Reason, Transition};
 use ninjapaws_engine::monitor::validate;
 use ninjapaws_engine::query::execute::Executor;
 use ninjapaws_engine::query::plan::Retention;
+use ninjapaws_storage::fnv;
 use tokio::sync::Semaphore;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::{JoinError, JoinHandle, JoinSet};
@@ -21,7 +22,6 @@ use tokio::time::Instant;
 
 use crate::definitions::{MonitorKey, MonitorRow};
 use crate::rows::{EvaluationRow, TransitionRow};
-use crate::shards::fnv1a;
 use crate::store::{self, History};
 use crate::telemetry::{Counter, Counters};
 
@@ -197,7 +197,7 @@ impl<B: Backend> Entity<B> {
     fn new(key: MonitorKey, services: Arc<Services<B>>) -> Self {
         // One resync's Ensure reaches every entity within milliseconds, so without a spread they
         // would all read Postgres in the same instant once the manager falls silent.
-        let spread = (fnv1a(&key.text()) % 1000) as f64 / 1000.0;
+        let spread = (fnv::hash64(key.text().as_bytes()) % 1000) as f64 / 1000.0;
         let unheard_after = services.resync.mul_f64(3.0 + spread);
         services.counts.entities.add(1);
         Entity {

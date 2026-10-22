@@ -9,11 +9,16 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use tokio::task::JoinHandle;
 use tokio_util::task::TaskTracker;
 
 use crate::table::Table;
+
+/// An insert gives up after this long; ClickHouse may still finish it. Without it a hung insert
+/// would hold its flush, and `stop` with it, forever.
+const INSERT_TIMEOUT: Duration = Duration::from_secs(120);
 
 pub(crate) struct Writer<T: Table> {
     client: clickhouse::Client,
@@ -172,11 +177,18 @@ impl<T: Table> Running for Writer<T> {
     }
 }
 
-/// Inserts now and fails if ClickHouse refuses.
-pub(crate) async fn insert<T: Table>(client: &clickhouse::Client, rows: &[T]) -> clickhouse::error::Result<()> {
-    let mut insert = client.insert::<T>(T::TABLE).await?;
-    for row in rows {
-        insert.write(row).await?;
+/// Inserts now and fails if ClickHouse refuses or does not answer in time.
+pub(crate) async fn insert<T: Table>(client: &clickhouse::Client, rows: &[T]) -> Result<(), String> {
+    let sent = async {
+        let mut insert = client.insert::<T>(T::TABLE).await?;
+        for row in rows {
+            insert.write(row).await?;
+        }
+        insert.end().await
+    };
+    match tokio::time::timeout(INSERT_TIMEOUT, sent).await {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(e)) => Err(e.to_string()),
+        Err(_) => Err(format!("the insert into {} did not finish in {} seconds", T::TABLE, INSERT_TIMEOUT.as_secs())),
     }
-    insert.end().await
 }

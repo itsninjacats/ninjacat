@@ -1,16 +1,41 @@
 //! http-intake.logs.<site> and agent-http-intake.logs.<site>, and beside them the agent's logs over
 //! TCP (`NINJACAT_LOGS_TCP_ADDR`).
 
-use ninjapaws_intake::auth::Scheme;
-use ninjapaws_intake::routers::logs;
+use ninjapaws_intake::auth;
+use ninjapaws_intake::routers::{flare, logs};
+use ninjapaws_intake::server;
 use ninjapaws_intake::tcp_logs;
+use tako::router::Router;
 use tako::types::BoxError;
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
-    ninjapaws_intake::server::run_with("ninjapaws_logs", Some(Scheme::Agent), logs::mount, |router, process| {
-        tcp_logs::listen(process)?;
-        Ok(router)
-    })
-    .await
+    let intake = server::start().await?;
+
+    let mut router = Router::new();
+    router.post("/api/v2/logs", logs::handle).middleware(auth::agent);
+    router.post("/v1/input", logs::handle).middleware(auth::agent);
+    // Older clients put the key in the path.
+    router.post("/v1/input/{key}", logs::handle).middleware(auth::agent);
+
+    // What the agent sweeps at startup on whatever host it talks to, and a flare, which goes to
+    // whichever host dd_url resolves to.
+    router.get("/api/v1/validate", server::validate).middleware(auth::agent);
+    router.post("/support/flare", flare::handle).middleware(auth::agent);
+    router.post("/support/flare/{case}", flare::handle).middleware(auth::agent);
+
+    // Without a key, on every host.
+    router.get("/ping", server::ping);
+    router.get("/_health", server::health);
+    router.head("/support/flare", server::flare_probe);
+    router.head("/support/flare/{case}", server::flare_probe);
+    // Anything else: logged, and 404.
+    router.middleware(server::log_405);
+    router.fallback(server::not_found);
+
+    // What the handlers write to and read from.
+    router.with_state(intake.clone());
+    // The agent's logs over TCP, beside the HTTP routes.
+    tcp_logs::listen(&intake)?;
+    server::serve("ninjapaws_logs", router, intake).await
 }

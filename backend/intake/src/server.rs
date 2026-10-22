@@ -1,35 +1,42 @@
-//! One intake host as a process: its routes, the ones every host has, the API key they ask for,
-//! and the answer for anything else. A binary names its host's router and calls [`run`].
+//! What every intake program shares. A program's `main` reads the environment with [`start`],
+//! registers its routes on a tako `Router` (each behind its API key, `auth`), puts the [`Intake`]
+//! in the router's state and [`serve`]s it.
 //!
 //! Which host a request was sent to is not looked at: each host is a process of its own, and
 //! whatever is in front of them (an ingress, a proxy) sends each host name to its process.
 
 use std::env;
 use std::future::Future;
+use std::ops::Deref;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use http::{HeaderValue, Method, StatusCode, Uri};
+use http::request::Parts;
+use http::{HeaderValue, StatusCode, Uri};
 use http_body_util::{BodyExt, Limited};
 use ninjapaws_storage::{Sink, Table};
 use serde::Serialize;
 use tako::Server;
 use tako::body::TakoBody;
 use tako::extractors::ipaddr::IpAddr;
+use tako::extractors::{FromRequest, FromRequestParts};
 use tako::middleware::Next;
 use tako::router::Router;
+use tako::router_state::RouterState;
 use tako::types::{BoxError, Request, Response};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
-use crate::auth::{self, Admitted, Scheme};
+use crate::auth::Admitted;
 use crate::capture;
 use crate::keys::{self, Store};
 use crate::raw;
-use crate::routers::flare;
 
-/// What every handler of a process shares.
+/// What a program has besides its routes: what its handlers write to and read from, and its
+/// settings.
+#[derive(Clone)]
 pub struct Intake {
     pub sink: Sink,
     pub keys: Arc<Store>,
@@ -38,9 +45,14 @@ pub struct Intake {
     pub ack_unknown: bool,
     /// The largest request body read (NINJACAT_MAX_BODY_BYTES); a larger one is refused with 413.
     pub max_body_bytes: usize,
+    /// Cancelled once the HTTP listener has stopped. The tasks in `tasks` (the logs over TCP) end
+    /// on it, and the writers flush only after every one of them has.
+    pub stopping: CancellationToken,
+    pub tasks: TaskTracker,
 }
 
-/// One request as a handler sees it: everything but the body, which it is given apart.
+/// One request as a handler sees it: everything but the body, which it is given apart
+/// ([`Body`]).
 pub struct Ctx {
     pub parts: http::request::Parts,
     pub intake: Arc<Intake>,
@@ -65,7 +77,7 @@ impl Ctx {
 
     /// The query parameter's first value, or "".
     pub fn query(&self, name: &str) -> String {
-        query_value(&self.parts.uri, name)
+        query_value(&self.parts.uri, name).unwrap_or_default()
     }
 
     pub fn path(&self) -> &str {
@@ -111,9 +123,9 @@ pub fn query_pairs(uri: &Uri) -> Vec<(String, String)> {
     form_urlencoded::parse(uri.query().unwrap_or_default().as_bytes()).into_owned().collect()
 }
 
-/// A query parameter's first value, or "".
-pub fn query_value(uri: &Uri, name: &str) -> String {
-    query_pairs(uri).into_iter().find(|(key, _)| key == name).map(|(_, value)| value).unwrap_or_default()
+/// A query parameter's first value; None when it is absent or empty.
+pub fn query_value(uri: &Uri, name: &str) -> Option<String> {
+    query_pairs(uri).into_iter().find(|(key, _)| key == name).map(|(_, value)| value).filter(|value| !value.is_empty())
 }
 
 /// JSON with the content type the agent has always been answered with.
@@ -141,153 +153,114 @@ pub fn accepted() -> Response {
     json(StatusCode::ACCEPTED, &serde_json::json!({}))
 }
 
-/// The routes of one host, being registered.
-pub struct Routes {
-    router: Router,
-    intake: Arc<Intake>,
-    /// The key the routes ask for; None for a host whose clients are anonymous.
-    scheme: Option<Scheme>,
+/// A request's body, read whole (up to NINJACAT_MAX_BODY_BYTES, 413 past it) with its
+/// Content-Encoding undone. The last argument of every handler.
+pub struct Body(pub Bytes);
+
+impl Deref for Body {
+    type Target = Bytes;
+
+    fn deref(&self) -> &Bytes {
+        &self.0
+    }
 }
 
-impl Routes {
-    pub fn post<F, Fut>(&mut self, path: &str, handler: F)
-    where
-        F: Fn(Ctx, Bytes) -> Fut + Clone + Send + Sync + 'static,
-        Fut: Future<Output = Response> + Send + 'static,
-    {
-        self.add(Method::POST, path, handler);
-    }
+impl<'a> FromRequest<'a> for Body {
+    type Error = Response;
 
-    pub fn get<F, Fut>(&mut self, path: &str, handler: F)
-    where
-        F: Fn(Ctx, Bytes) -> Fut + Clone + Send + Sync + 'static,
-        Fut: Future<Output = Response> + Send + 'static,
-    {
-        self.add(Method::GET, path, handler);
+    async fn from_request(req: &'a mut Request) -> Result<Self, Response> {
+        let limit = intake_of(req.extensions()).map_or(0, |intake| intake.max_body_bytes);
+        let raw = match Limited::new(std::mem::take(req.body_mut()), limit).collect().await {
+            Ok(collected) => collected.to_bytes(),
+            Err(_) => return Err(status(StatusCode::PAYLOAD_TOO_LARGE)),
+        };
+        let encoding =
+            req.headers().get(http::header::CONTENT_ENCODING).and_then(|v| v.to_str().ok()).unwrap_or_default();
+        Ok(Body(crate::body::decompress(encoding, raw)))
     }
+}
 
-    pub fn head<F, Fut>(&mut self, path: &str, handler: F)
-    where
-        F: Fn(Ctx, Bytes) -> Fut + Clone + Send + Sync + 'static,
-        Fut: Future<Output = Response> + Send + 'static,
-    {
-        self.add(Method::HEAD, path, handler);
-    }
+impl<'a> FromRequestParts<'a> for Ctx {
+    type Error = Response;
 
-    /// A route that reads the body whole, undoes its Content-Encoding, and hands the bytes to the
-    /// handler; behind the host's key.
-    fn add<F, Fut>(&mut self, method: Method, path: &str, handler: F)
-    where
-        F: Fn(Ctx, Bytes) -> Fut + Clone + Send + Sync + 'static,
-        Fut: Future<Output = Response> + Send + 'static,
-    {
-        let intake = self.intake.clone();
-        let route = self.router.route(method, path, move |req: Request| {
-            let handler = handler.clone();
-            let intake = intake.clone();
-            async move {
-                let (parts, body) = req.into_parts();
-                let raw = match Limited::new(body, intake.max_body_bytes).collect().await {
-                    Ok(collected) => collected.to_bytes(),
-                    Err(_) => return status(StatusCode::PAYLOAD_TOO_LARGE),
-                };
-                let encoding =
-                    parts.headers.get(http::header::CONTENT_ENCODING).and_then(|v| v.to_str().ok()).unwrap_or_default();
-                let body = crate::body::decompress(encoding, raw);
-                handler(Ctx { parts, intake }, body).await
-            }
+    fn from_request_parts(parts: &'a mut Parts) -> impl Future<Output = Result<Self, Response>> + Send + 'a {
+        // The parts are copied, not taken: the body's extractor, which runs next, reads the limit
+        // and the encoding from them.
+        let ctx = intake_of(&parts.extensions).map(|intake| {
+            let (mut copy, _) = http::Request::new(()).into_parts();
+            copy.method = parts.method.clone();
+            copy.uri = parts.uri.clone();
+            copy.version = parts.version;
+            copy.headers = parts.headers.clone();
+            copy.extensions = parts.extensions.clone();
+            Ctx { parts: copy, intake }
         });
-        if let Some(scheme) = self.scheme {
-            let keys = self.intake.keys.clone();
-            route.middleware(move |req, next| auth::guard(keys.clone(), scheme, req, next));
-        }
+        std::future::ready(ctx.ok_or_else(|| status(StatusCode::INTERNAL_SERVER_ERROR)))
     }
 }
 
-/// The host's router: its routes, the probes, what every host with a key serves, and the answer
-/// for anything else.
-pub fn router(intake: Intake, scheme: Option<Scheme>, mount: impl FnOnce(&mut Routes)) -> Router {
-    let intake = Arc::new(intake);
-    let mut routes = Routes { router: Router::new(), intake: intake.clone(), scheme };
-    mount(&mut routes);
-
-    // A host that asks for no key serves its own routes and nothing else: a flare upload there
-    // would be a body anyone could send.
-    if scheme.is_some() {
-        every_host(&mut routes);
-    }
-
-    // What asks for no key on any host: /ping, /_health, and the HEAD an agent sends to learn
-    // whether a flare could be uploaded. Its connectivity check sends that one without a key and
-    // reports anything but 200 or a redirect as a failure (pkg/diagnose/connectivity, agent
-    // 7.84.0).
-    let mut open = Routes { router: routes.router, intake: intake.clone(), scheme: None };
-    open.get("/ping", |_, _| async { json(StatusCode::OK, &serde_json::json!({ "message": "pong" })) });
-    open.get("/_health", |_, _| async { json(StatusCode::OK, &serde_json::json!({ "status": "ok" })) });
-    open.head("/support/flare", |_, _| async { status(StatusCode::OK) });
-    open.head("/support/flare/{case}", |_, _| async { status(StatusCode::OK) });
-
-    let mut router = open.router;
-    // A known path with the wrong method is answered by the router itself, with 405. It is as
-    // unhandled as an unknown path, so it is logged too.
-    router.middleware(|req: Request, next: Next| async move {
-        let unhandled = Unhandled::of(&req);
-        let response = next.run(req).await;
-        if response.status() == StatusCode::METHOD_NOT_ALLOWED {
-            unhandled.log();
-        }
-        response
-    });
-    let ack_unknown = intake.ack_unknown;
-    router.fallback(move |req: Request| async move {
-        Unhandled::of(&req).log();
-        if ack_unknown {
-            accepted()
-        } else {
-            json(StatusCode::NOT_FOUND, &serde_json::json!({ "errors": ["unknown endpoint"] }))
-        }
-    });
-    router
+/// The program's [`Intake`], which its `main` puts in the router's state (`with_state`).
+pub fn intake_of(extensions: &http::Extensions) -> Option<Arc<Intake>> {
+    extensions.get::<Arc<RouterState>>()?.get::<Intake>()
 }
 
-/// What the agent sweeps at startup on whatever host it talks to, before it knows which intake
-/// that is; and a flare, which goes to whichever host dd_url resolves to. They ask for the key
-/// the host asks for.
-fn every_host(routes: &mut Routes) {
-    routes.get("/api/v1/validate", |_, _| async { json(StatusCode::OK, &serde_json::json!({ "valid": true })) });
-    routes.post("/support/flare", flare::handle);
-    routes.post("/support/flare/{case}", flare::handle);
+/// GET /api/v1/validate, which the agent sweeps at startup on whatever host it talks to.
+pub async fn validate() -> Response {
+    json(StatusCode::OK, &serde_json::json!({ "valid": true }))
 }
 
-/// A request nothing serves, for the log line that is how unhandled endpoints are found.
-struct Unhandled {
-    method: Method,
-    path: String,
-    content_type: String,
-    user_agent: String,
+/// GET /ping, on every host, without a key.
+pub async fn ping() -> Response {
+    json(StatusCode::OK, &serde_json::json!({ "message": "pong" }))
 }
 
-impl Unhandled {
-    fn of(req: &Request) -> Self {
-        let header =
-            |name| req.headers().get(name).and_then(|v: &HeaderValue| v.to_str().ok()).unwrap_or_default().to_string();
-        Unhandled {
-            method: req.method().clone(),
-            path: raw::path_without_key(req.uri().path()),
-            content_type: header(http::header::CONTENT_TYPE),
-            user_agent: header(http::header::USER_AGENT),
-        }
-    }
+/// GET /_health, on every host, without a key.
+pub async fn health() -> Response {
+    json(StatusCode::OK, &serde_json::json!({ "status": "ok" }))
+}
 
-    fn log(&self) {
-        tracing::warn!(
-            "UNHANDLED ENDPOINT: {} {} (Content-Type: {}, User-Agent: {})",
-            self.method,
-            self.path,
-            self.content_type,
-            self.user_agent
-        );
+/// HEAD /support/flare, on every host, without a key: an agent sends it to learn whether a flare
+/// could be uploaded. Its connectivity check reports anything but 200 or a redirect as a failure
+/// (pkg/diagnose/connectivity, agent 7.84.0).
+pub async fn flare_probe() -> Response {
+    status(StatusCode::OK)
+}
+
+/// The answer for a path nothing serves, logged: the log line is how unhandled endpoints are
+/// found.
+pub async fn not_found(req: Request) -> Response {
+    log_unhandled(&unhandled(&req));
+    if intake_of(req.extensions()).is_some_and(|intake| intake.ack_unknown) {
+        accepted()
+    } else {
+        json(StatusCode::NOT_FOUND, &serde_json::json!({ "errors": ["unknown endpoint"] }))
     }
+}
+
+/// A router middleware: a known path with the wrong method is answered by the router itself, with
+/// 405. It is as unhandled as an unknown path, so it is logged too.
+pub async fn log_405(req: Request, next: Next) -> Response {
+    let line = unhandled(&req);
+    let response = next.run(req).await;
+    if response.status() == StatusCode::METHOD_NOT_ALLOWED {
+        log_unhandled(&line);
+    }
+    response
+}
+
+fn unhandled(req: &Request) -> String {
+    let header = |name| req.headers().get(name).and_then(|v: &HeaderValue| v.to_str().ok()).unwrap_or_default();
+    format!(
+        "{} {} (Content-Type: {}, User-Agent: {})",
+        req.method(),
+        raw::path_without_key(req.uri().path()),
+        header(http::header::CONTENT_TYPE),
+        header(http::header::USER_AGENT)
+    )
+}
+
+fn log_unhandled(line: &str) {
+    tracing::warn!("UNHANDLED ENDPOINT: {line}");
 }
 
 /// An environment variable, or `default` when it is unset or empty.
@@ -303,31 +276,8 @@ pub fn listen_on(addr: &str) -> String {
     }
 }
 
-/// What a host's process has besides its routes, for a binary that adds to them.
-pub struct Process {
-    pub keys: Arc<Store>,
-    pub sink: Sink,
-    /// Cancelled once the HTTP listener has stopped. The tasks in `tasks` end on it, and the
-    /// writers flush only after every one of them has.
-    pub stopping: CancellationToken,
-    pub tasks: TaskTracker,
-}
-
-/// The process of one host: reads its settings, the API keys and ClickHouse from the
-/// environment, serves `mount`'s routes on `NINJACAT_ADDR` until it is told to stop, then
-/// flushes what its writers still hold.
-pub async fn run(name: &str, scheme: Option<Scheme>, mount: impl FnOnce(&mut Routes)) -> Result<(), BoxError> {
-    run_with(name, scheme, mount, |router, _| Ok(router)).await
-}
-
-/// [`run`], with `around` handed the host's router before it is served, and the process: for what
-/// sits above a host's routes (browser-intake's CORS) or listens beside them (the logs over TCP).
-pub async fn run_with(
-    name: &str,
-    scheme: Option<Scheme>,
-    mount: impl FnOnce(&mut Routes),
-    around: impl FnOnce(Router, &Process) -> Result<Router, BoxError>,
-) -> Result<(), BoxError> {
+/// Reads the settings, the API keys and ClickHouse from the environment.
+pub async fn start() -> Result<Intake, BoxError> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -339,35 +289,41 @@ pub async fn run_with(
     if database_url.is_empty() {
         return Err("DATABASE_URL is not set (e.g. postgres://root:mysecretpassword@localhost:5433/local)".into());
     }
-    // Agents send a few megabytes; a flare or a profile is tens of them.
-    let max_body_bytes =
-        var_or("NINJACAT_MAX_BODY_BYTES", "").parse().ok().filter(|n| *n > 0).unwrap_or(64 * 1024 * 1024);
-
     let keys = Arc::new(Store::default());
     keys::fetch_now(&keys, &database_url).await?;
     tokio::spawn(keys::keep(keys.clone(), database_url));
 
-    let sink = Sink::clickhouse(ninjapaws_storage::client_from_env());
-    let process = Process { keys, sink, stopping: CancellationToken::new(), tasks: TaskTracker::new() };
-    let intake = Intake {
-        sink: process.sink.clone(),
-        keys: process.keys.clone(),
+    Ok(Intake {
+        keys,
+        sink: Sink::clickhouse(ninjapaws_storage::client_from_env()),
+        stopping: CancellationToken::new(),
+        tasks: TaskTracker::new(),
         ack_unknown: var_or("NINJACAT_ACK_UNKNOWN", "") == "true",
-        max_body_bytes,
-    };
-    let mut router = around(router(intake, scheme, mount), &process)?;
+        // Agents send a few megabytes; a flare or a profile is tens of them.
+        max_body_bytes: var_or("NINJACAT_MAX_BODY_BYTES", "")
+            .parse()
+            .ok()
+            .filter(|n| *n > 0)
+            .unwrap_or(64 * 1024 * 1024),
+    })
+}
+
+/// Serves `router` on `NINJACAT_ADDR` until the program is told to stop, then flushes what its
+/// writers still hold.
+pub async fn serve(name: &str, router: Router, intake: Intake) -> Result<(), BoxError> {
     if var_or("DEBUG", "") == "true" {
-        router = capture::around(router, var_or("NINJACAT_CAPTURE_DIR", "captures").into(), max_body_bytes);
+        let directory = PathBuf::from(var_or("NINJACAT_CAPTURE_DIR", "captures"));
+        router.middleware(move |req, next| capture::dump(directory.clone(), req, next));
     }
 
     let addr = var_or("NINJACAT_ADDR", ":8080");
     let listener = TcpListener::bind(listen_on(&addr)).await?;
     tracing::info!("{name} listening on {addr}");
     Server::builder().build().try_spawn_http(listener, router)?.shutdown_on_signal().await?;
-    process.stopping.cancel();
-    process.tasks.close();
-    process.tasks.wait().await;
+    intake.stopping.cancel();
+    intake.tasks.close();
+    intake.tasks.wait().await;
     // Last, once nothing feeds the writers any more.
-    process.sink.stop().await;
+    intake.sink.stop().await;
     Ok(())
 }

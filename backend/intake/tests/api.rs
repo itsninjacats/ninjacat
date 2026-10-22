@@ -1,12 +1,12 @@
 //! What api.<site> stores as the JSON text it was sent: the golden fixtures compare JSON by
 //! meaning, so they would not see a value written back with other digits or spacing.
 
+mod programs;
+
 use std::sync::Arc;
 
-use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::keys::{self, Key, Store};
-use ninjapaws_intake::routers::api;
-use ninjapaws_intake::server::{Intake, router};
+use ninjapaws_intake::server::Intake;
 use ninjapaws_storage::Sink;
 use serde_json::Value;
 
@@ -17,7 +17,14 @@ async fn post(path: &str, body: &str) -> Vec<(&'static str, Value)> {
     let store = Store::default();
     store.publish([(keys::hash(KEY), Key { id: "k".into(), name: "test".into(), tenant_id: "test".into() })]);
     let (sink, capture) = Sink::capture();
-    let intake = Intake { sink, keys: Arc::new(store), ack_unknown: false, max_body_bytes: 1 << 20 };
+    let intake = Intake {
+        sink,
+        keys: Arc::new(store),
+        ack_unknown: false,
+        max_body_bytes: 1 << 20,
+        stopping: Default::default(),
+        tasks: Default::default(),
+    };
     let request = http::Request::builder()
         .method("POST")
         .uri(path)
@@ -25,7 +32,7 @@ async fn post(path: &str, body: &str) -> Vec<(&'static str, Value)> {
         .header("content-type", "application/json")
         .body(body.to_string().into())
         .unwrap();
-    let response = router(intake, Some(Scheme::Agent), api::mount).dispatch(request).await;
+    let response = programs::router_of(programs::api, intake).dispatch(request).await;
     assert!(response.status().is_success(), "{path}: {}", response.status());
     capture.writes().into_iter().flat_map(|w| w.rows.into_iter().map(move |row| (w.writer, row))).collect()
 }

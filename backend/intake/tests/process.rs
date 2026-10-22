@@ -1,11 +1,12 @@
 //! process.<site> through its router, as the process-agent sends to it: what the golden fixtures
 //! do not cover.
 
+mod programs;
+
 use std::sync::Arc;
 
 use base64::Engine;
 use http_body_util::BodyExt;
-use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::keys::{self, Key, Store};
 use ninjapaws_intake::process_frame;
 use ninjapaws_intake::routers::process::{self, REPLY_FRAME};
@@ -16,6 +17,7 @@ use ninjapaws_proto::datadog::process_agent::{
 use ninjapaws_storage::{Sink, Write};
 use prost::Message;
 use serde_json::Value;
+use tako::router::Router;
 
 const KEY: &str = "00000000000000000000000000000001";
 
@@ -26,12 +28,18 @@ struct Answer {
     writes: Vec<Write>,
 }
 
-async fn send(scheme: Option<Scheme>, path: &str, body: Vec<u8>) -> Answer {
+async fn send(program: fn(&mut Router), path: &str, body: Vec<u8>) -> Answer {
     let store = Store::default();
     store.publish([(keys::hash(KEY), Key { id: "k".into(), name: "test".into(), tenant_id: "test".into() })]);
     let (sink, capture) = Sink::capture();
-    let intake =
-        ninjapaws_intake::server::Intake { sink, keys: Arc::new(store), ack_unknown: false, max_body_bytes: 1 << 24 };
+    let intake = ninjapaws_intake::server::Intake {
+        sink,
+        keys: Arc::new(store),
+        ack_unknown: false,
+        max_body_bytes: 1 << 24,
+        stopping: Default::default(),
+        tasks: Default::default(),
+    };
     let request = http::Request::builder()
         .method("POST")
         .uri(path)
@@ -39,7 +47,7 @@ async fn send(scheme: Option<Scheme>, path: &str, body: Vec<u8>) -> Answer {
         .header("x-dd-processagentversion", "7.58.2")
         .body(body.into())
         .unwrap();
-    let response = ninjapaws_intake::server::router(intake, scheme, process::mount).dispatch(request).await;
+    let response = programs::router_of(program, intake).dispatch(request).await;
     let status = response.status().as_u16();
     let content_type =
         response.headers().get("content-type").map(|v| v.to_str().unwrap().to_string()).unwrap_or_default();
@@ -49,7 +57,7 @@ async fn send(scheme: Option<Scheme>, path: &str, body: Vec<u8>) -> Answer {
 
 /// Posts a frame as the test agent would.
 async fn post(path: &str, body: Vec<u8>) -> Answer {
-    send(Some(Scheme::Agent), path, body).await
+    send(programs::processes, path, body).await
 }
 
 fn rows<'a>(answer: &'a Answer, writer: &str) -> Vec<&'a Value> {
@@ -80,9 +88,7 @@ fn blob(value: &Value) -> Vec<u8> {
 }
 
 fn frame(name: &str) -> Vec<u8> {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/frames")
-        .join(name);
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/frames").join(name);
     std::fs::read(path).unwrap()
 }
 
@@ -98,8 +104,15 @@ fn proc_frame() -> Vec<u8> {
 /// tenant_id leads every table's ORDER BY, so a made-up value would write rows no query looks at.
 #[tokio::test]
 async fn without_a_tenant_nothing_is_stored_and_the_agent_still_gets_its_reply() {
-    // The router with no key behind the request.
-    let answer = send(None, "/api/v1/collector", proc_frame()).await;
+    // The route with no key behind it.
+    let answer = send(
+        |router| {
+            router.post("/api/v1/collector", process::handle_collector);
+        },
+        "/api/v1/collector",
+        proc_frame(),
+    )
+    .await;
     assert_eq!(answer.status, 200);
     assert_eq!(answer.body, *REPLY_FRAME);
     assert!(answer.writes.is_empty());

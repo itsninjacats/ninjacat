@@ -53,10 +53,6 @@ fn check_query(input: &mut &str) -> ModalResult<(String, Vec<Call>)> {
     (preceded(ws, terminated(quoted, ws)), repeat(0.., call)).parse_next(input)
 }
 
-fn read(text: &str) -> Result<(String, Vec<Call>), String> {
-    parser::run(text, check_query)
-}
-
 // --- the query -------------------------------------------------------------------------------
 
 fn problems_of<T>(result: &Result<T, Vec<String>>) -> Vec<String> {
@@ -181,7 +177,7 @@ fn last_of(call: Option<&Call>) -> Result<i32, Vec<String>> {
 }
 
 pub fn query(text: &str) -> Result<CheckQuery, Vec<String>> {
-    let (name, calls) = read(text).map_err(|e| vec![e])?;
+    let (name, calls) = parser::run(text, check_query).map_err(|e| vec![e])?;
     let find = |n: &str| calls.iter().find(|c| c.name == n);
 
     let shape = shape_problems(&name, &calls);

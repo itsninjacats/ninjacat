@@ -5,7 +5,6 @@ mod definitions;
 mod entity;
 mod manager;
 mod notifier;
-mod reads;
 mod rows;
 mod selfmon;
 mod shards;
@@ -13,19 +12,20 @@ mod store;
 mod telemetry;
 #[cfg(test)]
 mod tests;
-mod writer;
 
 use std::collections::HashMap;
-use std::env;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use api::reads::ClickHouse;
+use api::{listen_on, metrics_retention, var_or};
 use chrono::TimeDelta;
 use ninjapaws_engine::Sql;
 use ninjapaws_engine::query::compile::Row;
 use ninjapaws_engine::query::execute::Executor;
-use ninjapaws_engine::query::plan::{DEFAULT_RETENTION, Retention};
+use ninjapaws_engine::query::plan::Retention;
+use ninjapaws_storage::Sink;
 use tako::Server;
 use tako::StatusCode;
 use tako::extractors::state::State;
@@ -38,19 +38,19 @@ use crate::definitions::{MonitorKey, MonitorRow};
 use crate::entity::Services;
 use crate::manager::{Entities, Manager, Postgres};
 use crate::notifier::{Notifier, Polled};
-use crate::reads::ClickHouse;
-use crate::rows::{EvaluationRow, MetricPoint, NotificationRow, TransitionRow};
+use crate::rows::{EvaluationRow, NotificationRow, TransitionRow};
 use crate::selfmon::SelfMonitor;
 use crate::shards::{APPLICATION_NAME, Balancer, LOCK_CLASS};
 use crate::store::History;
 use crate::telemetry::Counters;
-use crate::writer::{DEFAULT_LIMITS, METRICS_LIMITS, TableWriter};
 
 const RESYNC_INTERVAL: Duration = Duration::from_secs(30);
 const NOTIFY_INTERVAL: Duration = Duration::from_secs(5);
 /// How often a replica counts the replicas and takes or releases shards.
 const BALANCE_INTERVAL: Duration = Duration::from_secs(10);
 const RETRY: Duration = Duration::from_secs(30);
+/// ClickHouse's limit for one query: a model's history read can pass the query process's 7 s.
+const QUERY_LIMIT_SECONDS: u64 = 30;
 
 struct Settings {
     clickhouse_addr: String,
@@ -92,10 +92,6 @@ fn settings() -> Result<Settings, String> {
     })
 }
 
-fn var_or(name: &str, default: &str) -> String {
-    env::var(name).ok().filter(|v| !v.is_empty()).unwrap_or_else(|| default.to_string())
-}
-
 /// A set value that is not a positive whole number stops the start rather than falling back to
 /// the default.
 fn positive(name: &str, default: usize) -> Result<usize, String> {
@@ -126,40 +122,17 @@ fn machine_name() -> String {
         .unwrap_or_else(|| var_or("HOSTNAME", "localhost"))
 }
 
-/// `:8559`, `*:8559` and `0.0.0.0:8559` are every interface, as the settings have always spelled it.
-fn listen_on(addr: &str) -> String {
-    match addr.rsplit_once(':') {
-        Some(("" | "*", port)) => format!("0.0.0.0:{port}"),
-        _ => addr.to_string(),
-    }
-}
-
-/// A whole number of days, up to a century. A set value outside 1–36500 stops the start: falling
-/// back to the default could set a shorter TTL than meant, and ClickHouse would delete the
-/// difference.
-fn days(name: &str, default: TimeDelta) -> Result<TimeDelta, String> {
-    match var_or(name, "").as_str() {
-        "" => Ok(default),
-        raw => match raw.trim().parse::<i64>() {
-            Ok(n) if (1..=36500).contains(&n) => Ok(TimeDelta::days(n)),
-            _ => Err(format!("{name} must be a whole number of days from 1 to 36500, got \"{raw}\"")),
-        },
-    }
-}
-
-/// A step of whole minutes reads the rollup whatever its age, so a rollup kept shorter than the
-/// raw points would answer nothing where the raw table still holds them.
-fn metrics_retention() -> Result<Retention, String> {
-    let raw = days("NINJACAT_METRICS_RETENTION_DAYS", DEFAULT_RETENTION.raw)?;
-    let rollup = days("NINJACAT_METRICS_ROLLUP_RETENTION_DAYS", DEFAULT_RETENTION.rollup)?;
-    if rollup < raw {
-        return Err(format!(
-            "NINJACAT_METRICS_ROLLUP_RETENTION_DAYS ({}) must not be shorter than NINJACAT_METRICS_RETENTION_DAYS ({})",
-            rollup.num_days(),
-            raw.num_days()
-        ));
-    }
-    Ok(Retention { raw, rollup })
+/// The client the write path uses. Kept apart from the read client so no query can ever write,
+/// and so a slow query and a slow insert do not share a timeout. Inserts are synchronous:
+/// ClickHouse buffers them on its side by default (async_insert=1) and makes parts of its own
+/// choosing, while the writers' batches are what the part counts are tuned for.
+fn write_client(addr: &str, database: &str, user: &str, password: &str) -> clickhouse::Client {
+    clickhouse::Client::default()
+        .with_url(format!("http://{addr}"))
+        .with_database(database)
+        .with_user(user)
+        .with_password(password)
+        .with_setting("async_insert", "0")
 }
 
 fn now_ms() -> i64 {
@@ -170,8 +143,7 @@ fn now_ms() -> i64 {
 struct Live {
     pool: deadpool_postgres::Pool,
     reader: ClickHouse,
-    writes: clickhouse::Client,
-    evaluations: Arc<TableWriter<EvaluationRow>>,
+    sink: Sink,
 }
 
 impl Executor for Live {
@@ -190,11 +162,11 @@ impl entity::Backend for Live {
     }
 
     async fn insert(&self, rows: Vec<TransitionRow>) -> Result<(), String> {
-        writer::insert(&self.writes, "monitor_transitions", &rows).await
+        self.sink.insert(rows).await
     }
 
     fn record(&self, rows: Vec<EvaluationRow>) {
-        self.evaluations.add(rows);
+        self.sink.write(rows);
     }
 
     fn now(&self) -> i64 {
@@ -208,7 +180,7 @@ impl entity::Backend for Live {
 
 struct LiveNotifier {
     reader: ClickHouse,
-    writes: clickhouse::Client,
+    sink: Sink,
 }
 
 impl notifier::Backend for LiveNotifier {
@@ -221,7 +193,7 @@ impl notifier::Backend for LiveNotifier {
     }
 
     async fn write(&self, rows: Vec<NotificationRow>) -> Result<(), String> {
-        writer::insert(&self.writes, "monitor_notifications", &rows).await
+        self.sink.insert(rows).await
     }
 
     fn now(&self) -> i64 {
@@ -255,6 +227,13 @@ async fn terminated() {
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
+    // Storage's writers report a full buffer or a failed insert through tracing.
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .init();
     let s = settings()?;
     let mut postgres: tokio_postgres::Config = s.database_url.parse()?;
     // A connection gives up after 15 s, and an idle one is probed, so a dead
@@ -264,19 +243,23 @@ async fn main() -> Result<(), BoxError> {
     }
     postgres.keepalives(true).keepalives_idle(Duration::from_secs(30));
     let pool = definitions::pool(postgres.clone());
-    let reader = ClickHouse::new(&s.clickhouse_addr, &s.clickhouse_db, &s.clickhouse_user, &s.clickhouse_password);
-    let writes = writer::client(&s.clickhouse_addr, &s.clickhouse_db, &s.clickhouse_user, &s.clickhouse_password);
-    let evaluations = TableWriter::start(writes.clone(), "monitor_evaluations", DEFAULT_LIMITS);
-    let metrics: Arc<TableWriter<MetricPoint>> = TableWriter::start(writes.clone(), "metrics", METRICS_LIMITS);
+    let reader = ClickHouse::new(
+        &s.clickhouse_addr,
+        &s.clickhouse_db,
+        &s.clickhouse_user,
+        &s.clickhouse_password,
+        QUERY_LIMIT_SECONDS,
+    );
+    let sink = Sink::clickhouse(write_client(
+        &s.clickhouse_addr,
+        &s.clickhouse_db,
+        &s.clickhouse_user,
+        &s.clickhouse_password,
+    ));
     let counts = Arc::new(Counters::default());
 
     let services = Arc::new(Services {
-        backend: Arc::new(Live {
-            pool: pool.clone(),
-            reader: reader.clone(),
-            writes: writes.clone(),
-            evaluations: evaluations.clone(),
-        }),
+        backend: Arc::new(Live { pool: pool.clone(), reader: reader.clone(), sink: sink.clone() }),
         gate: Arc::new(Semaphore::new(s.concurrency)),
         retention: s.retention,
         max_groups: s.max_groups,
@@ -293,7 +276,7 @@ async fn main() -> Result<(), BoxError> {
     };
     let manager = tokio::spawn(manager.run(received));
 
-    let notify = Arc::new(LiveNotifier { reader, writes });
+    let notify = Arc::new(LiveNotifier { reader, sink: sink.clone() });
     let notifier_counts = counts.clone();
     let is_ready = Arc::new(AtomicBool::new(false));
     let balancer = Balancer {
@@ -319,8 +302,7 @@ async fn main() -> Result<(), BoxError> {
         host: s.selfmon_host.clone(),
         interval: s.selfmon_interval,
         counts,
-        writers: vec![evaluations.clone(), metrics.clone()],
-        metrics: metrics.clone(),
+        sink: sink.clone(),
     };
     let selfmon = tokio::spawn(selfmon.run());
 
@@ -339,8 +321,7 @@ async fn main() -> Result<(), BoxError> {
     let _ = manager.await;
     selfmon.abort();
     // The entities' last evaluations, and the last sample.
-    evaluations.stop().await;
-    metrics.stop().await;
+    sink.stop().await;
     health.shutdown(Duration::from_secs(1)).await;
     Ok(())
 }

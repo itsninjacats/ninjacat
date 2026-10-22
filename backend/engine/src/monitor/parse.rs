@@ -110,10 +110,6 @@ fn syntax(input: &mut &str) -> ModalResult<Syntax> {
         .parse_next(input)
 }
 
-fn read_syntax(text: &str) -> Result<Syntax, String> {
-    parser::run(text, syntax)
-}
-
 // --- windows ---------------------------------------------------------------------------------
 
 // A final newline is taken, as it always has been.
@@ -623,7 +619,7 @@ fn query_problems(q: &MonitorQuery) -> Vec<String> {
 
 /// Whether the inner query plans, and how the options fit it, is `validate`'s.
 pub fn query(text: &str) -> Result<MonitorQuery, Vec<String>> {
-    let s = read_syntax(text).map_err(|message| vec![message])?;
+    let s = parser::run(text, syntax).map_err(|message| vec![message])?;
     let (aggregator_name, window_text, change) = read_head(&s.head).map_err(|e| vec![e])?;
     let q = interpret(&s, aggregator_name, window_text, change)?;
     match query_problems(&q) {

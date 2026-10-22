@@ -7,19 +7,18 @@
 //! it is written, a timestamp may lose digits past 100 ns, and a string that is itself JSON is
 //! compared as JSON.
 
+mod programs;
+
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use base64::Engine;
 use http_body_util::BodyExt;
-use ninjapaws_intake::auth::Scheme;
+use ninjapaws_intake::auth;
 use ninjapaws_intake::keys::{self, Key, Store};
-use ninjapaws_intake::routers::{
-    api, app, ci_visibility, ci_webhook, config, containers, dbm, evp, install, kubeops, logs, misc, ndm, process,
-    profiling, rum, security, trace,
-};
-use ninjapaws_intake::server::{Intake, Routes, router};
+use ninjapaws_intake::routers::{flare, rum};
+use ninjapaws_intake::server::Intake;
 use ninjapaws_storage::Sink;
 use serde_json::Value;
 use tako::conn_info::ConnInfo;
@@ -45,16 +44,15 @@ fn fixtures_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
 
-/// A ported host's process as the fixtures need it: the key it asks for, its routes, and what its
-/// binary puts above them.
+/// A ported host's process as the fixtures need it: its routes, and what its binary puts above
+/// them.
 struct Process {
-    scheme: Option<Scheme>,
-    mounts: Vec<fn(&mut Routes)>,
+    program: fn(&mut Router),
     above: Option<fn(Router) -> Router>,
 }
 
-fn process(scheme: Option<Scheme>, mount: fn(&mut Routes)) -> Option<Process> {
-    Some(Process { scheme, mounts: vec![mount], above: None })
+fn process(program: fn(&mut Router)) -> Option<Process> {
+    Some(Process { program, above: None })
 }
 
 /// The peer of every Go httptest request.
@@ -67,159 +65,157 @@ fn browser() -> Option<Process> {
         let trusted = rum::trusted_proxies("192.0.2.1").unwrap();
         rum::above(router, &[], trusted)
     };
-    Some(Process { scheme: Some(Scheme::Browser), mounts: vec![rum::mount], above: Some(above) })
+    Some(Process { program: programs::browser, above: Some(above) })
 }
 
 /// The Go server's name for each group of routes, as the fixtures recorded which groups served a
 /// request, and the router that serves that group here.
 fn route_set(name: &str) -> Option<Process> {
-    let agent = Some(Scheme::Agent);
     match name {
-        "routeAPI" => process(agent, api::metrics_and_checks),
-        "routeApp" => process(agent, app::metrics_v3),
-        "routeTrace" => process(agent, trace::mount),
-        "routeTelemetry" => process(agent, misc::telemetry),
-        "routeResources" => process(agent, misc::resources),
-        "routeLogs" => process(agent, logs::mount),
-        "routeProfile" => process(agent, profiling::mount_profile),
-        "routeDebugger" => process(agent, profiling::mount_debugger),
-        "routeSourcemap" => process(agent, profiling::mount_sourcemap),
+        "routeAPI" => process(programs::api),
+        "routeApp" => process(programs::app),
+        "routeTrace" => process(programs::trace),
+        "routeTelemetry" => process(programs::telemetry),
+        "routeResources" => process(programs::resources),
+        "routeLogs" => process(programs::logs),
+        "routeProfile" => process(programs::profile),
+        "routeDebugger" => process(programs::debugger),
+        "routeSourcemap" => process(programs::sourcemap),
         "routeRUM" => browser(),
-        "routeProcess" => process(agent, process::mount),
-        "routeKubeops" => process(agent, kubeops::mount),
-        "routeContainers" => process(agent, containers::mount),
-        "routeConfig" => process(agent, config::mount),
-        "routeDBM" => process(agent, dbm::mount),
-        "routeNDM" => process(agent, ndm::mount),
-        "routeCWS" => process(agent, security::mount_cws),
-        "routeRuntimeSecurity" => process(agent, security::mount_runtime_security),
-        "routeCSPM" => process(agent, security::mount_cspm),
-        "routeSBOM" => process(agent, security::mount_sbom),
-        "routeSDS" => process(agent, security::mount_sds),
-        "routeAgentDiscovery" => process(agent, evp::mount_agent_discovery),
-        "routeAgentHealth" => process(agent, evp::mount_agent_health),
-        "routeEventManagement" => process(agent, evp::mount_event_management),
-        "routeSoftwareInventory" => process(agent, evp::mount_software_inventory),
-        "routeSynthetics" => process(agent, evp::mount_synthetics_results),
-        "routeDataObs" => process(Some(Scheme::Lineage), evp::mount_data_obs),
-        "routeCIVisibilityAPI" => process(agent, ci_visibility::mount_api),
-        "routeCITestCycle" => process(agent, ci_visibility::mount_test_cycle),
-        "routeCITestCov" => process(agent, ci_visibility::mount_test_coverage),
-        "routeCIWebhook" => process(Some(Scheme::CiWebhook), ci_webhook::mount),
-        "routeSyntheticsAgent" => process(agent, ci_webhook::mount_synthetics_poller),
-        "routeAIUsage" => process(agent, install::mount_ai_usage),
-        "routeLLMObs" => process(agent, install::mount_llm_obs),
-        "routeInstall" => process(None, install::mount),
+        "routeProcess" => process(programs::processes),
+        "routeKubeops" => process(programs::kubeops),
+        "routeContainers" => process(programs::containers),
+        "routeConfig" => process(programs::remote_config),
+        "routeDBM" => process(programs::dbm),
+        "routeNDM" => process(programs::ndm),
+        "routeCWS" => process(programs::cws),
+        "routeRuntimeSecurity" => process(programs::runtime_security),
+        "routeCSPM" => process(programs::cspm),
+        "routeSBOM" => process(programs::sbom),
+        "routeSDS" => process(programs::sds),
+        "routeAgentDiscovery" => process(programs::agent_discovery),
+        "routeAgentHealth" => process(programs::agent_health),
+        "routeEventManagement" => process(programs::event_management),
+        "routeSoftwareInventory" => process(programs::software_inventory),
+        "routeSynthetics" => process(programs::synthetics_results),
+        "routeDataObs" => process(programs::data_obs),
+        "routeCIVisibilityAPI" => process(programs::api),
+        "routeCITestCycle" => process(programs::ci_test_cycle),
+        "routeCITestCov" => process(programs::ci_test_coverage),
+        "routeCIWebhook" => process(programs::ci_webhook),
+        "routeSyntheticsAgent" => process(programs::synthetics_poller),
+        "routeAIUsage" => process(programs::ai_usage),
+        "routeLLMObs" => process(programs::llm_obs),
+        "routeInstall" => process(programs::install),
         _ => None,
     }
 }
 
 /// The process an intake host name is sent to.
 fn host_process(host: &str) -> Option<Process> {
-    let agent = Some(Scheme::Agent);
     // The OCI registry, the BTF download and the HEAD probe are anonymous.
     if host == "install.datadoghq.com" || host == "install.datad0g.com" {
-        return process(None, install::mount);
+        return process(programs::install);
     }
     if host.starts_with("app.") || host.contains("-app.agent.") {
-        return process(agent, app::mount);
+        return process(programs::app);
     }
     if host.starts_with("api.") || host.contains("-flare.agent.") {
-        return process(agent, api::mount);
+        return process(programs::api);
     }
     if host.starts_with("trace.agent.") {
-        return process(agent, trace::mount);
+        return process(programs::trace);
     }
     if host.starts_with("instrumentation-telemetry-intake.") {
-        return process(agent, misc::telemetry);
+        return process(programs::telemetry);
     }
     if host.starts_with("resources-intake.") {
-        return process(agent, misc::resources);
+        return process(programs::resources);
     }
     if host.starts_with("http-intake.logs.") || host.starts_with("agent-http-intake.logs.") {
-        return process(agent, logs::mount);
+        return process(programs::logs);
     }
     if host.starts_with("intake.profile.") {
-        return process(agent, profiling::mount_profile);
+        return process(programs::profile);
     }
     if host.starts_with("debugger-intake.") {
-        return process(agent, profiling::mount_debugger);
+        return process(programs::debugger);
     }
     if host.starts_with("sourcemap-intake.") {
-        return process(agent, profiling::mount_sourcemap);
+        return process(programs::sourcemap);
     }
     if host.starts_with("browser-intake.") {
         return browser();
     }
     if host.starts_with("process.") {
-        return process(agent, process::mount);
+        return process(programs::processes);
     }
     if host.starts_with("orchestrator.") || host.starts_with("kubeops-intake.") {
-        return process(agent, kubeops::mount);
+        return process(programs::kubeops);
     }
     if host.starts_with("contlcycle-intake.") || host.starts_with("contimage-intake.") {
-        return process(agent, containers::mount);
+        return process(programs::containers);
     }
     if host.starts_with("config.") {
-        return process(agent, config::mount);
+        return process(programs::remote_config);
     }
     let on = |prefix: &str| host.starts_with(prefix);
     if on("dbm-metrics-intake.") {
-        return process(agent, dbm::mount);
+        return process(programs::dbm);
     }
     if on("ndm-intake.") || on("snmp-traps-intake.") || on("ndmflow-intake.") || on("netpath-intake.") {
-        return process(agent, ndm::mount);
+        return process(programs::ndm);
     }
     if on("cws-intake.") {
-        return process(agent, security::mount_cws);
+        return process(programs::cws);
     }
     if on("runtime-security-http-intake.logs.") {
-        return process(agent, security::mount_runtime_security);
+        return process(programs::runtime_security);
     }
     if on("cspm-intake.") {
-        return process(agent, security::mount_cspm);
+        return process(programs::cspm);
     }
     if on("sbom-intake.") {
-        return process(agent, security::mount_sbom);
+        return process(programs::sbom);
     }
     if on("sds-intake.") {
-        return process(agent, security::mount_sds);
+        return process(programs::sds);
     }
     if on("agentdiscovery-intake.") {
-        return process(agent, evp::mount_agent_discovery);
+        return process(programs::agent_discovery);
     }
     if on("agenthealth-intake.") {
-        return process(agent, evp::mount_agent_health);
+        return process(programs::agent_health);
     }
     if on("event-management-intake.") {
-        return process(agent, evp::mount_event_management);
+        return process(programs::event_management);
     }
     if on("softinv-intake.") {
-        return process(agent, evp::mount_software_inventory);
+        return process(programs::software_inventory);
     }
     if on("http-synthetics.") {
-        return process(agent, evp::mount_synthetics_results);
+        return process(programs::synthetics_results);
     }
     if on("data-obs-intake.") {
-        return process(Some(Scheme::Lineage), evp::mount_data_obs);
+        return process(programs::data_obs);
     }
     if on("intake.synthetics.") {
-        return process(agent, ci_webhook::mount_synthetics_poller);
+        return process(programs::synthetics_poller);
     }
     if on("citestcycle-intake.") {
-        return process(agent, ci_visibility::mount_test_cycle);
+        return process(programs::ci_test_cycle);
     }
     if on("citestcov-intake.") {
-        return process(agent, ci_visibility::mount_test_coverage);
+        return process(programs::ci_test_coverage);
     }
     if on("webhook-intake.") {
-        return process(Some(Scheme::CiWebhook), ci_webhook::mount);
+        return process(programs::ci_webhook);
     }
     if on("eudm-intake.") {
-        return process(agent, install::mount_ai_usage);
+        return process(programs::ai_usage);
     }
     if on("llmobs-intake.") {
-        return process(agent, install::mount_llm_obs);
+        return process(programs::llm_obs);
     }
     None
 }
@@ -243,16 +239,18 @@ fn process_for(fixture: &Value) -> Option<Process> {
     }
     if routes.is_empty() {
         // The Go flare tests called its router alone; every host with a key serves it.
-        return path.starts_with("/support/flare").then(|| Process {
-            scheme: Some(Scheme::Agent),
-            mounts: Vec::new(),
-            above: None,
-        });
+        return path.starts_with("/support/flare").then_some(Process { program: flare_only, above: None });
     }
-    // The intake made of the named route sets, guarded as the first one is.
-    let sets: Vec<Process> = routes.iter().map(|name| route_set(name)).collect::<Option<_>>()?;
-    let (scheme, above) = (sets[0].scheme, sets[0].above);
-    Some(Process { scheme, mounts: sets.into_iter().flat_map(|set| set.mounts).collect(), above })
+    match routes[..] {
+        [name] => route_set(name),
+        _ => None,
+    }
+}
+
+/// The flare routes alone, as every program with a key registers them.
+fn flare_only(router: &mut Router) {
+    router.post("/support/flare", flare::handle).middleware(auth::agent);
+    router.post("/support/flare/{case}", flare::handle).middleware(auth::agent);
 }
 
 /// Every fixture file: those recorded by the Go server's own tests (`go/`), and those recorded
@@ -278,12 +276,15 @@ struct Answer {
 }
 
 fn router_of(process: &Process, sink: Sink) -> Router {
-    let intake = Intake { sink, keys: test_keys(), ack_unknown: false, max_body_bytes: 64 * 1024 * 1024 };
-    let router = router(intake, process.scheme, |routes| {
-        for mount in &process.mounts {
-            mount(routes);
-        }
-    });
+    let intake = Intake {
+        sink,
+        keys: test_keys(),
+        ack_unknown: false,
+        max_body_bytes: 64 * 1024 * 1024,
+        stopping: Default::default(),
+        tasks: Default::default(),
+    };
+    let router = programs::router_of(process.program, intake);
     match process.above {
         Some(above) => above(router),
         None => router,
@@ -461,7 +462,9 @@ async fn run(id: &str, fixture: &Value, process: &Process, overrides: &Value) ->
     // Null means the Go test ran without a capturing node: nothing to compare. An override that
     // ignores "/sends" says this intake stores something else on purpose; a test of its own pins
     // what.
-    let Some(sends) = fixture["sends"].as_array() else { return found };
+    let Some(sends) = fixture["sends"].as_array() else {
+        return found;
+    };
     if ignored.contains("/sends") {
         return found;
     }
@@ -508,7 +511,9 @@ async fn every_fixture_of_a_ported_host_is_answered_and_stored_as_it_says() {
             path.file_stem().unwrap().to_str().unwrap()
         );
         let fixture: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-        let Some(process) = process_for(&fixture) else { continue };
+        let Some(process) = process_for(&fixture) else {
+            continue;
+        };
         replayed += 1;
         let found = run(&id, &fixture, &process, &overrides).await;
         if !found.is_empty() {
@@ -539,7 +544,9 @@ async fn every_fixture_row_goes_into_its_clickhouse_table() {
     let sink = Sink::clickhouse(client.clone());
     for path in fixture_paths(&root) {
         let fixture: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
-        let Some(process) = process_for(&fixture) else { continue };
+        let Some(process) = process_for(&fixture) else {
+            continue;
+        };
         let (_, writes) = send(&fixture, &process).await;
         for write in writes {
             *expected.entry(write.table).or_default() += write.rows.len() as u64;

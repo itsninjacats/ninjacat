@@ -1,9 +1,9 @@
 //! The rows this process writes, field by field as the columns are named and typed
 //! (`backend/schema/migrations`); the ClickHouse client checks each against the table before it
-//! sends one. Instants are unix milliseconds, as a DateTime64(3) holds them.
+//! sends one. Instants are unix milliseconds, as a DateTime64(3) holds them. Self-monitoring's
+//! points are storage's `MetricPoint`.
 
-use std::collections::BTreeMap;
-
+use ninjapaws_storage::Table;
 use serde::Serialize;
 
 /// One group of a monitor moving from one state to another, with the thresholds it was judged
@@ -38,6 +38,11 @@ pub struct TransitionRow {
     pub last_triggered_at: Option<i64>,
 }
 
+impl Table for TransitionRow {
+    const WRITER: &'static str = "monitor_transitions";
+    const TABLE: &'static str = "monitor_transitions";
+}
+
 #[derive(clickhouse::Row, Serialize, Clone, Debug, PartialEq)]
 pub struct EvaluationRow {
     pub tenant_id: String,
@@ -49,6 +54,11 @@ pub struct EvaluationRow {
     /// evaluated, skipped or error.
     pub outcome: String,
     pub detail: String,
+}
+
+impl Table for EvaluationRow {
+    const WRITER: &'static str = "monitor_evaluations";
+    const TABLE: &'static str = "monitor_evaluations";
 }
 
 /// What the notifier did with one transition, one row per attempt.
@@ -71,24 +81,7 @@ pub struct NotificationRow {
     pub handled_at: i64,
 }
 
-/// A point of `metrics`, as self-monitoring writes one. The lifted tag columns and `series_id`
-/// are ClickHouse's own (MATERIALIZED).
-#[derive(clickhouse::Row, Serialize, Clone, Debug, PartialEq)]
-pub struct MetricPoint {
-    pub tenant_id: String,
-    pub timestamp: i64,
-    pub metric: String,
-    pub host: String,
-    /// GAUGE, COUNT, RATE or UNSPECIFIED.
-    pub metric_type: String,
-    pub source_type: String,
-    pub unit: String,
-    pub interval: u32,
-    pub value: f64,
-    pub tags: BTreeMap<String, Vec<String>>,
-    pub origin_product: u32,
-    pub origin_category: u32,
-    pub origin_service: u32,
-    pub resources: BTreeMap<String, String>,
-    pub extra: BTreeMap<String, String>,
+impl Table for NotificationRow {
+    const WRITER: &'static str = "monitor_notifications";
+    const TABLE: &'static str = "monitor_notifications";
 }

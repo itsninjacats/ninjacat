@@ -2,14 +2,13 @@
 
 use std::time::Duration;
 
+use api::reads::ClickHouse;
 use serde::Serialize;
 use tako::StatusCode;
 use tako::extractors::json::Json;
 use tako::extractors::state::State;
 use tako::responder::Responder;
 use tako::types::Response;
-
-use crate::reads::ClickHouse;
 
 /// Postgres, which only `/health` asks after: the panel's database, as `DATABASE_URL` names it.
 #[derive(Clone)]

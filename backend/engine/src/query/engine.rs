@@ -1,71 +1,20 @@
 //! The query engine as Rust code calls it: the panel, monitors, anything that is not an HTTP
 //! client.
 //!
-//! Queries and formulas go in as the same strings Datadog takes; results come back as plain
-//! records, with no JSON shape, parallel lists or "key:value" strings to take apart. The HTTP
-//! endpoints run the same engine and turn its results into Datadog's response shape; this module
-//! turns them into these.
-//!
-//! ```text
-//! let request = TimeseriesRequest {
-//!     from: now - 3_600_000, to: now, interval: None,
-//!     queries: vec![Query { name: "cpu".into(), query: "avg:system.cpu.user{env:prod} by {host}".into() }],
-//!     formulas: vec![],
-//! };
-//! match timeseries(&executor, &tenant, DEFAULT_RETENTION, now, &request).await {
-//!     Ok(results) => for s in &results[0].series { println!("{:?}: {} points", s.tags, s.points.len()) },
-//!     Err(QueryError::Invalid(problems)) => …,
-//!     Err(QueryError::Failed(message)) => …,
-//! }
-//! ```
+//! A request goes in already parsed (trees, not strings); results come back as plain records,
+//! with no JSON shape, parallel lists or "key:value" strings to take apart. The HTTP endpoints
+//! run the same engine and turn its results into Datadog's response shape; this module turns
+//! them into these. `split` turns an expression with its queries inline, as Datadog's v1 API and
+//! its monitors write them, into the named queries and the formula a request is made of.
 
-use chrono::TimeDelta;
 use ninjapaws_anomaly::Band;
 
-use crate::api::v2::scalar::ScalarAggregator;
-use crate::api::v2::timeseries::{self, ParsedFormula, ParsedQuery, ParsedTimeseriesRequest};
-use crate::api::v2::wire::{MetricsTimeseriesQuery, QueryFormula, TimeseriesFormulaRequestAttributes};
+use crate::api::v2::timeseries::{ParsedQuery, ParsedTimeseriesRequest};
 use crate::metric_query::ast::{Arg, Expr, Formula, MetricQuery};
-use crate::metric_query::parser;
 use crate::query::execute::{self, Executor, QueryError};
 use crate::query::plan::{self, Retention};
 use crate::query::series::{NOT_APPLICABLE, OutputResult};
 use crate::sql::TenantId;
-
-/// One query, as Datadog writes it: `avg:system.cpu.user{env:prod} by {host}`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Query {
-    pub name: String,
-    pub query: String,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct TimeseriesRequest {
-    /// Unix milliseconds.
-    pub from: i64,
-    pub to: i64,
-    /// A hint for the bucket width; None picks it from the window, as Datadog does.
-    pub interval: Option<TimeDelta>,
-    pub queries: Vec<Query>,
-    /// Formulas over the queries' names. Empty: each query is a result of its own.
-    pub formulas: Vec<String>,
-}
-
-/// A query for a scalar: the window reduced to one value per group.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ScalarQuery {
-    pub name: String,
-    pub query: String,
-    pub aggregator: ScalarAggregator,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct ScalarRequest {
-    pub from: i64,
-    pub to: i64,
-    pub queries: Vec<ScalarQuery>,
-    pub formulas: Vec<String>,
-}
 
 /// One `by` key of a series' group. Value None: the series has no such tag, Datadog's N/A group.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -106,18 +55,6 @@ pub struct FormulaResult {
     pub series: Vec<TimeSeries>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct ScalarValue {
-    pub tags: Vec<Tag>,
-    pub value: f64,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct ScalarResult {
-    pub formula: String,
-    pub values: Vec<ScalarValue>,
-}
-
 /// A series' group tags, `k:v` as the engine keeps them, read into keys and values; `k:N/A` is a
 /// key without a value.
 pub fn tags(group_tags: &[String]) -> Vec<Tag> {
@@ -130,11 +67,6 @@ pub fn tags(group_tags: &[String]) -> Vec<Tag> {
             }
         })
         .collect()
-}
-
-/// The names results are labelled with: the formulas, or else the queries.
-fn labels(queries: Vec<String>, formulas: &[String]) -> Vec<String> {
-    if formulas.is_empty() { queries } else { formulas.to_vec() }
 }
 
 /// The engine's own results, as records. `names` labels them, one per output.
@@ -171,8 +103,9 @@ pub fn results(names: &[String], outputs: Vec<OutputResult>) -> Vec<FormulaResul
         .collect()
 }
 
-/// The primitive under the others: an already parsed request (trees, not strings), for code that
-/// parses once and runs many times, as a monitor evaluating the same query every minute does.
+/// Runs an already parsed request, for code that parses once and runs many times, as a monitor
+/// evaluating the same query every minute does. Problems with the request come back as
+/// `QueryError::Invalid`, each one named, as the HTTP endpoint reports them.
 ///
 /// `labels` names the results, one per formula (or per query when there are no formulas). `now`
 /// is when the request is made, in unix milliseconds: the tables' retention counts back from it,
@@ -188,46 +121,6 @@ pub async fn parsed<E: Executor>(
     let plan = plan::plan(retention, now, request).map_err(QueryError::Invalid)?;
     let outputs = execute::evaluate(execute, tenant, &plan, None).await.map_err(QueryError::Failed)?;
     Ok(results(labels, outputs))
-}
-
-fn wire(
-    from: i64,
-    to: i64,
-    interval: Option<TimeDelta>,
-    queries: Vec<MetricsTimeseriesQuery>,
-    formulas: &[String],
-) -> TimeseriesFormulaRequestAttributes {
-    TimeseriesFormulaRequestAttributes {
-        from: Some(from),
-        to: Some(to),
-        interval: interval.map(|i| i.num_milliseconds()),
-        queries: Some(queries),
-        formulas: (!formulas.is_empty())
-            .then(|| formulas.iter().map(|f| QueryFormula { formula: Some(f.clone()), limit: None }).collect()),
-    }
-}
-
-fn metrics_query(name: &str, query: &str) -> MetricsTimeseriesQuery {
-    MetricsTimeseriesQuery { data_source: Some("metrics".into()), name: Some(name.into()), query: Some(query.into()) }
-}
-
-/// Timeseries: every formula's series over the window.
-///
-/// Problems with the request (a query that does not parse, a function given the wrong arguments,
-/// a formula naming no query) come back as `QueryError::Invalid`, each one named, exactly as the
-/// HTTP endpoint reports them.
-pub async fn timeseries<E: Executor>(
-    execute: &E,
-    tenant: &TenantId,
-    retention: Retention,
-    now: i64,
-    request: &TimeseriesRequest,
-) -> Result<Vec<FormulaResult>, QueryError> {
-    let queries = request.queries.iter().map(|q| metrics_query(&q.name, &q.query)).collect();
-    let raw = wire(request.from, request.to, request.interval, queries, &request.formulas);
-    let parsed_request = timeseries::parse(&raw).map_err(QueryError::Invalid)?;
-    let names = labels(request.queries.iter().map(|q| q.name.clone()).collect(), &request.formulas);
-    parsed(execute, tenant, retention, now, &names, &parsed_request).await
 }
 
 /// Splits an expression with queries inline into named queries and the formula over their names:
@@ -271,76 +164,12 @@ pub fn split(expr: &Expr<MetricQuery>) -> (Vec<ParsedQuery>, Formula) {
     (named, f)
 }
 
-/// One expression with its queries inline, the way Datadog's v1 API and its monitors write them:
-///
-/// ```text
-/// anomalies(avg:system.cpu.user{*} by {host}, 'basic', 3)
-/// sum:requests.errors{*}.as_count() / sum:requests.hits{*}.as_count() * 100
-/// ```
-///
-/// `split` turns it into named queries and a formula; from there it is the same engine as
-/// `timeseries`.
-#[allow(clippy::too_many_arguments)]
-pub async fn expression<E: Executor>(
-    execute: &E,
-    tenant: &TenantId,
-    retention: Retention,
-    now: i64,
-    from: i64,
-    until: i64,
-    text: &str,
-) -> Result<Vec<FormulaResult>, QueryError> {
-    let program = parser::parse_program(text).map_err(|e| QueryError::Invalid(vec![e]))?;
-    let [expr] = program.as_slice() else {
-        return Err(QueryError::Invalid(vec![format!(
-            "expected one expression, got {} separated by commas",
-            program.len()
-        )]));
-    };
-    let (queries, formula) = split(expr);
-    let request = ParsedTimeseriesRequest {
-        from,
-        to: until,
-        interval: None,
-        queries,
-        formulas: vec![ParsedFormula { formula, limit: None }],
-    };
-    parsed(execute, tenant, retention, now, &[text.to_string()], &request).await
-}
-
-/// Scalar: every formula's one value per group, over the window.
-pub async fn scalar<E: Executor>(
-    execute: &E,
-    tenant: &TenantId,
-    retention: Retention,
-    now: i64,
-    request: &ScalarRequest,
-) -> Result<Vec<ScalarResult>, QueryError> {
-    let queries = request.queries.iter().map(|q| metrics_query(&q.name, &q.query)).collect();
-    let raw = wire(request.from, request.to, None, queries, &request.formulas);
-    let plan = timeseries::parse(&raw).and_then(|r| plan::plan(retention, now, &r)).map_err(QueryError::Invalid)?;
-    let aggregators: Vec<ScalarAggregator> = request.queries.iter().map(|q| q.aggregator).collect();
-    let outputs = execute::evaluate_scalar(execute, tenant, &plan, &aggregators).await?;
-    let names = labels(request.queries.iter().map(|q| q.name.clone()).collect(), &request.formulas);
-
-    Ok(names
-        .into_iter()
-        .zip(outputs)
-        .map(|(formula, series)| ScalarResult {
-            formula,
-            // A group whose window held no points has no value.
-            values: series
-                .iter()
-                .filter_map(|s| s.points.values().next().map(|&value| ScalarValue { tags: tags(&s.group_tags), value }))
-                .collect(),
-        })
-        .collect())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::v2::timeseries::read;
     use crate::metric_query::ast::{BinaryOp, Literal};
+    use crate::metric_query::parser;
     use crate::query::compile::Row;
     use crate::query::execute::Fake;
     use crate::query::plan::DEFAULT_RETENTION;
@@ -366,12 +195,19 @@ mod tests {
         TenantId("t".into())
     }
 
-    fn cpu(query: &str) -> Vec<Query> {
-        vec![Query { name: "cpu".into(), query: query.into() }]
+    /// The query `cpu`, over 0 to 60 s in 20 s buckets, with these formulas.
+    fn request(query: &str, formulas: &[&str]) -> ParsedTimeseriesRequest {
+        let formulas: Vec<String> = formulas.iter().map(|f| format!(r#"{{"formula":"{f}"}}"#)).collect();
+        let body = format!(
+            r#"{{"data":{{"type":"timeseries_request","attributes":{{"from":0,"to":60000,"interval":20000,"queries":[{{"data_source":"metrics","name":"cpu","query":"{query}"}}],"formulas":[{}]}}}}}}"#,
+            formulas.join(",")
+        );
+        read(&body).unwrap_or_else(|es| panic!("{}", es.join("\n")))
     }
 
-    async fn run(request: TimeseriesRequest) -> Vec<FormulaResult> {
-        timeseries(&Fake(rows), &t(), DEFAULT_RETENTION, NOW, &request).await.unwrap_or_else(|e| panic!("{e:?}"))
+    async fn run(request: ParsedTimeseriesRequest, labels: &[&str]) -> Vec<FormulaResult> {
+        let labels: Vec<String> = labels.iter().map(|l| l.to_string()).collect();
+        parsed(&Fake(rows), &t(), DEFAULT_RETENTION, NOW, &labels, &request).await.unwrap_or_else(|e| panic!("{e:?}"))
     }
 
     fn values(s: &TimeSeries) -> Vec<f64> {
@@ -380,14 +216,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_query_in_series_with_tags_and_points_out() {
-        let result = run(TimeseriesRequest {
-            from: 0,
-            to: 60_000,
-            interval: Some(TimeDelta::seconds(20)),
-            queries: cpu("avg:cpu{*} by {host}.fill(null)"),
-            formulas: vec![],
-        })
-        .await;
+        let result = run(request("avg:cpu{*} by {host}.fill(null)", &[]), &["cpu"]).await;
 
         assert_eq!(result.len(), 1);
         let cpu = &result[0];
@@ -403,55 +232,22 @@ mod tests {
 
     #[tokio::test]
     async fn formulas_label_their_results() {
-        let result = run(TimeseriesRequest {
-            from: 0,
-            to: 60_000,
-            interval: Some(TimeDelta::seconds(20)),
-            queries: cpu("avg:cpu{*} by {host}.fill(null)"),
-            formulas: vec!["cpu * 2".into(), "top(cpu, 5, 'max', 'desc')".into()],
-        })
-        .await;
+        let formulas = ["cpu * 2", "top(cpu, 5, 'max', 'desc')"];
+        let result = run(request("avg:cpu{*} by {host}.fill(null)", &formulas), &formulas).await;
 
-        assert_eq!(
-            result.iter().map(|r| r.formula.as_str()).collect::<Vec<_>>(),
-            ["cpu * 2", "top(cpu, 5, 'max', 'desc')"]
-        );
+        assert_eq!(result.iter().map(|r| r.formula.as_str()).collect::<Vec<_>>(), formulas);
         assert_eq!(values(&result[0].series[0]), [20.0, 40.0, 60.0]);
     }
 
     #[tokio::test]
-    async fn problems_come_back_named() {
-        let request = TimeseriesRequest {
-            from: 0,
-            to: 60_000,
-            interval: None,
-            queries: cpu("avg:cpu{host:a"),
-            formulas: vec!["nope".into()],
-        };
-        match timeseries(&Fake(rows), &t(), DEFAULT_RETENTION, NOW, &request).await {
-            Err(QueryError::Invalid(es)) => assert!(es.iter().any(|e| e.starts_with("queries[0] (cpu):")), "{es:?}"),
+    async fn a_formula_naming_no_query_is_invalid() {
+        let labels = ["nope".to_string()];
+        let result =
+            parsed(&Fake(rows), &t(), DEFAULT_RETENTION, NOW, &labels, &request("avg:cpu{*}", &["nope"])).await;
+        match result {
+            Err(QueryError::Invalid(es)) => assert!(!es.is_empty()),
             other => panic!("expected errors, got {other:?}"),
         }
-    }
-
-    #[tokio::test]
-    async fn a_scalar_is_one_value_per_group() {
-        let request = ScalarRequest {
-            from: 0,
-            to: 60_000,
-            queries: vec![ScalarQuery {
-                name: "cpu".into(),
-                query: "avg:cpu{*} by {host}.fill(null)".into(),
-                aggregator: ScalarAggregator::Max,
-            }],
-            formulas: vec![],
-        };
-        let result =
-            scalar(&Fake(rows), &t(), DEFAULT_RETENTION, NOW, &request).await.unwrap_or_else(|e| panic!("{e:?}"));
-        assert_eq!(result.len(), 1);
-        let values: Vec<(Option<String>, f64)> =
-            result[0].values.iter().map(|v| (v.tags[0].value.clone(), v.value)).collect();
-        assert_eq!(values, [(Some("a".into()), 30.0), (Some("b".into()), 3.0)]);
     }
 
     #[tokio::test]
@@ -462,9 +258,8 @@ mod tests {
                 std::future::ready(Err("Code: 60. Unknown table".to_string()))
             }
         }
-        let request =
-            TimeseriesRequest { from: 0, to: 60_000, interval: None, queries: cpu("avg:cpu{*}"), formulas: vec![] };
-        let result = timeseries(&Broken, &t(), DEFAULT_RETENTION, NOW, &request).await;
+        let labels = ["cpu".to_string()];
+        let result = parsed(&Broken, &t(), DEFAULT_RETENTION, NOW, &labels, &request("avg:cpu{*}", &[])).await;
         assert_eq!(result, Err(QueryError::Failed("Code: 60. Unknown table".into())));
     }
 
@@ -504,30 +299,6 @@ mod tests {
             formula,
             Expr::Binary(BinaryOp::Div, Box::new(Expr::Binary(BinaryOp::Sub, leaf("q1"), leaf("q2"))), leaf("q1"))
         );
-    }
-
-    #[tokio::test]
-    async fn an_expression_runs_like_a_formula() {
-        let text = "avg:cpu{*} by {host}.fill(null) * 2";
-        let result = expression(&Fake(rows), &t(), DEFAULT_RETENTION, NOW, 0, 60_000, text)
-            .await
-            .unwrap_or_else(|e| panic!("{e:?}"));
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].formula, text);
-        assert_eq!(values(&result[0].series[0]), [20.0, 40.0, 60.0]);
-    }
-
-    #[tokio::test]
-    async fn expression_problems_are_named() {
-        let two = expression(&Fake(rows), &t(), DEFAULT_RETENTION, NOW, 0, 60_000, "avg:cpu{*}, avg:mem{*}").await;
-        assert_eq!(two, Err(QueryError::Invalid(vec!["expected one expression, got 2 separated by commas".into()])));
-
-        match expression(&Fake(rows), &t(), DEFAULT_RETENTION, NOW, 0, 60_000, "ewma_4(avg:cpu{*})").await {
-            Err(QueryError::Invalid(es)) => {
-                assert!(es.contains(&"formulas[0]: function 'ewma_4' is not supported yet".to_string()), "{es:?}")
-            }
-            other => panic!("{other:?}"),
-        }
     }
 
     #[test]

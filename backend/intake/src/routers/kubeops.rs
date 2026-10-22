@@ -11,10 +11,9 @@
 //! in k8s_cluster, ECS tasks in ecs_tasks, action results in k8s_actions. A frame that does not
 //! decode, and a message that is not an orchestrator one, goes to raw_payloads.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 
 use base64::Engine;
-use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use ninjapaws_proto::datadog::process_agent::*;
 use ninjapaws_storage::column::Blob;
@@ -26,19 +25,8 @@ use tako::types::Response;
 use crate::fields::{self, Fields, Mismatches};
 use crate::json;
 use crate::process_frame::{self, Body, Header};
-use crate::server::{Ctx, Routes, accepted};
+use crate::server::{self, Ctx, accepted};
 use crate::wire::{enum_name, tags, text, time, version_spread};
-
-pub fn mount(routes: &mut Routes) {
-    // Kubernetes resource collections; /api/v1/orchestrator is the same under
-    // orchestrator_explorer.use_legacy_endpoint.
-    routes.post("/api/v2/orch", |ctx, body| handle_frame("orch", ctx, body));
-    // Raw manifests (types 80-82): the object's own YAML or JSON, "exactly what kubectl would
-    // show". Same frame, same decoder.
-    routes.post("/api/v2/orchmanif", |ctx, body| handle_frame("orchmanif", ctx, body));
-    routes.post("/api/v1/orchestrator", |ctx, body| handle_frame("orch", ctx, body));
-    routes.post("/api/v2/kubeactions", handle_actions);
-}
 
 /// The frame header as the four columns every orchestrator row carries.
 #[derive(Clone, Debug, PartialEq)]
@@ -74,12 +62,14 @@ pub fn frame_columns(header: &Header) -> FrameColumns {
 /// Unix seconds for a nullable column: 0 means the sender did not supply the time, and it must
 /// never become 1970.
 fn seconds(value: i64) -> Option<DateTime<Utc>> {
-    time::optional_seconds(true, value)
+    time::optional_seconds(value)
 }
 
 /// major.minor.patch, with the prerelease tag when set.
 fn agent_version_text(version: Option<&AgentVersion>) -> String {
-    let Some(version) = version else { return String::new() };
+    let Some(version) = version else {
+        return String::new();
+    };
     let numbers = format!("{}.{}.{}", version.major, version.minor, version.patch);
     if version.pre.is_empty() { numbers } else { format!("{numbers}-{}", version.pre) }
 }
@@ -1166,7 +1156,9 @@ pub fn manifest_rows(
     collector: Option<CollectorManifest>,
     wrapper_tags: &[String],
 ) -> Vec<K8sManifest> {
-    let Some(mut collector) = collector else { return Vec::new() };
+    let Some(mut collector) = collector else {
+        return Vec::new();
+    };
     // Without the manifest list: the list is the rows.
     let manifests = std::mem::take(&mut collector.manifests);
     let envelope = json::proto::message(Some(&collector));
@@ -1224,7 +1216,9 @@ pub fn cluster_rows(
     frame: &FrameColumns,
     collector: &CollectorCluster,
 ) -> Vec<K8sCluster> {
-    let Some(cluster) = &collector.cluster else { return Vec::new() };
+    let Some(cluster) = &collector.cluster else {
+        return Vec::new();
+    };
     let nodes = &cluster.nodes_info;
     let versions = |spread: &HashMap<String, i32>| version_spread(spread.iter().map(|(v, n)| (v.clone(), *n)));
 
@@ -1337,7 +1331,7 @@ pub fn ecs_task_rows(
 
 // ---- the orchestrator handlers ----
 
-async fn handle_frame(label: &str, ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_frame(label: &str, ctx: Ctx, body: server::Body) -> Response {
     let tenant = ctx.tenant();
     match process_frame::decode(&body) {
         Err(e) => ctx.raw("orchestrator", "decode_error", &format!("{label}: {e}"), &body),
@@ -1384,36 +1378,9 @@ async fn handle_frame(label: &str, ctx: Ctx, body: Bytes) -> Response {
 
 // ---- kubeactions → k8s_actions ----
 
-/// One report on a remote action, as the cluster agent's ActionResultEvent
-/// (pkg/clusteragent/kubeactions/reporter.go) sends it.
-///
-/// event_type is action_received, action_progress or action_executed; status is success, failed,
-/// skipped, expired, claimed or in_progress; timestamp is RFC 3339, kept as the text it came as.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct ActionEvent {
-    pub action_id: String,
-    pub org_id: i64,
-    pub event_type: String,
-    pub status: String,
-    pub action_type: String,
-    pub cluster_id: String,
-    pub resource_id: String,
-    pub requested_by: String,
-    pub timestamp: String,
-    pub message: String,
-    /// What the executor attached, base64 on the wire.
-    pub payloads: BTreeMap<String, Vec<u8>>,
-    pub cluster_name: String,
-    pub resource_kind: String,
-    pub resource_name: String,
-    pub resource_namespace: String,
-    /// Keys the event carried that are not among the known ones, so a newer agent loses nothing
-    /// here.
-    pub extra: BTreeMap<String, Value>,
-}
-
-/// The JSON keys of an ActionEvent's own fields.
-pub const ACTION_KNOWN_KEYS: [&str; 15] = [
+/// The JSON keys of a K8sAction's own fields; any other key of an event goes to extra, so a
+/// newer agent loses nothing here.
+const ACTION_KNOWN_KEYS: [&str; 15] = [
     "action_id",
     "org_id",
     "event_type",
@@ -1457,14 +1424,23 @@ fn attachments(payloads: &Fields) -> BTreeMap<String, Vec<u8>> {
     attached
 }
 
-/// One event, `path` being its place in the batch. A member of the wrong type refuses the whole
-/// event; a member that is not a known one is kept in extra.
-pub fn decode_action(path: &str, raw: &Value) -> Result<ActionEvent, String> {
+/// One report on a remote action, as the cluster agent's ActionResultEvent
+/// (pkg/clusteragent/kubeactions/reporter.go) sends it, `path` being its place in the batch. A
+/// member of the wrong type refuses the whole event; a member that is not a known one is kept in
+/// extra.
+///
+/// event_type is action_received, action_progress or action_executed; status is success, failed,
+/// skipped, expired, claimed or in_progress; timestamp is RFC 3339, kept as the text it came as.
+/// An empty or unparseable one means "not provided": the row gets the arrival time, never 1970.
+pub fn decode_action(tenant: &str, arrival: DateTime<Utc>, path: &str, raw: &Value) -> Result<K8sAction, String> {
     let bad = Mismatches::default();
     let fields = fields::fields(&bad, path, raw);
-    let known: BTreeSet<&str> = ACTION_KNOWN_KEYS.into_iter().collect();
+    let extra: BTreeMap<String, Value> =
+        json::members(raw).into_iter().filter(|(name, _)| !ACTION_KNOWN_KEYS.contains(&name.as_str())).collect();
 
-    let event = ActionEvent {
+    let mut row = K8sAction {
+        tenant_id: tenant.into(),
+        timestamp: arrival,
         action_id: fields.string("action_id"),
         org_id: fields.int64("org_id"),
         event_type: fields.string("event_type"),
@@ -1473,62 +1449,42 @@ pub fn decode_action(path: &str, raw: &Value) -> Result<ActionEvent, String> {
         cluster_id: fields.string("cluster_id"),
         resource_id: fields.string("resource_id"),
         requested_by: fields.string("requested_by"),
-        timestamp: fields.string("timestamp"),
+        timestamp_raw: fields.string("timestamp"),
         message: fields.string("message"),
-        payloads: attachments(&fields.object("payloads")),
+        payloads: attachments(&fields.object("payloads"))
+            .into_iter()
+            .map(|(name, bytes)| (name, Blob(bytes)))
+            .collect(),
         cluster_name: fields.string("cluster_name"),
         resource_kind: fields.string("resource_kind"),
         resource_name: fields.string("resource_name"),
         resource_namespace: fields.string("resource_namespace"),
-        extra: json::members(raw).into_iter().filter(|(name, _)| !known.contains(name.as_str())).collect(),
+        // A column of their own, sorted, so filtering on a name needs no JSON parsing.
+        extra_keys: extra.keys().cloned().collect(),
+        extra: if extra.is_empty() { String::new() } else { json::compact_object(&extra) },
     };
+    row.timestamp = time::try_rfc3339(&row.timestamp_raw).unwrap_or(arrival);
 
     match bad.into_inner().into_iter().next() {
         Some(first) => Err(first),
-        None => Ok(event),
-    }
-}
-
-/// An empty or unparseable timestamp means "not provided": the row gets the arrival time, never
-/// 1970, and timestamp_raw keeps what was sent.
-pub fn action_row(tenant: &str, arrival: DateTime<Utc>, event: ActionEvent) -> K8sAction {
-    K8sAction {
-        tenant_id: tenant.into(),
-        timestamp: time::try_rfc3339(&event.timestamp).unwrap_or(arrival),
-        action_id: event.action_id,
-        org_id: event.org_id,
-        event_type: event.event_type,
-        status: event.status,
-        action_type: event.action_type,
-        cluster_id: event.cluster_id,
-        cluster_name: event.cluster_name,
-        resource_id: event.resource_id,
-        resource_kind: event.resource_kind,
-        resource_name: event.resource_name,
-        resource_namespace: event.resource_namespace,
-        requested_by: event.requested_by,
-        message: event.message,
-        // A column of their own, sorted, so filtering on a name needs no JSON parsing.
-        extra_keys: event.extra.keys().cloned().collect(),
-        payloads: event.payloads.into_iter().map(|(name, bytes)| (name, Blob(bytes))).collect(),
-        extra: if event.extra.is_empty() { String::new() } else { json::compact_object(&event.extra) },
-        timestamp_raw: event.timestamp,
+        None => Ok(row),
     }
 }
 
 /// The cluster agent's reports on the actions it ran: the other half of remote configuration. One
 /// event when an action is received, one when it is executed. Event platform track
 /// "kubeactions": a JSON array of events.
-pub async fn handle_actions(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_actions(ctx: Ctx, body: server::Body) -> Response {
     match json::try_parse_array(&body) {
         Err(e) => ctx.raw("kubeactions", "decode_error", &e, &body),
         Ok(items) => {
             let text = json::raw::text(&body);
             let sent = json::raw::elements(&text);
-            let mut events = Vec::new();
+            let arrival = Utc::now();
+            let mut rows = Vec::new();
             for (i, raw) in items.iter().enumerate() {
-                match decode_action(&format!("[{i}]"), raw) {
-                    Ok(event) => events.push(event),
+                match decode_action(ctx.tenant(), arrival, &format!("[{i}]"), raw) {
+                    Ok(row) => rows.push(row),
                     // One bad element must not cost the batch, nor itself: its own JSON is kept,
                     // as it was sent, while the rest become rows.
                     Err(e) => {
@@ -1536,8 +1492,7 @@ pub async fn handle_actions(ctx: Ctx, body: Bytes) -> Response {
                     }
                 }
             }
-            let arrival = Utc::now();
-            ctx.write(events.into_iter().map(|event| action_row(ctx.tenant(), arrival, event)).collect());
+            ctx.write(rows);
         }
     }
     accepted()
@@ -1593,12 +1548,12 @@ mod tests {
         row(Body::Pod(CollectorPod { pods: vec![pod], ..Default::default() }))
     }
 
-    fn decoded(text: &str) -> ActionEvent {
-        decode_action("", &serde_json::from_str(text).unwrap()).unwrap()
+    fn decoded(text: &str) -> K8sAction {
+        decode_action("t", now(), "", &serde_json::from_str(text).unwrap()).unwrap()
     }
 
     fn refused(text: &str) -> bool {
-        decode_action("", &serde_json::from_str(text).unwrap()).is_err()
+        decode_action("t", now(), "", &serde_json::from_str(text).unwrap()).is_err()
     }
 
     fn map<V: Clone>(pairs: &[(&str, V)]) -> BTreeMap<String, V> {
@@ -2738,8 +2693,7 @@ mod tests {
 
     #[test]
     fn an_empty_or_unparseable_action_timestamp_becomes_the_arrival_time_never_1970() {
-        let timestamp_of =
-            |text: &str| action_row("t", now(), decoded(&json!({ "timestamp": text }).to_string())).timestamp;
+        let timestamp_of = |text: &str| decoded(&json!({ "timestamp": text }).to_string()).timestamp;
         let utc = |h| Utc.with_ymd_and_hms(2026, 9, 20, h, 30, 0).unwrap();
         assert_eq!(timestamp_of(""), now());
         assert_eq!(timestamp_of("yesterday-ish"), now());
@@ -2749,10 +2703,9 @@ mod tests {
 
     #[test]
     fn keys_an_action_event_does_not_declare_surface_in_the_row_sorted() {
-        let event = decoded(
+        let row = decoded(
             r#"{"action_id": "a-1", "event_type": "action_executed", "status": "success", "zeta_field": 1, "alpha_field": {"nested": true}}"#,
         );
-        let row = action_row("t", now(), event);
         assert_eq!(
             (row.action_id.as_str(), row.event_type.as_str(), row.status.as_str()),
             ("a-1", "action_executed", "success")
@@ -2763,11 +2716,10 @@ mod tests {
 
     #[test]
     fn an_action_row_keeps_its_attachments_its_undeclared_values_and_the_timestamp_as_it_arrived() {
-        let event = decoded(
+        let row = decoded(
             r#"{"action_id": "a-1", "org_id": 9007199254740993, "status": "failed", "timestamp": "not-a-date",
                 "payloads": {"stderr": "YmFk", "binary": "/wD+", "nothing": null}, "new_field": {"nested": 7}}"#,
         );
-        let row = action_row("t", now(), event);
         assert_eq!(row.org_id, 9007199254740993);
         assert_eq!(row.payloads["stderr"].0, b"bad");
         assert_eq!(row.payloads["binary"].0, [0xff, 0x00, 0xfe]);
@@ -2780,7 +2732,7 @@ mod tests {
 
     #[test]
     fn an_action_row_with_nothing_extra_has_empty_extra_columns() {
-        let row = action_row("t", now(), decoded(r#"{"action_id":"a-1"}"#));
+        let row = decoded(r#"{"action_id":"a-1"}"#);
         assert!(row.extra_keys.is_empty());
         assert_eq!(row.extra, "");
         assert!(row.payloads.is_empty());
@@ -2791,7 +2743,7 @@ mod tests {
         assert_eq!(decoded(r#"{"action_id":"x","ACTION_ID":"y"}"#).action_id, "x");
         assert_eq!(decoded(r#"{"action_id":"x","action_id":"z"}"#).action_id, "z");
         // A key that is not exactly a known one fills nothing and is kept as extra.
-        assert_eq!(decoded(r#"{"ACTION_ID":"y"}"#).extra.keys().collect::<Vec<_>>(), ["ACTION_ID"]);
+        assert_eq!(decoded(r#"{"ACTION_ID":"y"}"#).extra_keys, ["ACTION_ID"]);
         assert_eq!(decoded(r#"{"ACTION_ID":"y","actionid":"x","action-id":"x"}"#).action_id, "");
 
         assert_eq!(decoded(r#"{"action_id":"x","action_id":null}"#).action_id, "");
@@ -2822,7 +2774,8 @@ mod tests {
 
     #[test]
     fn attachments_are_padded_standard_base64_line_breaks_allowed() {
-        let attachment = |text: &str| decoded(&json!({ "payloads": { "a": text } }).to_string()).payloads["a"].clone();
+        let attachment =
+            |text: &str| decoded(&json!({ "payloads": { "a": text } }).to_string()).payloads["a"].0.clone();
         assert_eq!(attachment("YmE="), b"ba");
         assert_eq!(attachment("Ym\nFk"), b"bad");
         assert!(attachment("").is_empty());
@@ -2835,9 +2788,9 @@ mod tests {
             assert!(refused(text), "{text}");
         }
         // A null attachment is an empty one.
-        assert!(decoded(r#"{"payloads":{"a":null}}"#).payloads["a"].is_empty());
+        assert!(decoded(r#"{"payloads":{"a":null}}"#).payloads["a"].0.is_empty());
         assert_eq!(
-            decode_action("[3]", &json!({ "payloads": { "a": "YmE" } })).map(|_| ()),
+            decode_action("t", now(), "[3]", &json!({ "payloads": { "a": "YmE" } })).map(|_| ()),
             Err("[3].payloads.a: not base64".into())
         );
     }

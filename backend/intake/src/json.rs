@@ -1,7 +1,7 @@
 //! JSON as every router reads and writes it: parsed into `serde_json::Value`, members in the
 //! order they came, the last of a repeated name.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -291,22 +291,15 @@ pub fn tag_list(value: Option<&Value>) -> Vec<String> {
     }
 }
 
-/// Members as the texts of a Map(String, String) column, each value as the JSON `write` gives
-/// it. A null member is the text `null`: an empty string is a value too, and not the one that
-/// was sent.
-pub fn member_texts(write: impl Fn(&Value) -> String, members: &BTreeMap<String, Value>) -> BTreeMap<String, String> {
-    members.iter().map(|(k, v)| (k.clone(), write(v))).collect()
-}
-
-/// The members of an object that have no column of their own, those not in `known`, as such
-/// texts.
-pub fn other_members(
-    known: &BTreeSet<&str>,
-    write: impl Fn(&Value) -> String,
-    object: Option<&Value>,
-) -> BTreeMap<String, String> {
-    let others = lenient_members(object).into_iter().filter(|(name, _)| !known.contains(name.as_str())).collect();
-    member_texts(write, &others)
+/// The members of an object that have no column of their own, those not in `known`, as the texts
+/// of a Map(String, String) column. A null member is the text `null`: an empty string is a value
+/// too, and not the one that was sent.
+pub fn other_members(known: &[&str], object: Option<&Value>) -> BTreeMap<String, String> {
+    lenient_members(object)
+        .into_iter()
+        .filter(|(name, _)| !known.contains(&name.as_str()))
+        .map(|(name, value)| (name, compact_sorted(&value)))
+        .collect()
 }
 
 /// A body as its items: the elements of a list, or the one object of a sender that skipped the
@@ -377,7 +370,7 @@ pub fn keys(object: &Value) -> String {
 /// number keeps its digits (`1.50`), an element its spacing. The text is the repaired body's
 /// ([`repair`]), which is what every value of it was parsed from.
 pub mod raw {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::BTreeMap;
 
     use serde_json::Value;
 
@@ -427,10 +420,10 @@ pub mod raw {
     }
 
     /// The members that have no column of their own, those not in `known`, each as its text.
-    pub fn other_members(known: &BTreeSet<&str>, text: &str) -> BTreeMap<String, String> {
+    pub fn other_members(known: &[&str], text: &str) -> BTreeMap<String, String> {
         members(text)
             .into_iter()
-            .filter(|(name, _)| !known.contains(name.as_str()))
+            .filter(|(name, _)| !known.contains(&name.as_str()))
             .map(|(k, v)| (k, v.into()))
             .collect()
     }

@@ -1,5 +1,5 @@
-//! One module per host's router. A module's `mount` registers what its host serves; the hosts
-//! that share a router (app. and api. share the core agent's) share its handlers.
+//! The handlers, one module per product. Which host serves which handler is in each program's
+//! `main` (`api/src/bin`); hosts that serve the same paths (app. and api.) share the handlers.
 
 pub mod api;
 pub mod api_payloads;

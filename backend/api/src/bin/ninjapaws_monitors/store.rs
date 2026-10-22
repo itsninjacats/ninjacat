@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 
+use api::reads::ClickHouse;
 use ninjapaws_engine::monitor::check;
 use ninjapaws_engine::monitor::definition::Monitor;
 use ninjapaws_engine::monitor::evaluate::{Evaluation, Reading};
@@ -9,7 +10,6 @@ use ninjapaws_engine::monitor::state::{CLOSES, Group, Reason, Status, Transition
 use ninjapaws_engine::{Sql, SqlValue};
 
 use crate::definitions::MonitorKey;
-use crate::reads::ClickHouse;
 use crate::rows::{EvaluationRow, TransitionRow};
 
 #[derive(Clone, Debug, Default, PartialEq)]

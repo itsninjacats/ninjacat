@@ -2,19 +2,20 @@
 //! the golden fixtures do not cover, and the payloads recorded from real senders
 //! (`backend/intake/tests/fixtures/real`).
 
+mod programs;
+
 use std::path::Path;
 use std::sync::Arc;
 
 use http_body_util::BodyExt;
-use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::keys::{self, Key, Store};
-use ninjapaws_intake::routers::{dbm, evp, ndm, security};
-use ninjapaws_intake::server::{Intake, Routes, router};
+use ninjapaws_intake::server::Intake;
 use ninjapaws_proto::datadog::agentdiscovery::{AgentDiscoveryPayload, AgentDiscoveryPayloadBatch};
 use ninjapaws_proto::datadog::sbom::{SbomEntity, SbomPayload};
 use ninjapaws_storage::{Sink, Write};
 use prost::Message;
 use serde_json::Value;
+use tako::router::Router;
 
 const KEY: &str = "00000000000000000000000000000001";
 const TENANT: &str = "test";
@@ -40,12 +41,19 @@ impl Answer {
     }
 }
 
-async fn send(mount: fn(&mut Routes), scheme: Scheme, path: &str, headers: &[(&str, &str)], body: Vec<u8>) -> Answer {
+async fn send(mount: fn(&mut Router), path: &str, headers: &[(&str, &str)], body: Vec<u8>) -> Answer {
     let store = Store::default();
     store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: TENANT.into() })]);
     let (sink, capture) = Sink::capture();
-    let intake = Intake { sink, keys: Arc::new(store), ack_unknown: false, max_body_bytes: 64 * 1024 * 1024 };
-    let router = router(intake, Some(scheme), mount);
+    let intake = Intake {
+        sink,
+        keys: Arc::new(store),
+        ack_unknown: false,
+        max_body_bytes: 64 * 1024 * 1024,
+        stopping: Default::default(),
+        tasks: Default::default(),
+    };
+    let router = programs::router_of(mount, intake);
     let mut request = http::Request::builder().method("POST").uri(path);
     for (name, value) in headers {
         request = request.header(*name, *value);
@@ -57,8 +65,8 @@ async fn send(mount: fn(&mut Routes), scheme: Scheme, path: &str, headers: &[(&s
 }
 
 /// A POST with the test key, answered 202 and `{}`.
-async fn post(mount: fn(&mut Routes), path: &str, body: impl Into<Vec<u8>>) -> Answer {
-    let answer = send(mount, Scheme::Agent, path, &[("dd-api-key", KEY)], body.into()).await;
+async fn post(mount: fn(&mut Router), path: &str, body: impl Into<Vec<u8>>) -> Answer {
+    let answer = send(mount, path, &[("dd-api-key", KEY)], body.into()).await;
     assert_eq!((answer.status, answer.body.as_str()), (202, "{}"), "{path}");
     answer
 }
@@ -83,9 +91,11 @@ async fn what_a_real_dbm_integration_sends_is_stored_event_for_event_with_no_key
     files.sort();
     let mut checked = 0;
     for file in files {
-        let Some(track) = tracks.iter().find(|track| file.ends_with(&format!("-{track}.json"))) else { continue };
+        let Some(track) = tracks.iter().find(|track| file.ends_with(&format!("-{track}.json"))) else {
+            continue;
+        };
         let body = real(&file);
-        let answer = post(dbm::mount, &format!("/api/v2/{track}"), body.clone()).await;
+        let answer = post(programs::dbm, &format!("/api/v2/{track}"), body.clone()).await;
         assert!(answer.raw().is_empty(), "{file}");
         let rows = answer.rows("dbm_events");
         let sent: Vec<Value> = serde_json::from_slice(&body).unwrap();
@@ -110,7 +120,8 @@ async fn what_a_real_dbm_integration_sends_is_stored_event_for_event_with_no_key
 #[tokio::test]
 async fn an_oracle_plan_is_a_list_of_steps_and_they_are_counted() {
     let answer =
-        post(dbm::mount, "/api/v2/databasequery", real("oracle-check-agent-7.84.0-oracle-23-databasequery.json")).await;
+        post(programs::dbm, "/api/v2/databasequery", real("oracle-check-agent-7.84.0-oracle-23-databasequery.json"))
+            .await;
     let rows = answer.rows("dbm_events");
     let plan = rows.iter().find(|row| row["dbm_type"] == "plan").unwrap();
     assert_eq!(plan["plan_definition_steps"], 2);
@@ -119,7 +130,7 @@ async fn an_oracle_plan_is_a_list_of_steps_and_they_are_counted() {
 
 #[tokio::test]
 async fn a_postgres_plan_is_explain_output_in_a_string_or_null_when_none_could_be_collected() {
-    let answer = post(dbm::mount, "/api/v2/databasequery", real("postgres-check-23.12.0-databasequery.json")).await;
+    let answer = post(programs::dbm, "/api/v2/databasequery", real("postgres-check-23.12.0-databasequery.json")).await;
     let mut shown: Vec<(String, bool)> = answer
         .rows("dbm_events")
         .iter()
@@ -132,14 +143,14 @@ async fn a_postgres_plan_is_explain_output_in_a_string_or_null_when_none_could_b
 #[tokio::test]
 async fn the_agents_empty_dbm_probe_stores_nothing() {
     for body in ["{}", "[]", ""] {
-        assert!(post(dbm::mount, "/api/v2/dbmmetrics", body).await.writes.is_empty(), "{body}");
+        assert!(post(programs::dbm, "/api/v2/dbmmetrics", body).await.writes.is_empty(), "{body}");
     }
 }
 
 #[tokio::test]
 async fn a_bare_dbm_object_is_a_batch_of_one_stored_with_its_text_as_sent() {
     let body = " {\"host\": \"db1\",\n  \"status\": \"ok\"}\n";
-    let answer = post(dbm::mount, "/api/v2/dbmhealth", body).await;
+    let answer = post(programs::dbm, "/api/v2/dbmhealth", body).await;
     let rows = answer.rows("dbm_events");
     assert_eq!(rows.len(), 1);
     assert_eq!(text(&rows[0]["event"]), body.trim());
@@ -150,7 +161,7 @@ async fn a_bare_dbm_object_is_a_batch_of_one_stored_with_its_text_as_sent() {
 
 #[tokio::test]
 async fn what_the_agents_snmp_check_learns_about_a_device_becomes_devices_interfaces_and_addresses() {
-    let answer = post(ndm::mount, "/api/v2/ndm", real("agent-7.84.0-ndm.json")).await;
+    let answer = post(programs::ndm, "/api/v2/ndm", real("agent-7.84.0-ndm.json")).await;
     assert!(answer.raw().is_empty());
     let devices = answer.rows("ndm_devices");
     assert_eq!(devices.len(), 1);
@@ -177,7 +188,7 @@ async fn what_the_agents_snmp_check_learns_about_a_device_becomes_devices_interf
 
 #[tokio::test]
 async fn traps_arrive_with_the_names_the_agents_own_trap_database_gave_them_or_as_bare_oids() {
-    let answer = post(ndm::mount, "/api/v2/ndmtraps", real("agent-7.84.0-ndmtraps.json")).await;
+    let answer = post(programs::ndm, "/api/v2/ndmtraps", real("agent-7.84.0-ndmtraps.json")).await;
     assert!(answer.raw().is_empty());
     let traps = answer.rows("snmp_traps");
     let mut shown: Vec<[&str; 3]> = traps
@@ -205,7 +216,7 @@ async fn traps_arrive_with_the_names_the_agents_own_trap_database_gave_them_or_a
 
 #[tokio::test]
 async fn netflow_v5_records_the_agent_aggregated_become_flows() {
-    let answer = post(ndm::mount, "/api/v2/ndmflow", real("agent-7.84.0-ndmflow.json")).await;
+    let answer = post(programs::ndm, "/api/v2/ndmflow", real("agent-7.84.0-ndmflow.json")).await;
     assert!(answer.raw().is_empty());
     let flows = answer.rows("netflow_flows");
     assert_eq!(flows.len(), 4);
@@ -219,7 +230,7 @@ async fn netflow_v5_records_the_agent_aggregated_become_flows() {
 
 #[tokio::test]
 async fn a_traceroute_the_agent_ran_becomes_one_network_path_with_its_hops() {
-    let answer = post(ndm::mount, "/api/v2/netpath", real("agent-7.84.0-netpath.json")).await;
+    let answer = post(programs::ndm, "/api/v2/netpath", real("agent-7.84.0-netpath.json")).await;
     assert!(answer.raw().is_empty());
     let paths = answer.rows("network_paths");
     assert_eq!(paths.len(), 1);
@@ -234,7 +245,7 @@ async fn a_traceroute_the_agent_ran_becomes_one_network_path_with_its_hops() {
 #[tokio::test]
 async fn one_value_of_the_wrong_type_refuses_the_whole_batch_of_flows_and_the_body_is_kept_raw() {
     let body = r#"[{"type":"netflow9","bytes":1},{"type":"netflow9","bytes":"many"}]"#;
-    let answer = post(ndm::mount, "/api/v2/ndmflow", body).await;
+    let answer = post(programs::ndm, "/api/v2/ndmflow", body).await;
     assert!(answer.rows("netflow_flows").is_empty());
     let raw = answer.raw();
     assert_eq!(raw.len(), 1);
@@ -248,7 +259,7 @@ async fn one_value_of_the_wrong_type_refuses_the_whole_batch_of_flows_and_the_bo
 async fn an_ndm_entry_with_a_value_of_the_wrong_type_is_kept_raw_and_the_entries_beside_it_are_stored() {
     let good = r#"{"namespace":"default","devices":[{"id":"default:10.0.0.1","status":1}]}"#;
     let bad = r#"{"namespace":"default","devices":[{"id":17}]}"#;
-    let answer = post(ndm::mount, "/api/v2/ndm", format!("[{good},{bad}]")).await;
+    let answer = post(programs::ndm, "/api/v2/ndm", format!("[{good},{bad}]")).await;
     let devices = answer.rows("ndm_devices");
     assert_eq!(devices.len(), 1);
     assert_eq!((text(&devices[0]["device_id"]), text(&devices[0]["status"])), ("default:10.0.0.1", "reachable"));
@@ -262,7 +273,7 @@ async fn an_ndm_entry_with_a_value_of_the_wrong_type_is_kept_raw_and_the_entries
 #[tokio::test]
 async fn an_entry_without_a_trap_is_an_unexpected_shape_a_broken_trap_a_decode_error() {
     let answer = post(
-        ndm::mount,
+        programs::ndm,
         "/api/v2/ndmtraps",
         r#"[{"other":1},{"trap":{"timestamp":"soon"}},{"trap":{"snmpTrapOID":"1.3"}},7]"#,
     )
@@ -283,25 +294,26 @@ async fn an_entry_without_a_trap_is_an_unexpected_shape_a_broken_trap_a_decode_e
 #[tokio::test]
 async fn an_entry_kept_raw_is_the_text_as_sent() {
     let bad = r#"{"namespace" : "x", "n": 1.50, "devices":[{"id":17}]}"#;
-    let answer = post(ndm::mount, "/api/v2/ndm", format!("[ {bad} ]")).await;
+    let answer = post(programs::ndm, "/api/v2/ndm", format!("[ {bad} ]")).await;
     assert_eq!(text(&answer.raw()[0]["body"]), bad);
 
     let bad = r#"{"n": 1.50, "configs": 7}"#;
-    let answer = post(ndm::mount, "/api/v2/ndmconfig", format!("[ {bad} ]")).await;
+    let answer = post(programs::ndm, "/api/v2/ndmconfig", format!("[ {bad} ]")).await;
     assert_eq!(text(&answer.raw()[0]["body"]), bad);
 
     let bad = r#"{"other" : 1E3}"#;
-    let answer = post(ndm::mount, "/api/v2/ndmtraps", format!("[ {bad} ]")).await;
+    let answer = post(programs::ndm, "/api/v2/ndmtraps", format!("[ {bad} ]")).await;
     assert_eq!(text(&answer.raw()[0]["body"]), bad);
 
-    let answer = post(evp::mount_synthetics_results, "/api/v2/synthetics", r#"[ {"test":{"id":"t"}} , 1.50 ]"#).await;
+    let answer = post(programs::synthetics_results, "/api/v2/synthetics", r#"[ {"test":{"id":"t"}} , 1.50 ]"#).await;
     assert_eq!(text(&answer.raw()[0]["body"]), "1.50");
 }
 
 #[tokio::test]
 async fn an_address_that_is_not_one_refuses_the_batch_of_paths() {
     let answer =
-        post(ndm::mount, "/api/v2/netpath", r#"[{"traceroute":{"runs":[{"hops":[{"ip_address":"nowhere"}]}]}}]"#).await;
+        post(programs::ndm, "/api/v2/netpath", r#"[{"traceroute":{"runs":[{"hops":[{"ip_address":"nowhere"}]}]}}]"#)
+            .await;
     assert!(answer.rows("network_paths").is_empty());
     let raw = answer.raw();
     assert_eq!((text(&raw[0]["intake"]), text(&raw[0]["reason"])), ("netpath", "decode_error"));
@@ -328,7 +340,7 @@ async fn post_dump(content_type: &str, body: Vec<u8>) -> Answer {
     if !content_type.is_empty() {
         headers.push(("content-type", content_type));
     }
-    let answer = send(security::mount_cws, Scheme::Agent, "/api/v2/secdump", &headers, body).await;
+    let answer = send(programs::cws, "/api/v2/secdump", &headers, body).await;
     assert_eq!((answer.status, answer.body.as_str()), (202, "{}"));
     answer
 }
@@ -365,9 +377,9 @@ async fn a_dump_request_with_nothing_to_decode_is_kept_raw() {
 async fn each_track_stores_its_envelopes_under_its_own_name() {
     let body = r#"[{"hostname":"h1","message":"{\"kind\":\"remediation\"}"}]"#;
     for (mount, path, track) in [
-        (security::mount_runtime_security as fn(&mut Routes), "/api/v2/secruntime", "secruntime"),
-        (security::mount_runtime_security, "/api/v2/secinfo", "secinfo"),
-        (security::mount_cspm, "/api/v2/compliance", "compliance"),
+        (programs::runtime_security as fn(&mut Router), "/api/v2/secruntime", "secruntime"),
+        (programs::runtime_security, "/api/v2/secinfo", "secinfo"),
+        (programs::cspm, "/api/v2/compliance", "compliance"),
     ] {
         let answer = post(mount, path, body).await;
         let rows = answer.rows("security_events");
@@ -385,7 +397,7 @@ async fn a_batch_that_is_not_a_list_of_envelopes_is_kept_raw_under_its_track() {
         ("\"text\"", "the body is not a list of envelopes: expected a list, got string"),
         (r#"[{"hostname":"h1"}, 7]"#, "the body is not a list of envelopes: entry 1 is not a JSON object"),
     ] {
-        let answer = post(security::mount_cspm, "/api/v2/compliance", body).await;
+        let answer = post(programs::cspm, "/api/v2/compliance", body).await;
         assert_eq!(answer.writers(), ["storage_raw_payloads"]);
         let raw = answer.raw();
         assert_eq!(
@@ -393,7 +405,7 @@ async fn a_batch_that_is_not_a_list_of_envelopes_is_kept_raw_under_its_track() {
             ["compliance", "unexpected_shape", note]
         );
     }
-    let answer = post(security::mount_runtime_security, "/api/v2/secinfo", "not json").await;
+    let answer = post(programs::runtime_security, "/api/v2/secinfo", "not json").await;
     let raw = answer.raw();
     assert_eq!((text(&raw[0]["intake"]), text(&raw[0]["reason"])), ("secinfo", "unexpected_shape"));
     assert!(text(&raw[0]["note"]).starts_with("the body is not a list of envelopes: "));
@@ -402,7 +414,7 @@ async fn a_batch_that_is_not_a_list_of_envelopes_is_kept_raw_under_its_track() {
 #[tokio::test]
 async fn an_empty_batch_or_a_probe_stores_nothing() {
     for body in ["null", "[]", "", "{}"] {
-        assert!(post(security::mount_runtime_security, "/api/v2/secruntime", body).await.writes.is_empty(), "{body}");
+        assert!(post(programs::runtime_security, "/api/v2/secruntime", body).await.writes.is_empty(), "{body}");
     }
 }
 
@@ -416,7 +428,7 @@ async fn an_envelope_with_text_that_is_not_valid_unicode_keeps_its_row() {
         br#""message":{"title":"t\ud800","k\udc00":2,"agent":{"rule_id":"r\ud800"}}}]"#,
     ]
     .concat();
-    let answer = post(security::mount_runtime_security, "/api/v2/secruntime", body).await;
+    let answer = post(programs::runtime_security, "/api/v2/secruntime", body).await;
     let rows = answer.rows("security_events");
     let row = rows[0];
     assert_eq!(
@@ -431,7 +443,7 @@ async fn an_envelope_with_text_that_is_not_valid_unicode_keeps_its_row() {
 
 #[tokio::test]
 async fn an_sbom_that_is_not_protobuf_or_has_no_entities_is_kept_raw() {
-    let answer = post(security::mount_sbom, "/api/v2/sbom", "definitely not protobuf").await;
+    let answer = post(programs::sbom, "/api/v2/sbom", "definitely not protobuf").await;
     let raw = answer.raw();
     assert_eq!(answer.writers(), ["storage_raw_payloads"]);
     assert_eq!((text(&raw[0]["intake"]), text(&raw[0]["reason"])), ("sbom", "decode_error"));
@@ -440,7 +452,7 @@ async fn an_sbom_that_is_not_protobuf_or_has_no_entities_is_kept_raw() {
     // Protobuf reads almost any bytes as some message: a payload without entities is taken for
     // another type's.
     let body = SbomPayload { version: 1, host: "h3".into(), ..Default::default() }.encode_to_vec();
-    let answer = post(security::mount_sbom, "/api/v2/sbom", body).await;
+    let answer = post(programs::sbom, "/api/v2/sbom", body).await;
     let raw = answer.raw();
     assert_eq!((text(&raw[0]["reason"]), text(&raw[0]["note"])), ("unexpected_shape", "decoded to zero entities"));
 }
@@ -454,7 +466,7 @@ async fn an_entity_without_components_writes_only_the_entity() {
         ..Default::default()
     }
     .encode_to_vec();
-    assert_eq!(post(security::mount_sbom, "/api/v2/sbom", body).await.writers(), ["storage_sbom_entities"]);
+    assert_eq!(post(programs::sbom, "/api/v2/sbom", body).await.writers(), ["storage_sbom_entities"]);
 }
 
 fn hex(text: &str) -> Vec<u8> {
@@ -475,7 +487,7 @@ async fn bytes_that_are_not_a_scanner_result_are_kept_raw_the_note_saying_what_w
         ("08", "decode_error", ""),
         ("706c61696e2074657874", "decode_error", ""),
     ] {
-        let answer = post(security::mount_sds, "/api/v2/sdsresult", hex(body)).await;
+        let answer = post(programs::sds, "/api/v2/sdsresult", hex(body)).await;
         assert_eq!(answer.writers(), ["storage_raw_payloads"], "{body}");
         let raw = answer.raw();
         assert_eq!((text(&raw[0]["intake"]), text(&raw[0]["reason"])), ("sds", reason), "{body}");
@@ -485,13 +497,13 @@ async fn bytes_that_are_not_a_scanner_result_are_kept_raw_the_note_saying_what_w
             assert_eq!(text(&raw[0]["note"]), note);
         }
     }
-    assert!(post(security::mount_sds, "/api/v2/sdsresult", Vec::new()).await.writes.is_empty());
+    assert!(post(programs::sds, "/api/v2/sdsresult", Vec::new()).await.writes.is_empty());
 }
 
 /// What the agent's data security check sent after scanning three tables of a Postgres: one with
 /// planted e-mail addresses and a card number, one with nothing to find, one that does not exist.
 async fn scanned(file: &str) -> Answer {
-    let answer = post(security::mount_sds, "/api/v2/sdsresult", real(file)).await;
+    let answer = post(programs::sds, "/api/v2/sdsresult", real(file)).await;
     assert!(answer.raw().is_empty());
     assert_eq!((answer.rows("sds_scans").len(), answer.rows("sds_results").len()), (1, 1));
     answer
@@ -573,16 +585,16 @@ async fn a_real_scan_that_failed_carries_the_scanners_reason() {
 #[tokio::test]
 async fn every_event_platform_route_answers_an_empty_body_with_202_and_stores_nothing() {
     for (mount, path) in [
-        (evp::mount_agent_discovery as fn(&mut Routes), "/api/v2/agentdiscovery"),
-        (evp::mount_agent_health, "/api/v2/agenthealth"),
-        (evp::mount_event_management, "/api/v2/events"),
-        (evp::mount_software_inventory, "/api/v2/softinv"),
-        (evp::mount_synthetics_results, "/api/v2/synthetics"),
+        (programs::agent_discovery as fn(&mut Router), "/api/v2/agentdiscovery"),
+        (programs::agent_health, "/api/v2/agenthealth"),
+        (programs::event_management, "/api/v2/events"),
+        (programs::software_inventory, "/api/v2/softinv"),
+        (programs::synthetics_results, "/api/v2/synthetics"),
     ] {
         assert!(post(mount, path, Vec::new()).await.writes.is_empty(), "{path}");
     }
     for path in ["/api/v1/lineage", "/api/v2/query-actions"] {
-        let answer = send(evp::mount_data_obs, Scheme::Lineage, path, &[("dd-api-key", KEY)], Vec::new()).await;
+        let answer = send(programs::data_obs, path, &[("dd-api-key", KEY)], Vec::new()).await;
         assert_eq!(answer.status, 202);
         assert!(answer.writes.is_empty(), "{path}");
     }
@@ -594,25 +606,25 @@ async fn a_discovery_batch_is_stored_a_body_that_is_not_protobuf_kept_raw_and_an
         host_id: "host-1".into(),
         payloads: vec![AgentDiscoveryPayload { integration: "postgres".into(), ..Default::default() }],
     };
-    let answer = post(evp::mount_agent_discovery, "/api/v2/agentdiscovery", batch.encode_to_vec()).await;
+    let answer = post(programs::agent_discovery, "/api/v2/agentdiscovery", batch.encode_to_vec()).await;
     let rows = answer.rows("agent_discovery");
     assert_eq!([text(&rows[0]["tenant_id"]), text(&rows[0]["host_id"])], [TENANT, "host-1"]);
 
-    let answer = post(evp::mount_agent_discovery, "/api/v2/agentdiscovery", "definitely not protobuf").await;
+    let answer = post(programs::agent_discovery, "/api/v2/agentdiscovery", "definitely not protobuf").await;
     let raw = answer.raw();
     assert_eq!((text(&raw[0]["intake"]), text(&raw[0]["reason"])), ("agentdiscovery", "decode_error"));
 
     // Protobuf skips unknown fields, so a payload meant for another endpoint decodes into an empty
     // batch: that is logged, not stored.
     let empty = AgentDiscoveryPayloadBatch { host_id: "host-1".into(), ..Default::default() };
-    assert!(post(evp::mount_agent_discovery, "/api/v2/agentdiscovery", empty.encode_to_vec()).await.writes.is_empty());
+    assert!(post(programs::agent_discovery, "/api/v2/agentdiscovery", empty.encode_to_vec()).await.writes.is_empty());
 }
 
 #[tokio::test]
 async fn a_health_report_is_stored_report_first_then_its_issues() {
     let body = r#"{"schema_version": "1.0", "host": {"hostname": "web-1"},
         "issues": {"b": {"id": "b", "severity": 1, "extra": {"pid": 9007199254740993}}, "a": {"id": "a"}}}"#;
-    let answer = post(evp::mount_agent_health, "/api/v2/agenthealth", body).await;
+    let answer = post(programs::agent_health, "/api/v2/agenthealth", body).await;
     assert_eq!(answer.writers(), ["storage_agent_health_reports", "storage_agent_health_issues"]);
     let report = answer.rows("agent_health_reports")[0];
     assert_eq!((text(&report["tenant_id"]), text(&report["host"])), (TENANT, "web-1"));
@@ -624,11 +636,11 @@ async fn a_health_report_is_stored_report_first_then_its_issues() {
     assert_eq!(text(&issues[1]["severity"]), "ISSUE_SEVERITY_LOW");
     assert_eq!(text(&issues[1]["extra"]), r#"{"pid":9007199254740993}"#);
 
-    let answer = post(evp::mount_agent_health, "/api/v2/agenthealth", r#"{"service": "datadog-agent"}"#).await;
+    let answer = post(programs::agent_health, "/api/v2/agenthealth", r#"{"service": "datadog-agent"}"#).await;
     assert_eq!(answer.writers(), ["storage_agent_health_reports"]);
 
     let body = r#"{"issues": {"a": {"tags": "x"}}}"#;
-    let answer = post(evp::mount_agent_health, "/api/v2/agenthealth", body).await;
+    let answer = post(programs::agent_health, "/api/v2/agenthealth", body).await;
     let raw = answer.raw();
     assert_eq!(
         [text(&raw[0]["intake"]), text(&raw[0]["reason"]), text(&raw[0]["body"])],
@@ -640,13 +652,13 @@ async fn a_health_report_is_stored_report_first_then_its_issues() {
 #[tokio::test]
 async fn an_event_is_stored_and_a_body_that_is_not_one_object_kept_raw() {
     let body = r#"{"data":{"attributes":{"title":"a\ud800","attributes":{}}}}"#;
-    let answer = post(evp::mount_event_management, "/api/v2/events", body).await;
+    let answer = post(programs::event_management, "/api/v2/events", body).await;
     assert_eq!(answer.writers(), ["storage_event_management_events"]);
     let rows = answer.rows("event_management_events");
     assert_eq!((text(&rows[0]["tenant_id"]), text(&rows[0]["title"])), (TENANT, "a\u{fffd}"));
 
     for body in [r#"[{"data": {}}]"#, "\"text\" ", r#"{"data": "#] {
-        let answer = post(evp::mount_event_management, "/api/v2/events", body).await;
+        let answer = post(programs::event_management, "/api/v2/events", body).await;
         let raw = answer.raw();
         assert_eq!(
             [text(&raw[0]["intake"]), text(&raw[0]["reason"]), text(&raw[0]["note"]), text(&raw[0]["body"])],
@@ -654,7 +666,7 @@ async fn an_event_is_stored_and_a_body_that_is_not_one_object_kept_raw() {
         );
     }
 
-    let answer = post(evp::mount_event_management, "/api/v2/events", r#"{"data": {"type": "event"}}"#).await;
+    let answer = post(programs::event_management, "/api/v2/events", r#"{"data": {"type": "event"}}"#).await;
     let raw = answer.raw();
     assert_eq!(
         (text(&raw[0]["reason"]), text(&raw[0]["note"])),
@@ -665,7 +677,7 @@ async fn an_event_is_stored_and_a_body_that_is_not_one_object_kept_raw() {
 #[tokio::test]
 async fn synthetics_results_are_stored_and_a_bad_item_kept_raw() {
     let body = r#"[{"test": {"id": "t-1"}}, 42, {"test": {"id": "t-2"}}]"#;
-    let answer = post(evp::mount_synthetics_results, "/api/v2/synthetics", body).await;
+    let answer = post(programs::synthetics_results, "/api/v2/synthetics", body).await;
     assert_eq!(answer.writers(), ["storage_raw_payloads", "storage_synthetics_results"]);
     let rows = answer.rows("synthetics_results");
     let ids: Vec<&str> = rows.iter().map(|r| text(&r["test_id"])).collect();
@@ -683,8 +695,7 @@ async fn a_lineage_event_sent_with_a_bearer_key_is_stored_with_the_querys_api_ve
     let bearer = format!("Bearer {KEY}");
     let headers = [("authorization", bearer.as_str()), ("via", "trace-agent 7.83.0")];
     let body = br#"{"eventType": "COMPLETE", "run": {"runId": "run-1"}}"#.to_vec();
-    let answer =
-        send(evp::mount_data_obs, Scheme::Lineage, "/api/v1/lineage?api-version=2", &headers, body.clone()).await;
+    let answer = send(programs::data_obs, "/api/v1/lineage?api-version=2", &headers, body.clone()).await;
     assert_eq!(answer.status, 202);
     assert_eq!(answer.writers(), ["storage_openlineage_events"]);
     let row = answer.rows("openlineage_events")[0];
@@ -693,7 +704,7 @@ async fn a_lineage_event_sent_with_a_bearer_key_is_stored_with_the_querys_api_ve
         [TENANT, "run-1", "2", "trace-agent 7.83.0"]
     );
 
-    let refused = send(evp::mount_data_obs, Scheme::Lineage, "/api/v1/lineage", &[], body).await;
+    let refused = send(programs::data_obs, "/api/v1/lineage", &[], body).await;
     assert_eq!(refused.status, 403);
     assert!(refused.writes.is_empty());
 }
@@ -701,7 +712,7 @@ async fn a_lineage_event_sent_with_a_bearer_key_is_stored_with_the_querys_api_ve
 #[tokio::test]
 async fn a_lineage_batch_stores_every_event_and_keeps_an_item_that_is_not_an_object_raw() {
     let body = br#"[{"eventType": "START"}, "text", {"eventType": "COMPLETE"}]"#.to_vec();
-    let answer = send(evp::mount_data_obs, Scheme::Lineage, "/api/v1/lineage", &[("dd-api-key", KEY)], body).await;
+    let answer = send(programs::data_obs, "/api/v1/lineage", &[("dd-api-key", KEY)], body).await;
     let types: Vec<&str> = answer.rows("openlineage_events").iter().map(|r| text(&r["event_type"])).collect();
     assert_eq!(types, ["START", "COMPLETE"]);
     let raw = answer.raw();
@@ -713,21 +724,21 @@ async fn a_lineage_batch_stores_every_event_and_keeps_an_item_that_is_not_an_obj
 
 #[tokio::test]
 async fn a_batched_body_that_is_not_json_is_kept_raw_and_one_of_null_holds_no_items() {
-    for (mount, scheme, path, intake) in [
-        (evp::mount_software_inventory as fn(&mut Routes), Scheme::Agent, "/api/v2/softinv", "softinv"),
-        (evp::mount_synthetics_results, Scheme::Agent, "/api/v2/synthetics", "synthetics"),
-        (evp::mount_data_obs, Scheme::Lineage, "/api/v1/lineage", "lineage"),
-        (evp::mount_data_obs, Scheme::Lineage, "/api/v2/query-actions", "query-actions"),
+    for (mount, path, intake) in [
+        (programs::software_inventory as fn(&mut Router), "/api/v2/softinv", "softinv"),
+        (programs::synthetics_results, "/api/v2/synthetics", "synthetics"),
+        (programs::data_obs, "/api/v1/lineage", "lineage"),
+        (programs::data_obs, "/api/v2/query-actions", "query-actions"),
     ] {
         let body = br#"[{"a": 1}, "#.to_vec();
-        let answer = send(mount, scheme, path, &[("dd-api-key", KEY)], body).await;
+        let answer = send(mount, path, &[("dd-api-key", KEY)], body).await;
         assert_eq!(answer.writers(), ["storage_raw_payloads"], "{path}");
         let raw = answer.raw();
         assert_eq!(
             [text(&raw[0]["intake"]), text(&raw[0]["reason"]), text(&raw[0]["note"])],
             [intake, "unexpected_shape", "body is not a JSON array or object"]
         );
-        let answer = send(mount, scheme, path, &[("dd-api-key", KEY)], b"null".to_vec()).await;
+        let answer = send(mount, path, &[("dd-api-key", KEY)], b"null".to_vec()).await;
         assert!(answer.writes.is_empty(), "{path}");
     }
 }
@@ -736,7 +747,7 @@ async fn a_batched_body_that_is_not_json_is_kept_raw_and_one_of_null_holds_no_it
 async fn a_query_action_entry_is_stored_whole_with_its_sorted_keys_and_the_senders_origin_headers() {
     let headers = [("dd-api-key", KEY), ("dd-evp-origin", "python-integration"), ("dd-evp-origin-version", "1.2.3")];
     let body = br#"[{"b": 9007199254740993, "a": {"z": 15, "y": null}}, {"only": "<tag> & more"}, null]"#.to_vec();
-    let answer = send(evp::mount_data_obs, Scheme::Lineage, "/api/v2/query-actions", &headers, body).await;
+    let answer = send(programs::data_obs, "/api/v2/query-actions", &headers, body).await;
     let rows = answer.rows("query_action_results");
     assert_eq!(rows.len(), 3);
     assert_eq!(text(&rows[0]["result"]), r#"{"a":{"y":null,"z":15},"b":9007199254740993}"#);
@@ -752,14 +763,9 @@ async fn a_query_action_entry_is_stored_whole_with_its_sorted_keys_and_the_sende
     }
 
     // A bare object is a batch of one, and a repeated key keeps its last value.
-    let answer = send(
-        evp::mount_data_obs,
-        Scheme::Lineage,
-        "/api/v2/query-actions",
-        &[("dd-api-key", KEY)],
-        br#"{"a": 1, "a": 2}"#.to_vec(),
-    )
-    .await;
+    let answer =
+        send(programs::data_obs, "/api/v2/query-actions", &[("dd-api-key", KEY)], br#"{"a": 1, "a": 2}"#.to_vec())
+            .await;
     let rows = answer.rows("query_action_results");
     assert_eq!((text(&rows[0]["result"]), text(&rows[0]["dd_evp_origin"])), (r#"{"a":2}"#, ""));
 }

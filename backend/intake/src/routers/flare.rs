@@ -4,7 +4,6 @@
 //! Served on every host that asks for a key, because the agent sends a flare to whichever host
 //! its dd_url resolves to, not to a dedicated one.
 
-use bytes::Bytes;
 use chrono::Utc;
 use http::StatusCode;
 use ninjapaws_storage::column::Blob;
@@ -12,7 +11,7 @@ use ninjapaws_storage::rows::flares::AgentFlare;
 use tako::types::Response;
 
 use crate::body;
-use crate::server::{Ctx, json};
+use crate::server::{Body, Ctx, json};
 use crate::wire::text;
 
 /// The label of flare uploads in raw_payloads.
@@ -36,7 +35,7 @@ fn case_number(case_id: &str) -> i64 {
     case_id.parse().unwrap_or_else(|_| (uuid::Uuid::new_v4().as_u64_pair().0 >> 1) as i64)
 }
 
-pub async fn handle(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle(ctx: Ctx, body: Body) -> Response {
     // The case id from the path, "" for a new flare.
     let path_case_id = ctx.path().strip_prefix("/support/flare/").unwrap_or_default().to_string();
 

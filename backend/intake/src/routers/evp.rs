@@ -23,10 +23,6 @@
 //! A body that does not decode, or a batch item that is not an object, goes to raw_payloads; a
 //! body that became rows never does.
 
-use std::collections::BTreeSet;
-use std::sync::LazyLock;
-
-use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use ninjapaws_proto::datadog::agentdiscovery::{AgentDiscoveryConfigFilePayloadFormat, AgentDiscoveryPayloadBatch};
 use ninjapaws_proto::datadog::healthplatform::{HealthReport, Issue, IssueSeverity, IssueState};
@@ -43,46 +39,11 @@ use uuid::Uuid;
 
 use super::api::merge_extra;
 use crate::json;
-use crate::server::{Ctx, Routes, accepted};
+use crate::server::{Body, Ctx, accepted};
 use crate::wire::{enum_name, tags, text, time};
-
-/// agentdiscovery-intake.<site>
-pub fn mount_agent_discovery(routes: &mut Routes) {
-    routes.post("/api/v2/agentdiscovery", handle_agent_discovery);
-}
-
-/// agenthealth-intake.<site>
-pub fn mount_agent_health(routes: &mut Routes) {
-    routes.post("/api/v2/agenthealth", handle_agent_health);
-}
-
-/// event-management-intake.<site>
-pub fn mount_event_management(routes: &mut Routes) {
-    routes.post("/api/v2/events", handle_event_management);
-}
-
-/// softinv-intake.<site>
-pub fn mount_software_inventory(routes: &mut Routes) {
-    routes.post("/api/v2/softinv", handle_software_inventory);
-}
-
-/// http-synthetics.<site>: where the results come back.
-pub fn mount_synthetics_results(routes: &mut Routes) {
-    routes.post("/api/v2/synthetics", handle_synthetics);
-}
-
-/// data-obs-intake.<site>
-pub fn mount_data_obs(routes: &mut Routes) {
-    routes.post("/api/v1/lineage", handle_open_lineage);
-    routes.post("/api/v2/query-actions", handle_query_actions);
-}
 
 // The JSON tracks are read generically, with the readers of `json` that note nothing: a value is
 // an `Option<&Value>`, None when the key is absent or null.
-
-fn names(list: &[&'static str]) -> BTreeSet<&'static str> {
-    list.iter().copied().collect()
-}
 
 /// An object, or null, which stands for an object with no members.
 fn is_object_or_null(value: &Value) -> bool {
@@ -161,7 +122,7 @@ pub fn agent_discovery_rows(
 
 /// agentdiscovery-intake: which integration config files and env vars each agent runtime sees.
 /// One AgentDiscoveryPayloadBatch per request.
-pub async fn handle_agent_discovery(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_agent_discovery(ctx: Ctx, body: Body) -> Response {
     if !body.is_empty() {
         match AgentDiscoveryPayloadBatch::decode(&body[..]) {
             Err(e) => ctx.raw("agentdiscovery", "decode_error", &e.to_string(), &body),
@@ -311,7 +272,7 @@ pub fn health_report_rows(
 
 /// agenthealth-intake: issues the agent found with its own setup, one HealthReport per request.
 /// Not an event platform track.
-pub async fn handle_agent_health(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_agent_health(ctx: Ctx, body: Body) -> Response {
     if !body.is_empty() {
         match decode_health_report(&body) {
             Err(e) => ctx.raw("agenthealth", "decode_error", &e, &body),
@@ -332,22 +293,20 @@ pub async fn handle_agent_health(ctx: Ctx, body: Bytes) -> Response {
 /// the two tracks are unrelated.
 const EVENT_MANAGEMENT_INTAKE: &str = "event-management";
 
-static EVENT_ATTRIBUTE_KEYS: LazyLock<BTreeSet<&str>> = LazyLock::new(|| {
-    names(&[
-        "host",
-        "title",
-        "category",
-        "integration_id",
-        "message",
-        "timestamp",
-        "tags",
-        "aggregation_key",
-        "attributes",
-        "system-notable-events",
-    ])
-});
-static EVENT_DATA_KEYS: LazyLock<BTreeSet<&str>> = LazyLock::new(|| names(&["type", "attributes"]));
-static EVENT_ENVELOPE_KEYS: LazyLock<BTreeSet<&str>> = LazyLock::new(|| names(&["data"]));
+const EVENT_ATTRIBUTE_KEYS: &[&str] = &[
+    "host",
+    "title",
+    "category",
+    "integration_id",
+    "message",
+    "timestamp",
+    "tags",
+    "aggregation_key",
+    "attributes",
+    "system-notable-events",
+];
+const EVENT_DATA_KEYS: &[&str] = &["type", "attributes"];
+const EVENT_ENVELOPE_KEYS: &[&str] = &["data"];
 
 /// One JSON:API-like envelope:
 ///
@@ -371,9 +330,9 @@ pub fn event_management_row(
 
     // Undeclared keys of all three levels land in one map: data's own (a JSON:API "id") and the
     // envelope's ("meta") under a prefix.
-    let extra = json::other_members(&EVENT_ATTRIBUTE_KEYS, json::compact_sorted, attrs);
-    let extra = merge_extra(extra, "data.", json::other_members(&EVENT_DATA_KEYS, json::compact_sorted, data));
-    let extra = merge_extra(extra, "top.", json::other_members(&EVENT_ENVELOPE_KEYS, json::compact_sorted, top));
+    let extra = json::other_members(EVENT_ATTRIBUTE_KEYS, attrs);
+    let extra = merge_extra(extra, "data.", json::other_members(EVENT_DATA_KEYS, data));
+    let extra = merge_extra(extra, "top.", json::other_members(EVENT_ENVELOPE_KEYS, top));
 
     let inner = match object_of(json::child("attributes", attrs)) {
         Some(object) => json::compact_sorted(object),
@@ -401,7 +360,7 @@ pub fn event_management_row(
 
 /// event-management-intake: notable events, logon duration, anomaly notifications. A stream track,
 /// so one envelope per request.
-pub async fn handle_event_management(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_event_management(ctx: Ctx, body: Body) -> Response {
     if !body.is_empty() {
         match parse_object(&body) {
             None => ctx.raw(EVENT_MANAGEMENT_INTAKE, "decode_error", "body is not a JSON object", &body),
@@ -419,21 +378,19 @@ pub async fn handle_event_management(ctx: Ctx, body: Bytes) -> Response {
     accepted()
 }
 
-static SOFTWARE_ENTRY_KEYS: LazyLock<BTreeSet<&str>> = LazyLock::new(|| {
-    names(&[
-        "software_type",
-        "name",
-        "version",
-        "publisher",
-        "deployment_status",
-        "deployment_time",
-        "product_code",
-        "is_64_bit",
-        "install_paths",
-    ])
-});
-static SOFTWARE_PAYLOAD_KEYS: LazyLock<BTreeSet<&str>> = LazyLock::new(|| names(&["hostname", "host_software"]));
-static HOST_SOFTWARE_KEYS: LazyLock<BTreeSet<&str>> = LazyLock::new(|| names(&["software"]));
+const SOFTWARE_ENTRY_KEYS: &[&str] = &[
+    "software_type",
+    "name",
+    "version",
+    "publisher",
+    "deployment_status",
+    "deployment_time",
+    "product_code",
+    "is_64_bit",
+    "install_paths",
+];
+const SOFTWARE_PAYLOAD_KEYS: &[&str] = &["hostname", "host_software"];
+const HOST_SOFTWARE_KEYS: &[&str] = &["software"];
 
 /// One row per software entry of a {hostname, host_software: {software: [...]}} payload. An entry
 /// that is not an object is dropped.
@@ -441,11 +398,13 @@ pub fn host_software_rows(tenant: &str, received_at: DateTime<Utc>, payload: &Va
     let top = Some(payload);
     let host_software = json::child("host_software", top);
     let payload_extra = merge_extra(
-        json::other_members(&SOFTWARE_PAYLOAD_KEYS, json::compact_sorted, top),
+        json::other_members(SOFTWARE_PAYLOAD_KEYS, top),
         "host_software.",
-        json::other_members(&HOST_SOFTWARE_KEYS, json::compact_sorted, host_software),
+        json::other_members(HOST_SOFTWARE_KEYS, host_software),
     );
-    let Some(Value::Array(entries)) = json::child("software", host_software) else { return Vec::new() };
+    let Some(Value::Array(entries)) = json::child("software", host_software) else {
+        return Vec::new();
+    };
     entries
         .iter()
         .filter(|item| item.is_object())
@@ -466,7 +425,7 @@ pub fn host_software_rows(tenant: &str, received_at: DateTime<Utc>, payload: &Va
                 product_code: json::text(json::child("product_code", entry)),
                 is_64_bit: json::flag(json::child("is_64_bit", entry)),
                 install_paths: json::text_list(json::child("install_paths", entry)),
-                extra: json::other_members(&SOFTWARE_ENTRY_KEYS, json::compact_sorted, entry),
+                extra: json::other_members(SOFTWARE_ENTRY_KEYS, entry),
                 payload_extra: payload_extra.clone(),
             }
         })
@@ -474,30 +433,27 @@ pub fn host_software_rows(tenant: &str, received_at: DateTime<Utc>, payload: &Va
 }
 
 /// softinv-intake: installed packages per host, batched.
-pub async fn handle_software_inventory(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_software_inventory(ctx: Ctx, body: Body) -> Response {
     handle_batch(&ctx, &body, "softinv", |now, item| host_software_rows(ctx.tenant(), now, item))
 }
 
-static SYNTHETICS_KEYS: LazyLock<BTreeSet<&str>> =
-    LazyLock::new(|| names(&["test", "location", "result", "_dd", "enrichment", "v"]));
+const SYNTHETICS_KEYS: &[&str] = &["test", "location", "result", "_dd", "enrichment", "v"];
 
-static SYNTHETICS_RESULT_KEYS: LazyLock<BTreeSet<&str>> = LazyLock::new(|| {
-    names(&[
-        "id",
-        "initialId",
-        "status",
-        "runType",
-        "duration",
-        "testStartedAt",
-        "testFinishedAt",
-        "testTriggeredAt",
-        "assertions",
-        "failure",
-        "config",
-        "netstats",
-        "netpath",
-    ])
-});
+const SYNTHETICS_RESULT_KEYS: &[&str] = &[
+    "id",
+    "initialId",
+    "status",
+    "runType",
+    "duration",
+    "testStartedAt",
+    "testFinishedAt",
+    "testTriggeredAt",
+    "assertions",
+    "failure",
+    "config",
+    "netstats",
+    "netpath",
+];
 
 /// One test result:
 ///
@@ -571,20 +527,19 @@ pub fn synthetics_result_row(tenant: &str, received_at: DateTime<Utc>, item: &Va
         enrichment: json::compact_sorted_or_empty(json::child("enrichment", top)),
         v: json::text(json::child("v", top)),
         extra: merge_extra(
-            json::other_members(&SYNTHETICS_KEYS, json::compact_sorted, top),
+            json::other_members(SYNTHETICS_KEYS, top),
             "result.",
-            json::other_members(&SYNTHETICS_RESULT_KEYS, json::compact_sorted, result),
+            json::other_members(SYNTHETICS_RESULT_KEYS, result),
         ),
     }
 }
 
 /// http-synthetics: results of network tests the agent ran on the server's behalf, batched.
-pub async fn handle_synthetics(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_synthetics(ctx: Ctx, body: Body) -> Response {
     handle_batch(&ctx, &body, "synthetics", |now, item| vec![synthetics_result_row(ctx.tenant(), now, item)])
 }
 
-static LINEAGE_KEYS: LazyLock<BTreeSet<&str>> =
-    LazyLock::new(|| names(&["eventType", "eventTime", "producer", "schemaURL", "run", "job", "inputs", "outputs"]));
+const LINEAGE_KEYS: &[&str] = &["eventType", "eventTime", "producer", "schemaURL", "run", "job", "inputs", "outputs"];
 
 /// An inputs[] or outputs[] list as three index-aligned arrays.
 struct Datasets {
@@ -641,14 +596,14 @@ pub fn open_lineage_event_row(
         output_facets: outputs.facets,
         api_version: api_version.into(),
         via: via.into(),
-        extra: json::other_members(&LINEAGE_KEYS, json::compact_sorted, top),
+        extra: json::other_members(LINEAGE_KEYS, top),
     }
 }
 
 /// OpenLineage RunEvents, forwarded as they are by the trace-agent's reverse proxy, with
 /// ?api-version=2 when the agent is told to add it. The transport posts one RunEvent per request;
 /// an array is accepted in case a client batches.
-pub async fn handle_open_lineage(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_open_lineage(ctx: Ctx, body: Body) -> Response {
     let api_version = ctx.query("api-version");
     let via = ctx.header("via").to_string();
     handle_batch(&ctx, &body, "lineage", |now, event| {
@@ -658,7 +613,7 @@ pub async fn handle_open_lineage(ctx: Ctx, body: Bytes) -> Response {
 
 /// Results of Data Observability query actions, batched. They come from Python integrations and
 /// no type documents them, so each entry is stored whole.
-pub async fn handle_query_actions(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_query_actions(ctx: Ctx, body: Body) -> Response {
     let origin = ctx.header("dd-evp-origin").to_string();
     let origin_version = ctx.header("dd-evp-origin-version").to_string();
     handle_batch(&ctx, &body, "query-actions", |now, entry| {
