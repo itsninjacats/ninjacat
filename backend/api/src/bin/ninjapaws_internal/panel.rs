@@ -4,6 +4,7 @@
 
 use std::collections::BTreeMap;
 
+use api::reads::ClickHouse;
 use chrono::TimeDelta;
 use ninjapaws_engine::json;
 use ninjapaws_engine::panel::{self, LogFacet, LogSearch, SeriesQuery};
@@ -20,7 +21,6 @@ use tako::extractors::state::State;
 use tako::responder::Responder;
 use tako::types::Response;
 
-use crate::reads::ClickHouse;
 use crate::token::Claims;
 
 #[derive(Serialize)]
@@ -102,7 +102,10 @@ pub async fn metric_names(
 ) -> Response {
     match listing_range(&q.from, &q.to) {
         Err(e) => fail(StatusCode::BAD_REQUEST, e),
-        Ok((from, until)) => names(&clickhouse, panel::list_metrics(&tenant(&claims), from, until, &q.search, int(&q.limit)), "metrics").await,
+        Ok((from, until)) => {
+            names(&clickhouse, panel::list_metrics(&tenant(&claims), from, until, &q.search, int(&q.limit)), "metrics")
+                .await
+        }
     }
 }
 
@@ -113,7 +116,9 @@ pub async fn metric_tag_keys(
 ) -> Response {
     match listing_range(&q.from, &q.to) {
         Err(e) => fail(StatusCode::BAD_REQUEST, e),
-        Ok((from, until)) => names(&clickhouse, panel::list_tag_keys(&tenant(&claims), from, until, &q.metric), "keys").await,
+        Ok((from, until)) => {
+            names(&clickhouse, panel::list_tag_keys(&tenant(&claims), from, until, &q.metric), "keys").await
+        }
     }
 }
 
@@ -128,7 +133,8 @@ pub async fn metric_tag_values(
     match listing_range(&q.from, &q.to) {
         Err(e) => fail(StatusCode::BAD_REQUEST, e),
         Ok((from, until)) => {
-            let sql = panel::list_tag_values(&tenant(&claims), from, until, &q.metric, &q.key, &q.search, int(&q.limit));
+            let sql =
+                panel::list_tag_values(&tenant(&claims), from, until, &q.metric, &q.key, &q.search, int(&q.limit));
             names(&clickhouse, sql, "values").await
         }
     }
@@ -213,7 +219,16 @@ pub async fn metric_query(
     let now = now();
 
     // A failure in ClickHouse is the caller's 400 with its reason, as for the other lookups.
-    let results = match engine::parsed(&*clickhouse, &tenant(&claims), *retention, now, &["q".into()], &panel::series_request(&query)).await {
+    let results = match engine::parsed(
+        &*clickhouse,
+        &tenant(&claims),
+        *retention,
+        now,
+        &["q".into()],
+        &panel::series_request(&query),
+    )
+    .await
+    {
         Ok(results) => results,
         Err(QueryError::Invalid(problems)) => return fail(StatusCode::BAD_REQUEST, problems.join("; ")),
         Err(QueryError::Failed(e)) => {

@@ -2,6 +2,7 @@
 //! of the dev ClickHouse. The tests that need ClickHouse pass without asserting when it is not
 //! running.
 
+use api::reads::ClickHouse;
 use http_body_util::BodyExt;
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode, get_current_timestamp};
 use ninjapaws_engine::query::plan::DEFAULT_RETENTION;
@@ -9,9 +10,8 @@ use serde_json::{Value, json};
 use tako::StatusCode;
 use tako::router::Router;
 
-use crate::app;
 use crate::probes::Postgres;
-use crate::reads::ClickHouse;
+use crate::{QUERY_LIMIT_SECONDS, app};
 
 const SECRET: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
@@ -28,7 +28,7 @@ fn served(clickhouse: ClickHouse) -> Router {
 /// A ClickHouse nobody listens on: a request that asks it anything answers with the network's
 /// error, not with the one the test expects.
 fn no_clickhouse() -> Router {
-    served(ClickHouse::new("127.0.0.1:1", "ninjacat", "ninjacat", "ninjacat"))
+    served(ClickHouse::new("127.0.0.1:1", "ninjacat", "ninjacat", "ninjacat", QUERY_LIMIT_SECONDS))
 }
 
 /// A token as the panel mints it (frontend/src/lib/server/ninjacat.ts).
@@ -76,7 +76,10 @@ const TABLES: [&str; 7] =
 const VIEWS: [&str; 2] = ["metrics_1m_mv", "metric_tag_keys_mv"];
 
 fn admin() -> clickhouse::Client {
-    clickhouse::Client::default().with_url(format!("http://{DEV_CLICKHOUSE}")).with_user("ninjacat").with_password("ninjacat")
+    clickhouse::Client::default()
+        .with_url(format!("http://{DEV_CLICKHOUSE}"))
+        .with_user("ninjacat")
+        .with_password("ninjacat")
 }
 
 /// A database of its own on the dev ClickHouse, dropped afterwards. None when there is no
@@ -106,7 +109,8 @@ impl Scratch {
         }
         for view in VIEWS {
             let made = async {
-                let create: String = scratch.admin.query(&format!("SHOW CREATE TABLE ninjacat.{view}")).fetch_one().await?;
+                let create: String =
+                    scratch.admin.query(&format!("SHOW CREATE TABLE ninjacat.{view}")).fetch_one().await?;
                 scratch.run(&create.replace("ninjacat.", "{db}.")).await
             };
             if let Err(e) = made.await {
@@ -122,7 +126,7 @@ impl Scratch {
     }
 
     fn router(&self) -> Router {
-        served(ClickHouse::new(DEV_CLICKHOUSE, &self.database, "ninjacat", "ninjacat"))
+        served(ClickHouse::new(DEV_CLICKHOUSE, &self.database, "ninjacat", "ninjacat", QUERY_LIMIT_SECONDS))
     }
 }
 
@@ -194,8 +198,11 @@ fn guarded(now: i64) -> Vec<(&'static str, String, String)> {
 }
 
 /// Validation reads nothing, but answers only the panel.
-const VALIDATE: (&str, &str, &str) =
-    ("POST", "/internal/monitors/validate", r#"{"type":"query alert","query":"avg(last_5m):avg:system.cpu.user{*} > 90"}"#);
+const VALIDATE: (&str, &str, &str) = (
+    "POST",
+    "/internal/monitors/validate",
+    r#"{"type":"query alert","query":"avg(last_5m):avg:system.cpu.user{*} > 90"}"#,
+);
 
 #[tokio::test]
 async fn a_token_that_is_not_the_panels_or_names_not_exactly_one_tenant_is_401() {
@@ -225,9 +232,17 @@ async fn a_token_that_is_not_the_panels_or_names_not_exactly_one_tenant_is_401()
     let routes = guarded(now_ms());
     for (label, bearer) in &refused {
         let (method, path, body) = VALIDATE;
-        assert_eq!(send(&router, bearer.as_deref(), method, path, body).await.0, StatusCode::UNAUTHORIZED, "{label}, {path}");
+        assert_eq!(
+            send(&router, bearer.as_deref(), method, path, body).await.0,
+            StatusCode::UNAUTHORIZED,
+            "{label}, {path}"
+        );
         for (method, path, body) in &routes {
-            assert_eq!(send(&router, bearer.as_deref(), method, path, body).await.0, StatusCode::UNAUTHORIZED, "{label}, {path}");
+            assert_eq!(
+                send(&router, bearer.as_deref(), method, path, body).await.0,
+                StatusCode::UNAUTHORIZED,
+                "{label}, {path}"
+            );
         }
     }
 }
@@ -317,7 +332,7 @@ async fn the_probes_need_no_token() {
 
 #[tokio::test]
 async fn the_query_process_does_not_start_with_a_short_secret() {
-    let clickhouse = || ClickHouse::new("127.0.0.1:1", "ninjacat", "ninjacat", "ninjacat");
+    let clickhouse = || ClickHouse::new("127.0.0.1:1", "ninjacat", "ninjacat", "ninjacat", QUERY_LIMIT_SECONDS);
     let error = app("too-short", clickhouse(), DEFAULT_RETENTION, no_postgres()).err().unwrap();
     assert!(error.contains("NINJACAT_QUERY_TOKEN_SECRET"));
     assert!(app(&"x".repeat(32), clickhouse(), DEFAULT_RETENTION, no_postgres()).is_ok());
@@ -342,7 +357,8 @@ fn timeseries_body(from: i64, to: i64, interval: &str, query: &str, formula: &st
     )
 }
 
-const EMPTY_TIMESERIES: &str = r#"{"data":{"id":"0","type":"timeseries_response","attributes":{"series":[],"times":[],"values":[]}}}"#;
+const EMPTY_TIMESERIES: &str =
+    r#"{"data":{"id":"0","type":"timeseries_response","attributes":{"series":[],"times":[],"values":[]}}}"#;
 
 #[tokio::test]
 async fn v1_metrics() {
@@ -356,7 +372,13 @@ async fn v1_metrics() {
 async fn v2_timeseries() {
     let requests: Vec<_> = [(253402300800000, 253402300800001), (-62135596800001, -62135596800000)]
         .iter()
-        .map(|&(from, to)| ("POST", "/api/v2/query/timeseries".into(), timeseries_body(from, to, "", "avg:x{*}", "timeshift(a, -86400)")))
+        .map(|&(from, to)| {
+            (
+                "POST",
+                "/api/v2/query/timeseries".into(),
+                timeseries_body(from, to, "", "avg:x{*}", "timeshift(a, -86400)"),
+            )
+        })
         .collect();
     answers(&requests, EMPTY_TIMESERIES).await;
 }
@@ -370,7 +392,11 @@ async fn v2_timeseries_shifted_or_stepped_past_what_a_date_can_hold() {
     ]
     .iter()
     .map(|(query, formula, interval)| {
-        ("POST", "/api/v2/query/timeseries".into(), timeseries_body(1760000000000, 1760003600000, interval, query, formula))
+        (
+            "POST",
+            "/api/v2/query/timeseries".into(),
+            timeseries_body(1760000000000, 1760003600000, interval, query, formula),
+        )
     })
     .collect();
     answers(&requests, EMPTY_TIMESERIES).await;
@@ -409,7 +435,8 @@ fn strings(v: &Value) -> Vec<String> {
 }
 
 async fn validate(router: &Router, body: &str) -> Value {
-    let (status, answer) = send(router, Some(&mint(&panel_claims("acme"))), "POST", "/internal/monitors/validate", body).await;
+    let (status, answer) =
+        send(router, Some(&mint(&panel_claims("acme"))), "POST", "/internal/monitors/validate", body).await;
     assert_eq!(status, StatusCode::OK, "{answer}");
     serde_json::from_str(&answer).unwrap()
 }
@@ -563,23 +590,41 @@ async fn stored(scratch: &Scratch, now: i64) {
         transition(now, "acme", 7, "host:a", 30.0, "none", "Alert", "new"),
         warned(),
         transition(now, "acme", 7, "host:b", 28.0, "none", "Alert", "new"),
-        triggered(28.0, Transition { actor: Some("user-1"), ..transition(now, "acme", 7, "host:b", 25.0, "Alert", "OK", "recovery") }),
+        triggered(
+            28.0,
+            Transition {
+                actor: Some("user-1"),
+                ..transition(now, "acme", 7, "host:b", 25.0, "Alert", "OK", "recovery")
+            },
+        ),
         transition(now, "acme", 7, "host:d", 35.0, "none", "Alert", "new"),
         triggered(35.0, transition(now, "acme", 7, "host:d", 32.0, "Alert", "OK", "recovery")),
-        Transition { last_triggered_at: Some(ago(now, 35.0)), ..transition(now, "acme", 7, "host:d", 22.0, "OK", "No Data", "no_data") },
+        Transition {
+            last_triggered_at: Some(ago(now, 35.0)),
+            ..transition(now, "acme", 7, "host:d", 22.0, "OK", "No Data", "no_data")
+        },
         transition(now, "acme", 7, "host:c", 12.0, "none", "Alert", "new"),
-        Transition { window_from: 0, window_to: 0, ..transition(now, "acme", 7, "host:c", 10.0, "Alert", "OK", "expired") },
+        Transition {
+            window_from: 0,
+            window_to: 0,
+            ..transition(now, "acme", 7, "host:c", 10.0, "Alert", "OK", "expired")
+        },
         transition(now, "acme", 8, "*", 15.0, "none", "Alert", "new"),
         transition(now, "globex", 7, "host:z", 5.0, "none", "Alert", "new"),
     ];
     let rows: Vec<String> = rows.iter().map(values).collect();
-    let insert = |rows: &[String]| format!("INSERT INTO {{db}}.monitor_transitions ({TRANSITION_COLUMNS}) VALUES {}", rows.join(", "));
+    let insert = |rows: &[String]| {
+        format!("INSERT INTO {{db}}.monitor_transitions ({TRANSITION_COLUMNS}) VALUES {}", rows.join(", "))
+    };
     scratch.run(&insert(&rows)).await.unwrap();
     scratch.run(&insert(&[values(&warned())])).await.unwrap();
 
     let evaluation = |tenant: &str, group: &str, minutes: f64, value: &str, outcome: &str| {
         let detail = if outcome == "evaluated" { "" } else { "window not full" };
-        format!("('{tenant}', 7, '{group}', {}, {value}, 'Warn', '{outcome}', '{detail}')", time(Some(ago(now, minutes))))
+        format!(
+            "('{tenant}', 7, '{group}', {}, {value}, 'Warn', '{outcome}', '{detail}')",
+            time(Some(ago(now, minutes)))
+        )
     };
     let evaluations = [
         evaluation("acme", "host:a", 2.0, "42", "evaluated"),
@@ -726,12 +771,18 @@ async fn a_range_starts_from_each_open_groups_latest_transition_before_it() {
     stored(&scratch, now).await;
     let router = scratch.router();
     let (_, answer) = get(&router, "/internal/monitors/7/transitions?from=-21m").await;
-    assert_eq!(groups_and_states(&answer["initial"]), pairs(&[("host:a", "Alert"), ("host:b", "OK"), ("host:d", "No Data")]));
+    assert_eq!(
+        groups_and_states(&answer["initial"]),
+        pairs(&[("host:a", "Alert"), ("host:b", "OK"), ("host:d", "No Data")])
+    );
 
     // host:c expired before it: closed, so not there.
     let (_, later) = get(&router, "/internal/monitors/7/transitions?from=-5m").await;
     assert!(later["transitions"].as_array().unwrap().is_empty());
-    assert_eq!(groups_and_states(&later["initial"]), pairs(&[("host:a", "Warn"), ("host:b", "OK"), ("host:d", "No Data")]));
+    assert_eq!(
+        groups_and_states(&later["initial"]),
+        pairs(&[("host:a", "Warn"), ("host:b", "OK"), ("host:d", "No Data")])
+    );
 
     let (_, one) = get(&router, "/internal/monitors/7/transitions?from=-21m&group=host:a").await;
     assert_eq!(groups_and_states(&one["initial"]), pairs(&[("host:a", "Alert")]));
@@ -752,13 +803,20 @@ async fn evaluations_of_a_range_one_group_or_all_the_monitors_own_rows_among_the
         .collect();
     assert_eq!(
         seen,
-        pairs(&[("host:d", "evaluated"), ("host:a", "evaluated"), ("host:a", "evaluated"), ("host:a", "skipped"), ("", "error")])
+        pairs(&[
+            ("host:d", "evaluated"),
+            ("host:a", "evaluated"),
+            ("host:a", "evaluated"),
+            ("host:a", "skipped"),
+            ("", "error")
+        ])
     );
     assert!(!has(&rows[0], "value"));
     assert_eq!(rows[1]["value"], 42.0);
     assert_eq!(rows[3]["detail"], "window not full");
 
     let (_, one) = get(&router, "/internal/monitors/7/evaluations?from=-1h&group=host:a").await;
-    let groups: Vec<&str> = one["evaluations"].as_array().unwrap().iter().map(|e| e["group"].as_str().unwrap()).collect();
+    let groups: Vec<&str> =
+        one["evaluations"].as_array().unwrap().iter().map(|e| e["group"].as_str().unwrap()).collect();
     assert_eq!(groups, ["host:a", "host:a", "host:a", ""]);
 }

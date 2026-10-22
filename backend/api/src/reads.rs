@@ -1,6 +1,6 @@
-//! ClickHouse as the monitors read it: each `Sql`'s values bound as server-side parameters, the
-//! rows read back as JSON arrays, by position, as the SQL selects its columns. (The query
-//! process's `reads.rs`, with the monitors' limit.)
+//! ClickHouse as the engine's SQL runs on it: each `Sql`'s values bound as server-side
+//! parameters, the rows read back as JSON arrays, by position, as the SQL selects its columns.
+//! The query process and the monitors read through it, each with its own limit.
 
 use std::time::Duration;
 
@@ -10,28 +10,28 @@ use ninjapaws_engine::{Sql, SqlValue};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
-/// ClickHouse's limit for one query: a model's history read can pass the query process's 7 s.
-const QUERY_LIMIT_SECONDS: u64 = 30;
-
 #[derive(Clone)]
 pub struct ClickHouse {
     client: clickhouse::Client,
+    limit_seconds: u64,
 }
 
 impl ClickHouse {
     /// A client that cannot write: readonly=2 makes ClickHouse refuse anything but reads, while
-    /// still letting the client set its own settings (readonly=1 would not).
-    pub fn new(addr: &str, database: &str, user: &str, password: &str) -> Self {
+    /// still letting the client set its own settings (readonly=1 would not). `limit_seconds` is
+    /// ClickHouse's limit for one query: a slow query must fail there, with a readable message,
+    /// before our own timeout, a second later, gives up on it.
+    pub fn new(addr: &str, database: &str, user: &str, password: &str, limit_seconds: u64) -> Self {
         let client = clickhouse::Client::default()
             .with_url(format!("http://{addr}"))
             .with_database(database)
             .with_user(user)
             .with_password(password)
             .with_setting("readonly", "2")
-            .with_setting("max_execution_time", QUERY_LIMIT_SECONDS.to_string())
+            .with_setting("max_execution_time", limit_seconds.to_string())
             // Counts and ids as JSON numbers, not strings.
             .with_setting("output_format_json_quote_64bit_integers", "0");
-        Self { client }
+        Self { client, limit_seconds }
     }
 
     /// Each row as `T`, from its JSON array: a tuple or a struct, field by field in the order
@@ -39,6 +39,11 @@ impl ClickHouse {
     pub async fn read<T: DeserializeOwned>(&self, sql: &Sql) -> Result<Vec<T>, String> {
         let body = self.fetch(sql, "JSONCompactEachRow").await?;
         lines(&body).map(|line| serde_json::from_slice(line).map_err(|e| e.to_string())).collect()
+    }
+
+    pub async fn ping(&self) -> bool {
+        let sql = Sql { text: "SELECT 1".into(), parameters: Vec::new() };
+        self.read::<(u8,)>(&sql).await.is_ok()
     }
 
     async fn fetch(&self, sql: &Sql, format: &str) -> Result<Vec<u8>, String> {
@@ -53,11 +58,12 @@ impl ClickHouse {
             };
         }
         let fetched = async { query.fetch_bytes(format)?.collect().await };
-        match tokio::time::timeout(Duration::from_secs(QUERY_LIMIT_SECONDS + 1), fetched).await {
+        let wait = self.limit_seconds + 1;
+        match tokio::time::timeout(Duration::from_secs(wait), fetched).await {
             Ok(Ok(body)) => Ok(body.to_vec()),
             Ok(Err(clickhouse::error::Error::BadResponse(message))) => Err(message),
             Ok(Err(e)) => Err(e.to_string()),
-            Err(_) => Err(format!("ClickHouse did not answer in {} seconds", QUERY_LIMIT_SECONDS + 1)),
+            Err(_) => Err(format!("ClickHouse did not answer in {wait} seconds")),
         }
     }
 }

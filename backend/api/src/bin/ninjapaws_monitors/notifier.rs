@@ -4,11 +4,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use api::reads::ClickHouse;
 use ninjapaws_engine::monitor::state::NEVER_NOTIFIED;
 use ninjapaws_engine::{Sql, SqlValue};
 use tokio::time::MissedTickBehavior;
 
-use crate::reads::ClickHouse;
 use crate::rows::NotificationRow;
 use crate::telemetry::Counters;
 

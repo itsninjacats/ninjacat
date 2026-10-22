@@ -8,15 +8,15 @@ mod monitors;
 mod panel;
 mod probes;
 mod query_api;
-mod reads;
 #[cfg(test)]
 mod tests;
 mod token;
 
 use std::env;
 
-use chrono::TimeDelta;
-use ninjapaws_engine::query::plan::{DEFAULT_RETENTION, Retention};
+use api::reads::ClickHouse;
+use api::{listen_on, metrics_retention, var_or};
+use ninjapaws_engine::query::plan::Retention;
 use tako::Server;
 use tako::middleware::IntoMiddleware;
 use tako::middleware::jwt_auth::JwtAuth;
@@ -25,7 +25,9 @@ use tako::types::BoxError;
 use tokio::net::TcpListener;
 
 use crate::probes::Postgres;
-use crate::reads::ClickHouse;
+
+/// ClickHouse's limit for one of the panel's queries.
+const QUERY_LIMIT_SECONDS: u64 = 7;
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
@@ -39,6 +41,7 @@ async fn main() -> Result<(), BoxError> {
         &var_or("CLICKHOUSE_DB", "ninjacat"),
         &var_or("CLICKHOUSE_USER", "ninjacat"),
         &var_or("CLICKHOUSE_PASSWORD", "ninjacat"),
+        QUERY_LIMIT_SECONDS,
     );
     let router = app(&secret, clickhouse, metrics_retention()?, Postgres { url: database_url })?;
 
@@ -83,44 +86,4 @@ fn app(secret: &str, clickhouse: ClickHouse, retention: Retention, postgres: Pos
     router.get("/health", probes::health);
     router.merge(guarded);
     Ok(router)
-}
-
-fn var_or(name: &str, default: &str) -> String {
-    env::var(name).ok().filter(|v| !v.is_empty()).unwrap_or_else(|| default.to_string())
-}
-
-/// `:8081`, `*:8081` and `0.0.0.0:8081` are every interface, as the settings have always spelled it.
-fn listen_on(addr: &str) -> String {
-    match addr.rsplit_once(':') {
-        Some(("" | "*", port)) => format!("0.0.0.0:{port}"),
-        _ => addr.to_string(),
-    }
-}
-
-/// A whole number of days, up to a century. A set value outside 1–36500 stops the start: falling
-/// back to the default could set a shorter TTL than meant, and ClickHouse would delete the
-/// difference.
-fn days(name: &str, default: TimeDelta) -> Result<TimeDelta, String> {
-    match var_or(name, "").as_str() {
-        "" => Ok(default),
-        raw => match raw.trim().parse::<i64>() {
-            Ok(n) if (1..=36500).contains(&n) => Ok(TimeDelta::days(n)),
-            _ => Err(format!("{name} must be a whole number of days from 1 to 36500, got \"{raw}\"")),
-        },
-    }
-}
-
-/// A step of whole minutes reads the rollup whatever its age, so a rollup kept shorter than the
-/// raw points would answer nothing where the raw table still holds them.
-fn metrics_retention() -> Result<Retention, String> {
-    let raw = days("NINJACAT_METRICS_RETENTION_DAYS", DEFAULT_RETENTION.raw)?;
-    let rollup = days("NINJACAT_METRICS_ROLLUP_RETENTION_DAYS", DEFAULT_RETENTION.rollup)?;
-    if rollup < raw {
-        return Err(format!(
-            "NINJACAT_METRICS_ROLLUP_RETENTION_DAYS ({}) must not be shorter than NINJACAT_METRICS_RETENTION_DAYS ({})",
-            rollup.num_days(),
-            raw.num_days()
-        ));
-    }
-    Ok(Retention { raw, rollup })
 }
