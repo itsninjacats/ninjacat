@@ -56,6 +56,17 @@ async fn fetch(client: &tokio_postgres::Client, store: &Store) -> Result<(), tok
     Ok(())
 }
 
+/// The keys as Postgres has them now, kept in step by a keeper for the life of the process.
+pub async fn start(database_url: &str) -> Result<Arc<Store>, String> {
+    if database_url.is_empty() {
+        return Err("DATABASE_URL is not set (e.g. postgres://root:mysecretpassword@localhost:5433/local)".into());
+    }
+    let store = Arc::new(Store::default());
+    fetch_now(&store, database_url).await?;
+    tokio::spawn(keep(store.clone(), database_url.to_string()));
+    Ok(store)
+}
+
 /// Reads the keys once, now. Called before the intake accepts anything: with no keys every agent
 /// would be answered 403, which tells it to stop. A Postgres the panel has not migrated yet has no
 /// keys to read: the intake starts with none rather than wait for an order of installation.

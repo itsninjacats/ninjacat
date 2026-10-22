@@ -2,14 +2,13 @@
 //! metadata, its checks, the tags of hosts it does not run on.
 
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use super::Tags;
 use crate::column;
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// Who sent a sketch batch: CommonMetadata without its api_key, which is a credential and has no
 /// column.
@@ -28,9 +27,7 @@ pub struct AgentBatchMetadata {
 }
 
 impl Table for AgentBatchMetadata {
-    const WRITER: &'static str = "storage_agent_batch_metadata";
     const TABLE: &'static str = "agent_batch_metadata";
-    const LIMITS: Limits = Limits { max_rows: 500, ..Limits::DEFAULT };
 }
 
 /// One entry of the V5 collector's agent_checks list. The wire shape is a positional array with
@@ -56,9 +53,7 @@ pub struct AgentCheck {
 }
 
 impl Table for AgentCheck {
-    const WRITER: &'static str = "storage_agent_checks";
     const TABLE: &'static str = "agent_checks";
-    const LIMITS: Limits = Limits { max_rows: 500, ..Limits::DEFAULT };
 }
 
 /// Tags an agent reported for a host it is NOT running on, one row per (host, source).
@@ -73,9 +68,7 @@ pub struct ExternalHostTags {
 }
 
 impl Table for ExternalHostTags {
-    const WRITER: &'static str = "storage_external_host_tags";
     const TABLE: &'static str = "external_host_tags";
-    const LIMITS: Limits = Limits { max_rows: 500, ..Limits::DEFAULT };
 }
 
 /// One variant of /api/v1/metadata: the shared envelope as columns, the variant's own body as
@@ -98,11 +91,7 @@ pub struct AgentMetadata {
 }
 
 impl Table for AgentMetadata {
-    const WRITER: &'static str = "storage_agent_metadata";
     const TABLE: &'static str = "agent_metadata";
-    // A row is a whole inventory document, so the counts stand for megabytes.
-    const LIMITS: Limits =
-        Limits { max_rows: 200, flush_interval: Duration::from_secs(10), buffer_limit: 5_000, max_in_flight: 1 };
 }
 
 /// One /api/v2/intake-key exchange. proof_fingerprint is the SHA-256 of the delegated-auth proof,
@@ -118,9 +107,7 @@ pub struct DelegatedAuth {
 }
 
 impl Table for DelegatedAuth {
-    const WRITER: &'static str = "storage_delegated_auth_requests";
     const TABLE: &'static str = "delegated_auth_requests";
-    const LIMITS: Limits = Limits { max_rows: 500, ..Limits::DEFAULT };
 }
 
 /// The processes of one name on a host, summed: what the agent's resources check reports beside
@@ -142,7 +129,5 @@ pub struct ProcessGroup {
 }
 
 impl Table for ProcessGroup {
-    const WRITER: &'static str = "storage_process_groups";
     const TABLE: &'static str = "process_groups";
-    const LIMITS: Limits = Limits { max_rows: 2_000, flush_interval: Duration::from_secs(10), ..Limits::DEFAULT };
 }

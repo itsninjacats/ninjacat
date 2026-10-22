@@ -3,18 +3,13 @@
 //! top-level keys nothing here declares, as JSON text by name.
 
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Serializer};
 
 use super::Tags;
 use crate::column;
-use crate::table::{Limits, Table};
-
-/// A whole inventory lands at once, not bit by bit.
-const INVENTORY: Limits =
-    Limits { max_rows: 2000, flush_interval: Duration::from_secs(5), buffer_limit: 50_000, max_in_flight: 2 };
+use crate::table::Table;
 
 #[derive(clickhouse::Row, Serialize, Clone, Debug)]
 pub struct NdmDevice {
@@ -80,9 +75,7 @@ impl Serialize for DeviceStatus {
 }
 
 impl Table for NdmDevice {
-    const WRITER: &'static str = "storage_ndm_devices";
     const TABLE: &'static str = "ndm_devices";
-    const LIMITS: Limits = INVENTORY;
 }
 
 #[derive(clickhouse::Row, Serialize, Clone, Debug)]
@@ -115,9 +108,7 @@ pub struct NdmInterface {
 }
 
 impl Table for NdmInterface {
-    const WRITER: &'static str = "storage_ndm_interfaces";
     const TABLE: &'static str = "ndm_interfaces";
-    const LIMITS: Limits = INVENTORY;
 }
 
 #[derive(clickhouse::Row, Serialize, Clone, Debug)]
@@ -135,9 +126,7 @@ pub struct NdmIpAddress {
 }
 
 impl Table for NdmIpAddress {
-    const WRITER: &'static str = "storage_ndm_ip_addresses";
     const TABLE: &'static str = "ndm_ip_addresses";
-    const LIMITS: Limits = INVENTORY;
 }
 
 /// One element of the payload's other lists (links, vpn_tunnels, netflow_exporters, diagnoses,
@@ -158,9 +147,7 @@ pub struct NdmMetadataObject {
 }
 
 impl Table for NdmMetadataObject {
-    const WRITER: &'static str = "storage_ndm_metadata_objects";
     const TABLE: &'static str = "ndm_metadata_objects";
-    const LIMITS: Limits = INVENTORY;
 }
 
 /// One device configuration backup from /api/v2/ndmconfig. The payload's fields are repeated on
@@ -185,11 +172,7 @@ pub struct NdmDeviceConfig {
 }
 
 impl Table for NdmDeviceConfig {
-    const WRITER: &'static str = "storage_ndm_device_configs";
     const TABLE: &'static str = "ndm_device_configs";
-    // A row is a whole configuration file: megabytes, not bytes.
-    const LIMITS: Limits =
-        Limits { max_rows: 200, flush_interval: Duration::from_secs(10), buffer_limit: 5_000, max_in_flight: 1 };
 }
 
 #[derive(clickhouse::Row, Serialize, Clone, Debug)]
@@ -218,10 +201,7 @@ pub struct SnmpTrap {
 }
 
 impl Table for SnmpTrap {
-    const WRITER: &'static str = "storage_snmp_traps";
     const TABLE: &'static str = "snmp_traps";
-    const LIMITS: Limits =
-        Limits { max_rows: 200, flush_interval: Duration::from_secs(5), buffer_limit: 20_000, max_in_flight: 2 };
 }
 
 #[derive(clickhouse::Row, Serialize, Clone, Debug)]
@@ -265,11 +245,7 @@ pub struct NetflowFlow {
 }
 
 impl Table for NetflowFlow {
-    const WRITER: &'static str = "storage_netflow_flows";
     const TABLE: &'static str = "netflow_flows";
-    // The busiest NDM table, in the class of logs.
-    const LIMITS: Limits =
-        Limits { max_rows: 20_000, flush_interval: Duration::from_secs(5), buffer_limit: 500_000, max_in_flight: 2 };
 }
 
 /// One traceroute result. Runs are parallel arrays; what belongs to a hop is an array per run.
@@ -330,8 +306,5 @@ pub struct NetworkPath {
 }
 
 impl Table for NetworkPath {
-    const WRITER: &'static str = "storage_network_paths";
     const TABLE: &'static str = "network_paths";
-    // Scheduled tests trickle in.
-    const LIMITS: Limits = Limits { max_rows: 500, ..Limits::DEFAULT };
 }

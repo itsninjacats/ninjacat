@@ -47,7 +47,6 @@ pub struct SdsScan {
 }
 
 impl Table for SdsScan {
-    const WRITER: &'static str = "storage_sds_scans";
     const TABLE: &'static str = "sds_scans";
 }
 
@@ -102,7 +101,6 @@ pub struct SdsResult {
 }
 
 impl Table for SdsResult {
-    const WRITER: &'static str = "storage_sds_results";
     const TABLE: &'static str = "sds_results";
 }
 
@@ -147,6 +145,5 @@ pub struct SdsMatch {
 }
 
 impl Table for SdsMatch {
-    const WRITER: &'static str = "storage_sds_matches";
     const TABLE: &'static str = "sds_matches";
 }

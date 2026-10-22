@@ -1,14 +1,19 @@
 //! app.<site> and <version>-app.agent.<site>: what api.<site> serves, and metrics v3.
 
 use ninjapaws_intake::auth;
+use ninjapaws_intake::keys;
 use ninjapaws_intake::routers::{api, app, flare};
 use ninjapaws_intake::server::{self, Body, Ctx};
+use tako::extractors::state::State;
 use tako::router::Router;
 use tako::types::BoxError;
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
-    let intake = server::start().await?;
+    server::init_tracing();
+    let clickhouse = ninjapaws_storage::client_from_env();
+    let keys = keys::start(&server::var_or("DATABASE_URL", "")).await?;
+    let settings = server::Settings::from_env();
 
     let mut router = Router::new();
     router.post("/intake/", api::handle_intake).middleware(auth::agent);
@@ -48,14 +53,20 @@ async fn main() -> Result<(), BoxError> {
 
     // Columnar metrics, intake v3.
     router
-        .post("/api/intake/metrics/v3/series", |ctx: Ctx, body: Body| app::handle("v3series", ctx, body))
+        .post("/api/intake/metrics/v3/series", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            app::handle("v3series", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
     router
-        .post("/api/intake/metrics/v3/sketches", |ctx: Ctx, body: Body| app::handle("v3sketches", ctx, body))
+        .post("/api/intake/metrics/v3/sketches", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            app::handle("v3sketches", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
     // A shadow copy of the v2 traffic on /api/beta/sketches.
     router
-        .post("/api/intake/metrics/v3beta/sketches", |ctx: Ctx, body: Body| app::handle("v3beta", ctx, body))
+        .post("/api/intake/metrics/v3beta/sketches", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            app::handle("v3beta", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
 
     // What the agent sweeps at startup on whatever host it talks to, and a flare, which goes to
@@ -73,7 +84,9 @@ async fn main() -> Result<(), BoxError> {
     router.middleware(server::log_405);
     router.fallback(server::not_found);
 
-    // What the handlers write to and read from.
-    router.with_state(intake.clone());
-    server::serve("ninjapaws_app", router, intake).await
+    // What the handlers and the middleware read.
+    router.with_state(clickhouse);
+    router.with_state(keys);
+    router.with_state(settings);
+    server::serve("ninjapaws_app", router).await
 }

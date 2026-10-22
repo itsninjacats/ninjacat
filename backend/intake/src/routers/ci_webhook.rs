@@ -20,13 +20,16 @@ use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
 use http::StatusCode;
+use ninjapaws_storage as storage;
 use ninjapaws_storage::rows::ci::CiWebhookEvent;
 use serde_json::value::RawValue;
+use tako::extractors::state::State;
 use tako::types::Response;
 
 use super::ci_visibility::{Value, raw_root};
 use crate::json;
-use crate::server::{Body, Ctx, accepted, json};
+use crate::raw;
+use crate::server::{Body, Ctx, accepted, json, storage_failed};
 use crate::wire::{tags, text, time};
 
 /// Request headers kept on a webhook row. An allowlist, never a blocklist, so a table kept for 90
@@ -214,15 +217,18 @@ fn elements<'a>(root: &'a serde_json::Value, written: &'a RawValue) -> Vec<(&'a 
     }
 }
 
-fn store(ctx: &Ctx, body: &[u8]) {
+async fn store(clickhouse: &clickhouse::Client, ctx: &Ctx, body: &[u8]) -> Result<(), String> {
     let root = match json::try_parse(body) {
         Ok(root) => root,
-        Err(e) => return ctx.raw("webhook", "decode_error", &format!("batch: {e}"), body),
+        Err(e) => {
+            raw::store(clickhouse, ctx, "webhook", "decode_error", &format!("batch: {e}"), body).await;
+            return Ok(());
+        }
     };
     // The text of what parsed, for each element's `body`.
     let repaired = json::repair(body);
     let Ok(written) = raw_root(&repaired) else {
-        return;
+        return Ok(());
     };
     let delivery = Delivery {
         provider: ctx.header("dd-ci-provider-name").trim().to_lowercase(),
@@ -247,19 +253,31 @@ fn store(ctx: &Ctx, body: &[u8]) {
         let body = written.get().trim();
         match Value::of_json(element) {
             element @ Value::Object(_) => rows.push(webhook_row(ctx.tenant(), now, &delivery, body, &element)),
-            _ => ctx.raw("webhook", "unexpected_shape", "element is not a JSON object", body.as_bytes()),
+            _ => {
+                raw::store(
+                    clickhouse,
+                    ctx,
+                    "webhook",
+                    "unexpected_shape",
+                    "element is not a JSON object",
+                    body.as_bytes(),
+                )
+                .await
+            }
         }
     }
-    ctx.write(rows);
+    storage::insert(clickhouse, &rows).await
 }
 
 /// A batch of CI pipeline, stage and job events.
 ///
 /// The Jenkins plugin only tells 2xx from everything else, so 202 with an empty object is the
 /// whole contract.
-pub async fn handle(ctx: Ctx, body: Body) -> Response {
-    if !body.is_empty() {
-        store(&ctx, &body);
+pub async fn handle(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
+    if !body.is_empty()
+        && let Err(e) = store(&clickhouse, &ctx, &body).await
+    {
+        return storage_failed(e);
     }
     accepted()
 }

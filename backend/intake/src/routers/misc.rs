@@ -9,21 +9,23 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, TimeDelta, Utc};
+use ninjapaws_storage as storage;
 use ninjapaws_storage::rows::Extra;
 use ninjapaws_storage::rows::apm_telemetry::ApmTelemetry;
 use serde_json::Value;
+use tako::extractors::state::State;
 use tako::types::Response;
 
 use crate::json;
 use crate::raw;
-use crate::server::{Body, Ctx, accepted};
+use crate::server::{Body, Ctx, accepted, storage_failed};
 use crate::wire::time;
 
 /// One opaque integration payload per request. The agent never looks inside: an integration hands
 /// it bytes, and no schema for them is published anywhere. So the bytes are kept as they are, with
 /// the sender's identity, which the event platform carries in headers, in the note.
-pub async fn handle_gen_resources(ctx: Ctx, body: Body) -> Response {
-    ctx.raw("genresources", "no_schema", &raw::origin_note(&ctx), &body);
+pub async fn handle_gen_resources(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
+    raw::store(&clickhouse, &ctx, "genresources", "no_schema", &raw::origin_note(&ctx), &body).await;
     accepted()
 }
 
@@ -239,12 +241,12 @@ fn batch_entries(payload: Option<&Value>) -> Option<Vec<BTreeMap<String, Value>>
 /// One row for the request, whoever sent it. A message-batch, whose payload is
 /// [{request_type, payload}, …], adds one row per entry on top of that row, which keeps the whole
 /// batch.
-pub async fn handle_telemetry(ctx: Ctx, body: Body) -> Response {
-    let refuse = |error: &str| ctx.raw("apmtelemetry", "decode_error", error, &body);
+pub async fn handle_telemetry(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     match json::try_parse(&body) {
-        Err(e) => refuse(&e),
+        Err(e) => raw::store(&clickhouse, &ctx, "apmtelemetry", "decode_error", &e, &body).await,
         Ok(root) if !root.is_object() && !root.is_null() => {
-            refuse(&format!("expected an object, got {}", json::kind(&root)))
+            let note = format!("expected an object, got {}", json::kind(&root));
+            raw::store(&clickhouse, &ctx, "apmtelemetry", "decode_error", &note, &body).await
         }
         Ok(root) => {
             let envelope = json::members(&root);
@@ -276,7 +278,9 @@ pub async fn handle_telemetry(ctx: Ctx, body: Body) -> Response {
                 }
             }
             found.insert(0, parent);
-            ctx.write(found);
+            if let Err(e) = storage::insert(&clickhouse, &found).await {
+                return storage_failed(e);
+            }
         }
     }
     accepted()

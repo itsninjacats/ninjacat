@@ -1,12 +1,11 @@
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use super::{Extra, Tags};
 use crate::column;
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 #[derive(clickhouse::Row, Serialize, Clone, Debug, Default)]
 pub struct MetricPoint {
@@ -40,14 +39,7 @@ impl MetricPoint {
 }
 
 impl Table for MetricPoint {
-    const WRITER: &'static str = "storage_metrics";
     const TABLE: &'static str = "metrics";
-    // One insert is a part here and one in each table the views fill (metrics_1m,
-    // metric_tag_keys). A buffered point with its tags takes a few KB, and while ClickHouse
-    // stalls four batches are in flight beside the buffer, so the limit is what keeps the
-    // process inside its memory.
-    const LIMITS: Limits =
-        Limits { max_rows: 50_000, flush_interval: Duration::from_secs(10), buffer_limit: 150_000, ..Limits::DEFAULT };
 }
 
 #[derive(clickhouse::Row, Serialize, Clone, Debug, Default)]
@@ -73,7 +65,5 @@ pub struct SketchRow {
 }
 
 impl Table for SketchRow {
-    const WRITER: &'static str = "storage_sketches";
     const TABLE: &'static str = "sketches";
-    const LIMITS: Limits = Limits { max_rows: 1000, ..Limits::DEFAULT };
 }

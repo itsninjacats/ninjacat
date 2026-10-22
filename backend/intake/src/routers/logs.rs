@@ -8,15 +8,18 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
+use ninjapaws_storage as storage;
 use ninjapaws_storage::column;
 use ninjapaws_storage::rows::logs::Log;
 use serde_json::Value;
 use serde_json::value::RawValue;
+use tako::extractors::state::State;
 use tako::types::Response;
 
 use crate::fields::{self, Mismatches};
 use crate::json;
-use crate::server::{Body, Ctx, accepted};
+use crate::raw;
+use crate::server::{Body, Ctx, accepted, storage_failed};
 use crate::wire::{tags, text, time};
 
 /// The fields Datadog's HTTPLogItem declares. Everything else in an item is an attribute.
@@ -202,14 +205,14 @@ pub fn to_row(tenant: &str, item: LogItem, arrival: DateTime<Utc>, defaults: &Ba
     }
 }
 
-pub async fn handle(ctx: Ctx, body: Body) -> Response {
+pub async fn handle(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     if ctx.is_sweep() || body.is_empty() {
         return accepted();
     }
     let items = match parse_items(&body) {
         Ok(items) => items,
         Err(e) => {
-            ctx.raw("logs", "decode_error", &e, &body);
+            raw::store(&clickhouse, &ctx, "logs", "decode_error", &e, &body).await;
             return accepted();
         }
     };
@@ -230,10 +233,11 @@ pub async fn handle(ctx: Ctx, body: Body) -> Response {
             .and_then(|item| decode_item(&item));
         match decoded {
             Err(ItemProblem::NotALog(problem)) => {
-                ctx.raw("logs", "unexpected_shape", &format!("item #{i}: {problem}"), raw_bytes)
+                raw::store(&clickhouse, &ctx, "logs", "unexpected_shape", &format!("item #{i}: {problem}"), raw_bytes)
+                    .await
             }
             Err(ItemProblem::Undecodable(error)) => {
-                ctx.raw("logs", "decode_error", &format!("item #{i}: {error}"), raw_bytes)
+                raw::store(&clickhouse, &ctx, "logs", "decode_error", &format!("item #{i}: {error}"), raw_bytes).await
             }
             // `{}` says nothing: a probe, not a log.
             Ok(item)
@@ -244,6 +248,8 @@ pub async fn handle(ctx: Ctx, body: Body) -> Response {
             Ok(item) => rows.push(to_row(ctx.tenant(), item, arrival, &defaults)),
         }
     }
-    ctx.write(rows);
+    if let Err(e) = storage::insert(&clickhouse, &rows).await {
+        return storage_failed(e);
+    }
     accepted()
 }

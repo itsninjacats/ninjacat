@@ -1,6 +1,6 @@
-//! What every intake program shares. A program's `main` reads the environment with [`start`],
-//! registers its routes on a tako `Router` (each behind its API key, `auth`), puts the [`Intake`]
-//! in the router's state and [`serve`]s it.
+//! What every intake program shares. A program's `main` reads its settings, registers its routes
+//! on a tako `Router` (each behind its API key, `auth`), puts the ClickHouse client, the API keys
+//! and the [`Settings`] in the router's state and [`serve`]s it.
 //!
 //! Which host a request was sent to is not looked at: each host is a process of its own, and
 //! whatever is in front of them (an ingress, a proxy) sends each host name to its process.
@@ -15,7 +15,6 @@ use bytes::Bytes;
 use http::request::Parts;
 use http::{HeaderValue, StatusCode, Uri};
 use http_body_util::{BodyExt, Limited};
-use ninjapaws_storage::{Sink, Table};
 use serde::Serialize;
 use tako::Server;
 use tako::body::TakoBody;
@@ -26,36 +25,44 @@ use tako::router::Router;
 use tako::router_state::RouterState;
 use tako::types::{BoxError, Request, Response};
 use tokio::net::TcpListener;
-use tokio_util::sync::CancellationToken;
-use tokio_util::task::TaskTracker;
 
 use crate::auth::Admitted;
 use crate::capture;
-use crate::keys::{self, Store};
 use crate::raw;
 
-/// What a program has besides its routes: what its handlers write to and read from, and its
-/// settings.
-#[derive(Clone)]
-pub struct Intake {
-    pub sink: Sink,
-    pub keys: Arc<Store>,
+/// How a program answers what it does not serve and how much it reads, in the router's state.
+#[derive(Clone, Debug)]
+pub struct Settings {
     /// Answer 202 instead of 404 on unknown paths (NINJACAT_ACK_UNKNOWN): keeps a chatty agent
     /// quiet while a new endpoint is looked at.
     pub ack_unknown: bool,
     /// The largest request body read (NINJACAT_MAX_BODY_BYTES); a larger one is refused with 413.
     pub max_body_bytes: usize,
-    /// Cancelled once the HTTP listener has stopped. The tasks in `tasks` (the logs over TCP) end
-    /// on it, and the writers flush only after every one of them has.
-    pub stopping: CancellationToken,
-    pub tasks: TaskTracker,
+}
+
+impl Settings {
+    pub fn from_env() -> Settings {
+        Settings {
+            ack_unknown: var_or("NINJACAT_ACK_UNKNOWN", "") == "true",
+            // Agents send a few megabytes; a flare or a profile is tens of them.
+            max_body_bytes: var_or("NINJACAT_MAX_BODY_BYTES", "")
+                .parse()
+                .ok()
+                .filter(|n| *n > 0)
+                .unwrap_or(64 * 1024 * 1024),
+        }
+    }
+}
+
+/// The router's `T` (`with_state`), for a middleware or an extractor, which cannot take `State`.
+pub fn state<T: Send + Sync + 'static>(extensions: &http::Extensions) -> Option<Arc<T>> {
+    extensions.get::<Arc<RouterState>>()?.get::<T>()
 }
 
 /// One request as a handler sees it: everything but the body, which it is given apart
 /// ([`Body`]).
 pub struct Ctx {
     pub parts: http::request::Parts,
-    pub intake: Arc<Intake>,
 }
 
 impl Ctx {
@@ -82,19 +89,6 @@ impl Ctx {
 
     pub fn path(&self) -> &str {
         self.parts.uri.path()
-    }
-
-    /// Hands rows to the table's writer. A request with no tenant (a route that asks for no key)
-    /// writes nothing: a row belongs to a tenant.
-    pub fn write<T: Table>(&self, rows: Vec<T>) {
-        if !self.tenant().is_empty() {
-            self.intake.sink.write(rows);
-        }
-    }
-
-    /// Keeps a request that could not be turned into rows (see [`raw::store`]).
-    pub fn raw(&self, intake: &str, reason: &str, note: &str, body: &[u8]) {
-        raw::store(self, intake, reason, note, body);
     }
 
     /// The agent's connectivity sweep at startup: an empty body or `{}`, nothing to decode.
@@ -153,6 +147,13 @@ pub fn accepted() -> Response {
     json(StatusCode::ACCEPTED, &serde_json::json!({}))
 }
 
+/// The answer when ClickHouse refused an insert: 503 tells the sender to try again later, so the
+/// payload is not lost.
+pub fn storage_failed(error: String) -> Response {
+    tracing::warn!("{error}");
+    json(StatusCode::SERVICE_UNAVAILABLE, &serde_json::json!({ "errors": ["storage unavailable"] }))
+}
+
 /// A request's body, read whole (up to NINJACAT_MAX_BODY_BYTES, 413 past it) with its
 /// Content-Encoding undone. The last argument of every handler.
 pub struct Body(pub Bytes);
@@ -169,7 +170,7 @@ impl<'a> FromRequest<'a> for Body {
     type Error = Response;
 
     async fn from_request(req: &'a mut Request) -> Result<Self, Response> {
-        let limit = intake_of(req.extensions()).map_or(0, |intake| intake.max_body_bytes);
+        let limit = state::<Settings>(req.extensions()).map_or(0, |settings| settings.max_body_bytes);
         let raw = match Limited::new(std::mem::take(req.body_mut()), limit).collect().await {
             Ok(collected) => collected.to_bytes(),
             Err(_) => return Err(status(StatusCode::PAYLOAD_TOO_LARGE)),
@@ -186,22 +187,14 @@ impl<'a> FromRequestParts<'a> for Ctx {
     fn from_request_parts(parts: &'a mut Parts) -> impl Future<Output = Result<Self, Response>> + Send + 'a {
         // The parts are copied, not taken: the body's extractor, which runs next, reads the limit
         // and the encoding from them.
-        let ctx = intake_of(&parts.extensions).map(|intake| {
-            let (mut copy, _) = http::Request::new(()).into_parts();
-            copy.method = parts.method.clone();
-            copy.uri = parts.uri.clone();
-            copy.version = parts.version;
-            copy.headers = parts.headers.clone();
-            copy.extensions = parts.extensions.clone();
-            Ctx { parts: copy, intake }
-        });
-        std::future::ready(ctx.ok_or_else(|| status(StatusCode::INTERNAL_SERVER_ERROR)))
+        let (mut copy, _) = http::Request::new(()).into_parts();
+        copy.method = parts.method.clone();
+        copy.uri = parts.uri.clone();
+        copy.version = parts.version;
+        copy.headers = parts.headers.clone();
+        copy.extensions = parts.extensions.clone();
+        std::future::ready(Ok(Ctx { parts: copy }))
     }
-}
-
-/// The program's [`Intake`], which its `main` puts in the router's state (`with_state`).
-pub fn intake_of(extensions: &http::Extensions) -> Option<Arc<Intake>> {
-    extensions.get::<Arc<RouterState>>()?.get::<Intake>()
 }
 
 /// GET /api/v1/validate, which the agent sweeps at startup on whatever host it talks to.
@@ -230,7 +223,7 @@ pub async fn flare_probe() -> Response {
 /// found.
 pub async fn not_found(req: Request) -> Response {
     log_unhandled(&unhandled(&req));
-    if intake_of(req.extensions()).is_some_and(|intake| intake.ack_unknown) {
+    if state::<Settings>(req.extensions()).is_some_and(|settings| settings.ack_unknown) {
         accepted()
     } else {
         json(StatusCode::NOT_FOUND, &serde_json::json!({ "errors": ["unknown endpoint"] }))
@@ -276,41 +269,19 @@ pub fn listen_on(addr: &str) -> String {
     }
 }
 
-/// Reads the settings, the API keys and ClickHouse from the environment.
-pub async fn start() -> Result<Intake, BoxError> {
+/// Logs to stderr, at the level RUST_LOG asks for (info by default).
+pub fn init_tracing() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
-
-    let database_url = var_or("DATABASE_URL", "");
-    if database_url.is_empty() {
-        return Err("DATABASE_URL is not set (e.g. postgres://root:mysecretpassword@localhost:5433/local)".into());
-    }
-    let keys = Arc::new(Store::default());
-    keys::fetch_now(&keys, &database_url).await?;
-    tokio::spawn(keys::keep(keys.clone(), database_url));
-
-    Ok(Intake {
-        keys,
-        sink: Sink::clickhouse(ninjapaws_storage::client_from_env()),
-        stopping: CancellationToken::new(),
-        tasks: TaskTracker::new(),
-        ack_unknown: var_or("NINJACAT_ACK_UNKNOWN", "") == "true",
-        // Agents send a few megabytes; a flare or a profile is tens of them.
-        max_body_bytes: var_or("NINJACAT_MAX_BODY_BYTES", "")
-            .parse()
-            .ok()
-            .filter(|n| *n > 0)
-            .unwrap_or(64 * 1024 * 1024),
-    })
 }
 
-/// Serves `router` on `NINJACAT_ADDR` until the program is told to stop, then flushes what its
-/// writers still hold.
-pub async fn serve(name: &str, router: Router, intake: Intake) -> Result<(), BoxError> {
+/// Serves `router` on `NINJACAT_ADDR` until the program is told to stop. With DEBUG=true every
+/// request is dumped to NINJACAT_CAPTURE_DIR first.
+pub async fn serve(name: &str, router: Router) -> Result<(), BoxError> {
     if var_or("DEBUG", "") == "true" {
         let directory = PathBuf::from(var_or("NINJACAT_CAPTURE_DIR", "captures"));
         router.middleware(move |req, next| capture::dump(directory.clone(), req, next));
@@ -320,10 +291,5 @@ pub async fn serve(name: &str, router: Router, intake: Intake) -> Result<(), Box
     let listener = TcpListener::bind(listen_on(&addr)).await?;
     tracing::info!("{name} listening on {addr}");
     Server::builder().build().try_spawn_http(listener, router)?.shutdown_on_signal().await?;
-    intake.stopping.cancel();
-    intake.tasks.close();
-    intake.tasks.wait().await;
-    // Last, once nothing feeds the writers any more.
-    intake.sink.stop().await;
     Ok(())
 }

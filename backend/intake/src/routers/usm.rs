@@ -468,8 +468,8 @@ mod tests {
         }
     }
 
-    /// The rows inserted through the real writers into a scratch database built from the
-    /// migrations. Passes without asserting when ClickHouse is not running.
+    /// The rows inserted into a scratch database built from the migrations. Passes without
+    /// asserting when ClickHouse is not running.
     #[tokio::test]
     async fn the_stat_rows_fit_their_clickhouse_tables() {
         let server = ninjapaws_storage::client_from_env().with_database("default");
@@ -482,11 +482,11 @@ mod tests {
         let client = ninjapaws_storage::client_from_env().with_database(&database_name);
         ninjapaws_storage::migrations::apply(&client).await.unwrap();
 
-        let sink = ninjapaws_storage::Sink::clickhouse(client);
         let inserted = async {
-            sink.insert(http(&key(), &http_aggregations().encode_to_vec()).unwrap()).await?;
-            sink.insert(kafka(&key(), &kafka_aggregations().encode_to_vec()).unwrap()).await?;
-            sink.insert(database(&key(), &database_aggregations().encode_to_vec()).unwrap()).await
+            ninjapaws_storage::insert(&client, &http(&key(), &http_aggregations().encode_to_vec()).unwrap()).await?;
+            ninjapaws_storage::insert(&client, &kafka(&key(), &kafka_aggregations().encode_to_vec()).unwrap()).await?;
+            ninjapaws_storage::insert(&client, &database(&key(), &database_aggregations().encode_to_vec()).unwrap())
+                .await
         }
         .await;
         server.query(&format!("DROP DATABASE {database_name}")).execute().await.unwrap();

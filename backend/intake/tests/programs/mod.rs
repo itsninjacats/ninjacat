@@ -3,12 +3,16 @@
 
 #![allow(dead_code)]
 
+use std::sync::Arc;
+
 use ninjapaws_intake::auth;
+use ninjapaws_intake::keys::Store;
 use ninjapaws_intake::routers::{
     api, app, ci_visibility, ci_webhook, config, containers, dbm, evp, flare, install, kubeops, logs, misc, ndm,
     process, profiling, rum, security, trace,
 };
 use ninjapaws_intake::server::{self, Body, Ctx};
+use tako::extractors::state::State;
 use tako::router::Router;
 
 /// ninjapaws_agent_discovery
@@ -85,46 +89,80 @@ pub fn api(router: &mut Router) {
     // after `setting` while every flag in the settings answer is false; they exist because a
     // tracer configured by hand must not get a 404 in the middle of a test run.
     router
-        .post("/api/v2/libraries/tests/services/setting", |ctx: Ctx, body: Body| async move {
-            ci_visibility::answer_config("settings", ci_visibility::settings_answer, &ctx, &body)
-        })
+        .post(
+            "/api/v2/libraries/tests/services/setting",
+            |ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body| async move {
+                ci_visibility::answer_config(&clickhouse, "settings", ci_visibility::settings_answer, &ctx, &body).await
+            },
+        )
         .middleware(auth::agent);
     router
-        .post("/api/v2/ci/tests/skippable", |ctx: Ctx, body: Body| async move {
-            ci_visibility::answer_config("skippable", ci_visibility::skippable_answer, &ctx, &body)
-        })
+        .post(
+            "/api/v2/ci/tests/skippable",
+            |ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body| async move {
+                ci_visibility::answer_config(&clickhouse, "skippable", ci_visibility::skippable_answer, &ctx, &body)
+                    .await
+            },
+        )
         .middleware(auth::agent);
     router
-        .post("/api/v2/ci/libraries/tests", |ctx: Ctx, body: Body| async move {
-            ci_visibility::answer_config("known_tests", ci_visibility::test_list_answer, &ctx, &body)
-        })
+        .post(
+            "/api/v2/ci/libraries/tests",
+            |ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body| async move {
+                ci_visibility::answer_config(&clickhouse, "known_tests", ci_visibility::test_list_answer, &ctx, &body)
+                    .await
+            },
+        )
         .middleware(auth::agent);
     router
-        .post("/api/v2/ci/libraries/tests/flaky", |ctx: Ctx, body: Body| async move {
-            ci_visibility::answer_config("flaky_tests", ci_visibility::test_list_answer, &ctx, &body)
-        })
+        .post(
+            "/api/v2/ci/libraries/tests/flaky",
+            |ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body| async move {
+                ci_visibility::answer_config(&clickhouse, "flaky_tests", ci_visibility::test_list_answer, &ctx, &body)
+                    .await
+            },
+        )
         .middleware(auth::agent);
     router
-        .post("/api/v2/test/libraries/test-management/tests", |ctx: Ctx, body: Body| async move {
-            ci_visibility::answer_config("test_management", ci_visibility::test_management_answer, &ctx, &body)
-        })
+        .post(
+            "/api/v2/test/libraries/test-management/tests",
+            |ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body| async move {
+                ci_visibility::answer_config(
+                    &clickhouse,
+                    "test_management",
+                    ci_visibility::test_management_answer,
+                    &ctx,
+                    &body,
+                )
+                .await
+            },
+        )
         .middleware(auth::agent);
     router.post("/api/v2/git/repository/search_commits", ci_visibility::handle_search_commits).middleware(auth::agent);
     router.post("/api/v2/git/repository/packfile", ci_visibility::handle_packfile).middleware(auth::agent);
     router
-        .post("/api/v2/ci/pipeline/tags", |ctx: Ctx, body: Body| async move {
-            ci_visibility::handle_pipeline_event("tag", &ctx, &body)
-        })
+        .post(
+            "/api/v2/ci/pipeline/tags",
+            |ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body| async move {
+                ci_visibility::handle_pipeline_event(&clickhouse, "tag", &ctx, &body).await
+            },
+        )
         .middleware(auth::agent);
     router
-        .post("/api/v2/ci/pipeline/metrics", |ctx: Ctx, body: Body| async move {
-            ci_visibility::handle_pipeline_event("measure", &ctx, &body)
-        })
+        .post(
+            "/api/v2/ci/pipeline/metrics",
+            |ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body| async move {
+                ci_visibility::handle_pipeline_event(&clickhouse, "measure", &ctx, &body).await
+            },
+        )
         .middleware(auth::agent);
     router
-        .post("/api/intake/ci/custom_spans", |ctx: Ctx, body: Body| async move {
-            ci_visibility::handle_pipeline_event("custom_span", &ctx, &body)
-        })
+        .post(
+            "/api/intake/ci/custom_spans",
+            |ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body| async move {
+                ci_visibility::handle_pipeline_event(&clickhouse, "custom_span", &ctx, &body).await
+            },
+        )
         .middleware(auth::agent);
 
     // What the agent sweeps at startup on whatever host it talks to, and a flare, which goes to
@@ -173,14 +211,20 @@ pub fn app(router: &mut Router) {
 
     // Columnar metrics, intake v3.
     router
-        .post("/api/intake/metrics/v3/series", |ctx: Ctx, body: Body| app::handle("v3series", ctx, body))
+        .post("/api/intake/metrics/v3/series", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            app::handle("v3series", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
     router
-        .post("/api/intake/metrics/v3/sketches", |ctx: Ctx, body: Body| app::handle("v3sketches", ctx, body))
+        .post("/api/intake/metrics/v3/sketches", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            app::handle("v3sketches", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
     // A shadow copy of the v2 traffic on /api/beta/sketches.
     router
-        .post("/api/intake/metrics/v3beta/sketches", |ctx: Ctx, body: Body| app::handle("v3beta", ctx, body))
+        .post("/api/intake/metrics/v3beta/sketches", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            app::handle("v3beta", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
 
     // What the agent sweeps at startup on whatever host it talks to, and a flare, which goes to
@@ -201,7 +245,9 @@ pub fn browser(router: &mut Router) {
     // The browser profiler's multipart is the envelope the tracers send, so it reuses that handler
     // under its own label.
     router
-        .post("/api/v2/profile", |ctx: Ctx, body: Body| profiling::handle_profile("profile-browser", ctx, body))
+        .post("/api/v2/profile", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            profiling::handle_profile("profile-browser", ctx, clickhouse, body)
+        })
         .middleware(auth::browser);
     router.post("/api/v2/debugger", profiling::handle_debugger).middleware(auth::browser);
     router.get("/api/v2/profiling/quota", rum::handle_profiling_quota).middleware(auth::browser);
@@ -263,7 +309,9 @@ pub fn containers(router: &mut Router) {
 /// ninjapaws_cspm
 pub fn cspm(router: &mut Router) {
     router
-        .post("/api/v2/compliance", |ctx: Ctx, body: Body| security::handle_track("compliance", ctx, body))
+        .post("/api/v2/compliance", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            security::handle_track("compliance", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
 
     // What the agent sweeps at startup on whatever host it talks to, and a flare, which goes to
@@ -299,24 +347,36 @@ pub fn data_obs(router: &mut Router) {
 /// ninjapaws_dbm
 pub fn dbm(router: &mut Router) {
     router
-        .post("/api/v2/dbmmetrics", |ctx: Ctx, body: Body| dbm::handle("dbmmetrics", ctx, body))
+        .post("/api/v2/dbmmetrics", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            dbm::handle("dbmmetrics", ctx, clickhouse, body)
+        })
         .middleware(auth::agent); // query and lock metrics
     router
-        .post("/api/v2/dbmactivity", |ctx: Ctx, body: Body| dbm::handle("dbmactivity", ctx, body))
+        .post("/api/v2/dbmactivity", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            dbm::handle("dbmactivity", ctx, clickhouse, body)
+        })
         .middleware(auth::agent); // active sessions
     router
-        .post("/api/v2/databasequery", |ctx: Ctx, body: Body| dbm::handle("databasequery", ctx, body))
+        .post("/api/v2/databasequery", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            dbm::handle("databasequery", ctx, clickhouse, body)
+        })
         .middleware(auth::agent); // query samples and plans
     router
-        .post("/api/v2/dbmmetadata", |ctx: Ctx, body: Body| dbm::handle("dbmmetadata", ctx, body))
+        .post("/api/v2/dbmmetadata", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            dbm::handle("dbmmetadata", ctx, clickhouse, body)
+        })
         .middleware(auth::agent); // instances and schemas
     // No producer of these two is in the agent's source: only the envelope can be claimed about
     // them.
     router
-        .post("/api/v2/dbmhealth", |ctx: Ctx, body: Body| dbm::handle("dbmhealth", ctx, body))
+        .post("/api/v2/dbmhealth", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            dbm::handle("dbmhealth", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
     router
-        .post("/api/v2/dbmcolumnstatistics", |ctx: Ctx, body: Body| dbm::handle("dbmcolumnstatistics", ctx, body))
+        .post("/api/v2/dbmcolumnstatistics", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            dbm::handle("dbmcolumnstatistics", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
 
     // What the agent sweeps at startup on whatever host it talks to, and a flare, which goes to
@@ -363,15 +423,21 @@ pub fn kubeops(router: &mut Router) {
     // Kubernetes resource collections; /api/v1/orchestrator is the same under
     // orchestrator_explorer.use_legacy_endpoint.
     router
-        .post("/api/v2/orch", |ctx: Ctx, body: Body| kubeops::handle_frame("orch", ctx, body))
+        .post("/api/v2/orch", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            kubeops::handle_frame("orch", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
     router
-        .post("/api/v1/orchestrator", |ctx: Ctx, body: Body| kubeops::handle_frame("orch", ctx, body))
+        .post("/api/v1/orchestrator", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            kubeops::handle_frame("orch", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
     // Raw manifests (types 80-82): the object's own YAML or JSON, "exactly what kubectl would
     // show". Same frame, same decoder.
     router
-        .post("/api/v2/orchmanif", |ctx: Ctx, body: Body| kubeops::handle_frame("orchmanif", ctx, body))
+        .post("/api/v2/orchmanif", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            kubeops::handle_frame("orchmanif", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
     router.post("/api/v2/kubeactions", kubeops::handle_actions).middleware(auth::agent);
 
@@ -441,11 +507,15 @@ pub fn profile(router: &mut Router) {
     // What the trace-agent forwards from /profiling/v1/input: the tracer's own multipart, byte for
     // byte.
     router
-        .post("/api/v2/profile", |ctx: Ctx, body: Body| profiling::handle_profile("profile", ctx, body))
+        .post("/api/v2/profile", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            profiling::handle_profile("profile", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
     // The old path, still used by the agent's internal profiling.
     router
-        .post("/v1/input", |ctx: Ctx, body: Body| profiling::handle_profile("profile-v1", ctx, body))
+        .post("/v1/input", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            profiling::handle_profile("profile-v1", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
 
     // What the agent sweeps at startup on whatever host it talks to, and a flare, which goes to
@@ -486,10 +556,14 @@ pub fn resources(router: &mut Router) {
 /// ninjapaws_runtime_security
 pub fn runtime_security(router: &mut Router) {
     router
-        .post("/api/v2/secruntime", |ctx: Ctx, body: Body| security::handle_track("secruntime", ctx, body))
+        .post("/api/v2/secruntime", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            security::handle_track("secruntime", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
     router
-        .post("/api/v2/secinfo", |ctx: Ctx, body: Body| security::handle_track("secinfo", ctx, body))
+        .post("/api/v2/secinfo", |ctx: Ctx, clickhouse: State<clickhouse::Client>, body: Body| {
+            security::handle_track("secinfo", ctx, clickhouse, body)
+        })
         .middleware(auth::agent);
 
     // What the agent sweeps at startup on whatever host it talks to, and a flare, which goes to
@@ -592,8 +666,13 @@ pub fn trace(router: &mut Router) {
     router.post("/support/flare/{case}", flare::handle).middleware(auth::agent);
 }
 
-/// A program's router as its `main` hands it to `serve`, around `intake`.
-pub fn router_of(program: fn(&mut Router), intake: server::Intake) -> Router {
+/// A program's router as its `main` hands it to `serve`, with the state its `main` gives it.
+pub fn router_of(
+    program: fn(&mut Router),
+    clickhouse: clickhouse::Client,
+    keys: Arc<Store>,
+    settings: server::Settings,
+) -> Router {
     let mut router = Router::new();
     program(&mut router);
     router.get("/ping", server::ping);
@@ -602,6 +681,8 @@ pub fn router_of(program: fn(&mut Router), intake: server::Intake) -> Router {
     router.head("/support/flare/{case}", server::flare_probe);
     router.middleware(server::log_405);
     router.fallback(server::not_found);
-    router.with_state(intake);
+    router.with_state(clickhouse);
+    router.with_state(keys);
+    router.with_state(settings);
     router
 }

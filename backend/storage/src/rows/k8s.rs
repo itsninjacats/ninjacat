@@ -4,14 +4,13 @@
 //! the frame format documents no unit for it; None when the wire said 0.
 
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use super::Tags;
 use crate::column::{self, Blob};
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// One Kubernetes object in one collection pass, whatever its kind.
 ///
@@ -141,12 +140,7 @@ pub struct K8sResource {
 }
 
 impl Table for K8sResource {
-    const WRITER: &'static str = "storage_k8s_resources";
     const TABLE: &'static str = "k8s_resources";
-    // The cluster agent sends a whole collection pass at once: thousands of objects, then
-    // silence. Rows carry the object's JSON, so the buffer ceiling is real memory.
-    const LIMITS: Limits =
-        Limits { max_rows: 2000, flush_interval: Duration::from_secs(5), buffer_limit: 50_000, max_in_flight: 2 };
 }
 
 /// One object's manifest, its YAML or JSON exactly as the cluster agent collected it.
@@ -190,11 +184,7 @@ pub struct K8sManifest {
 }
 
 impl Table for K8sManifest {
-    const WRITER: &'static str = "storage_k8s_manifests";
     const TABLE: &'static str = "k8s_manifests";
-    // Every row is a whole document, so these counts stand for megabytes.
-    const LIMITS: Limits =
-        Limits { max_rows: 200, flush_interval: Duration::from_secs(10), buffer_limit: 5_000, max_in_flight: 1 };
 }
 
 /// The cluster as the agent sums it up: one row per cluster per pass.
@@ -249,10 +239,7 @@ pub struct K8sCluster {
 }
 
 impl Table for K8sCluster {
-    const WRITER: &'static str = "storage_k8s_cluster";
     const TABLE: &'static str = "k8s_cluster";
-    const LIMITS: Limits =
-        Limits { max_rows: 50, flush_interval: Duration::from_secs(15), buffer_limit: 1_000, max_in_flight: 1 };
 }
 
 /// What the cluster agent did with a remote action: the audit record.
@@ -286,9 +273,5 @@ pub struct K8sAction {
 }
 
 impl Table for K8sAction {
-    const WRITER: &'static str = "storage_k8s_actions";
     const TABLE: &'static str = "k8s_actions";
-    // Human scale: an operator triggers an action and waits to see its result.
-    const LIMITS: Limits =
-        Limits { max_rows: 200, flush_interval: Duration::from_secs(10), buffer_limit: 10_000, max_in_flight: 1 };
 }

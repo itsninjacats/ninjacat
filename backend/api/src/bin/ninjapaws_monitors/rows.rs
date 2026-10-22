@@ -39,7 +39,6 @@ pub struct TransitionRow {
 }
 
 impl Table for TransitionRow {
-    const WRITER: &'static str = "monitor_transitions";
     const TABLE: &'static str = "monitor_transitions";
 }
 
@@ -57,7 +56,6 @@ pub struct EvaluationRow {
 }
 
 impl Table for EvaluationRow {
-    const WRITER: &'static str = "monitor_evaluations";
     const TABLE: &'static str = "monitor_evaluations";
 }
 
@@ -82,6 +80,5 @@ pub struct NotificationRow {
 }
 
 impl Table for NotificationRow {
-    const WRITER: &'static str = "monitor_notifications";
     const TABLE: &'static str = "monitor_notifications";
 }

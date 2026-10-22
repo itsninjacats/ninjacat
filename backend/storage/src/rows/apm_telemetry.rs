@@ -1,12 +1,11 @@
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use super::Extra;
 use crate::column;
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// One instrumentation telemetry request, or one entry of a message-batch request (see
 /// batch_index).
@@ -60,10 +59,5 @@ pub struct ApmTelemetry {
 }
 
 impl Table for ApmTelemetry {
-    const WRITER: &'static str = "storage_apm_telemetry";
     const TABLE: &'static str = "apm_telemetry";
-    // Every instrumented process heartbeats on its own schedule, so a deploy makes many of them
-    // report within the same second.
-    const LIMITS: Limits =
-        Limits { max_rows: 2_000, flush_interval: Duration::from_secs(5), buffer_limit: 50_000, max_in_flight: 2 };
 }

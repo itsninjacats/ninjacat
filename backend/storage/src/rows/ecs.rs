@@ -1,12 +1,11 @@
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use super::Tags;
 use crate::column;
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// One ECS task in one collection pass. It arrives on the orchestrator intake with the Kubernetes
 /// collectors but has a table of its own: a task has no namespace, name or uid, the columns
@@ -72,8 +71,5 @@ pub struct EcsTask {
 }
 
 impl Table for EcsTask {
-    const WRITER: &'static str = "storage_ecs_tasks";
     const TABLE: &'static str = "ecs_tasks";
-    const LIMITS: Limits =
-        Limits { max_rows: 2000, flush_interval: Duration::from_secs(5), buffer_limit: 5_000, max_in_flight: 2 };
 }

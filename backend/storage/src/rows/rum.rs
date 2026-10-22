@@ -9,14 +9,13 @@
 //! driver's rows cannot nest, so each row repeats them.
 
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use super::Tags;
 use crate::column::{self, Blob};
-use crate::table::{Limits, Table};
+use crate::table::Table;
 
 /// The sender columns every RUM table starts with, as one request gives them.
 #[derive(Clone, Debug)]
@@ -129,12 +128,7 @@ pub struct RumView {
 }
 
 impl Table for RumView {
-    const WRITER: &'static str = "storage_rum_views";
     const TABLE: &'static str = "rum_views";
-    // An active page re-sends its view every few seconds and every row carries the whole event,
-    // so the limits stand for memory.
-    const LIMITS: Limits =
-        Limits { max_rows: 2_000, flush_interval: Duration::from_secs(5), buffer_limit: 50_000, max_in_flight: 2 };
 }
 
 /// One action, error, resource, long_task, vital or transition. The columns of the other kinds
@@ -219,12 +213,7 @@ pub struct RumEvent {
 }
 
 impl Table for RumEvent {
-    const WRITER: &'static str = "storage_rum_events";
     const TABLE: &'static str = "rum_events";
-    // The high-volume table of the family: resources alone are dozens per page load, each row
-    // with its whole event.
-    const LIMITS: Limits =
-        Limits { max_rows: 10_000, flush_interval: Duration::from_secs(5), buffer_limit: 100_000, max_in_flight: 4 };
 }
 
 /// One type:"telemetry" event: the SDK reporting on itself.
@@ -277,9 +266,7 @@ pub struct RumTelemetry {
 }
 
 impl Table for RumTelemetry {
-    const WRITER: &'static str = "storage_rum_telemetry";
     const TABLE: &'static str = "rum_telemetry";
-    const LIMITS: Limits = Limits { max_rows: 500, ..Limits::DEFAULT };
 }
 
 /// One mobile cpu or memory sample run. Timestamps and values stay the parallel arrays they
@@ -327,9 +314,7 @@ pub struct RumTimeseries {
 }
 
 impl Table for RumTimeseries {
-    const WRITER: &'static str = "storage_rum_timeseries";
     const TABLE: &'static str = "rum_timeseries";
-    const LIMITS: Limits = Limits { max_rows: 500, ..Limits::DEFAULT };
 }
 
 /// One blob part of a /api/v2/replay upload, with the metadata entry that described it. The bytes
@@ -377,11 +362,7 @@ pub struct RumReplaySegment {
 }
 
 impl Table for RumReplaySegment {
-    const WRITER: &'static str = "storage_rum_replay_segments";
     const TABLE: &'static str = "rum_replay_segments";
-    // A row is a compressed recording segment: these counts stand for megabytes.
-    const LIMITS: Limits =
-        Limits { max_rows: 200, flush_interval: Duration::from_secs(10), buffer_limit: 5_000, max_in_flight: 1 };
 }
 
 /// One span out of a /api/v2/spans envelope.
@@ -429,7 +410,5 @@ pub struct RumSpan {
 }
 
 impl Table for RumSpan {
-    const WRITER: &'static str = "storage_rum_spans";
     const TABLE: &'static str = "rum_spans";
-    const LIMITS: Limits = Limits { max_rows: 5_000, ..Limits::DEFAULT };
 }

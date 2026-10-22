@@ -31,6 +31,7 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Utc};
 use http::{HeaderValue, StatusCode};
 use ninjapaws_proto::datadog::agentpayload::{CommonMetadata, MetricPayload, SketchPayload};
+use ninjapaws_storage as storage;
 use ninjapaws_storage::column;
 use ninjapaws_storage::fnv;
 use ninjapaws_storage::rows::agent::{
@@ -47,6 +48,7 @@ use ninjapaws_storage::rows::runner::{
 use ninjapaws_storage::rows::{Extra, Tags};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use tako::extractors::state::State;
 use tako::types::Response;
 use uuid::Uuid;
 
@@ -54,7 +56,8 @@ use super::api_payloads::*;
 use crate::body;
 use crate::ddsketch;
 use crate::json;
-use crate::server::{Body, Ctx, accepted, json, json_as, status};
+use crate::raw;
+use crate::server::{Body, Ctx, accepted, json, json_as, status, storage_failed};
 use crate::wire::{metric_type_name, tags, text, time};
 
 /// The reply the agent expects after a batch of metrics. It reads the body: an empty object would
@@ -129,13 +132,13 @@ fn whole_seconds(value: f64) -> i64 {
 /// The host is a resource of type "host"; every other resource type (the agent writes one more,
 /// "device") goes into the row's resources map, so a device series stays distinguishable from a
 /// host one.
-pub async fn handle_series_v2(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_series_v2(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     if ctx.is_sweep() {
         return ack_series();
     }
     let decoded = parse_message::<MetricPayload>(body::is_json(ctx.header("content-type"), &body), &body);
     match decoded {
-        Err(error) => ctx.raw("series", "decode_error", &error, &body),
+        Err(error) => raw::store(&clickhouse, &ctx, "series", "decode_error", &error, &body).await,
         Ok(payload) => {
             let mut points = Vec::new();
             for series in &payload.series {
@@ -170,7 +173,9 @@ pub async fn handle_series_v2(ctx: Ctx, body: Body) -> Response {
                     });
                 }
             }
-            ctx.write(points);
+            if let Err(e) = storage::insert(&clickhouse, &points).await {
+                return storage_failed(e);
+            }
         }
     }
     ack_series()
@@ -190,25 +195,28 @@ pub fn normalize_type_word(word: &str) -> &'static str {
 /// source_type_name and unit, which the API does not have: the last two have columns, device goes
 /// into the resources map under the name v2 uses for it, anything else the API does not have into
 /// `extra`.
-pub async fn handle_series_v1(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_series_v1(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     if ctx.is_sweep() {
         return ack_series();
     }
     match parse_series_v1(&body) {
-        Err(error) => ctx.raw("series", "decode_error", &error, &body),
+        Err(error) => raw::store(&clickhouse, &ctx, "series", "decode_error", &error, &body).await,
         Ok(payload) => {
             if !payload.additional.is_empty() {
                 // A key beside `series` belongs to the batch, not to a point: copying it onto
                 // every row would multiply it. The body is kept instead, once.
-                ctx.raw(
+                raw::store(
+                    &clickhouse,
+                    &ctx,
                     "series",
                     "unexpected_shape",
                     &format!("v1 payload carried undeclared top-level keys: {}", key_list(&payload.additional)),
                     &body,
-                );
+                )
+                .await;
             }
             for (_, item, why) in &payload.rejected {
-                ctx.raw("series", "unexpected_shape", why, item.as_bytes());
+                raw::store(&clickhouse, &ctx, "series", "unexpected_shape", why, item.as_bytes()).await;
             }
 
             let mut points = Vec::new();
@@ -241,16 +249,23 @@ pub async fn handle_series_v1(ctx: Ctx, body: Body) -> Response {
                         }),
                         // The series is stored through its other points; the pair is the
                         // smallest thing worth keeping.
-                        _ => ctx.raw(
-                            "series",
-                            "unexpected_shape",
-                            &format!("series[{at}].points[{j}]: expected a [timestamp, value] pair of numbers"),
-                            point.raw.as_bytes(),
-                        ),
+                        _ => {
+                            raw::store(
+                                &clickhouse,
+                                &ctx,
+                                "series",
+                                "unexpected_shape",
+                                &format!("series[{at}].points[{j}]: expected a [timestamp, value] pair of numbers"),
+                                point.raw.as_bytes(),
+                            )
+                            .await
+                        }
                     }
                 }
             }
-            ctx.write(points);
+            if let Err(e) = storage::insert(&clickhouse, &points).await {
+                return storage_failed(e);
+            }
         }
     }
     ack_series()
@@ -259,24 +274,25 @@ pub async fn handle_series_v1(ctx: Ctx, body: Body) -> Response {
 /// Who sent a batch, as opposed to what was in it: agent version, timezone, the agent's clock and
 /// both of its IPs. The api_key in the same block is a credential and is not carried over. An
 /// all-empty block is not stored.
-fn store_batch_metadata(ctx: &Ctx, intake: &str, sender: &CommonMetadata) {
+fn batch_metadata(ctx: &Ctx, intake: &str, sender: &CommonMetadata) -> Vec<AgentBatchMetadata> {
     let empty = sender.agent_version.is_empty()
         && sender.timezone.is_empty()
         && sender.current_epoch == 0.0
         && sender.internal_ip.is_empty()
         && sender.public_ip.is_empty();
-    if !empty {
-        ctx.write(vec![AgentBatchMetadata {
-            tenant_id: ctx.tenant().into(),
-            received_at: Utc::now(),
-            intake: intake.into(),
-            agent_version: sender.agent_version.clone(),
-            timezone: sender.timezone.clone(),
-            current_epoch: sender.current_epoch,
-            internal_ip: sender.internal_ip.clone(),
-            public_ip: sender.public_ip.clone(),
-        }]);
+    if empty {
+        return Vec::new();
     }
+    vec![AgentBatchMetadata {
+        tenant_id: ctx.tenant().into(),
+        received_at: Utc::now(),
+        intake: intake.into(),
+        agent_version: sender.agent_version.clone(),
+        timezone: sender.timezone.clone(),
+        current_epoch: sender.current_epoch,
+        internal_ip: sender.internal_ip.clone(),
+        public_ip: sender.public_ip.clone(),
+    }]
 }
 
 /// /api/beta/sketches: DDSketch histograms the agent has already built. One row per dogsketch,
@@ -285,23 +301,26 @@ fn store_batch_metadata(ctx: &Ctx, intake: &str, sender: &CommonMetadata) {
 /// A sketch may also carry `distributions`, the pre-DDSketch encoding (raw values and ranks). The
 /// current agent never writes it and it cannot become a bucket row without inventing numbers, so
 /// such a sketch is kept raw, whole.
-pub async fn handle_sketches(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_sketches(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     if ctx.is_sweep() {
         return ack_series();
     }
     let decoded = parse_message::<SketchPayload>(body::is_json(ctx.header("content-type"), &body), &body);
     match decoded {
-        Err(error) => ctx.raw("sketches", "decode_error", &error, &body),
+        Err(error) => raw::store(&clickhouse, &ctx, "sketches", "decode_error", &error, &body).await,
         Ok(payload) => {
             let mut rows = Vec::new();
             for sketch in &payload.sketches {
                 if !sketch.distributions.is_empty() {
-                    ctx.raw(
+                    raw::store(
+                        &clickhouse,
+                        &ctx,
                         "sketches",
                         "no_schema",
                         &format!("legacy pre-DDSketch Distribution for {} has no row shape", sketch.metric),
                         json::proto::message(Some(sketch)).as_bytes(),
-                    );
+                    )
+                    .await;
                 }
                 let origin = sketch.metadata.as_ref().and_then(|m| m.origin).unwrap_or_default();
                 let tags = tags::to_multi_map(&sketch.tags);
@@ -326,8 +345,13 @@ pub async fn handle_sketches(ctx: Ctx, body: Body) -> Response {
                     });
                 }
             }
-            ctx.write(rows);
-            store_batch_metadata(&ctx, "sketches", &payload.metadata.unwrap_or_default());
+            if let Err(e) = storage::insert(&clickhouse, &rows).await {
+                return storage_failed(e);
+            }
+            let sender = batch_metadata(&ctx, "sketches", &payload.metadata.unwrap_or_default());
+            if let Err(e) = storage::insert(&clickhouse, &sender).await {
+                return storage_failed(e);
+            }
         }
     }
     ack_series()
@@ -355,23 +379,30 @@ pub fn distribution_point(items: &[DistributionItem]) -> Option<(DateTime<Utc>, 
 /// The raw values are not kept: a distribution exists to be merged with the agent's sketches,
 /// which arrive already bucketed. What does not fit is kept whole: a body with no series list, an
 /// element that is not a series, a pair that could not be split.
-pub async fn handle_distribution_points(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_distribution_points(
+    ctx: Ctx,
+    State(clickhouse): State<clickhouse::Client>,
+    body: Body,
+) -> Response {
     if ctx.is_sweep() {
         return ack_series();
     }
     match parse_distribution_points(&body) {
-        Err(error) => ctx.raw("distribution_points", "decode_error", &error, &body),
+        Err(error) => raw::store(&clickhouse, &ctx, "distribution_points", "decode_error", &error, &body).await,
         Ok(payload) => {
             if !payload.additional.is_empty() {
-                ctx.raw(
+                raw::store(
+                    &clickhouse,
+                    &ctx,
                     "distribution_points",
                     "unexpected_shape",
                     &format!("payload carried undeclared top-level keys: {}", key_list(&payload.additional)),
                     &body,
-                );
+                )
+                .await;
             }
             for (_, item, why) in &payload.rejected {
-                ctx.raw("distribution_points", "unexpected_shape", why, item.as_bytes());
+                raw::store(&clickhouse, &ctx, "distribution_points", "unexpected_shape", why, item.as_bytes()).await;
             }
 
             let mut rows = Vec::new();
@@ -379,12 +410,15 @@ pub async fn handle_distribution_points(ctx: Ctx, body: Body) -> Response {
                 if !series.kind.is_empty() && series.kind != "distribution" {
                     // Noted, and the points still become rows: a typo in that one word must not
                     // cost a host its distribution.
-                    ctx.raw(
+                    raw::store(
+                        &clickhouse,
+                        &ctx,
                         "distribution_points",
                         "unexpected_shape",
                         &format!("series[{at}].type: expected \"distribution\", got \"{}\"", series.kind),
                         series.raw.as_bytes(),
-                    );
+                    )
+                    .await;
                 }
                 let extra = extra_encoded(&[], &series.additional);
                 let tags = tags::to_multi_map(&series.tags);
@@ -411,16 +445,23 @@ pub async fn handle_distribution_points(ctx: Ctx, body: Body) -> Response {
                                 ..Default::default()
                             });
                         }
-                        _ => ctx.raw(
-                            "distribution_points",
-                            "unexpected_shape",
-                            &format!("series[{at}].points[{j}]: expected a [timestamp, [values]] pair"),
-                            point.raw.as_bytes(),
-                        ),
+                        _ => {
+                            raw::store(
+                                &clickhouse,
+                                &ctx,
+                                "distribution_points",
+                                "unexpected_shape",
+                                &format!("series[{at}].points[{j}]: expected a [timestamp, [values]] pair"),
+                                point.raw.as_bytes(),
+                            )
+                            .await
+                        }
                     }
                 }
             }
-            ctx.write(rows);
+            if let Err(e) = storage::insert(&clickhouse, &rows).await {
+                return storage_failed(e);
+            }
         }
     }
     ack_series()
@@ -432,17 +473,17 @@ pub async fn handle_distribution_points(ctx: Ctx, body: Body) -> Response {
 
 /// /api/v1/check_run. A check answers "is this thing working", not "how much of it is there";
 /// monitors of the "service is down" kind are built on these.
-pub async fn handle_check_run(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_check_run(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     if ctx.is_sweep() {
         return ack_series();
     }
     match parse_check_runs(&body) {
-        Err(error) => ctx.raw("check_run", "decode_error", &error, &body),
+        Err(error) => raw::store(&clickhouse, &ctx, "check_run", "decode_error", &error, &body).await,
         Ok(checks) => {
             for (_, item, why) in &checks.rejected {
-                ctx.raw("check_run", "unexpected_shape", why, item.as_bytes());
+                raw::store(&clickhouse, &ctx, "check_run", "unexpected_shape", why, item.as_bytes()).await;
             }
-            let rows = checks
+            let rows: Vec<_> = checks
                 .runs
                 .iter()
                 .map(|run| CheckRun {
@@ -456,7 +497,9 @@ pub async fn handle_check_run(ctx: Ctx, body: Body) -> Response {
                     extra: extra_encoded(&[], &run.additional),
                 })
                 .collect();
-            ctx.write(rows);
+            if let Err(e) = storage::insert(&clickhouse, &rows).await {
+                return storage_failed(e);
+            }
         }
     }
     ack_series()
@@ -488,13 +531,13 @@ fn new_event_id() -> (Uuid, u64) {
 
 /// POST /api/v1/events. Unlike every other endpoint this one MUST return a body: the client reads
 /// the reply into EventCreateResponse and keeps the id.
-pub async fn handle_events(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_events(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     if ctx.is_sweep() {
         return json(StatusCode::ACCEPTED, &json!({ "status": "ok" }));
     }
     let events = match parse_events(&body) {
         Err(error) => {
-            ctx.raw("events", "decode_error", &error, &body);
+            raw::store(&clickhouse, &ctx, "events", "decode_error", &error, &body).await;
             return json(StatusCode::BAD_REQUEST, &json!({ "status": "error", "error": error }));
         }
         Ok(events) if events.is_empty() => {
@@ -505,7 +548,7 @@ pub async fn handle_events(ctx: Ctx, body: Body) -> Response {
 
     // Every event gets an id; the reply carries the first one's.
     let ids: Vec<(Uuid, u64)> = events.iter().map(|_| new_event_id()).collect();
-    let rows = events
+    let rows: Vec<_> = events
         .iter()
         .zip(&ids)
         .map(|(event, (id, number))| Event {
@@ -529,7 +572,9 @@ pub async fn handle_events(ctx: Ctx, body: Body) -> Response {
             extra: extra_encoded(&[], &event.additional),
         })
         .collect();
-    ctx.write(rows);
+    if let Err(e) = storage::insert(&clickhouse, &rows).await {
+        return storage_failed(e);
+    }
 
     let first = &events[0];
     let first_id = ids[0].1;
@@ -640,20 +685,29 @@ fn events_by_source(events: &Value) -> Result<BTreeMap<String, Vec<Value>>, Stri
 
 /// The events variant: {"events": {<source>: [...]}, "internalHostname"}. The rows go to the same
 /// table as /api/v1/events.
-fn intake_events(ctx: &Ctx, envelope: &BTreeMap<String, Value>, sent: &Sent) {
+async fn intake_events(
+    clickhouse: &clickhouse::Client,
+    ctx: &Ctx,
+    envelope: &BTreeMap<String, Value>,
+    sent: &Sent<'_>,
+) -> Result<(), String> {
     let events = &envelope["events"];
     match events_by_source(events) {
-        Err(error) => ctx.raw("intake", "unexpected_shape", &error, sent_text(sent, "events").as_bytes()),
+        Err(error) => {
+            raw::store(clickhouse, ctx, "intake", "unexpected_shape", &error, sent_text(sent, "events").as_bytes())
+                .await;
+            Ok(())
+        }
         Ok(by_source) => {
             let host = json::lenient_string(envelope.get("internalHostname"));
             // By source in sorted order, so two replays of one payload give the same rows.
-            let rows = by_source
+            let rows: Vec<_> = by_source
                 .iter()
                 .flat_map(|(source, list)| {
                     list.iter().map(|event| intake_event_row(ctx.tenant(), source, &host, event))
                 })
                 .collect();
-            ctx.write(rows);
+            storage::insert(clickhouse, &rows).await
         }
     }
 }
@@ -691,29 +745,35 @@ pub fn agent_check_row(
 /// The agent_checks variant (the V5 collector's payload): check statuses as positional arrays,
 /// and external_host_tags, [[hostname, {source: [tags]}]]: tags for hosts the agent is NOT
 /// running on, which is why they get a table of their own.
-fn intake_agent_checks(ctx: &Ctx, envelope: &BTreeMap<String, Value>, sent: &Sent) {
+async fn intake_agent_checks(
+    clickhouse: &clickhouse::Client,
+    ctx: &Ctx,
+    envelope: &BTreeMap<String, Value>,
+    sent: &Sent<'_>,
+) -> Result<(), String> {
     let elements = |name: &str| sent.get(name).map(|t| json::raw::elements(t)).unwrap_or_default();
     let check_texts = elements("agent_checks");
     let tag_texts = elements("external_host_tags");
     let checks = json::lenient_items(envelope.get("agent_checks"));
-    let external_tags: Vec<Option<(String, Tags)>> = json::lenient_items(envelope.get("external_host_tags"))
-        .iter()
-        .enumerate()
-        .map(|(i, entry)| match entry.as_array() {
+    let mut external_tags: Vec<(String, Tags)> = Vec::new();
+    for (i, entry) in json::lenient_items(envelope.get("external_host_tags")).iter().enumerate() {
+        match entry.as_array() {
             Some(pair) if pair.len() == 2 => {
-                Some((json::lenient_string(Some(&pair[0])), json::lenient_string_lists(Some(&pair[1]))))
+                external_tags.push((json::lenient_string(Some(&pair[0])), json::lenient_string_lists(Some(&pair[1]))))
             }
             _ => {
-                ctx.raw(
+                raw::store(
+                    clickhouse,
+                    ctx,
                     "intake",
                     "unexpected_shape",
                     &format!("external_host_tags[{i}] is not a [hostname, tags] pair"),
                     tag_texts.get(i).copied().unwrap_or_default().as_bytes(),
-                );
-                None
+                )
+                .await
             }
-        })
-        .collect();
+        }
+    }
 
     let now = Utc::now();
     let host = json::lenient_string(envelope.get("internalHostname"));
@@ -726,21 +786,25 @@ fn intake_agent_checks(ctx: &Ctx, envelope: &BTreeMap<String, Value>, sent: &Sen
             Some(positional) => {
                 check_rows.push(agent_check_row(ctx.tenant(), now, &host, &version, &uuid, &meta, positional))
             }
-            None => ctx.raw(
-                "intake",
-                "unexpected_shape",
-                &format!("agent_checks[{i}] is not a positional array"),
-                check_texts.get(i).copied().unwrap_or_default().as_bytes(),
-            ),
+            None => {
+                raw::store(
+                    clickhouse,
+                    ctx,
+                    "intake",
+                    "unexpected_shape",
+                    &format!("agent_checks[{i}] is not a positional array"),
+                    check_texts.get(i).copied().unwrap_or_default().as_bytes(),
+                )
+                .await
+            }
         }
     }
-    ctx.write(check_rows);
+    storage::insert(clickhouse, &check_rows).await?;
 
     // One row per SOURCE: a host carries several at once, and flattening them would lose which
     // of them said what.
-    let tag_rows = external_tags
+    let tag_rows: Vec<_> = external_tags
         .into_iter()
-        .flatten()
         .flat_map(|(described_host, by_source)| {
             by_source.into_iter().map(move |(source, list)| ExternalHostTags {
                 tenant_id: ctx.tenant().into(),
@@ -751,7 +815,7 @@ fn intake_agent_checks(ctx: &Ctx, envelope: &BTreeMap<String, Value>, sent: &Sen
             })
         })
         .collect();
-    ctx.write(tag_rows);
+    storage::insert(clickhouse, &tag_rows).await
 }
 
 /// The envelope keys intake_host reads by name; the rest go to intake_extra. apiKey is in the list so
@@ -798,10 +862,15 @@ const GOHAI_KNOWN_SECTIONS: [&str; 4] = ["platform", "cpu", "memory", "filesyste
 ///   anything else                        intake_extra
 ///
 /// The payload is loose and shifts between agent versions, so fields are read by name.
-fn intake_host(ctx: &Ctx, envelope: &BTreeMap<String, Value>, envelope_text: &str) {
+async fn intake_host(
+    clickhouse: &clickhouse::Client,
+    ctx: &Ctx,
+    envelope: &BTreeMap<String, Value>,
+    envelope_text: &str,
+) -> Result<(), String> {
     let hostname = json::lenient_string(envelope.get("internalHostname"));
     if hostname.is_empty() {
-        return;
+        return Ok(());
     }
     // The text of gohai's own document, which the envelope carries as a string.
     let gohai_text = json::lenient_string(envelope.get("gohai"));
@@ -845,7 +914,7 @@ fn intake_host(ctx: &Ctx, envelope: &BTreeMap<String, Value>, envelope_text: &st
         intake_extra: extra_sent(&HOST_KNOWN_KEYS, envelope_text),
         resources: sent_text(&sent, "resources"),
     };
-    ctx.write(vec![row]);
+    storage::insert(clickhouse, &[row]).await
 }
 
 /// One row of a resources snapshot, as gohai writes it:
@@ -876,11 +945,16 @@ fn process_group(tenant: &str, host: &str, at: DateTime<Utc>, fields: &Value) ->
 /// {"meta":{"host":…},"processes":{"snaps":[[unix seconds, [row, …]], …]}}: the processes of the
 /// host grouped by name, sent with the host metadata. Whatever of it is not that shape keeps the
 /// body raw, once.
-fn intake_resources(ctx: &Ctx, body: &[u8], resources: &Value) {
+async fn intake_resources(
+    clickhouse: &clickhouse::Client,
+    ctx: &Ctx,
+    body: &[u8],
+    resources: &Value,
+) -> Result<(), String> {
     let host = json::at(&["meta", "host"], resources).and_then(json::string_of).unwrap_or_default();
     let Some(snaps) = json::at(&["processes", "snaps"], resources).and_then(Value::as_array) else {
-        ctx.raw("intake", "unexpected_shape", "resources without processes.snaps", body);
-        return;
+        raw::store(clickhouse, ctx, "intake", "unexpected_shape", "resources without processes.snaps", body).await;
+        return Ok(());
     };
     let mut rows = Vec::new();
     let mut unread = 0;
@@ -904,14 +978,17 @@ fn intake_resources(ctx: &Ctx, body: &[u8], resources: &Value) {
         }
     }
     if unread > 0 {
-        ctx.raw(
+        raw::store(
+            clickhouse,
+            ctx,
             "intake",
             "unexpected_shape",
             &format!("resources: {unread} snapshots or rows are not the resources check's shape"),
             body,
-        );
+        )
+        .await;
     }
-    ctx.write(rows);
+    storage::insert(clickhouse, &rows).await
 }
 
 /// Four producers share /intake/ and nothing but the path; they are told apart by their top-level
@@ -921,11 +998,23 @@ fn intake_resources(ctx: &Ctx, body: &[u8], resources: &Value) {
 ///   agent_checks           the V5 collector: check statuses, external host tags
 ///   gohai or systemStats   host metadata
 ///   resources alone        the resources check's process groups
-fn decode_intake(ctx: &Ctx, body: &[u8]) {
+async fn decode_intake(clickhouse: &clickhouse::Client, ctx: &Ctx, body: &[u8]) -> Result<(), String> {
     let root = match json::try_parse(body) {
-        Err(error) => return ctx.raw("intake", "decode_error", &error, body),
+        Err(error) => {
+            raw::store(clickhouse, ctx, "intake", "decode_error", &error, body).await;
+            return Ok(());
+        }
         Ok(root) if !root.is_object() && !root.is_null() => {
-            return ctx.raw("intake", "decode_error", &format!("expected an object, got {}", json::kind(&root)), body);
+            raw::store(
+                clickhouse,
+                ctx,
+                "intake",
+                "decode_error",
+                &format!("expected an object, got {}", json::kind(&root)),
+                body,
+            )
+            .await;
+            return Ok(());
         }
         Ok(root) => root,
     };
@@ -933,26 +1022,32 @@ fn decode_intake(ctx: &Ctx, body: &[u8]) {
     let text = json::raw::text(body);
     let sent = json::raw::members(&text);
     if envelope.contains_key("events") {
-        intake_events(ctx, &envelope, &sent);
+        intake_events(clickhouse, ctx, &envelope, &sent).await
     } else if envelope.contains_key("agent_checks") {
-        intake_agent_checks(ctx, &envelope, &sent);
+        intake_agent_checks(clickhouse, ctx, &envelope, &sent).await
     } else if envelope.contains_key("gohai") || envelope.contains_key("systemStats") {
-        intake_host(ctx, &envelope, &text);
+        intake_host(clickhouse, ctx, &envelope, &text).await
     } else if envelope.contains_key("resources") && envelope.len() == 1 {
-        intake_resources(ctx, body, &envelope["resources"]);
+        intake_resources(clickhouse, ctx, body, &envelope["resources"]).await
     } else {
-        ctx.raw(
+        raw::store(
+            clickhouse,
+            ctx,
             "intake",
             "unexpected_shape",
             &format!("no known /intake/ variant key, keys: {}", key_list(&envelope)),
             body,
-        );
+        )
+        .await;
+        Ok(())
     }
 }
 
-pub async fn handle_intake(ctx: Ctx, body: Body) -> Response {
-    if !ctx.is_sweep() {
-        decode_intake(&ctx, &body);
+pub async fn handle_intake(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
+    if !ctx.is_sweep()
+        && let Err(e) = decode_intake(&clickhouse, &ctx, &body).await
+    {
+        return storage_failed(e);
     }
     status_ok()
 }
@@ -980,16 +1075,23 @@ const METADATA_VARIANTS: [&str; 13] = [
 
 const METADATA_ENVELOPE_KEYS: [&str; 5] = ["hostname", "clustername", "cluster_id", "timestamp", "uuid"];
 
-fn store_metadata(ctx: &Ctx, body: &[u8]) {
+async fn store_metadata(clickhouse: &clickhouse::Client, ctx: &Ctx, body: &[u8]) -> Result<(), String> {
     let root = match json::try_parse(body) {
-        Err(error) => return ctx.raw("metadata", "decode_error", &error, body),
+        Err(error) => {
+            raw::store(clickhouse, ctx, "metadata", "decode_error", &error, body).await;
+            return Ok(());
+        }
         Ok(root) if !root.is_object() && !root.is_null() => {
-            return ctx.raw(
+            raw::store(
+                clickhouse,
+                ctx,
                 "metadata",
                 "decode_error",
                 &format!("expected an object, got {}", json::kind(&root)),
                 body,
-            );
+            )
+            .await;
+            return Ok(());
         }
         Ok(root) => root,
     };
@@ -997,12 +1099,16 @@ fn store_metadata(ctx: &Ctx, body: &[u8]) {
     let found: Vec<&str> = METADATA_VARIANTS.iter().copied().filter(|v| envelope.contains_key(*v)).collect();
     if found.is_empty() {
         // A producer we have never seen, or a variant key renamed between releases.
-        return ctx.raw(
+        raw::store(
+            clickhouse,
+            ctx,
             "metadata",
             "no_schema",
             &format!("no known /api/v1/metadata variant key, keys: {}", key_list(&envelope)),
             body,
-        );
+        )
+        .await;
+        return Ok(());
     }
     let timestamp = json::lenient_int64(json::field("timestamp", &root));
     let now = Utc::now();
@@ -1014,7 +1120,7 @@ fn store_metadata(ctx: &Ctx, body: &[u8]) {
     let extra = extra_sent(&skip, &text);
 
     // One row per variant key present: `variant` stays a real filter.
-    let rows = found
+    let rows: Vec<_> = found
         .iter()
         .map(|variant| AgentMetadata {
             tenant_id: ctx.tenant().into(),
@@ -1029,15 +1135,17 @@ fn store_metadata(ctx: &Ctx, body: &[u8]) {
             envelope_extra: extra.clone(),
         })
         .collect();
-    ctx.write(rows);
+    storage::insert(clickhouse, &rows).await
 }
 
 /// /api/v1/metadata: the inventory payloads. Each is an envelope of hostname, timestamp and uuid
 /// plus ONE variant key; the cluster-agent's carry clustername and cluster_id instead of hostname.
 /// None of the variants has a published type, so each is stored as its JSON under its key.
-pub async fn handle_metadata(ctx: Ctx, body: Body) -> Response {
-    if !ctx.is_sweep() {
-        store_metadata(&ctx, &body);
+pub async fn handle_metadata(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
+    if !ctx.is_sweep()
+        && let Err(e) = store_metadata(&clickhouse, &ctx, &body).await
+    {
+        return storage_failed(e);
     }
     status_ok()
 }
@@ -1073,18 +1181,21 @@ fn proof_fingerprint(proof: &str) -> String {
 /// api_key is an error on its side. The key that admitted the request is what it gets back,
 /// whether it came in the header or in the query. The proof IS the credential, so only its
 /// fingerprint is stored.
-pub async fn handle_intake_key(ctx: Ctx, _: Body) -> Response {
+pub async fn handle_intake_key(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, _: Body) -> Response {
     let authorization = ctx.header("authorization");
     let (scheme, proof) = authorization.split_once(' ').unwrap_or((authorization, ""));
     // The key the request was admitted with, as the authentication left it.
     if let Some(key_id) = ctx.key_id() {
-        ctx.write(vec![DelegatedAuth {
+        let row = DelegatedAuth {
             tenant_id: ctx.tenant().into(),
             at: Utc::now(),
             scheme: scheme.into(),
             proof_fingerprint: proof_fingerprint(proof),
             api_key_id: key_id.into(),
-        }]);
+        };
+        if let Err(e) = storage::insert(&clickhouse, &[row]).await {
+            return storage_failed(e);
+        }
     }
     let query_key = ctx.query("api_key");
     let admitted_with = text::first_non_empty(&[ctx.header("dd-api-key"), &query_key]);
@@ -1137,10 +1248,16 @@ fn try_json_api(body: &[u8]) -> Option<JsonApiResource> {
 
 /// The request's JSON:API resource. A body that is not one is kept raw, with `note`, and gives
 /// None.
-fn decode_json_api(ctx: &Ctx, body: &[u8], intake: &str, note: &str) -> Option<JsonApiResource> {
+async fn decode_json_api(
+    clickhouse: &clickhouse::Client,
+    ctx: &Ctx,
+    body: &[u8],
+    intake: &str,
+    note: &str,
+) -> Option<JsonApiResource> {
     let resource = try_json_api(body);
     if resource.is_none() {
-        ctx.raw(intake, "decode_error", note, body);
+        raw::store(clickhouse, ctx, intake, "decode_error", note, body).await;
     }
     resource
 }
@@ -1149,15 +1266,18 @@ fn decode_json_api(ctx: &Ctx, body: &[u8], intake: &str, note: &str) -> Option<J
 /// the build ids already held, and the uploader sends only what is missing; it reads the reply as
 /// a JSON:API array, so anything else stops all uploads. We hold nothing, so the array is empty.
 /// The question is kept: these build ids are the profiled binaries of the fleet.
-pub async fn handle_symbols_query(ctx: Ctx, body: Body) -> Response {
-    if let Some(resource) = decode_json_api(&ctx, &body, "symbols", "not a JSON:API document") {
-        ctx.write(vec![SymbolQuery {
+pub async fn handle_symbols_query(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
+    if let Some(resource) = decode_json_api(&clickhouse, &ctx, &body, "symbols", "not a JSON:API document").await {
+        let row = SymbolQuery {
             tenant_id: ctx.tenant().into(),
             at: Utc::now(),
             arch: resource.text("arch"),
             build_ids: json::lenient_strings(resource.attributes.get("buildIds")).unwrap_or_default(),
             resource: text::utf8(&body),
-        }]);
+        };
+        if let Err(e) = storage::insert(&clickhouse, &[row]).await {
+            return storage_failed(e);
+        }
     }
     json(StatusCode::OK, &json!({ "data": [] }))
 }
@@ -1183,14 +1303,15 @@ pub fn tenant_org_id(tenant: &str) -> i64 {
 /// splits it on ":" and signs every later request with the pair, so runner_id must not contain a
 /// colon. The status must be exactly 200 (anything else is retried forever) and the reply's type
 /// must be "createRunnerResponse".
-pub async fn handle_runner_enroll(ctx: Ctx, body: Body) -> Response {
-    let Some(resource) = decode_json_api(&ctx, &body, "par", "enroll: not a JSON:API document") else {
+pub async fn handle_runner_enroll(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
+    let Some(resource) = decode_json_api(&clickhouse, &ctx, &body, "par", "enroll: not a JSON:API document").await
+    else {
         return status(StatusCode::BAD_REQUEST);
     };
     let modes = json::lenient_strings(resource.attributes.get("runner_modes"));
     let runner_id = Uuid::new_v4().to_string();
     let org_id = tenant_org_id(ctx.tenant());
-    ctx.write(vec![RunnerEnrollment {
+    let row = RunnerEnrollment {
         tenant_id: ctx.tenant().into(),
         runner_id: runner_id.clone(),
         enrolled_at: Utc::now(),
@@ -1203,7 +1324,10 @@ pub async fn handle_runner_enroll(ctx: Ctx, body: Body) -> Response {
         agent_flavor: resource.text("agent_flavor"),
         org_id,
         attributes: column::json_object(&json::compact_object(&resource.attributes)),
-    }]);
+    };
+    if let Err(e) = storage::insert(&clickhouse, &[row]).await {
+        return storage_failed(e);
+    }
     let reply = json!({
         "data": {
             "type": "createRunnerResponse",
@@ -1225,18 +1349,21 @@ pub async fn handle_runner_enroll(ctx: Ctx, body: Body) -> Response {
 /// The runner's poll for work. An EMPTY 200 means "no task" and is the normal idle answer: a body
 /// would be parsed as a task, and any other status is an error on the runner's side. Every poll is
 /// also the only liveness signal a runner with no tasks produces.
-pub async fn handle_runner_dequeue(ctx: Ctx, body: Body) -> Response {
-    if let Some(resource) = decode_json_api(&ctx, &body, "par", "dequeue: not a JSON:API document") {
+pub async fn handle_runner_dequeue(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
+    if let Some(resource) = decode_json_api(&clickhouse, &ctx, &body, "par", "dequeue: not a JSON:API document").await {
         // Both timestamps stay strings: their format is undocumented and an unparseable value
         // must not become 1970.
-        ctx.write(vec![RunnerDequeue {
+        let row = RunnerDequeue {
             tenant_id: ctx.tenant().into(),
             at: Utc::now(),
             runner_started_at: resource.text("runner_started_at"),
             last_task_received_at: resource.text("last_task_received_at"),
             version: ctx.header("x-datadog-onprem-version").into(),
             modes: ctx.header("x-datadog-onprem-modes").into(),
-        }]);
+        };
+        if let Err(e) = storage::insert(&clickhouse, &[row]).await {
+            return storage_failed(e);
+        }
     }
     status(StatusCode::OK)
 }
@@ -1244,8 +1371,10 @@ pub async fn handle_runner_dequeue(ctx: Ctx, body: Body) -> Response {
 /// publish-task-update: the outcome of a task. The document id is "succeed_task" or "fail_task";
 /// `payload.outputs` is the action's own result, arbitrary JSON of any size. The runner accepts
 /// any status.
-pub async fn handle_runner_task_update(ctx: Ctx, body: Body) -> Response {
-    if let Some(resource) = decode_json_api(&ctx, &body, "par", "task-update: not a JSON:API document") {
+pub async fn handle_runner_task_update(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
+    if let Some(resource) =
+        decode_json_api(&clickhouse, &ctx, &body, "par", "task-update: not a JSON:API document").await
+    {
         let payload = json::lenient_members(resource.attributes.get("payload"));
         let payload_text = resource.sent("payload");
         // A numeric enum on the runner's side, and a succeeded task sends none: absent must not
@@ -1255,7 +1384,7 @@ pub async fn handle_runner_task_update(ctx: Ctx, body: Body) -> Response {
             Some(code) => json::int64_of(code),
             None => None,
         };
-        ctx.write(vec![RunnerTaskUpdate {
+        let row = RunnerTaskUpdate {
             tenant_id: ctx.tenant().into(),
             at: Utc::now(),
             outcome: resource.id.clone(),
@@ -1273,7 +1402,10 @@ pub async fn handle_runner_task_update(ctx: Ctx, body: Body) -> Response {
                 "payload.",
                 extra_sent(&["branch", "outputs", "error_code", "error_details", "api_error"], &payload_text),
             ),
-        }]);
+        };
+        if let Err(e) = storage::insert(&clickhouse, &[row]).await {
+            return storage_failed(e);
+        }
     }
     accepted()
 }
@@ -1281,16 +1413,20 @@ pub async fn handle_runner_task_update(ctx: Ctx, body: Body) -> Response {
 /// The per-task heartbeat. It must be answered with exactly 200: a 404 tells the runner the job is
 /// gone and it stops heartbeating. The rows answer "when did this job stop making progress": a job
 /// that hangs never sends a task update.
-pub async fn handle_runner_heartbeat(ctx: Ctx, body: Body) -> Response {
-    if let Some(resource) = decode_json_api(&ctx, &body, "par", "heartbeat: not a JSON:API document") {
-        ctx.write(vec![RunnerHeartbeat {
+pub async fn handle_runner_heartbeat(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
+    if let Some(resource) = decode_json_api(&clickhouse, &ctx, &body, "par", "heartbeat: not a JSON:API document").await
+    {
+        let row = RunnerHeartbeat {
             tenant_id: ctx.tenant().into(),
             at: Utc::now(),
             task_id: resource.text("task_id"),
             action_fqn: resource.text("action_fqn"),
             job_id: resource.text("job_id"),
             client: resource.sent("client"),
-        }]);
+        };
+        if let Err(e) = storage::insert(&clickhouse, &[row]).await {
+            return storage_failed(e);
+        }
     }
     json(StatusCode::OK, &json!({}))
 }
@@ -1307,12 +1443,14 @@ pub async fn handle_runner_health_check(_: Ctx, _: Body) -> Response {
 /// POST /api/v2/actions/connections: a connection a runner may use to reach a third-party system.
 /// SENSITIVE: `integration.credentials` holds secrets and is stored verbatim, because a connection
 /// without them cannot be used. It must never be logged.
-pub async fn handle_action_connections(ctx: Ctx, body: Body) -> Response {
-    if let Some(resource) = decode_json_api(&ctx, &body, "par", "connections: not a JSON:API document") {
+pub async fn handle_action_connections(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
+    if let Some(resource) =
+        decode_json_api(&clickhouse, &ctx, &body, "par", "connections: not a JSON:API document").await
+    {
         let integration = json::lenient_members(resource.attributes.get("integration"));
         let integration_text = resource.sent("integration");
         let connection_tags = json::lenient_strings(resource.attributes.get("tags")).unwrap_or_default();
-        ctx.write(vec![ActionConnection {
+        let row = ActionConnection {
             tenant_id: ctx.tenant().into(),
             at: Utc::now(),
             name: resource.text("name"),
@@ -1325,7 +1463,10 @@ pub async fn handle_action_connections(ctx: Ctx, body: Body) -> Response {
                 "integration.",
                 extra_sent(&["type", "credentials"], &integration_text),
             ),
-        }]);
+        };
+        if let Err(e) = storage::insert(&clickhouse, &[row]).await {
+            return storage_failed(e);
+        }
     }
     accepted()
 }

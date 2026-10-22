@@ -66,7 +66,7 @@ pub fn origin_note(ctx: &Ctx) -> String {
 ///   reason  "no_schema" | "decode_error" | "unexpected_shape"
 ///   note    the decoder's error, the field that was missing
 ///   body    what the handler tried to decode, already decompressed
-pub fn store(ctx: &Ctx, intake: &str, reason: &str, note: &str, body: &[u8]) {
+pub async fn store(clickhouse: &clickhouse::Client, ctx: &Ctx, intake: &str, reason: &str, note: &str, body: &[u8]) {
     let path = path_without_key(ctx.path());
     if ctx.tenant().is_empty() {
         tracing::warn!("[raw] {intake} {path}: no tenant, payload dropped ({} B)", body.len());
@@ -113,7 +113,10 @@ pub fn store(ctx: &Ctx, intake: &str, reason: &str, note: &str, body: &[u8]) {
         body_bytes: body.len() as u64,
         note: note.into(),
     };
-    ctx.intake.sink.write(vec![row]);
+    if let Err(e) = ninjapaws_storage::insert(clickhouse, &[row]).await {
+        tracing::warn!("[raw] {intake} {path}: {reason}: {note} ({} B), not kept: {e}", body.len());
+        return;
+    }
 
     // The one line about a kept payload; handlers do not log it again. An intake with no schema
     // keeps everything it gets, which is its ordinary work and not worth a warning each time.

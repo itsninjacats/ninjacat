@@ -9,6 +9,7 @@
 //! as "no_schema".
 
 use http::{HeaderValue, StatusCode};
+use tako::extractors::state::State;
 use tako::types::Response;
 
 use crate::raw;
@@ -63,17 +64,17 @@ pub async fn handle_btf(_: Ctx, _: Body) -> Response {
 /// The Rust ai_prompt_logger posts through the local evp_proxy, which adds the API key; it only
 /// checks for a 2xx. The producer is not in datadog-agent and publishes no schema, so the body is
 /// kept as it arrived.
-pub async fn handle_ai_usage(ctx: Ctx, body: Body) -> Response {
-    ctx.raw("aiusage", "no_schema", &raw::origin_note(&ctx), &body);
+pub async fn handle_ai_usage(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
+    raw::store(&clickhouse, &ctx, "aiusage", "no_schema", &raw::origin_note(&ctx), &body).await;
     accepted()
 }
 
 /// The agent never sends LLM Observability data here; the only caller is the connectivity
 /// diagnose, which posts no body and wants a 2xx.
-pub async fn handle_llm_obs(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_llm_obs(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     if !body.is_empty() && !ctx.is_sweep() {
         let note = format!("unexpected payload — the agent only probes this host; {}", raw::origin_note(&ctx));
-        ctx.raw("llmobs", "no_schema", &note, &body);
+        raw::store(&clickhouse, &ctx, "llmobs", "no_schema", &note, &body).await;
     }
     accepted()
 }

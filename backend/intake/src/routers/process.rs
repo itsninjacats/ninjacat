@@ -32,10 +32,12 @@ use ninjapaws_proto::datadog::process_agent::{
     ProcessStat, ProcessState, ProtocolType, ResCollector, ServiceNameSource, SystemInfo, collector_proc,
     res_collector,
 };
+use ninjapaws_storage as storage;
 use ninjapaws_storage::column::Blob;
 use ninjapaws_storage::rows::process as rows;
-use ninjapaws_storage::rows::usm::ConnectionKey;
+use ninjapaws_storage::rows::usm::{ConnectionDatabaseStat, ConnectionHttpStat, ConnectionKafkaStat, ConnectionKey};
 use tako::body::TakoBody;
+use tako::extractors::state::State;
 use tako::types::Response;
 use uuid::Uuid;
 
@@ -43,7 +45,8 @@ use super::process_buffers::{dns_buffer, tag_buffer};
 use super::usm;
 use crate::json;
 use crate::process_frame::{self, Body, Frame};
-use crate::server::{self, Ctx};
+use crate::raw;
+use crate::server::{self, Ctx, storage_failed};
 use crate::wire::{enum_name, tags, text, time};
 
 /// The agent omits every sub-message it could not read. An empty one in its place leaves the
@@ -905,11 +908,11 @@ fn reply() -> Response {
 
 /// The frame of a request. One that cannot be read is kept whole: it is exactly the payload that
 /// would explain why, and it arrives once.
-fn decode(body: &[u8], ctx: &Ctx, label: &str) -> Option<Frame> {
+async fn decode(clickhouse: &clickhouse::Client, body: &[u8], ctx: &Ctx, label: &str) -> Option<Frame> {
     match process_frame::decode(body) {
         Ok(frame) => Some(frame),
         Err(error) => {
-            ctx.raw("process", "decode_error", &format!("{label}: {error}"), body);
+            raw::store(clickhouse, ctx, "process", "decode_error", &format!("{label}: {error}"), body).await;
             None
         }
     }
@@ -917,49 +920,73 @@ fn decode(body: &[u8], ctx: &Ctx, label: &str) -> Option<Frame> {
 
 /// The frame's type byte decides the body, not the path, so the two can disagree: a
 /// misconfigured agent, or a type not met before.
-fn unexpected(body: &[u8], ctx: &Ctx, label: &str, frame: &Frame) {
+async fn unexpected(clickhouse: &clickhouse::Client, body: &[u8], ctx: &Ctx, label: &str, frame: &Frame) {
     let note = format!("/api/v1/{label} decoded to {} (frame type {})", frame.body.name(), frame.header.message_type);
-    ctx.raw("process", "unexpected_shape", &note, body);
+    raw::store(clickhouse, ctx, "process", "unexpected_shape", &note, body).await;
 }
 
 /// The process check. One path, two message types: 12 (CollectorProc, the full snapshot every
 /// 10 s) and 27 (CollectorRealTime, stats only, every 2 s).
-pub async fn handle_collector(ctx: Ctx, body: server::Body) -> Response {
-    if let Some(frame) = decode(&body, &ctx, "collector") {
-        let info = frame_info(&body, &ctx);
-        match &frame.body {
-            Body::Proc(proc) => {
-                ctx.write(vec![snapshot_row(&info, &frame)]);
-                ctx.write(proc.processes.iter().map(|p| process_row(&info, proc, p)).collect());
-                ctx.write(proc_container_rows(&info, proc));
+pub async fn handle_collector(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: server::Body) -> Response {
+    let Some(frame) = decode(&clickhouse, &body, &ctx, "collector").await else {
+        return reply();
+    };
+    let info = frame_info(&body, &ctx);
+    match &frame.body {
+        Body::Proc(proc) => {
+            let processes: Vec<_> = proc.processes.iter().map(|p| process_row(&info, proc, p)).collect();
+            if let Err(e) = storage::insert(&clickhouse, &[snapshot_row(&info, &frame)]).await {
+                return storage_failed(e);
             }
-            Body::RealTime(real_time) => {
-                ctx.write(vec![snapshot_row(&info, &frame)]);
-                ctx.write(real_time.stats.iter().map(|s| process_stat_row(&info, real_time, s)).collect());
-                ctx.write(real_time_container_stat_rows(&info, real_time));
+            if let Err(e) = storage::insert(&clickhouse, &processes).await {
+                return storage_failed(e);
             }
-            _ => unexpected(&body, &ctx, "collector", &frame),
+            if let Err(e) = storage::insert(&clickhouse, &proc_container_rows(&info, proc)).await {
+                return storage_failed(e);
+            }
         }
+        Body::RealTime(real_time) => {
+            let stats: Vec<_> = real_time.stats.iter().map(|s| process_stat_row(&info, real_time, s)).collect();
+            if let Err(e) = storage::insert(&clickhouse, &[snapshot_row(&info, &frame)]).await {
+                return storage_failed(e);
+            }
+            if let Err(e) = storage::insert(&clickhouse, &stats).await {
+                return storage_failed(e);
+            }
+            if let Err(e) = storage::insert(&clickhouse, &real_time_container_stat_rows(&info, real_time)).await {
+                return storage_failed(e);
+            }
+        }
+        _ => unexpected(&clickhouse, &body, &ctx, "collector", &frame).await,
     }
     reply()
 }
 
 /// The container check. One path, two message types: 39 (CollectorContainer, the full inventory
 /// every 10 s) and 40 (CollectorContainerRealTime, stats only, every 2 s).
-pub async fn handle_container(ctx: Ctx, body: server::Body) -> Response {
-    if let Some(frame) = decode(&body, &ctx, "container") {
-        let info = frame_info(&body, &ctx);
-        match &frame.body {
-            Body::Container(inventory) => {
-                ctx.write(vec![snapshot_row(&info, &frame)]);
-                ctx.write(inventory_container_rows(&info, inventory));
+pub async fn handle_container(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: server::Body) -> Response {
+    let Some(frame) = decode(&clickhouse, &body, &ctx, "container").await else {
+        return reply();
+    };
+    let info = frame_info(&body, &ctx);
+    match &frame.body {
+        Body::Container(inventory) => {
+            if let Err(e) = storage::insert(&clickhouse, &[snapshot_row(&info, &frame)]).await {
+                return storage_failed(e);
             }
-            Body::ContainerRealTime(real_time) => {
-                ctx.write(vec![snapshot_row(&info, &frame)]);
-                ctx.write(container_real_time_stat_rows(&info, real_time));
+            if let Err(e) = storage::insert(&clickhouse, &inventory_container_rows(&info, inventory)).await {
+                return storage_failed(e);
             }
-            _ => unexpected(&body, &ctx, "container", &frame),
         }
+        Body::ContainerRealTime(real_time) => {
+            if let Err(e) = storage::insert(&clickhouse, &[snapshot_row(&info, &frame)]).await {
+                return storage_failed(e);
+            }
+            if let Err(e) = storage::insert(&clickhouse, &container_real_time_stat_rows(&info, real_time)).await {
+                return storage_failed(e);
+            }
+        }
+        _ => unexpected(&clickhouse, &body, &ctx, "container", &frame).await,
     }
     reply()
 }
@@ -967,7 +994,10 @@ pub async fn handle_container(ctx: Ctx, body: server::Body) -> Response {
 /// What system-probe saw inside each connection, per HTTP endpoint, Kafka topic and database
 /// operation. A message that does not parse is logged and gives no rows; its bytes are on the
 /// connection's own row.
-fn store_usm(ctx: &Ctx, info: &FrameInfo, conns: &CollectorConnections) {
+fn usm_rows(
+    info: &FrameInfo,
+    conns: &CollectorConnections,
+) -> (Vec<ConnectionHttpStat>, Vec<ConnectionKafkaStat>, Vec<ConnectionDatabaseStat>) {
     let mut http = Vec::new();
     let mut kafka = Vec::new();
     let mut database = Vec::new();
@@ -998,65 +1028,75 @@ fn store_usm(ctx: &Ctx, info: &FrameInfo, conns: &CollectorConnections) {
         take(&mut kafka, usm::kafka(&key, &c.data_streams_aggregations));
         take(&mut database, usm::database(&key, &c.database_aggregations));
     }
-
-    ctx.write(http);
-    ctx.write(kafka);
-    ctx.write(database);
+    (http, kafka, database)
 }
 
 /// The network check (type 22): the system-probe's connection table, with DNS, routes and eBPF
 /// telemetry. The payload row goes first, then one row per connection.
-pub async fn handle_connections(ctx: Ctx, body: server::Body) -> Response {
-    if let Some(frame) = decode(&body, &ctx, "connections") {
-        match &frame.body {
-            Body::Connections(conns) => {
-                let info = frame_info(&body, &ctx);
-                let dns_names =
-                    dns_buffer::names(&conns.encoded_dns, &conns.encoded_domain_database).unwrap_or_else(|error| {
-                        // The buffers are stored either way.
-                        tracing::warn!("[connections] DNS names not read: {error}");
-                        Vec::new()
-                    });
+pub async fn handle_connections(
+    ctx: Ctx,
+    State(clickhouse): State<clickhouse::Client>,
+    body: server::Body,
+) -> Response {
+    let Some(frame) = decode(&clickhouse, &body, &ctx, "connections").await else {
+        return reply();
+    };
+    let Body::Connections(conns) = &frame.body else {
+        unexpected(&clickhouse, &body, &ctx, "connections", &frame).await;
+        return reply();
+    };
+    let info = frame_info(&body, &ctx);
+    let dns_names = dns_buffer::names(&conns.encoded_dns, &conns.encoded_domain_database).unwrap_or_else(|error| {
+        // The buffers are stored either way.
+        tracing::warn!("[connections] DNS names not read: {error}");
+        Vec::new()
+    });
+    let payload = connections_payload_row(&info, conns, dns_names);
+    let connections: Vec<_> = conns
+        .connections
+        .iter()
+        .map(|c| connection_row(&info, &conns.host_name, &conns.encoded_tags, &conns.encoded_connections_tags, c))
+        .collect();
+    let (http, kafka, database) = usm_rows(&info, conns);
 
-                ctx.write(vec![snapshot_row(&info, &frame)]);
-                ctx.write(vec![connections_payload_row(&info, conns, dns_names)]);
-                ctx.write(
-                    conns
-                        .connections
-                        .iter()
-                        .map(|c| {
-                            connection_row(
-                                &info,
-                                &conns.host_name,
-                                &conns.encoded_tags,
-                                &conns.encoded_connections_tags,
-                                c,
-                            )
-                        })
-                        .collect(),
-                );
-                store_usm(&ctx, &info, conns);
-            }
-            _ => unexpected(&body, &ctx, "connections", &frame),
-        }
+    if let Err(e) = storage::insert(&clickhouse, &[snapshot_row(&info, &frame)]).await {
+        return storage_failed(e);
+    }
+    if let Err(e) = storage::insert(&clickhouse, &[payload]).await {
+        return storage_failed(e);
+    }
+    if let Err(e) = storage::insert(&clickhouse, &connections).await {
+        return storage_failed(e);
+    }
+    if let Err(e) = storage::insert(&clickhouse, &http).await {
+        return storage_failed(e);
+    }
+    if let Err(e) = storage::insert(&clickhouse, &kafka).await {
+        return storage_failed(e);
+    }
+    if let Err(e) = storage::insert(&clickhouse, &database).await {
+        return storage_failed(e);
     }
     reply()
 }
 
 /// The lightweight process discovery check (type 53): pid, command and user only, no resource
 /// usage.
-pub async fn handle_discovery(ctx: Ctx, body: server::Body) -> Response {
-    if let Some(frame) = decode(&body, &ctx, "discovery") {
-        match &frame.body {
-            Body::ProcDiscovery(discoveries) => {
-                let info = frame_info(&body, &ctx);
-                ctx.write(vec![snapshot_row(&info, &frame)]);
-                ctx.write(
-                    discoveries.process_discoveries.iter().map(|d| discovery_row(&info, discoveries, d)).collect(),
-                );
-            }
-            _ => unexpected(&body, &ctx, "discovery", &frame),
-        }
+pub async fn handle_discovery(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: server::Body) -> Response {
+    let Some(frame) = decode(&clickhouse, &body, &ctx, "discovery").await else {
+        return reply();
+    };
+    let Body::ProcDiscovery(discoveries) = &frame.body else {
+        unexpected(&clickhouse, &body, &ctx, "discovery", &frame).await;
+        return reply();
+    };
+    let info = frame_info(&body, &ctx);
+    let rows: Vec<_> = discoveries.process_discoveries.iter().map(|d| discovery_row(&info, discoveries, d)).collect();
+    if let Err(e) = storage::insert(&clickhouse, &[snapshot_row(&info, &frame)]).await {
+        return storage_failed(e);
+    }
+    if let Err(e) = storage::insert(&clickhouse, &rows).await {
+        return storage_failed(e);
     }
     reply()
 }

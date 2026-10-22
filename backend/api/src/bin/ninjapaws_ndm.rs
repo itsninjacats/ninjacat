@@ -2,6 +2,7 @@
 //! Network Device Monitoring.
 
 use ninjapaws_intake::auth;
+use ninjapaws_intake::keys;
 use ninjapaws_intake::routers::{flare, ndm};
 use ninjapaws_intake::server;
 use tako::router::Router;
@@ -9,7 +10,10 @@ use tako::types::BoxError;
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
-    let intake = server::start().await?;
+    server::init_tracing();
+    let clickhouse = ninjapaws_storage::client_from_env();
+    let keys = keys::start(&server::var_or("DATABASE_URL", "")).await?;
+    let settings = server::Settings::from_env();
 
     let mut router = Router::new();
     router.post("/api/v2/ndm", ndm::handle_metadata).middleware(auth::agent);
@@ -33,7 +37,9 @@ async fn main() -> Result<(), BoxError> {
     router.middleware(server::log_405);
     router.fallback(server::not_found);
 
-    // What the handlers write to and read from.
-    router.with_state(intake.clone());
-    server::serve("ninjapaws_ndm", router, intake).await
+    // What the handlers and the middleware read.
+    router.with_state(clickhouse);
+    router.with_state(keys);
+    router.with_state(settings);
+    server::serve("ninjapaws_ndm", router).await
 }

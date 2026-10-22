@@ -17,11 +17,14 @@
 //! missing, and a walk that runs off the end of a value column all go to raw_payloads.
 
 use ninjapaws_proto::datadoghq::api::metrics::v3::{MetricFlags, MetricType, Payload, ValueType};
+use ninjapaws_storage as storage;
 use ninjapaws_storage::rows::metrics::{MetricPoint, SketchRow};
 use prost::Message;
+use tako::extractors::state::State;
 use tako::types::Response;
 
-use crate::server::{Body, Ctx, accepted};
+use crate::raw;
+use crate::server::{Body, Ctx, accepted, storage_failed};
 use crate::wire::{metric_type_name, tags, time, varint};
 
 /// The two ways a column can be wrong. Notes in raw_payloads quote them.
@@ -594,10 +597,10 @@ pub fn decode(tenant: &str, payload: &Payload) -> Decoded {
 }
 
 /// `label` names the route in raw_payloads and in the log.
-pub async fn handle(label: &str, ctx: Ctx, body: Body) -> Response {
+pub async fn handle(label: &str, ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     let payload = match Payload::decode(&body[..]) {
         Err(message) => {
-            ctx.raw(label, "decode_error", &message.to_string(), &body);
+            raw::store(&clickhouse, &ctx, label, "decode_error", &message.to_string(), &body).await;
             return accepted();
         }
         Ok(payload) => payload,
@@ -613,34 +616,44 @@ pub async fn handle(label: &str, ctx: Ctx, body: Body) -> Response {
             "[{label}] decoded to zero series ({} bytes): wrong payload type or still compressed?",
             body.len()
         );
-        ctx.raw(
+        raw::store(
+            &clickhouse,
+            &ctx,
             label,
             "unexpected_shape",
             &format!("protobuf decoded but MetricData carries no series; metadata tags={tags} resources={resources}"),
             &body,
-        );
+        )
+        .await;
         return accepted();
     }
 
     let decoded = decode(ctx.tenant(), &payload);
-    ctx.write(decoded.points);
-    ctx.write(decoded.sketches);
+    if let Err(e) = storage::insert(&clickhouse, &decoded.points).await {
+        return storage_failed(e);
+    }
+    if let Err(e) = storage::insert(&clickhouse, &decoded.sketches).await {
+        return storage_failed(e);
+    }
 
     // The rows above are what the walk could read; the two notes below keep what it could not. A
     // payload that decodes cleanly is never mirrored into raw_payloads.
     if let Some(problem) = &decoded.problem {
-        ctx.raw(label, "unexpected_shape", problem, &body);
+        raw::store(&clickhouse, &ctx, label, "unexpected_shape", problem, &body).await;
     }
     if decoded.wide_ints > 0 {
         // The row is still written (a rounded value beats no value) and the payload is kept, so
         // the exact integer stays recoverable.
         tracing::warn!("[{label}] {} sint64 values beyond 2^53: stored rounded, payload kept raw", decoded.wide_ints);
-        ctx.raw(
+        raw::store(
+            &clickhouse,
+            &ctx,
             label,
             "int64_precision",
             &format!("{} sint64 values beyond 2^53 widened to Float64", decoded.wide_ints),
             &body,
-        );
+        )
+        .await;
     }
     accepted()
 }

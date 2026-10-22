@@ -16,16 +16,19 @@ use std::io::Read;
 
 use bytes::Bytes;
 use chrono::{DateTime, TimeDelta, Utc};
+use ninjapaws_storage as storage;
 use ninjapaws_storage::column::Blob;
 use ninjapaws_storage::rows::Tags;
 use ninjapaws_storage::rows::profiling::{DebuggerDiagnostic, DebuggerLog, Profile, SymbolUpload, SymdbUpload};
 use serde_json::Value;
+use tako::extractors::state::State;
 use tako::types::Response;
 
 use super::pprof::{self, Summary};
 use crate::body;
 use crate::json;
-use crate::server::{Body, Ctx, accepted};
+use crate::raw;
+use crate::server::{Body, Ctx, accepted, storage_failed};
 use crate::wire::{tags, text, time};
 
 /// An epoch number as a time. Producers send seconds, milliseconds, microseconds or nanoseconds;
@@ -165,11 +168,16 @@ fn decode_object(what: &str, data: &[u8]) -> Option<Value> {
 }
 
 /// POST of a profile; `label` names the path it came by and is stored as the row's variant.
-pub async fn handle_profile(label: &'static str, ctx: Ctx, body: Body) -> Response {
+pub async fn handle_profile(
+    label: &'static str,
+    ctx: Ctx,
+    State(clickhouse): State<clickhouse::Client>,
+    body: Body,
+) -> Response {
     match read_parts(&ctx, &body, label).await {
         Err(problem) => {
             let note = format!("not multipart, content-type {}: {problem}", or_unknown(ctx.header("content-type")));
-            ctx.raw("profiling", "decode_error", &note, &body);
+            raw::store(&clickhouse, &ctx, "profiling", "decode_error", &note, &body).await;
         }
         Ok(parts) => {
             // The event part carries the submission: which attachments follow, the interval they
@@ -184,15 +192,22 @@ pub async fn handle_profile(label: &'static str, ctx: Ctx, body: Body) -> Respon
                     None => tracing::debug!("[{label}] {name} is not pprof ({} B)", data.len()),
                 }
             }
-            ctx.write(vec![profile_row(
-                ctx.tenant(),
-                label,
-                ctx.header("dd-evp-origin"),
-                ctx.header("dd-evp-origin-version"),
-                &parts,
-                event.as_ref(),
-                &profiles,
-            )]);
+            if let Err(e) = storage::insert(
+                &clickhouse,
+                &[profile_row(
+                    ctx.tenant(),
+                    label,
+                    ctx.header("dd-evp-origin"),
+                    ctx.header("dd-evp-origin-version"),
+                    &parts,
+                    event.as_ref(),
+                    &profiles,
+                )],
+            )
+            .await
+            {
+                return storage_failed(e);
+            }
         }
     }
     accepted()
@@ -339,10 +354,10 @@ pub fn symdb_upload_row(
     }
 }
 
-fn store_logs(ctx: &Ctx, ddtags: &str, entries: Vec<&[u8]>) {
+fn log_rows(ctx: &Ctx, ddtags: &str, entries: Vec<&[u8]>) -> Vec<DebuggerLog> {
     let tags = tags::to_multi_map(tags::split_ddtags(ddtags));
     let arrival = Utc::now();
-    let rows = entries
+    entries
         .into_iter()
         .map(|entry| {
             // Best effort: an entry that is not an object keeps its bytes and has no columns.
@@ -357,14 +372,13 @@ fn store_logs(ctx: &Ctx, ddtags: &str, entries: Vec<&[u8]>) {
                 extra_keys: extra_keys(decoded.as_ref()),
             }
         })
-        .collect();
-    ctx.write(rows);
+        .collect()
 }
 
-fn store_diagnostics(ctx: &Ctx, ddtags: &str, messages: Vec<&[u8]>) {
+fn diagnostic_rows(ctx: &Ctx, ddtags: &str, messages: Vec<&[u8]>) -> Vec<DebuggerDiagnostic> {
     let tags = tags::to_multi_map(tags::split_ddtags(ddtags));
     let arrival = Utc::now();
-    let rows = messages
+    messages
         .into_iter()
         .enumerate()
         .map(|(i, message)| {
@@ -374,8 +388,7 @@ fn store_diagnostics(ctx: &Ctx, ddtags: &str, messages: Vec<&[u8]>) {
             }
             diagnostic_row(ctx.tenant(), arrival, &tags, message, decoded.as_ref())
         })
-        .collect();
-    ctx.write(rows);
+        .collect()
 }
 
 /// POST /api/v2/debugger: one path, three producers, told apart by Content-Type and part names.
@@ -385,7 +398,7 @@ fn store_diagnostics(ctx: &Ctx, ddtags: &str, messages: Vec<&[u8]>) {
 ///   multipart: file+event  symbol database: gzip JSON, then its metadata
 ///
 /// Each variant has a table of its own.
-pub async fn handle_debugger(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_debugger(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     let content_type = ctx.header("content-type");
     let ddtags = ctx.query("ddtags");
 
@@ -394,9 +407,13 @@ pub async fn handle_debugger(ctx: Ctx, body: Body) -> Response {
             None => {
                 let note =
                     format!("logs variant: not a JSON array or NDJSON, content-type {}", or_unknown(content_type));
-                ctx.raw("debugger", "decode_error", &note, &body);
+                raw::store(&clickhouse, &ctx, "debugger", "decode_error", &note, &body).await;
             }
-            Some(entries) => store_logs(&ctx, &ddtags, entries),
+            Some(entries) => {
+                if let Err(e) = storage::insert(&clickhouse, &log_rows(&ctx, &ddtags, entries)).await {
+                    return storage_failed(e);
+                }
+            }
         }
         return accepted();
     }
@@ -404,7 +421,7 @@ pub async fn handle_debugger(ctx: Ctx, body: Body) -> Response {
         Ok(parts) => parts,
         Err(problem) => {
             let note = format!("multipart, content-type {}: {problem}", or_unknown(content_type));
-            ctx.raw("debugger", "decode_error", &note, &body);
+            raw::store(&clickhouse, &ctx, "debugger", "decode_error", &note, &body).await;
             return accepted();
         }
     };
@@ -415,17 +432,38 @@ pub async fn handle_debugger(ctx: Ctx, body: Body) -> Response {
             if symdb.envelope.is_none() {
                 tracing::warn!("[debugger] symdb file is not a gzip-compressed JSON object ({} B)", file.len());
             }
-            ctx.write(vec![symdb_upload_row(ctx.tenant(), event, file, &ddtags, decoded.as_ref(), &symdb)]);
+            if let Err(e) = storage::insert(
+                &clickhouse,
+                &[symdb_upload_row(ctx.tenant(), event, file, &ddtags, decoded.as_ref(), &symdb)],
+            )
+            .await
+            {
+                return storage_failed(e);
+            }
         }
         (None, Some(event)) => match json::try_parse_element_bytes(event) {
             // Not an array at all, unlike an empty batch: `[]` stores nothing and is not an error.
-            Err(_) => ctx.raw("debugger", "decode_error", "diagnostics variant: event part is not a JSON array", &body),
-            Ok(messages) => store_diagnostics(&ctx, &ddtags, messages),
+            Err(_) => {
+                raw::store(
+                    &clickhouse,
+                    &ctx,
+                    "debugger",
+                    "decode_error",
+                    "diagnostics variant: event part is not a JSON array",
+                    &body,
+                )
+                .await
+            }
+            Ok(messages) => {
+                if let Err(e) = storage::insert(&clickhouse, &diagnostic_rows(&ctx, &ddtags, messages)).await {
+                    return storage_failed(e);
+                }
+            }
         },
         _ => {
             let names = parts.keys().map(String::as_str).collect::<Vec<_>>().join(",");
             let note = format!("multipart with neither file nor event parts: {names}");
-            ctx.raw("debugger", "unexpected_shape", &note, &body);
+            raw::store(&clickhouse, &ctx, "debugger", "unexpected_shape", &note, &body).await;
         }
     }
     accepted()
@@ -486,15 +524,19 @@ pub fn symbol_upload_row(tenant: &str, parts: &BTreeMap<String, Bytes>, meta: Op
 /// POST /api/v2/srcmap: an ELF symbol file (elf_symbol_file) and its metadata (event), usually
 /// zstd-compressed as a whole. The agent sends it only after /api/v2/profiles/symbols/query said
 /// the symbols are missing.
-pub async fn handle_sourcemap(ctx: Ctx, body: Body) -> Response {
+pub async fn handle_sourcemap(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     match read_parts(&ctx, &body, "srcmap").await {
         Err(problem) => {
             let note = format!("multipart, content-type {}: {problem}", or_unknown(ctx.header("content-type")));
-            ctx.raw("srcmap", "decode_error", &note, &body);
+            raw::store(&clickhouse, &ctx, "srcmap", "decode_error", &note, &body).await;
         }
         Ok(parts) => {
             let meta = parts.get("event").and_then(|data| decode_object("srcmap event", data));
-            ctx.write(vec![symbol_upload_row(ctx.tenant(), &parts, meta.as_ref())]);
+            if let Err(e) =
+                storage::insert(&clickhouse, &[symbol_upload_row(ctx.tenant(), &parts, meta.as_ref())]).await
+            {
+                return storage_failed(e);
+            }
         }
     }
     accepted()
