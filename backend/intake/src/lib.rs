@@ -16,7 +16,6 @@ pub mod msgpack;
 pub mod process_frame;
 pub mod raw;
 pub mod routers;
-pub mod self_metrics;
 pub mod server;
 pub mod tcp_logs;
 pub mod wire;

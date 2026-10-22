@@ -16,10 +16,10 @@ use ninjapaws_proto::datadog::contlcycle::{
 };
 use ninjapaws_storage::rows::Tags;
 use ninjapaws_storage::rows::containers::{ContainerEvent as ContainerEventRow, ContainerImage as ContainerImageRow};
+use ninjapaws_storage::rows::metrics::MetricPoint;
 use prost::Message;
 use tako::types::Response;
 
-use crate::self_metrics;
 use crate::server::{Body, Ctx, accepted};
 use crate::wire::{enum_name, tags, text, time};
 
@@ -310,7 +310,13 @@ pub async fn handle_images(ctx: Ctx, body: Body) -> Response {
                 // The metric is what makes an incomplete inventory noticeable without going
                 // looking for a log line.
                 let reason = Tags::from([("reason".to_string(), vec!["no_identity".to_string()])]);
-                self_metrics::count(&ctx, &payload.host, self_metrics::IMAGES_SKIPPED, skipped as f64, reason);
+                ctx.write(vec![MetricPoint {
+                    host: payload.host.clone(),
+                    metric_type: "COUNT".into(),
+                    source_type: "ninjacat".into(),
+                    tags: reason,
+                    ..MetricPoint::new(ctx.tenant(), Utc::now(), "ninjacat.intake.images.skipped", skipped as f64)
+                }]);
             }
             ctx.write(rows);
         }
