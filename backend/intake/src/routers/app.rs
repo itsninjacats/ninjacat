@@ -16,29 +16,13 @@
 //! A body that does not decode, a payload with no series, a per-series column that is short or
 //! missing, and a walk that runs off the end of a value column all go to raw_payloads.
 
-use bytes::Bytes;
 use ninjapaws_proto::datadoghq::api::metrics::v3::{MetricFlags, MetricType, Payload, ValueType};
 use ninjapaws_storage::rows::metrics::{MetricPoint, SketchRow};
 use prost::Message;
 use tako::types::Response;
 
-use super::api;
-use crate::server::{Ctx, Routes, accepted};
+use crate::server::{Body, Ctx, accepted};
 use crate::wire::{metric_type_name, tags, time, varint};
-
-/// app.<site>, <version>-app.agent.<site>
-pub fn mount(routes: &mut Routes) {
-    api::metrics_and_checks(routes);
-    metrics_v3(routes);
-}
-
-/// Metrics v3, on app.<site> only.
-pub fn metrics_v3(routes: &mut Routes) {
-    routes.post("/api/intake/metrics/v3/series", |ctx, body| handle("v3series", ctx, body));
-    routes.post("/api/intake/metrics/v3/sketches", |ctx, body| handle("v3sketches", ctx, body));
-    // A shadow copy of the v2 traffic on /api/beta/sketches.
-    routes.post("/api/intake/metrics/v3beta/sketches", |ctx, body| handle("v3beta", ctx, body));
-}
 
 /// The two ways a column can be wrong. Notes in raw_payloads quote them.
 pub const TRUNCATED: &str = "column ends mid-element";
@@ -610,7 +594,7 @@ pub fn decode(tenant: &str, payload: &Payload) -> Decoded {
 }
 
 /// `label` names the route in raw_payloads and in the log.
-pub async fn handle(label: &str, ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle(label: &str, ctx: Ctx, body: Body) -> Response {
     let payload = match Payload::decode(&body[..]) {
         Err(message) => {
             ctx.raw(label, "decode_error", &message.to_string(), &body);

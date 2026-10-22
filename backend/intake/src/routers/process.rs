@@ -22,7 +22,6 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
-use bytes::Bytes;
 use chrono::{DateTime, TimeZone, Utc};
 use http::{HeaderValue, StatusCode};
 use ninjapaws_proto::datadog::process_agent::{
@@ -44,15 +43,8 @@ use super::process_buffers::{dns_buffer, tag_buffer};
 use super::usm;
 use crate::json;
 use crate::process_frame::{self, Body, Frame};
-use crate::server::{Ctx, Routes};
+use crate::server::{self, Ctx};
 use crate::wire::{enum_name, tags, text, time};
-
-pub fn mount(routes: &mut Routes) {
-    routes.post("/api/v1/collector", handle_collector);
-    routes.post("/api/v1/container", handle_container);
-    routes.post("/api/v1/connections", handle_connections);
-    routes.post("/api/v1/discovery", handle_discovery);
-}
 
 /// The agent omits every sub-message it could not read. An empty one in its place leaves the
 /// columns it feeds at zero.
@@ -701,7 +693,9 @@ pub fn discovery_row(
 /// open-ended map newer ones send, so both eras read the same way. Empty when the agent sent
 /// none, not eleven zeros.
 pub fn conn_telemetry(telemetry: Option<&CollectorConnectionsTelemetry>) -> BTreeMap<String, i64> {
-    let Some(t) = telemetry else { return BTreeMap::new() };
+    let Some(t) = telemetry else {
+        return BTreeMap::new();
+    };
     [
         ("kprobes_triggered", t.kprobes_triggered),
         ("kprobes_missed", t.kprobes_missed),
@@ -935,7 +929,7 @@ fn unexpected(body: &[u8], ctx: &Ctx, label: &str, frame: &Frame) {
 
 /// The process check. One path, two message types: 12 (CollectorProc, the full snapshot every
 /// 10 s) and 27 (CollectorRealTime, stats only, every 2 s).
-pub async fn handle_collector(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_collector(ctx: Ctx, body: server::Body) -> Response {
     if let Some(frame) = decode(&body, &ctx, "collector") {
         let info = frame_info(&body, &ctx);
         match &frame.body {
@@ -957,7 +951,7 @@ pub async fn handle_collector(ctx: Ctx, body: Bytes) -> Response {
 
 /// The container check. One path, two message types: 39 (CollectorContainer, the full inventory
 /// every 10 s) and 40 (CollectorContainerRealTime, stats only, every 2 s).
-pub async fn handle_container(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_container(ctx: Ctx, body: server::Body) -> Response {
     if let Some(frame) = decode(&body, &ctx, "container") {
         let info = frame_info(&body, &ctx);
         match &frame.body {
@@ -1017,7 +1011,7 @@ fn store_usm(ctx: &Ctx, info: &FrameInfo, conns: &CollectorConnections) {
 
 /// The network check (type 22): the system-probe's connection table, with DNS, routes and eBPF
 /// telemetry. The payload row goes first, then one row per connection.
-pub async fn handle_connections(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_connections(ctx: Ctx, body: server::Body) -> Response {
     if let Some(frame) = decode(&body, &ctx, "connections") {
         match &frame.body {
             Body::Connections(conns) => {
@@ -1056,7 +1050,7 @@ pub async fn handle_connections(ctx: Ctx, body: Bytes) -> Response {
 
 /// The lightweight process discovery check (type 53): pid, command and user only, no resource
 /// usage.
-pub async fn handle_discovery(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_discovery(ctx: Ctx, body: server::Body) -> Response {
     if let Some(frame) = decode(&body, &ctx, "discovery") {
         match &frame.body {
             Body::ProcDiscovery(discoveries) => {

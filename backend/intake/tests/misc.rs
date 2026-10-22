@@ -1,24 +1,32 @@
 //! The telemetry and resources hosts through their routers, beyond the golden fixtures: what an
 //! envelope's keys and headers become, and the note of a kept payload.
 
+mod programs;
+
 use std::sync::Arc;
 
-use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::keys::{self, Key, Store};
-use ninjapaws_intake::routers::misc;
-use ninjapaws_intake::server::{Intake, Routes, router};
+use ninjapaws_intake::server::Intake;
 use ninjapaws_storage::{Sink, Write};
 use serde_json::Value;
+use tako::router::Router;
 
 const KEY: &str = "00000000000000000000000000000001";
 
 /// Posts a body with the test key to the host `mount` serves; returns the status and the writes.
-async fn post(mount: fn(&mut Routes), path: &str, headers: &[(&str, &str)], body: &str) -> (u16, Vec<Write>) {
+async fn post(mount: fn(&mut Router), path: &str, headers: &[(&str, &str)], body: &str) -> (u16, Vec<Write>) {
     let store = Store::default();
     store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: "test".into() })]);
     let (sink, capture) = Sink::capture();
-    let intake = Intake { sink, keys: Arc::new(store), ack_unknown: false, max_body_bytes: 1 << 20 };
-    let router = router(intake, Some(Scheme::Agent), mount);
+    let intake = Intake {
+        sink,
+        keys: Arc::new(store),
+        ack_unknown: false,
+        max_body_bytes: 1 << 20,
+        stopping: Default::default(),
+        tasks: Default::default(),
+    };
+    let router = programs::router_of(mount, intake);
     let mut request = http::Request::builder().method("POST").uri(path).header("dd-api-key", KEY);
     for (name, value) in headers {
         request = request.header(*name, *value);
@@ -33,7 +41,7 @@ fn rows(writes: &[Write], table: &str) -> Vec<Value> {
 }
 
 async fn telemetry(body: &str) -> Vec<Value> {
-    let (status, writes) = post(misc::telemetry, "/api/v2/apmtelemetry", &[], body).await;
+    let (status, writes) = post(programs::telemetry, "/api/v2/apmtelemetry", &[], body).await;
     assert_eq!(status, 202);
     rows(&writes, "apm_telemetry")
 }
@@ -59,7 +67,7 @@ async fn the_producer_is_named_from_request_type_then_from_the_keys_only_one_pro
 #[tokio::test]
 async fn the_proxys_headers_are_stored_and_a_malformed_application_block_lands_in_extra() {
     let (_, writes) = post(
-        misc::telemetry,
+        programs::telemetry,
         "/api/v2/apmtelemetry",
         &[
             ("Via", "trace-agent 7.60.0"),
@@ -135,7 +143,7 @@ async fn a_null_body_is_an_empty_envelope_and_still_a_row() {
 
 #[tokio::test]
 async fn a_body_that_is_json_but_not_an_object_goes_to_raw_payloads() {
-    let (_, writes) = post(misc::telemetry, "/api/v2/apmtelemetry", &[], "[1,2,3]").await;
+    let (_, writes) = post(programs::telemetry, "/api/v2/apmtelemetry", &[], "[1,2,3]").await;
     assert!(rows(&writes, "apm_telemetry").is_empty());
     let raw = rows(&writes, "raw_payloads");
     assert_eq!(raw.len(), 1);
@@ -147,7 +155,7 @@ async fn a_body_that_is_json_but_not_an_object_goes_to_raw_payloads() {
 #[tokio::test]
 async fn genresources_quotes_the_origin_headers_in_the_note() {
     let (status, writes) = post(
-        misc::resources,
+        programs::resources,
         "/api/v2/genresources",
         &[("DD-EVP-ORIGIN", "a\"b\\c"), ("Content-Type", "application/x-protobuf")],
         "opaque",

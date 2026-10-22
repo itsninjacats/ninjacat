@@ -9,7 +9,6 @@
 
 use std::collections::BTreeMap;
 
-use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use ninjapaws_storage::rows::dbm::DbmEvent;
 use serde_json::Value;
@@ -18,20 +17,8 @@ use tako::types::Response;
 use crate::fields::{Mismatches, fields};
 use crate::json;
 use crate::raw;
-use crate::server::{Ctx, Routes, accepted};
+use crate::server::{Body, Ctx, accepted};
 use crate::wire::{tags, time};
-
-/// dbm-metrics-intake.<site>
-pub fn mount(routes: &mut Routes) {
-    routes.post("/api/v2/dbmmetrics", |ctx, body| handle("dbmmetrics", ctx, body)); // query and lock metrics
-    routes.post("/api/v2/dbmactivity", |ctx, body| handle("dbmactivity", ctx, body)); // active sessions
-    routes.post("/api/v2/databasequery", |ctx, body| handle("databasequery", ctx, body)); // query samples and plans
-    routes.post("/api/v2/dbmmetadata", |ctx, body| handle("dbmmetadata", ctx, body)); // instances and schemas
-    // No producer of these two is in the agent's source: only the envelope can be claimed about
-    // them.
-    routes.post("/api/v2/dbmhealth", |ctx, body| handle("dbmhealth", ctx, body));
-    routes.post("/api/v2/dbmcolumnstatistics", |ctx, body| handle("dbmcolumnstatistics", ctx, body));
-}
 
 /// The part of an event that every track shares. The wire is not consistent across tracks, and
 /// the envelope absorbs that:
@@ -278,7 +265,7 @@ pub fn to_row(tenant: &str, track: &str, received_at: DateTime<Utc>, event: &str
 }
 
 /// Stores one track's batch. `track` is the route's name, and what the rows say they arrived on.
-pub async fn handle(track: &'static str, ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle(track: &'static str, ctx: Ctx, body: Body) -> Response {
     // The agent's start-up probe: a row of it would be an event with nothing in it.
     if raw::is_probe(&body) {
         return accepted();

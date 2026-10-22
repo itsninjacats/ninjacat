@@ -14,7 +14,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use base64::Engine;
-use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use ninjapaws_proto::datadog::process_agent::*;
 use ninjapaws_storage::column::Blob;
@@ -26,19 +25,8 @@ use tako::types::Response;
 use crate::fields::{self, Fields, Mismatches};
 use crate::json;
 use crate::process_frame::{self, Body, Header};
-use crate::server::{Ctx, Routes, accepted};
+use crate::server::{self, Ctx, accepted};
 use crate::wire::{enum_name, tags, text, time, version_spread};
-
-pub fn mount(routes: &mut Routes) {
-    // Kubernetes resource collections; /api/v1/orchestrator is the same under
-    // orchestrator_explorer.use_legacy_endpoint.
-    routes.post("/api/v2/orch", |ctx, body| handle_frame("orch", ctx, body));
-    // Raw manifests (types 80-82): the object's own YAML or JSON, "exactly what kubectl would
-    // show". Same frame, same decoder.
-    routes.post("/api/v2/orchmanif", |ctx, body| handle_frame("orchmanif", ctx, body));
-    routes.post("/api/v1/orchestrator", |ctx, body| handle_frame("orch", ctx, body));
-    routes.post("/api/v2/kubeactions", handle_actions);
-}
 
 /// The frame header as the four columns every orchestrator row carries.
 #[derive(Clone, Debug, PartialEq)]
@@ -79,7 +67,9 @@ fn seconds(value: i64) -> Option<DateTime<Utc>> {
 
 /// major.minor.patch, with the prerelease tag when set.
 fn agent_version_text(version: Option<&AgentVersion>) -> String {
-    let Some(version) = version else { return String::new() };
+    let Some(version) = version else {
+        return String::new();
+    };
     let numbers = format!("{}.{}.{}", version.major, version.minor, version.patch);
     if version.pre.is_empty() { numbers } else { format!("{numbers}-{}", version.pre) }
 }
@@ -1166,7 +1156,9 @@ pub fn manifest_rows(
     collector: Option<CollectorManifest>,
     wrapper_tags: &[String],
 ) -> Vec<K8sManifest> {
-    let Some(mut collector) = collector else { return Vec::new() };
+    let Some(mut collector) = collector else {
+        return Vec::new();
+    };
     // Without the manifest list: the list is the rows.
     let manifests = std::mem::take(&mut collector.manifests);
     let envelope = json::proto::message(Some(&collector));
@@ -1224,7 +1216,9 @@ pub fn cluster_rows(
     frame: &FrameColumns,
     collector: &CollectorCluster,
 ) -> Vec<K8sCluster> {
-    let Some(cluster) = &collector.cluster else { return Vec::new() };
+    let Some(cluster) = &collector.cluster else {
+        return Vec::new();
+    };
     let nodes = &cluster.nodes_info;
     let versions = |spread: &HashMap<String, i32>| version_spread(spread.iter().map(|(v, n)| (v.clone(), *n)));
 
@@ -1337,7 +1331,7 @@ pub fn ecs_task_rows(
 
 // ---- the orchestrator handlers ----
 
-async fn handle_frame(label: &str, ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_frame(label: &str, ctx: Ctx, body: server::Body) -> Response {
     let tenant = ctx.tenant();
     match process_frame::decode(&body) {
         Err(e) => ctx.raw("orchestrator", "decode_error", &format!("{label}: {e}"), &body),
@@ -1519,7 +1513,7 @@ pub fn action_row(tenant: &str, arrival: DateTime<Utc>, event: ActionEvent) -> K
 /// The cluster agent's reports on the actions it ran: the other half of remote configuration. One
 /// event when an action is received, one when it is executed. Event platform track
 /// "kubeactions": a JSON array of events.
-pub async fn handle_actions(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_actions(ctx: Ctx, body: server::Body) -> Response {
     match json::try_parse_array(&body) {
         Err(e) => ctx.raw("kubeactions", "decode_error", &e, &body),
         Ok(items) => {

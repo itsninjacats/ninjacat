@@ -17,7 +17,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::net::{IpAddr, Ipv6Addr};
 use std::sync::LazyLock;
 
-use bytes::Bytes;
 use ninjapaws_storage::rows::ndm::{
     DeviceStatus, NdmDevice, NdmDeviceConfig, NdmInterface, NdmIpAddress, NdmMetadataObject, NetflowFlow, NetworkPath,
     SnmpTrap,
@@ -28,17 +27,8 @@ use tako::types::Response;
 
 use crate::fields::{Fields, Mismatches, fields};
 use crate::json;
-use crate::server::{Ctx, Routes, accepted};
+use crate::server::{Body, Ctx, accepted};
 use crate::wire::{tags, text, time};
-
-/// ndm-intake.<site>, snmp-traps-intake.<site>, ndmflow-intake.<site>, netpath-intake.<site>
-pub fn mount(routes: &mut Routes) {
-    routes.post("/api/v2/ndm", handle_metadata);
-    routes.post("/api/v2/ndmconfig", handle_config);
-    routes.post("/api/v2/ndmtraps", handle_traps);
-    routes.post("/api/v2/ndmflow", handle_flow);
-    routes.post("/api/v2/netpath", handle_netpath);
-}
 
 /// The value of the first `key:value` tag in a comma-joined ddtags, or "".
 fn tag_value(ddtags: &str, key: &str) -> String {
@@ -224,7 +214,7 @@ pub fn metadata_rows(tenant: &str, entry: &str) -> Result<MetadataRows, String> 
     }
 }
 
-pub async fn handle_metadata(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_metadata(ctx: Ctx, body: Body) -> Response {
     match json::try_parse_list(&body) {
         Err(e) => ctx.raw("ndm", "decode_error", &e, &body),
         Ok(_) => {
@@ -293,7 +283,7 @@ pub fn config_rows(tenant: &str, entry: &str) -> Result<Vec<NdmDeviceConfig>, St
     }
 }
 
-pub async fn handle_config(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_config(ctx: Ctx, body: Body) -> Response {
     match json::try_parse_list(&body) {
         Err(e) => ctx.raw("ndmconfig", "decode_error", &e, &body),
         Ok(_) => {
@@ -369,7 +359,7 @@ pub fn trap_row(tenant: &str, trap: &str) -> Result<SnmpTrap, String> {
     }
 }
 
-pub async fn handle_traps(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_traps(ctx: Ctx, body: Body) -> Response {
     match json::try_parse_list(&body) {
         Err(e) => ctx.raw("ndmtraps", "decode_error", &e, &body),
         Ok(batch) => {
@@ -497,7 +487,7 @@ pub fn decode_flows(tenant: &str, body: &[u8]) -> Result<Vec<NetflowFlow>, Strin
     }
 }
 
-pub async fn handle_flow(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_flow(ctx: Ctx, body: Body) -> Response {
     match decode_flows(ctx.tenant(), &body) {
         Err(e) => ctx.raw("ndmflow", "decode_error", &e, &body),
         Ok(rows) => ctx.write(rows),
@@ -664,7 +654,7 @@ pub fn decode_paths(tenant: &str, body: &[u8]) -> Result<Vec<NetworkPath>, Strin
     }
 }
 
-pub async fn handle_netpath(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_netpath(ctx: Ctx, body: Body) -> Response {
     match decode_paths(ctx.tenant(), &body) {
         Err(e) => ctx.raw("netpath", "decode_error", &e, &body),
         Ok(rows) => ctx.write(rows),

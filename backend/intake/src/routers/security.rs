@@ -19,7 +19,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::LazyLock;
 
-use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use ninjapaws_proto::cyclonedx::v1_4::{
     Classification, Component, HashAlg, ImpactAnalysisJustification, ImpactAnalysisState, LicenseChoice, Property,
@@ -45,34 +44,8 @@ use uuid::Uuid;
 
 use crate::body;
 use crate::json;
-use crate::server::{Ctx, Routes, accepted};
+use crate::server::{Body, Ctx, accepted};
 use crate::wire::{enum_name, tags, text, time};
-
-/// cws-intake.<site>
-pub fn mount_cws(routes: &mut Routes) {
-    routes.post("/api/v2/secdump", handle_sec_dump);
-}
-
-/// runtime-security-http-intake.logs.<site>
-pub fn mount_runtime_security(routes: &mut Routes) {
-    routes.post("/api/v2/secruntime", |ctx, body| handle_track("secruntime", ctx, body));
-    routes.post("/api/v2/secinfo", |ctx, body| handle_track("secinfo", ctx, body));
-}
-
-/// cspm-intake.<site>
-pub fn mount_cspm(routes: &mut Routes) {
-    routes.post("/api/v2/compliance", |ctx, body| handle_track("compliance", ctx, body));
-}
-
-/// sbom-intake.<site>
-pub fn mount_sbom(routes: &mut Routes) {
-    routes.post("/api/v2/sbom", handle_sbom);
-}
-
-/// sds-intake.<site>
-pub fn mount_sds(routes: &mut Routes) {
-    routes.post("/api/v2/sdsresult", handle_sds_result);
-}
 
 /// Header keys with a column of their own; the rest go to header_extra.
 static KNOWN_HEADER_KEYS: LazyLock<BTreeSet<&str>> =
@@ -236,7 +209,7 @@ fn walk(
 ///
 /// The parts are decoded independently: a broken "event" does not lose the "dump", and the other
 /// way round.
-pub async fn handle_sec_dump(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_sec_dump(ctx: Ctx, body: Body) -> Response {
     let Some(boundary) = body::boundary(ctx.header("content-type")) else {
         ctx.raw("secdump", "decode_error", "content-type is not multipart/form-data", &body);
         return accepted();
@@ -365,7 +338,7 @@ pub fn event_rows(tenant: &str, received_at: DateTime<Utc>, track: &str, envelop
 
 /// A logs-pipeline batch: a JSON array of envelopes. One handler serves three tracks; the rows
 /// share a table and carry the track.
-pub async fn handle_track(track: &'static str, ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_track(track: &'static str, ctx: Ctx, body: Body) -> Response {
     match decode_envelopes(&body) {
         Err(problem) => {
             ctx.raw(track, "unexpected_shape", &format!("the body is not a list of envelopes: {problem}"), &body)
@@ -558,7 +531,7 @@ pub fn sbom_rows(
 }
 
 /// POST /api/v2/sbom: one SBOMPayload per request, protobuf.
-pub async fn handle_sbom(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_sbom(ctx: Ctx, body: Body) -> Response {
     match SbomPayload::decode(&body[..]) {
         Err(problem) => ctx.raw("sbom", "decode_error", &problem.to_string(), &body),
         // Protobuf reads almost any bytes as some message.
@@ -627,7 +600,9 @@ fn sds_rules(payload: &SdsResultPayload) -> String {
 /// differently; everything else of it stays in the JSON.
 fn sds_location(location: Option<&Location>) -> SdsLocation {
     let none = SdsLocation::default();
-    let Some(location) = location else { return none };
+    let Some(location) = location else {
+        return none;
+    };
     match &location.scan_location {
         Some(ScanLocation::PostgresTable(table)) => SdsLocation {
             kind: "postgres_table".into(),
@@ -884,7 +859,7 @@ fn sds_is_blank(payload: &SdsResultPayload) -> bool {
 /// A protobuf parser fails open: bytes meant for another endpoint decode into a message with
 /// nothing in it. A payload that names no resource and has no result is therefore kept raw, its
 /// wire layout in the note, instead of becoming an empty scan.
-pub async fn handle_sds_result(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_sds_result(ctx: Ctx, body: Body) -> Response {
     let layout = || match wire_layout(&body).as_deref() {
         None => "protobuf did not parse as a sequence of top-level fields".to_string(),
         Some("") => "no fields (empty or wrong payload type?)".to_string(),

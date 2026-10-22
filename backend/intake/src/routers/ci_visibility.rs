@@ -17,7 +17,6 @@
 //! rest.
 
 use std::collections::{BTreeMap, HashMap};
-use std::future::{Ready, ready};
 
 use base64::Engine;
 use bytes::Bytes;
@@ -38,47 +37,8 @@ use crate::body;
 use crate::fields::{self, Mismatches};
 use crate::json;
 use crate::msgpack::{self, MsgValue};
-use crate::server::{Ctx, Routes, accepted, json, status};
+use crate::server::{Body, Ctx, accepted, json, status};
 use crate::wire::text;
-
-/// citestcycle-intake.<site>: tracers in CI.
-pub fn mount_test_cycle(routes: &mut Routes) {
-    routes.post("/api/v2/citestcycle", handle_test_cycle);
-}
-
-/// citestcov-intake.<site>: tracers in CI.
-pub fn mount_test_coverage(routes: &mut Routes) {
-    routes.post("/api/v2/citestcov", handle_test_cov);
-}
-
-/// The CI Visibility endpoints on api.<site>, which app.<site> deliberately does not carry. A
-/// tracer never calls the four after `setting` while every flag in the settings answer is false;
-/// they exist because a tracer configured by hand must not get a 404 in the middle of a test run.
-pub fn mount_api(routes: &mut Routes) {
-    routes.post("/api/v2/libraries/tests/services/setting", config("settings", settings_answer));
-    routes.post("/api/v2/ci/tests/skippable", config("skippable", skippable_answer));
-    routes.post("/api/v2/ci/libraries/tests", config("known_tests", test_list_answer));
-    routes.post("/api/v2/ci/libraries/tests/flaky", config("flaky_tests", test_list_answer));
-    routes.post("/api/v2/test/libraries/test-management/tests", config("test_management", test_management_answer));
-    routes.post("/api/v2/git/repository/search_commits", handle_search_commits);
-    routes.post("/api/v2/git/repository/packfile", handle_packfile);
-    routes.post("/api/v2/ci/pipeline/tags", pipeline_event("tag"));
-    routes.post("/api/v2/ci/pipeline/metrics", pipeline_event("measure"));
-    routes.post("/api/intake/ci/custom_spans", pipeline_event("custom_span"));
-}
-
-/// A handler that answers one configuration endpoint with `answer`.
-fn config(
-    endpoint: &'static str,
-    answer: fn(&ConfigRequest) -> String,
-) -> impl Fn(Ctx, Bytes) -> Ready<Response> + Clone + Send + Sync + 'static {
-    move |ctx, body| ready(answer_config(endpoint, answer, &ctx, &body))
-}
-
-/// A handler that stores a datadog-ci call as `kind`.
-fn pipeline_event(kind: &'static str) -> impl Fn(Ctx, Bytes) -> Ready<Response> + Clone + Send + Sync + 'static {
-    move |ctx, body| ready(handle_pipeline_event(kind, &ctx, &body))
-}
 
 /// A decoded payload value. A test-cycle payload arrives as msgpack or as JSON, and both become
 /// this, so the row builders are written once.
@@ -593,7 +553,9 @@ fn store_test_cycle(ctx: &Ctx, body: &[u8]) {
             return ctx.raw("citestcycle", "decode_error", &note, body);
         }
         Ok(envelope @ Value::Object(_)) => envelope,
-        Ok(_) => return ctx.raw("citestcycle", "unexpected_shape", &format!("payload is not a {format} map"), body),
+        Ok(_) => {
+            return ctx.raw("citestcycle", "unexpected_shape", &format!("payload is not a {format} map"), body);
+        }
     };
     let events = envelope.field("events").items();
     if events.is_empty() {
@@ -631,7 +593,7 @@ fn store_test_cycle(ctx: &Ctx, body: &[u8]) {
 /// The tracer's transport treats any status below 400 as success and never retries, so a payload
 /// refused here is simply gone. A body that does not decode is therefore answered 202 and kept
 /// raw.
-pub async fn handle_test_cycle(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_test_cycle(ctx: Ctx, body: Body) -> Response {
     if !body.is_empty() {
         store_test_cycle(&ctx, &body);
     }
@@ -684,7 +646,9 @@ fn header<E: rmp::decode::RmpReadErr>(
     wanted: &str,
 ) -> Result<usize, String> {
     let count = read.map_err(|e| match e {
-        ValueReadError::TypeMismatch(marker) => format!("expected {wanted}, got the marker {marker:?}"),
+        ValueReadError::TypeMismatch(marker) => {
+            format!("expected {wanted}, got the marker {marker:?}")
+        }
         _ => msgpack::TRUNCATED.to_string(),
     })?;
     if count > i32::MAX as u32 {
@@ -836,9 +800,9 @@ async fn store_coverage(ctx: &Ctx, body: Bytes) {
 ///
 ///   {"version": 2, "coverages": [{"test_session_id", "test_suite_id",
 ///     "span_id", "files": [{"filename", "bitmap"}]}]}
-pub async fn handle_test_cov(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_test_cov(ctx: Ctx, body: Body) -> Response {
     if !body.is_empty() {
-        store_coverage(&ctx, body).await;
+        store_coverage(&ctx, body.0).await;
     }
     accepted()
 }
@@ -1019,7 +983,7 @@ fn commits_answer(repository: &str) -> Response {
 ///
 /// The answer is JSON even for a request that does not decode: the client retries a 200 of any
 /// other content type, and a 4xx is terminal.
-pub async fn handle_search_commits(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_search_commits(ctx: Ctx, body: Body) -> Response {
     match read_search_commits(&body) {
         Err(e) => {
             ctx.raw("gitmeta", "decode_error", &format!("search_commits: {e}"), &body);
@@ -1057,7 +1021,9 @@ struct PushedSha {
 }
 
 fn read_pushed_sha(data: &[u8]) -> PushedSha {
-    let Ok(root) = json::try_parse(data) else { return PushedSha { sha: None, repository: None, decoded: false } };
+    let Ok(root) = json::try_parse(data) else {
+        return PushedSha { sha: None, repository: None, decoded: false };
+    };
     let bad = Mismatches::default();
     let document = fields::fields(&bad, "", &root);
     let commit = document.object("data");
@@ -1072,7 +1038,7 @@ fn read_pushed_sha(data: &[u8]) -> PushedSha {
 ///
 /// The answer is 204 with no body: dd-trace-go accepts any 2xx, dd-trace-py checks for exactly
 /// 204, so 204 is the one status both call success.
-pub async fn handle_packfile(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_packfile(ctx: Ctx, body: Body) -> Response {
     let content_type = ctx.header("content-type");
     let parts = match body::try_parts(content_type, body.clone()).await {
         Ok(parts) => parts,
@@ -1147,7 +1113,9 @@ const PIPELINE_KNOWN_KEYS: [&str; 9] =
 fn store_pipeline_event(kind: &str, ctx: &Ctx, body: &[u8]) {
     let root = match json::try_parse(body) {
         Ok(root) => root,
-        Err(e) => return ctx.raw("cipipeline", "decode_error", &format!("{kind} envelope: {e}"), body),
+        Err(e) => {
+            return ctx.raw("cipipeline", "decode_error", &format!("{kind} envelope: {e}"), body);
+        }
     };
     let problems = Mismatches::default();
     let data = fields::fields(&problems, "", &root).object("data");

@@ -416,9 +416,7 @@ mod tests {
     /// Bytes system-probe 7.84.0 really put inside connections between lab containers: the agent
     /// posting to the intake, psql against Postgres, redis-cli against Redis.
     fn recorded(name: &str) -> Vec<u8> {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/real")
-            .join(name);
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real").join(name);
         std::fs::read(path).unwrap()
     }
 

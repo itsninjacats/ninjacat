@@ -18,7 +18,6 @@
 
 use std::collections::BTreeMap;
 
-use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use http::StatusCode;
 use ninjapaws_storage::rows::ci::CiWebhookEvent;
@@ -27,20 +26,8 @@ use tako::types::Response;
 
 use super::ci_visibility::{Value, raw_root};
 use crate::json;
-use crate::server::{Ctx, Routes, accepted, json};
+use crate::server::{Body, Ctx, accepted, json};
 use crate::wire::{tags, text, time};
-
-/// webhook-intake.<site>: CI providers' webhooks. The path is taken with or without the slash the
-/// Jenkins plugin's URL ends in.
-pub fn mount(routes: &mut Routes) {
-    routes.post("/api/v2/webhook", handle);
-    routes.post("/api/v2/webhook/", handle);
-}
-
-/// intake.synthetics.<site>: the poller the agent READS its test list from.
-pub fn mount_synthetics_poller(routes: &mut Routes) {
-    routes.get("/api/unstable/synthetics/agents/tests", handle_synthetics_agent_tests);
-}
 
 /// Request headers kept on a webhook row. An allowlist, never a blocklist, so a table kept for 90
 /// days cannot become a place a credential lasts: DD-API-KEY and Authorization are absent on
@@ -234,7 +221,9 @@ fn store(ctx: &Ctx, body: &[u8]) {
     };
     // The text of what parsed, for each element's `body`.
     let repaired = json::repair(body);
-    let Ok(written) = raw_root(&repaired) else { return };
+    let Ok(written) = raw_root(&repaired) else {
+        return;
+    };
     let delivery = Delivery {
         provider: ctx.header("dd-ci-provider-name").trim().to_lowercase(),
         service: ctx.query("service"),
@@ -268,7 +257,7 @@ fn store(ctx: &Ctx, body: &[u8]) {
 ///
 /// The Jenkins plugin only tells 2xx from everything else, so 202 with an empty object is the
 /// whole contract.
-pub async fn handle(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle(ctx: Ctx, body: Body) -> Response {
     if !body.is_empty() {
         store(&ctx, &body);
     }
@@ -288,6 +277,6 @@ pub async fn handle(ctx: Ctx, body: Bytes) -> Response {
 /// Serving real tests from synthetics_test_configs needs a read path the intake does not have;
 /// until then the empty list is the honest answer. Nothing is stored: the poll carries no
 /// telemetry.
-pub async fn handle_synthetics_agent_tests(_: Ctx, _: Bytes) -> Response {
+pub async fn handle_synthetics_agent_tests(_: Ctx, _: Body) -> Response {
     json(StatusCode::OK, &serde_json::json!({ "tests": [] }))
 }

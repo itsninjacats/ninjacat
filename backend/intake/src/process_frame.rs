@@ -225,9 +225,7 @@ mod tests {
     /// Frames made by the agent's own encoder (agent-payload v5.0.207), one per encoding, each
     /// carrying the same CollectorProc.
     fn frame(name: &str) -> Vec<u8> {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/frames")
-            .join(name);
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/frames").join(name);
         std::fs::read(path).unwrap()
     }
 

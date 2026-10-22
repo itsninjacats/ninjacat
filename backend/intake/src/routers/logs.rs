@@ -7,7 +7,6 @@
 
 use std::collections::BTreeMap;
 
-use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use ninjapaws_storage::column;
 use ninjapaws_storage::rows::logs::Log;
@@ -17,16 +16,8 @@ use tako::types::Response;
 
 use crate::fields::{self, Mismatches};
 use crate::json;
-use crate::server::{Ctx, Routes, accepted};
+use crate::server::{Body, Ctx, accepted};
 use crate::wire::{tags, text, time};
-
-/// http-intake.logs.<site>, agent-http-intake.logs.<site>    logs_config.logs_dd_url
-pub fn mount(routes: &mut Routes) {
-    routes.post("/api/v2/logs", handle);
-    routes.post("/v1/input", handle);
-    // Older clients put the key in the path.
-    routes.post("/v1/input/{key}", handle);
-}
 
 /// The fields Datadog's HTTPLogItem declares. Everything else in an item is an attribute.
 const DECLARED_FIELDS: [&str; 5] = ["ddsource", "ddtags", "hostname", "message", "service"];
@@ -211,7 +202,7 @@ pub fn to_row(tenant: &str, item: LogItem, arrival: DateTime<Utc>, defaults: &Ba
     }
 }
 
-pub async fn handle(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle(ctx: Ctx, body: Body) -> Response {
     if ctx.is_sweep() || body.is_empty() {
         return accepted();
     }

@@ -1,88 +1,81 @@
-//! Datadog API keys as a route middleware. A request whose key is known goes on as that key,
-//! with it in its extensions; any other is answered 403, which is what the agent understands as
-//! "bad key, stop sending".
-
-use std::sync::Arc;
+//! Datadog API keys as a route middleware: `.middleware(auth::agent)` on a route. A request whose
+//! key is known goes on as that key, with it in its extensions; any other is answered 403, which
+//! is what the agent understands as "bad key, stop sending".
+//!
+//! One function per place a host's clients put the key; the first place that holds one decides.
 
 use http::StatusCode;
 use tako::middleware::Next;
 use tako::types::{Request, Response};
 
-use crate::keys::{Key, Store};
-use crate::server::{json, query_value};
-
-/// Where a request may carry its key.
-enum Source {
-    Header(&'static str),
-    /// `Authorization: Bearer <key>`.
-    Bearer,
-    Query(&'static str),
-}
-
-/// Where a host's clients put the key. The first source that offers one decides.
-#[derive(Clone, Copy, Debug)]
-pub enum Scheme {
-    /// The Dd-Api-Key header, then the api_key query parameter.
-    ///
-    /// The query parameter is there for GET /api/v1/validate, which the agent calls with the key
-    /// in the URL; refusing it makes the agent mark itself unhealthy. A key in a URL leaks into
-    /// access logs, so no other query parameter is accepted unless an intake's clients leave no
-    /// choice.
-    Agent,
-    /// browser-intake: the header (iOS, Android) or the query string (browser). The browser has
-    /// no choice: its fetch sets no headers at all, to stay a "simple request" and
-    /// interchangeable with sendBeacon. The one request the browser SDK does put a header on, the
-    /// profiler's quota check, names it DD-CLIENT-TOKEN.
-    Browser,
-    /// webhook-intake: Jenkins sends the header, but a GitLab project webhook has no field for
-    /// one, so the key travels as `?dd-api-key=`.
-    CiWebhook,
-    /// data-obs-intake: OpenLineage's transport sends `Authorization: Bearer`, and the
-    /// trace-agent's lineage proxy forwards it unchanged.
-    Lineage,
-}
-
-impl Scheme {
-    fn sources(self) -> &'static [Source] {
-        match self {
-            Scheme::Agent => &[Source::Header("dd-api-key"), Source::Query("api_key")],
-            Scheme::Browser => {
-                &[Source::Header("dd-api-key"), Source::Query("dd-api-key"), Source::Header("dd-client-token")]
-            }
-            Scheme::CiWebhook => &[Source::Header("dd-api-key"), Source::Query("dd-api-key"), Source::Query("api_key")],
-            Scheme::Lineage => &[Source::Header("dd-api-key"), Source::Bearer, Source::Query("api_key")],
-        }
-    }
-}
+use crate::keys::Key;
+use crate::server::{intake_of, json, query_value};
 
 /// The key a request was admitted with, in its extensions.
 #[derive(Clone, Debug)]
 pub struct Admitted(pub Key);
 
-fn candidate(source: &Source, req: &Request) -> String {
-    let header = |name: &str| req.headers().get(name).and_then(|v| v.to_str().ok()).unwrap_or_default().to_string();
-    match source {
-        Source::Header(name) => header(name),
-        Source::Query(name) => query_value(req.uri(), name),
-        // Anything that is not a Bearer credential yields nothing, so the next source gets its
-        // turn.
-        Source::Bearer => {
-            let value = header("authorization");
-            match value.get(..7) {
-                Some(scheme) if scheme.eq_ignore_ascii_case("Bearer ") => value[7..].trim().to_string(),
-                _ => String::new(),
-            }
-        }
-    }
+/// Agents and tracers: the Dd-Api-Key header, then the api_key query parameter.
+///
+/// The query parameter is there for GET /api/v1/validate, which the agent calls with the key in
+/// the URL; refusing it makes the agent mark itself unhealthy. A key in a URL leaks into access
+/// logs, so no other query parameter is accepted unless an intake's clients leave no choice.
+pub async fn agent(req: Request, next: Next) -> Response {
+    let key = header(&req, "dd-api-key").or_else(|| query_value(req.uri(), "api_key"));
+    admit(key, req, next).await
 }
 
-pub async fn guard(keys: Arc<Store>, scheme: Scheme, mut req: Request, next: Next) -> Response {
-    let key = scheme.sources().iter().map(|source| candidate(source, &req)).find(|found| !found.is_empty());
-    match key.and_then(|key| keys.lookup(&key)) {
+/// browser-intake: the header (iOS, Android) or the query string (browser). The browser has no
+/// choice: its fetch sets no headers at all, to stay a "simple request" and interchangeable with
+/// sendBeacon. The one request the browser SDK does put a header on, the profiler's quota check,
+/// names it DD-CLIENT-TOKEN.
+pub async fn browser(req: Request, next: Next) -> Response {
+    let key = header(&req, "dd-api-key")
+        .or_else(|| query_value(req.uri(), "dd-api-key"))
+        .or_else(|| header(&req, "dd-client-token"));
+    admit(key, req, next).await
+}
+
+/// webhook-intake: Jenkins sends the header, but a GitLab project webhook has no field for one,
+/// so the key travels as `?dd-api-key=`.
+pub async fn ci_webhook(req: Request, next: Next) -> Response {
+    let key = header(&req, "dd-api-key")
+        .or_else(|| query_value(req.uri(), "dd-api-key"))
+        .or_else(|| query_value(req.uri(), "api_key"));
+    admit(key, req, next).await
+}
+
+/// data-obs-intake: OpenLineage's transport sends `Authorization: Bearer`, and the trace-agent's
+/// lineage proxy forwards it unchanged.
+pub async fn lineage(req: Request, next: Next) -> Response {
+    let key = header(&req, "dd-api-key").or_else(|| bearer(&req)).or_else(|| query_value(req.uri(), "api_key"));
+    admit(key, req, next).await
+}
+
+async fn admit(key: Option<String>, mut req: Request, next: Next) -> Response {
+    let known = match (key, intake_of(req.extensions())) {
+        (Some(key), Some(intake)) => intake.keys.lookup(&key),
+        _ => None,
+    };
+    match known {
         Some(known) => {
             req.extensions_mut().insert(Admitted(known));
             next.run(req).await
         }
         None => json(StatusCode::FORBIDDEN, &serde_json::json!({ "errors": ["invalid API key"] })),
     }
+}
+
+fn header(req: &Request, name: &str) -> Option<String> {
+    let value = req.headers().get(name)?.to_str().ok()?;
+    (!value.is_empty()).then(|| value.to_string())
+}
+
+/// `Authorization: Bearer <key>`. Anything that is not a Bearer credential is no key, so the next
+/// place gets its turn.
+fn bearer(req: &Request) -> Option<String> {
+    let value = header(req, "authorization")?;
+    let scheme = value.get(..7)?;
+    let key = value[7..].trim();
+    (scheme.eq_ignore_ascii_case("Bearer ") && !key.is_empty()).then(|| key.to_string())
 }

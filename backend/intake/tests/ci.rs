@@ -1,22 +1,23 @@
 //! Tests of routers/ci_visibility.rs, ci_webhook.rs and install.rs beyond the golden fixtures: the
 //! decoders' edge cases, and the columns that keep a JSON value as the text it arrived in.
 
+mod programs;
+
 use std::collections::BTreeMap;
 use std::io::Write;
 use std::sync::Arc;
 
 use base64::Engine;
 use http_body_util::BodyExt;
-use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::json;
 use ninjapaws_intake::keys::{self, Key, Store};
 use ninjapaws_intake::routers::ci_visibility::{
     AgentHeaders, Value, coverage_entries_msgpack, decode_any, read_config_request, test_event_row,
 };
-use ninjapaws_intake::routers::{ci_visibility, ci_webhook, install};
-use ninjapaws_intake::server::{Intake, Routes, router};
+use ninjapaws_intake::server::Intake;
 use ninjapaws_storage::{Sink, Write as Batch};
 use serde_json::{Value as Json, json};
+use tako::router::Router;
 
 const KEY: &str = "00000000000000000000000000000001";
 const BOUNDARY: &str = "frontier";
@@ -45,19 +46,19 @@ impl Answer {
     }
 }
 
-async fn serve(
-    scheme: Option<Scheme>,
-    mount: fn(&mut Routes),
-    method: &str,
-    url: &str,
-    headers: &[(&str, &str)],
-    body: &[u8],
-) -> Answer {
+async fn serve(mount: fn(&mut Router), method: &str, url: &str, headers: &[(&str, &str)], body: &[u8]) -> Answer {
     let store = Store::default();
     store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: "test".into() })]);
     let (sink, capture) = Sink::capture();
-    let intake = Intake { sink, keys: Arc::new(store), ack_unknown: false, max_body_bytes: 64 * 1024 * 1024 };
-    let router = router(intake, scheme, mount);
+    let intake = Intake {
+        sink,
+        keys: Arc::new(store),
+        ack_unknown: false,
+        max_body_bytes: 64 * 1024 * 1024,
+        stopping: Default::default(),
+        tasks: Default::default(),
+    };
+    let router = programs::router_of(mount, intake);
     let mut request = http::Request::builder().method(method).uri(url);
     for (name, value) in headers {
         request = request.header(*name, *value);
@@ -70,13 +71,13 @@ async fn serve(
 }
 
 /// A POST with the test key to a host that asks for the agent's key.
-async fn post(mount: fn(&mut Routes), url: &str, headers: &[(&str, &str)], body: &[u8]) -> Answer {
+async fn post(mount: fn(&mut Router), url: &str, headers: &[(&str, &str)], body: &[u8]) -> Answer {
     let mut with_key = vec![("dd-api-key", KEY)];
     with_key.extend_from_slice(headers);
-    serve(Some(Scheme::Agent), mount, "POST", url, &with_key, body).await
+    serve(mount, "POST", url, &with_key, body).await
 }
 
-async fn post_json(mount: fn(&mut Routes), url: &str, body: &str) -> Answer {
+async fn post_json(mount: fn(&mut Router), url: &str, body: &str) -> Answer {
     post(mount, url, &[("content-type", "application/json")], body.as_bytes()).await
 }
 
@@ -101,7 +102,7 @@ fn multipart(parts: &[(&str, &str, &[u8])]) -> (String, Vec<u8>) {
 
 async fn coverage(parts: &[(&str, &str, &[u8])]) -> Answer {
     let (content_type, body) = multipart(parts);
-    post(ci_visibility::mount_test_coverage, "/api/v2/citestcov", &[("content-type", &content_type)], &body).await
+    post(programs::ci_test_coverage, "/api/v2/citestcov", &[("content-type", &content_type)], &body).await
 }
 
 fn value(text: &str) -> Value {
@@ -379,15 +380,15 @@ async fn a_deeply_nested_body_is_decoded_in_linear_time() {
     assert!(json::try_parse(deep(DEEPEST + 1, cycle).as_bytes()).is_err());
 
     let started = std::time::Instant::now();
-    let answer = post_json(ci_visibility::mount_test_cycle, "/api/v2/citestcycle", &deep(DEEPEST, cycle)).await;
+    let answer = post_json(programs::ci_test_cycle, "/api/v2/citestcycle", &deep(DEEPEST, cycle)).await;
     assert_eq!(answer.rows("ci_test_events").len(), 1);
     let answer = webhook("/api/v2/webhook", &[], &deep(DEEPEST, r#"[{"level":"job","parameters":{"x":{}}}]"#)).await;
     assert_eq!(answer.rows("ci_webhook_events").len(), 1);
     let settings = deep(DEEPEST, r#"{"data":{"attributes":{"configurations":{}}}}"#);
-    let answer = post_json(ci_visibility::mount_api, "/api/v2/libraries/tests/services/setting", &settings).await;
+    let answer = post_json(programs::api, "/api/v2/libraries/tests/services/setting", &settings).await;
     assert_eq!(answer.rows("ci_settings_requests").len(), 1);
     let tags = deep(DEEPEST, r#"{"data":{"type":"t","attributes":{"tags":{}}}}"#);
-    let answer = post_json(ci_visibility::mount_api, "/api/v2/ci/pipeline/tags", &tags).await;
+    let answer = post_json(programs::api, "/api/v2/ci/pipeline/tags", &tags).await;
     assert_eq!(answer.rows("ci_pipeline_events").len(), 1);
     // Read once per level, each 4 MB body would be over a hundred passes.
     assert!(started.elapsed() < std::time::Duration::from_secs(10), "{:?}", started.elapsed());
@@ -443,8 +444,7 @@ async fn a_truncated_coverage_upload_is_kept_raw_not_stored_in_part() {
     ]);
     // Cut inside the closing boundary: both parts are whole, the body is not.
     let cut = &body[..body.len() - 9];
-    let answer =
-        post(ci_visibility::mount_test_coverage, "/api/v2/citestcov", &[("content-type", &content_type)], cut).await;
+    let answer = post(programs::ci_test_coverage, "/api/v2/citestcov", &[("content-type", &content_type)], cut).await;
     assert_eq!(answer.status, 202);
     assert!(answer.rows("ci_coverage").is_empty());
     let raw = answer.row("raw_payloads");
@@ -506,8 +506,7 @@ async fn a_json_coverage_entry_is_stored_as_the_text_it_arrived_in() {
 #[tokio::test]
 async fn an_empty_test_cycle_body_is_answered_and_nothing_is_stored() {
     let answer =
-        post(ci_visibility::mount_test_cycle, "/api/v2/citestcycle", &[("content-type", "application/msgpack")], b"")
-            .await;
+        post(programs::ci_test_cycle, "/api/v2/citestcycle", &[("content-type", "application/msgpack")], b"").await;
     assert_eq!(answer.status, 202);
     assert!(answer.writes.is_empty());
 }
@@ -515,7 +514,7 @@ async fn an_empty_test_cycle_body_is_answered_and_nothing_is_stored() {
 #[tokio::test]
 async fn events_that_are_not_maps_keep_the_body_raw_once_the_others_become_rows() {
     let body = r#"{"version":3,"events":[5,{"type":"test","version":2,"content":{"service":"s","meta":{"test.is_new":" YES "}}},"x"]}"#;
-    let answer = post_json(ci_visibility::mount_test_cycle, "/api/v2/citestcycle", body).await;
+    let answer = post_json(programs::ci_test_cycle, "/api/v2/citestcycle", body).await;
     assert_eq!(answer.status, 202);
     let writers: Vec<&str> = answer.writes.iter().map(|w| w.writer).collect();
     assert_eq!(writers, vec!["storage_raw_payloads", "storage_ci_test_events"]);
@@ -532,7 +531,7 @@ async fn events_that_are_not_maps_keep_the_body_raw_once_the_others_become_rows(
 async fn an_events_content_keeps_each_number_as_it_was_written() {
     let body =
         r#"{"events":[{"type":"test","content":{ "span_id" : 12345678901234567890, "metrics": {"cpu": 1.50} }}]}"#;
-    let answer = post_json(ci_visibility::mount_test_cycle, "/api/v2/citestcycle", body).await;
+    let answer = post_json(programs::ci_test_cycle, "/api/v2/citestcycle", body).await;
     let row = answer.row("ci_test_events");
     assert_eq!(row["span_id"], 12345678901234567890u64);
     // Re-written with sorted keys and no spaces; the literals stay.
@@ -555,7 +554,7 @@ fn a_source_line_is_taken_from_metrics_first_then_from_meta() {
 async fn the_agents_own_headers_win_over_the_fallbacks() {
     let body = br#"{"events":[{"type":"test","content":{}}]}"#;
     let answer = post(
-        ci_visibility::mount_test_cycle,
+        programs::ci_test_cycle,
         "/api/v2/citestcycle",
         &[
             ("content-type", "application/json"),
@@ -571,7 +570,7 @@ async fn the_agents_own_headers_win_over_the_fallbacks() {
     assert_eq!(row["agent_version"], "7.90.0");
 
     let via_other = post(
-        ci_visibility::mount_test_cycle,
+        programs::ci_test_cycle,
         "/api/v2/citestcycle",
         &[("content-type", "application/json"), ("via", "1.1 varnish")],
         body,
@@ -655,7 +654,7 @@ fn of_a_repeated_key_the_last_one_counts() {
 async fn the_configurations_are_stored_as_the_text_they_arrived_in() {
     let configurations = r#"{ "os.platform" : "linux",  "weight": 1.50 }"#;
     let body = format!(r#"{{"data":{{"id":"a","attributes":{{"service":"s","configurations":{configurations}}}}}}}"#);
-    let answer = post_json(ci_visibility::mount_api, "/api/v2/libraries/tests/services/setting", &body).await;
+    let answer = post_json(programs::api, "/api/v2/libraries/tests/services/setting", &body).await;
     let row = answer.row("ci_settings_requests");
     assert_eq!(row["configurations"], configurations);
     assert_eq!(row["request_body"], body.as_str());
@@ -663,8 +662,7 @@ async fn the_configurations_are_stored_as_the_text_they_arrived_in() {
 
 #[tokio::test]
 async fn an_id_that_needs_escaping_is_echoed_as_valid_json() {
-    let answer =
-        post_json(ci_visibility::mount_api, "/api/v2/ci/libraries/tests", r#"{"data":{"id":"a\"b\\c"}}"#).await;
+    let answer = post_json(programs::api, "/api/v2/ci/libraries/tests", r#"{"data":{"id":"a\"b\\c"}}"#).await;
     let answer_json: Json = serde_json::from_slice(&answer.body).unwrap();
     assert_eq!(answer_json["data"]["id"], "a\"b\\c");
     assert_eq!(answer.row("ci_settings_requests")["response_body"], answer.text());
@@ -674,7 +672,7 @@ async fn an_id_that_needs_escaping_is_echoed_as_valid_json() {
 async fn a_commit_search_that_does_not_decode_still_gets_an_empty_json_answer() {
     for body in [r#"{"data":"#, r#"{"data":{"id":"a"}}"#, r#"{"data":[5]}"#, r#"{"data":[{"id":7}]}"#, r#"{"meta":[]}"#]
     {
-        let answer = post_json(ci_visibility::mount_api, "/api/v2/git/repository/search_commits", body).await;
+        let answer = post_json(programs::api, "/api/v2/git/repository/search_commits", body).await;
         assert_eq!(answer.status, 200);
         assert_eq!(answer.headers["content-type"], "application/json; charset=utf-8");
         assert_eq!(answer.text(), r#"{"data":[],"meta":{"repository_url":""}}"#);
@@ -686,7 +684,7 @@ async fn a_commit_search_that_does_not_decode_still_gets_an_empty_json_answer() 
 #[tokio::test]
 async fn a_commit_without_an_id_is_not_stored() {
     let body = r#"{"data":[{"id":"aaa"},null,{"type":"commit"},{"id":""}],"meta":{"repository_url":"r"}}"#;
-    let answer = post_json(ci_visibility::mount_api, "/api/v2/git/repository/search_commits", body).await;
+    let answer = post_json(programs::api, "/api/v2/git/repository/search_commits", body).await;
     assert_eq!(answer.status, 200);
     assert_eq!(answer.row("git_commits")["sha"], "aaa");
     assert!(answer.rows("raw_payloads").is_empty());
@@ -695,7 +693,7 @@ async fn a_commit_without_an_id_is_not_stored() {
 #[tokio::test]
 async fn a_packfile_upload_that_is_not_multipart_is_kept_raw_and_still_answered_204() {
     let answer = post(
-        ci_visibility::mount_api,
+        programs::api,
         "/api/v2/git/repository/packfile",
         &[("content-type", "application/octet-stream")],
         b"PACK",
@@ -714,7 +712,7 @@ async fn a_packfile_upload_that_is_not_multipart_is_kept_raw_and_still_answered_
 
 async fn packfile(parts: &[(&str, &str, &[u8])]) -> Answer {
     let (content_type, body) = multipart(parts);
-    post(ci_visibility::mount_api, "/api/v2/git/repository/packfile", &[("content-type", &content_type)], &body).await
+    post(programs::api, "/api/v2/git/repository/packfile", &[("content-type", &content_type)], &body).await
 }
 
 #[tokio::test]
@@ -773,7 +771,7 @@ async fn a_repeated_pushed_sha_part_changes_only_what_it_sets() {
 #[tokio::test]
 async fn measures_fill_the_metrics_column_only_when_metrics_are_absent() {
     let body = r#"{"data":{"type":"t","attributes":{"metrics":{"a":1},"measures":{"b":2},"ci_level":"2"}}}"#;
-    let answer = post_json(ci_visibility::mount_api, "/api/intake/ci/custom_spans", body).await;
+    let answer = post_json(programs::api, "/api/intake/ci/custom_spans", body).await;
     let row = answer.row("ci_pipeline_events");
     assert_eq!(row["metrics"], json!({ "a": 1.0 }));
     assert_eq!(row["ci_level"], 2);
@@ -784,7 +782,7 @@ async fn measures_fill_the_metrics_column_only_when_metrics_are_absent() {
 #[tokio::test]
 async fn a_datadog_ci_call_whose_attributes_are_not_an_object_is_still_a_row() {
     for body in [r#"{"data":{"type":"t","attributes":[1,2]}}"#, "null", r#"{"data":null}"#] {
-        let answer = post_json(ci_visibility::mount_api, "/api/v2/ci/pipeline/tags", body).await;
+        let answer = post_json(programs::api, "/api/v2/ci/pipeline/tags", body).await;
         assert_eq!(answer.status, 202);
         let row = answer.row("ci_pipeline_events");
         assert_eq!(row["kind"], "tag");
@@ -797,7 +795,7 @@ async fn a_datadog_ci_call_whose_attributes_are_not_an_object_is_still_a_row() {
 #[tokio::test]
 async fn a_datadog_ci_envelope_of_the_wrong_shape_is_kept_raw() {
     for body in ["[1]", r#"{"data":5}"#, r#"{"data":{"type":7}}"#] {
-        let answer = post_json(ci_visibility::mount_api, "/api/v2/ci/pipeline/metrics", body).await;
+        let answer = post_json(programs::api, "/api/v2/ci/pipeline/metrics", body).await;
         assert_eq!(answer.status, 202);
         assert!(answer.rows("ci_pipeline_events").is_empty());
         assert_eq!(answer.row("raw_payloads")["intake"], "cipipeline");
@@ -808,7 +806,7 @@ async fn a_datadog_ci_envelope_of_the_wrong_shape_is_kept_raw() {
 async fn a_datadog_ci_calls_attributes_are_stored_as_the_text_they_arrived_in() {
     let attributes = r#"{ "tags" : {"team": "ci"},  "metrics": {"binary.size": 1.50} }"#;
     let body = format!(r#"{{"data":{{"type":"ci_custom_metric","attributes":{attributes}}}}}"#);
-    let answer = post_json(ci_visibility::mount_api, "/api/v2/ci/pipeline/metrics", &body).await;
+    let answer = post_json(programs::api, "/api/v2/ci/pipeline/metrics", &body).await;
     let row = answer.row("ci_pipeline_events");
     assert_eq!(row["attributes"], attributes);
     assert_eq!(row["metrics"], json!({ "binary.size": 1.5 }));
@@ -819,7 +817,7 @@ async fn a_datadog_ci_calls_attributes_are_stored_as_the_text_they_arrived_in() 
 async fn webhook(url: &str, headers: &[(&str, &str)], body: &str) -> Answer {
     let mut with_key = vec![("dd-api-key", KEY), ("content-type", "application/json")];
     with_key.extend_from_slice(headers);
-    serve(Some(Scheme::CiWebhook), ci_webhook::mount, "POST", url, &with_key, body.as_bytes()).await
+    serve(programs::ci_webhook, "POST", url, &with_key, body.as_bytes()).await
 }
 
 #[tokio::test]
@@ -947,8 +945,7 @@ async fn the_delivery_id_falls_back_from_gitlab_to_github_to_datadogs_request_id
 #[tokio::test]
 async fn the_synthetics_pollers_answer_does_not_depend_on_its_query() {
     let answer = serve(
-        Some(Scheme::Agent),
-        ci_webhook::mount_synthetics_poller,
+        programs::synthetics_poller,
         "GET",
         "/api/unstable/synthetics/agents/tests?agent_hostname=h",
         &[("dd-api-key", KEY)],
@@ -963,7 +960,7 @@ async fn the_synthetics_pollers_answer_does_not_depend_on_its_query() {
 // ---- install, eudm-intake, llmobs-intake ----
 
 async fn install(method: &str, url: &str) -> Answer {
-    serve(None, install::mount, method, url, &[], b"x").await
+    serve(programs::install, method, url, &[], b"x").await
 }
 
 #[tokio::test]
@@ -1002,13 +999,9 @@ async fn a_btf_archive_is_not_hosted_so_system_probe_falls_back_to_its_next_sour
 
 #[tokio::test]
 async fn an_llmobs_body_sent_by_the_diagnose_sweep_is_a_probe_not_a_payload() {
-    let answer = post(
-        install::mount_llm_obs,
-        "/api/v2/llmobs",
-        &[("x-requested-with", "datadog-agent-diagnose")],
-        br#"{"span":{}}"#,
-    )
-    .await;
+    let answer =
+        post(programs::llm_obs, "/api/v2/llmobs", &[("x-requested-with", "datadog-agent-diagnose")], br#"{"span":{}}"#)
+            .await;
     assert_eq!(answer.status, 202);
     assert!(answer.writes.is_empty());
 }
@@ -1016,7 +1009,7 @@ async fn an_llmobs_body_sent_by_the_diagnose_sweep_is_a_probe_not_a_payload() {
 #[tokio::test]
 async fn the_note_of_an_aiusage_payload_quotes_the_proxys_origin_headers() {
     let answer = post(
-        install::mount_ai_usage,
+        programs::ai_usage,
         "/api/v2/aiusage",
         &[
             ("dd-evp-origin", "ai \"prompt\" logger"),

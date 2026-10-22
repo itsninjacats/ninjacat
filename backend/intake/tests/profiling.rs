@@ -1,5 +1,7 @@
 //! Tests of routers/profiling.rs beyond the golden fixtures.
 
+mod programs;
+
 use std::collections::BTreeMap;
 use std::io::Write;
 use std::sync::Arc;
@@ -8,16 +10,16 @@ use base64::Engine;
 use bytes::Bytes;
 use chrono::{DateTime, SecondsFormat, Utc};
 use http_body_util::BodyExt;
-use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::json;
 use ninjapaws_intake::keys::{self, Key, Store};
 use ninjapaws_intake::routers::pprof::{self, Summary};
 use ninjapaws_intake::routers::profiling;
-use ninjapaws_intake::server::{Intake, Routes, router};
+use ninjapaws_intake::server::Intake;
 use ninjapaws_proto::perftools::profiles::{Function, Line, Location, Profile, Sample, ValueType};
 use ninjapaws_storage::{Sink, Write as Batch};
 use prost::Message;
 use serde_json::Value;
+use tako::router::Router;
 
 const KEY: &str = "00000000000000000000000000000001";
 const BOUNDARY: &str = "profiling-tests-boundary";
@@ -65,12 +67,19 @@ fn multipart(parts: &[(&str, &[u8])]) -> (String, Vec<u8>) {
 }
 
 /// One POST with the test key to a host's routes: the status, the body and what was written.
-async fn post(mount: fn(&mut Routes), url: &str, content_type: &str, body: &[u8]) -> (u16, Vec<u8>, Vec<Batch>) {
+async fn post(mount: fn(&mut Router), url: &str, content_type: &str, body: &[u8]) -> (u16, Vec<u8>, Vec<Batch>) {
     let store = Store::default();
     store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: "test".into() })]);
     let (sink, capture) = Sink::capture();
-    let intake = Intake { sink, keys: Arc::new(store), ack_unknown: false, max_body_bytes: 64 * 1024 * 1024 };
-    let router = router(intake, Some(Scheme::Agent), mount);
+    let intake = Intake {
+        sink,
+        keys: Arc::new(store),
+        ack_unknown: false,
+        max_body_bytes: 64 * 1024 * 1024,
+        stopping: Default::default(),
+        tasks: Default::default(),
+    };
+    let router = programs::router_of(mount, intake);
     let mut request = http::Request::builder().method("POST").uri(url).header("dd-api-key", KEY);
     if !content_type.is_empty() {
         request = request.header("content-type", content_type);
@@ -467,7 +476,7 @@ fn an_empty_array_is_a_batch_with_no_entries_not_a_failure() {
 async fn ndjson_logs_are_stored_one_row_per_line() {
     let body = b"{\"service\":\"svc-a\",\"b\":1,\"a\":2,\"a\":3}\nnot json\n";
     let (status, _, writes) =
-        post(profiling::mount_debugger, "/api/v2/debugger?ddtags=env:prod,env:dev", "text/plain", body).await;
+        post(programs::debugger, "/api/v2/debugger?ddtags=env:prod,env:dev", "text/plain", body).await;
 
     assert_eq!(status, 202);
     let rows = rows(&writes, "debugger_logs");
@@ -503,7 +512,7 @@ async fn text_that_is_not_valid_unicode_is_replaced_not_refused() {
     ]
     .concat();
     let body = [&b"["[..], &entry, b"]"].concat();
-    let (status, _, writes) = post(profiling::mount_debugger, "/api/v2/debugger", "application/json", &body).await;
+    let (status, _, writes) = post(programs::debugger, "/api/v2/debugger", "application/json", &body).await;
 
     assert_eq!(status, 202);
     let rows = rows(&writes, "debugger_logs");
@@ -563,8 +572,7 @@ fn json_nested_deeply_is_still_read() {
 
 #[tokio::test]
 async fn logs_that_are_not_json_are_kept_raw() {
-    let (status, _, writes) =
-        post(profiling::mount_debugger, "/api/v2/debugger", "text/plain", b"not json at all").await;
+    let (status, _, writes) = post(programs::debugger, "/api/v2/debugger", "text/plain", b"not json at all").await;
 
     assert_eq!(status, 202);
     assert_eq!(writes.len(), 1);
@@ -579,7 +587,7 @@ async fn a_diagnostics_entry_that_is_not_an_object_still_gets_its_row() {
         "event",
         br#"[{"service":"svc","timestamp":"2025-09-23T10:30:00Z","debugger":{"diagnostics":{"probeId":"p1"}}}, 42]"#,
     )]);
-    let (_, _, writes) = post(profiling::mount_debugger, "/api/v2/debugger", &content_type, &body).await;
+    let (_, _, writes) = post(programs::debugger, "/api/v2/debugger", &content_type, &body).await;
 
     let rows = rows(&writes, "debugger_diagnostics");
     assert_eq!(rows.len(), 2);
@@ -606,7 +614,7 @@ fn an_exception_without_a_message_is_an_empty_message_not_an_absent_one() {
 #[tokio::test]
 async fn an_empty_diagnostics_batch_stores_nothing() {
     let (content_type, body) = multipart(&[("event", b"[]")]);
-    let (status, _, writes) = post(profiling::mount_debugger, "/api/v2/debugger", &content_type, &body).await;
+    let (status, _, writes) = post(programs::debugger, "/api/v2/debugger", &content_type, &body).await;
 
     assert_eq!(status, 202);
     assert!(writes.is_empty());
@@ -801,7 +809,7 @@ fn a_symbol_upload_without_an_elf_part_says_so() {
 async fn the_old_profile_path_stores_the_same_row_under_its_own_variant() {
     let cpu = pprof_bytes();
     let (content_type, body) = multipart(&[("event", br#"{"family":"go"}"#), ("cpu.pprof", &cpu)]);
-    let (status, answer, writes) = post(profiling::mount_profile, "/v1/input", &content_type, &body).await;
+    let (status, answer, writes) = post(programs::profile, "/v1/input", &content_type, &body).await;
 
     assert_eq!(status, 202);
     assert_eq!(answer, b"{}");
@@ -815,7 +823,7 @@ async fn the_old_profile_path_stores_the_same_row_under_its_own_variant() {
 #[tokio::test]
 async fn a_repeated_part_name_keeps_the_last_part() {
     let (content_type, body) = multipart(&[("notes", b"first"), ("event", b"{}"), ("notes", b"second")]);
-    let (_, _, writes) = post(profiling::mount_profile, "/api/v2/profile", &content_type, &body).await;
+    let (_, _, writes) = post(programs::profile, "/api/v2/profile", &content_type, &body).await;
 
     let rows = rows(&writes, "profiles");
     assert_eq!(rows[0]["attach_name"], serde_json::json!(["notes"]));
@@ -843,8 +851,7 @@ async fn a_profile_that_is_not_multipart_is_kept_raw_with_the_reason() {
         ),
     ];
     for (content_type, note) in cases {
-        let (status, _, writes) =
-            post(profiling::mount_profile, "/api/v2/profile", content_type, b"not multipart").await;
+        let (status, _, writes) = post(programs::profile, "/api/v2/profile", content_type, b"not multipart").await;
         assert_eq!(status, 202);
         let raws = rows(&writes, "raw_payloads");
         assert_eq!(raws.len(), 1, "{content_type}");
@@ -854,7 +861,7 @@ async fn a_profile_that_is_not_multipart_is_kept_raw_with_the_reason() {
     }
     // A boundary the body never reaches: the body breaks off.
     let (_, _, writes) =
-        post(profiling::mount_profile, "/api/v2/profile", "multipart/form-data; boundary=x", b"not multipart").await;
+        post(programs::profile, "/api/v2/profile", "multipart/form-data; boundary=x", b"not multipart").await;
     let note = rows(&writes, "raw_payloads")[0]["note"].as_str().unwrap().to_string();
     assert!(note.starts_with("not multipart, content-type multipart/form-data; boundary=x: "), "{note}");
 }
@@ -863,20 +870,20 @@ async fn a_profile_that_is_not_multipart_is_kept_raw_with_the_reason() {
 async fn a_quoted_boundary_and_a_boundary_in_other_letter_case_are_understood() {
     let (_, body) = multipart(&[("event", br#"{"family":"go"}"#)]);
     let content_type = format!("Multipart/Form-Data; Boundary=\"{BOUNDARY}\"");
-    let (_, _, writes) = post(profiling::mount_profile, "/api/v2/profile", &content_type, &body).await;
+    let (_, _, writes) = post(programs::profile, "/api/v2/profile", &content_type, &body).await;
 
     assert_eq!(rows(&writes, "profiles")[0]["family"], "go");
 }
 
-type Mount = fn(&mut Routes);
+type Mount = fn(&mut Router);
 
 /// Half a submission is not stored as if it were a whole one.
 #[tokio::test]
 async fn a_multipart_body_that_breaks_off_is_kept_raw() {
     let cases: [(Mount, &str, &str, &str); 3] = [
-        (profiling::mount_profile, "/api/v2/profile", "profiling", "not multipart, content-type "),
-        (profiling::mount_debugger, "/api/v2/debugger", "debugger", "multipart, content-type "),
-        (profiling::mount_sourcemap, "/api/v2/srcmap", "srcmap", "multipart, content-type "),
+        (programs::profile, "/api/v2/profile", "profiling", "not multipart, content-type "),
+        (programs::debugger, "/api/v2/debugger", "debugger", "multipart, content-type "),
+        (programs::sourcemap, "/api/v2/srcmap", "srcmap", "multipart, content-type "),
     ];
     let cpu = pprof_bytes();
     let (content_type, body) = multipart(&[("event", br#"{"family":"go"}"#), ("cpu.pprof", &cpu)]);
@@ -894,8 +901,7 @@ async fn a_multipart_body_that_breaks_off_is_kept_raw() {
 
 #[tokio::test]
 async fn a_symbol_upload_that_is_not_multipart_is_kept_raw() {
-    let (status, _, writes) =
-        post(profiling::mount_sourcemap, "/api/v2/srcmap", "application/octet-stream", b"\x7fELF").await;
+    let (status, _, writes) = post(programs::sourcemap, "/api/v2/srcmap", "application/octet-stream", b"\x7fELF").await;
 
     assert_eq!(status, 202);
     let raws = rows(&writes, "raw_payloads");
@@ -910,7 +916,7 @@ async fn a_symbol_upload_that_is_not_multipart_is_kept_raw() {
 async fn a_symbol_upload_whose_event_is_not_json_still_stores_the_file() {
     let elf = fake_elf(2, 2);
     let (content_type, body) = multipart(&[("event", b"not json"), ("elf_symbol_file", &elf)]);
-    let (_, _, writes) = post(profiling::mount_sourcemap, "/api/v2/srcmap", &content_type, &body).await;
+    let (_, _, writes) = post(programs::sourcemap, "/api/v2/srcmap", &content_type, &body).await;
 
     let rows = rows(&writes, "symbol_uploads");
     assert_eq!(rows.len(), 1);

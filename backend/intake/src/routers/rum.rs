@@ -38,29 +38,13 @@ use tako::plugins::cors::{CorsBuilder, CorsPlugin};
 use tako::router::Router;
 use tako::types::{Request, Response};
 
-use super::{logs, profiling};
 use crate::body::{self, Part};
 use crate::json;
-use crate::server::{Ctx, Routes, accepted, json as json_response, query_pairs};
+use crate::server::{Body, Ctx, accepted, json as json_response, query_pairs};
 use crate::wire::{tags, text, time};
 
 /// The label of this intake in raw_payloads.
 const INTAKE: &str = "rum";
-
-/// browser-intake.<site>: the RUM and Logs SDKs, browser and mobile.
-pub fn mount(routes: &mut Routes) {
-    routes.post("/api/v2/rum", handle_rum);
-    // Logs from an SDK are the wire format the agent sends; only the framing differs, and the logs
-    // handler sniffs it.
-    routes.post("/api/v2/logs", logs::handle);
-    routes.post("/api/v2/replay", handle_replay);
-    routes.post("/api/v2/spans", handle_spans);
-    // The browser profiler's multipart is the envelope the tracers send, so it reuses that handler
-    // under its own label.
-    routes.post("/api/v2/profile", |ctx, body| profiling::handle_profile("profile-browser", ctx, body));
-    routes.post("/api/v2/debugger", profiling::handle_debugger);
-    routes.get("/api/v2/profiling/quota", handle_profiling_quota);
-}
 
 /// What a preflight is told it may send. DD-API-KEY and DD-EVP-* are for the mobile SDKs and for a
 /// browser deployment that chose headers over the query string; Content-Encoding because a proxy
@@ -179,7 +163,9 @@ pub fn unwrap_forward(req: &mut Request) {
                 *req.uri_mut() = uri;
             }
         }
-        Err(_) => tracing::warn!("[rum] ddforward is not a path+query, routing the request as it came"),
+        Err(_) => {
+            tracing::warn!("[rum] ddforward is not a path+query, routing the request as it came")
+        }
     }
 }
 
@@ -312,7 +298,9 @@ enum Discriminator<'a> {
 fn discriminator<'a>(path: &[&str], event: &'a Value) -> Discriminator<'a> {
     let mut current = event;
     for key in path {
-        let Some(object) = current.as_object() else { return Discriminator::NotText };
+        let Some(object) = current.as_object() else {
+            return Discriminator::NotText;
+        };
         match object.get(*key) {
             Some(next) => current = next,
             None => return Discriminator::Absent,
@@ -647,11 +635,11 @@ pub fn timeseries_row(request: &RumRequest, o: &Value, raw: &str) -> RumTimeseri
 }
 
 /// POST /api/v2/rum: NDJSON, one event per line, from every SDK.
-pub async fn handle_rum(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_rum(ctx: Ctx, body: Body) -> Response {
     if ctx.is_sweep() {
         return accepted();
     }
-    let body = inflated(&ctx, body);
+    let body = inflated(&ctx, body.0);
     if body.is_empty() {
         return accepted();
     }
@@ -780,11 +768,11 @@ pub fn replay_row(request: &RumRequest, part: &Part, meta: &Value, meta_raw: &st
 /// The blobs are not decoded, by design: Datadog's own intake stores segments unprocessed, and the
 /// SDK emits zlib streams meant to be concatenated later, which inflating and re-deflating would
 /// throw away.
-pub async fn handle_replay(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_replay(ctx: Ctx, body: Body) -> Response {
     if ctx.is_sweep() {
         return accepted();
     }
-    let body = inflated(&ctx, body);
+    let body = inflated(&ctx, body.0);
     if body.is_empty() {
         return accepted();
     }
@@ -909,11 +897,11 @@ fn envelope_extra(envelope: &Value) -> String {
 /// Not the agent's /v0.4/traces: NDJSON of {"spans":[...],"env":"..."} envelopes with a flat,
 /// hand-rolled span shape that only dd-sdk-ios and dd-sdk-android produce, with no published
 /// schema.
-pub async fn handle_spans(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_spans(ctx: Ctx, body: Body) -> Response {
     if ctx.is_sweep() {
         return accepted();
     }
-    let body = inflated(&ctx, body);
+    let body = inflated(&ctx, body.0);
     if body.is_empty() {
         return accepted();
     }
@@ -961,7 +949,7 @@ pub async fn handle_spans(ctx: Ctx, body: Bytes) -> Response {
 /// GET /api/v2/profiling/quota?session_id=… — the browser profiler asks before it starts whether
 /// this session may be profiled. There is no quota here, so every session is admitted. Without an
 /// answer the SDK profiles anyway, but marks the session's events with the reason "api-error".
-pub async fn handle_profiling_quota(_: Ctx, _: Bytes) -> Response {
+pub async fn handle_profiling_quota(_: Ctx, _: Body) -> Response {
     json_response(
         StatusCode::OK,
         &serde_json::json!({ "data": { "attributes": { "admitted": true, "reason": "quota_ok" } } }),

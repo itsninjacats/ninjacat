@@ -1,15 +1,15 @@
 //! Tests of the logs intake beyond the golden fixtures: real payloads, the host's own cases, and
 //! the agent's logs over TCP.
 
+mod programs;
+
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{TimeDelta, TimeZone, Utc};
-use ninjapaws_intake::auth::Scheme;
 use ninjapaws_intake::keys::{self, Key, Store};
-use ninjapaws_intake::routers::logs;
-use ninjapaws_intake::server::{Intake, Process, router};
+use ninjapaws_intake::server::Intake;
 use ninjapaws_intake::tcp_logs::{self, FrameResult, Framing};
 use ninjapaws_proto::pb;
 use ninjapaws_storage::{Capture, Sink, Write as Batch};
@@ -31,10 +31,17 @@ fn store() -> Arc<Store> {
 /// One POST of a body to the logs host with the test key: what was written.
 async fn post(path: &str, body: &[u8]) -> Vec<Batch> {
     let (sink, capture) = Sink::capture();
-    let intake = Intake { sink, keys: store(), ack_unknown: false, max_body_bytes: 64 * 1024 * 1024 };
+    let intake = Intake {
+        sink,
+        keys: store(),
+        ack_unknown: false,
+        max_body_bytes: 64 * 1024 * 1024,
+        stopping: Default::default(),
+        tasks: Default::default(),
+    };
     let request = http::Request::builder().method("POST").uri(path).header("dd-api-key", KEY);
     let response =
-        router(intake, Some(Scheme::Agent), logs::mount).dispatch(request.body(body.to_vec().into()).unwrap()).await;
+        programs::router_of(programs::logs, intake).dispatch(request.body(body.to_vec().into()).unwrap()).await;
     assert_eq!(response.status(), 202);
     capture.writes()
 }
@@ -46,8 +53,7 @@ fn rows<'a>(writes: &'a [Batch], table: &str) -> Vec<&'a Value> {
 #[tokio::test]
 async fn logs_from_the_dotnet_tracer_which_have_no_message_field_become_log_rows() {
     let body = std::fs::read(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/real/dd-trace-dotnet-3.54.0-logs.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real/dd-trace-dotnet-3.54.0-logs.json"),
     )
     .unwrap();
     let writes = post("/api/v2/logs", &body).await;
@@ -213,13 +219,20 @@ fn an_unknown_key_closes_the_connection_a_frame_without_a_key_is_dropped() {
 }
 
 /// A listener on a free port, as the logs binary starts it, and the rows it is handed.
-async fn listening(tls: Option<tokio_rustls::TlsAcceptor>) -> (u16, Process, Arc<Capture>) {
+async fn listening(tls: Option<tokio_rustls::TlsAcceptor>) -> (u16, Intake, Arc<Capture>) {
     let (sink, capture) = Sink::capture();
-    let process = Process { keys: store(), sink, stopping: CancellationToken::new(), tasks: TaskTracker::new() };
+    let intake = Intake {
+        keys: store(),
+        sink,
+        stopping: CancellationToken::new(),
+        tasks: TaskTracker::new(),
+        ack_unknown: false,
+        max_body_bytes: 1 << 20,
+    };
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
-    tcp_logs::serve(listener, tls, &process);
-    (port, process, capture)
+    tcp_logs::serve(listener, tls, &intake);
+    (port, intake, capture)
 }
 
 fn messages(capture: &Capture) -> Vec<String> {
@@ -233,50 +246,50 @@ fn messages(capture: &Capture) -> Vec<String> {
 }
 
 /// Waits for the rows, then stops the process as the binary does and waits for its connections.
-async fn rows_after(process: Process, capture: &Capture, expected: usize) -> Vec<String> {
+async fn rows_after(intake: Intake, capture: &Capture, expected: usize) -> Vec<String> {
     for _ in 0..250 {
         if messages(capture).len() >= expected {
             break;
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    process.stopping.cancel();
-    process.tasks.close();
-    process.tasks.wait().await;
+    intake.stopping.cancel();
+    intake.tasks.close();
+    intake.tasks.wait().await;
     messages(capture)
 }
 
 #[tokio::test]
 async fn length_prefixed_frames_over_a_real_connection() {
-    let (port, process, capture) = listening(None).await;
+    let (port, intake, capture) = listening(None).await;
     let payload = [prefixed(KEY, &proto_log("one", 0)), prefixed(KEY, &proto_log("two", 0))].concat();
     let mut client = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     client.write_all(&payload).await.unwrap();
     drop(client);
 
-    assert_eq!(rows_after(process, &capture, 2).await, ["one", "two"]);
+    assert_eq!(rows_after(intake, &capture, 2).await, ["one", "two"]);
 }
 
 #[tokio::test]
 async fn lines_over_a_real_connection_and_rows_before_an_unknown_key_are_kept() {
-    let (port, process, capture) = listening(None).await;
+    let (port, intake, capture) = listening(None).await;
     let payload = format!("{KEY} first\n{KEY} second\nffffffffffffffffffffffffffffffff third\n{KEY} never read\n");
     let mut client = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     client.write_all(payload.as_bytes()).await.unwrap();
 
-    assert_eq!(rows_after(process, &capture, 2).await, ["first", "second"]);
+    assert_eq!(rows_after(intake, &capture, 2).await, ["first", "second"]);
 }
 
 /// The agent holds its connection open: a stopping process is the one to leave, and what was read
 /// is kept.
 #[tokio::test]
 async fn a_connection_held_open_is_flushed_when_the_process_stops() {
-    let (port, process, capture) = listening(None).await;
+    let (port, intake, capture) = listening(None).await;
     let mut client = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     client.write_all(format!("{KEY} held\n").as_bytes()).await.unwrap();
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    assert_eq!(rows_after(process, &capture, 1).await, ["held"]);
+    assert_eq!(rows_after(intake, &capture, 1).await, ["held"]);
     drop(client);
 }
 
@@ -294,7 +307,7 @@ async fn frames_over_tls() {
     let acceptor = tcp_logs::tls_acceptor(cert_file.to_str().unwrap(), key_file.to_str().unwrap()).unwrap();
     std::fs::remove_dir_all(&directory).unwrap();
 
-    let (port, process, capture) = listening(Some(acceptor)).await;
+    let (port, intake, capture) = listening(Some(acceptor)).await;
     let mut roots = RootCertStore::empty();
     roots.add(CertificateDer::from(certified.cert.der().to_vec())).unwrap();
     let connector = tokio_rustls::TlsConnector::from(Arc::new(
@@ -305,5 +318,5 @@ async fn frames_over_tls() {
     client.write_all(&prefixed(KEY, &proto_log("encrypted", 0))).await.unwrap();
     client.shutdown().await.unwrap();
 
-    assert_eq!(rows_after(process, &capture, 1).await, ["encrypted"]);
+    assert_eq!(rows_after(intake, &capture, 1).await, ["encrypted"]);
 }

@@ -8,7 +8,6 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use bytes::Bytes;
 use chrono::{DateTime, TimeDelta, Utc};
 use ninjapaws_storage::rows::Extra;
 use ninjapaws_storage::rows::apm_telemetry::ApmTelemetry;
@@ -17,23 +16,13 @@ use tako::types::Response;
 
 use crate::json;
 use crate::raw;
-use crate::server::{Ctx, Routes, accepted};
+use crate::server::{Body, Ctx, accepted};
 use crate::wire::time;
-
-/// resources-intake.<site>
-pub fn resources(routes: &mut Routes) {
-    routes.post("/api/v2/genresources", handle_gen_resources);
-}
-
-/// instrumentation-telemetry-intake.<site>    apm_config.telemetry.dd_url
-pub fn telemetry(routes: &mut Routes) {
-    routes.post("/api/v2/apmtelemetry", handle_telemetry);
-}
 
 /// One opaque integration payload per request. The agent never looks inside: an integration hands
 /// it bytes, and no schema for them is published anywhere. So the bytes are kept as they are, with
 /// the sender's identity, which the event platform carries in headers, in the note.
-pub async fn handle_gen_resources(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_gen_resources(ctx: Ctx, body: Body) -> Response {
     ctx.raw("genresources", "no_schema", &raw::origin_note(&ctx), &body);
     accepted()
 }
@@ -251,7 +240,7 @@ fn batch_entries(payload: Option<&Value>) -> Option<Vec<BTreeMap<String, Value>>
 /// One row for the request, whoever sent it. A message-batch, whose payload is
 /// [{request_type, payload}, …], adds one row per entry on top of that row, which keeps the whole
 /// batch.
-pub async fn handle_telemetry(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_telemetry(ctx: Ctx, body: Body) -> Response {
     let refuse = |error: &str| ctx.raw("apmtelemetry", "decode_error", error, &body);
     match json::try_parse(&body) {
         Err(e) => refuse(&e),

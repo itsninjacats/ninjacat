@@ -26,7 +26,6 @@
 use std::collections::BTreeSet;
 use std::sync::LazyLock;
 
-use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use ninjapaws_proto::datadog::agentdiscovery::{AgentDiscoveryConfigFilePayloadFormat, AgentDiscoveryPayloadBatch};
 use ninjapaws_proto::datadog::healthplatform::{HealthReport, Issue, IssueSeverity, IssueState};
@@ -43,39 +42,8 @@ use uuid::Uuid;
 
 use super::api::merge_extra;
 use crate::json;
-use crate::server::{Ctx, Routes, accepted};
+use crate::server::{Body, Ctx, accepted};
 use crate::wire::{enum_name, tags, text, time};
-
-/// agentdiscovery-intake.<site>
-pub fn mount_agent_discovery(routes: &mut Routes) {
-    routes.post("/api/v2/agentdiscovery", handle_agent_discovery);
-}
-
-/// agenthealth-intake.<site>
-pub fn mount_agent_health(routes: &mut Routes) {
-    routes.post("/api/v2/agenthealth", handle_agent_health);
-}
-
-/// event-management-intake.<site>
-pub fn mount_event_management(routes: &mut Routes) {
-    routes.post("/api/v2/events", handle_event_management);
-}
-
-/// softinv-intake.<site>
-pub fn mount_software_inventory(routes: &mut Routes) {
-    routes.post("/api/v2/softinv", handle_software_inventory);
-}
-
-/// http-synthetics.<site>: where the results come back.
-pub fn mount_synthetics_results(routes: &mut Routes) {
-    routes.post("/api/v2/synthetics", handle_synthetics);
-}
-
-/// data-obs-intake.<site>
-pub fn mount_data_obs(routes: &mut Routes) {
-    routes.post("/api/v1/lineage", handle_open_lineage);
-    routes.post("/api/v2/query-actions", handle_query_actions);
-}
 
 // The JSON tracks are read generically, with the readers of `json` that note nothing: a value is
 // an `Option<&Value>`, None when the key is absent or null.
@@ -161,7 +129,7 @@ pub fn agent_discovery_rows(
 
 /// agentdiscovery-intake: which integration config files and env vars each agent runtime sees.
 /// One AgentDiscoveryPayloadBatch per request.
-pub async fn handle_agent_discovery(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_agent_discovery(ctx: Ctx, body: Body) -> Response {
     if !body.is_empty() {
         match AgentDiscoveryPayloadBatch::decode(&body[..]) {
             Err(e) => ctx.raw("agentdiscovery", "decode_error", &e.to_string(), &body),
@@ -311,7 +279,7 @@ pub fn health_report_rows(
 
 /// agenthealth-intake: issues the agent found with its own setup, one HealthReport per request.
 /// Not an event platform track.
-pub async fn handle_agent_health(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_agent_health(ctx: Ctx, body: Body) -> Response {
     if !body.is_empty() {
         match decode_health_report(&body) {
             Err(e) => ctx.raw("agenthealth", "decode_error", &e, &body),
@@ -401,7 +369,7 @@ pub fn event_management_row(
 
 /// event-management-intake: notable events, logon duration, anomaly notifications. A stream track,
 /// so one envelope per request.
-pub async fn handle_event_management(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_event_management(ctx: Ctx, body: Body) -> Response {
     if !body.is_empty() {
         match parse_object(&body) {
             None => ctx.raw(EVENT_MANAGEMENT_INTAKE, "decode_error", "body is not a JSON object", &body),
@@ -445,7 +413,9 @@ pub fn host_software_rows(tenant: &str, received_at: DateTime<Utc>, payload: &Va
         "host_software.",
         json::other_members(&HOST_SOFTWARE_KEYS, json::compact_sorted, host_software),
     );
-    let Some(Value::Array(entries)) = json::child("software", host_software) else { return Vec::new() };
+    let Some(Value::Array(entries)) = json::child("software", host_software) else {
+        return Vec::new();
+    };
     entries
         .iter()
         .filter(|item| item.is_object())
@@ -474,7 +444,7 @@ pub fn host_software_rows(tenant: &str, received_at: DateTime<Utc>, payload: &Va
 }
 
 /// softinv-intake: installed packages per host, batched.
-pub async fn handle_software_inventory(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_software_inventory(ctx: Ctx, body: Body) -> Response {
     handle_batch(&ctx, &body, "softinv", |now, item| host_software_rows(ctx.tenant(), now, item))
 }
 
@@ -579,7 +549,7 @@ pub fn synthetics_result_row(tenant: &str, received_at: DateTime<Utc>, item: &Va
 }
 
 /// http-synthetics: results of network tests the agent ran on the server's behalf, batched.
-pub async fn handle_synthetics(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_synthetics(ctx: Ctx, body: Body) -> Response {
     handle_batch(&ctx, &body, "synthetics", |now, item| vec![synthetics_result_row(ctx.tenant(), now, item)])
 }
 
@@ -648,7 +618,7 @@ pub fn open_lineage_event_row(
 /// OpenLineage RunEvents, forwarded as they are by the trace-agent's reverse proxy, with
 /// ?api-version=2 when the agent is told to add it. The transport posts one RunEvent per request;
 /// an array is accepted in case a client batches.
-pub async fn handle_open_lineage(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_open_lineage(ctx: Ctx, body: Body) -> Response {
     let api_version = ctx.query("api-version");
     let via = ctx.header("via").to_string();
     handle_batch(&ctx, &body, "lineage", |now, event| {
@@ -658,7 +628,7 @@ pub async fn handle_open_lineage(ctx: Ctx, body: Bytes) -> Response {
 
 /// Results of Data Observability query actions, batched. They come from Python integrations and
 /// no type documents them, so each entry is stored whole.
-pub async fn handle_query_actions(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_query_actions(ctx: Ctx, body: Body) -> Response {
     let origin = ctx.header("dd-evp-origin").to_string();
     let origin_version = ctx.header("dd-evp-origin-version").to_string();
     handle_batch(&ctx, &body, "query-actions", |now, entry| {

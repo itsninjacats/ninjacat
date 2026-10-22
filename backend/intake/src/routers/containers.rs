@@ -7,7 +7,6 @@
 //! Both carry protobuf. Lifecycle events land in container_events, the image inventory in
 //! container_images. A body that does not decode, or decodes to nothing, goes to raw_payloads.
 
-use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use ninjapaws_proto::datadog::contimage::{ContainerImage, ContainerImagePayload};
 use ninjapaws_proto::datadog::contlcycle::{
@@ -21,20 +20,17 @@ use prost::Message;
 use tako::types::Response;
 
 use crate::self_metrics;
-use crate::server::{Ctx, Routes, accepted};
+use crate::server::{Body, Ctx, accepted};
 use crate::wire::{enum_name, tags, text, time};
-
-pub fn mount(routes: &mut Routes) {
-    routes.post("/api/v2/contlcycle", handle_lifecycle);
-    routes.post("/api/v2/contimage", handle_images);
-}
 
 // ---- lifecycle events ----
 
 /// A container state as one label: the kind, then reason, exit code and signal when the value
 /// carries them.
 fn container_state_label(state: Option<&ContainerStateValue>) -> String {
-    let Some(state) = state else { return "-".into() };
+    let Some(state) = state else {
+        return "-".into();
+    };
     let reason = state.reason.as_ref().map(|r| format!("/{r}")).unwrap_or_default();
     let exit_code = state.exit_code.map(|c| format!(" exit={c}")).unwrap_or_default();
     let signal = state.signal.map(|s| format!(" signal={s}")).unwrap_or_default();
@@ -170,8 +166,7 @@ pub fn event_rows(payload: &EventsPayload, tenant: &str, now: DateTime<Utc>) -> 
                 row.exited_at = container.optional_exit_timestamp.and_then(
                     |container_event::OptionalExitTimestamp::ExitTimestamp(t)| time::optional_seconds(true, t),
                 );
-                row.owner_type =
-                    owner.map(|o| enum_name(o.owner_type, ObjectKind::as_str_name)).unwrap_or_default();
+                row.owner_type = owner.map(|o| enum_name(o.owner_type, ObjectKind::as_str_name)).unwrap_or_default();
                 row.owner_uid = owner.map(|o| o.owner_uid.clone()).unwrap_or_default();
                 with_container_transition(container.transition.as_ref(), &mut row);
             }
@@ -287,7 +282,7 @@ pub fn image_rows(
 
 /// Container, pod and task start/stop/OOM events. One payload covers one kind of object, named by
 /// object_kind.
-pub async fn handle_lifecycle(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_lifecycle(ctx: Ctx, body: Body) -> Response {
     match EventsPayload::decode(body.as_ref()) {
         Err(e) => ctx.raw("contlcycle", "decode_error", &e.to_string(), &body),
         Ok(payload) if payload.events.is_empty() => {
@@ -299,7 +294,7 @@ pub async fn handle_lifecycle(ctx: Ctx, body: Bytes) -> Response {
 }
 
 /// The container image inventory.
-pub async fn handle_images(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_images(ctx: Ctx, body: Body) -> Response {
     match ContainerImagePayload::decode(body.as_ref()) {
         Err(e) => ctx.raw("contimage", "decode_error", &e.to_string(), &body),
         Ok(payload) if payload.images.is_empty() => {

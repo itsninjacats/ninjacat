@@ -18,7 +18,6 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use base64::Engine;
-use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use http::StatusCode;
 use ninjapaws_proto::datadog::trace::{
@@ -35,19 +34,11 @@ use tako::types::Response;
 use super::trace_sketch;
 use crate::json;
 use crate::msgpack::{self, MsgFields, MsgValue};
-use crate::server::{Ctx, Routes, accepted, json};
+use crate::server::{Body, Ctx, accepted, json};
 use crate::wire::{tags, text};
 
 /// The label of everything on this host in raw_payloads.
 const INTAKE: &str = "trace";
-
-/// trace.agent.<site>
-pub fn mount(routes: &mut Routes) {
-    routes.post("/api/v0.2/traces", handle_traces);
-    routes.post("/api/v0.2/stats", handle_stats);
-    routes.post("/api/v0.1/pipeline_stats", handle_pipeline_stats);
-    routes.post("/api/v2/data_streams_messages", handle_data_streams_messages);
-}
 
 // --- JSON for the *_json columns ---
 
@@ -476,7 +467,7 @@ pub fn span_rows(tenant: &str, received_at: DateTime<Utc>, payload: &AgentPayloa
 /// What arrives is a sample: the agent runs its samplers before this writer. The complete counts
 /// are in the stats endpoint. The agent parses the answer (rate_by_service feeds its priority
 /// sampler), so it keeps exactly this shape.
-pub async fn handle_traces(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_traces(ctx: Ctx, body: Body) -> Response {
     let answer = json(StatusCode::OK, &serde_json::json!({ "rate_by_service": {} }));
     if ctx.is_sweep() {
         return answer;
@@ -679,7 +670,7 @@ pub fn stat_rows(tenant: &str, received_at: DateTime<Utc>, payload: &StatsPayloa
 ///
 /// The Android SDK from 3.14 may post msgpack here that is not a StatsPayload; it fails the decode
 /// and goes to raw_payloads.
-pub async fn handle_stats(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_stats(ctx: Ctx, body: Body) -> Response {
     if !ctx.is_sweep() {
         match decode_stats_payload(&body) {
             Err(problem) => ctx.raw(INTAKE, "decode_error", &format!("msgpack StatsPayload: {problem}"), &body),
@@ -957,7 +948,7 @@ pub fn dsm_rows(tenant: &str, received_at: DateTime<Utc>, payload: &DsmPayload, 
 /// POST /api/v0.1/pipeline_stats: Data Streams Monitoring stats straight from the tracer. The
 /// trace-agent is a reverse proxy here: it adds Via, X-Datadog-Additional-Tags and
 /// X-Datadog-Container-Tags and forwards the body untouched.
-pub async fn handle_pipeline_stats(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_pipeline_stats(ctx: Ctx, body: Body) -> Response {
     if !ctx.is_sweep() {
         match decode_dsm_payload(&body) {
             Err(problem) => {
@@ -1024,7 +1015,7 @@ pub fn dsm_message_rows(
 
 /// POST /api/v2/data_streams_messages. Not the trace-agent at all: an Event Platform track that
 /// happens to live on this host. JSON, batched by the forwarder into one array.
-pub async fn handle_data_streams_messages(ctx: Ctx, body: Bytes) -> Response {
+pub async fn handle_data_streams_messages(ctx: Ctx, body: Body) -> Response {
     match json::try_parse_element_bytes(&body) {
         Err(problem) => ctx.raw(
             INTAKE,

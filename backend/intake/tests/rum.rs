@@ -8,6 +8,8 @@
 //! The fixtures recorded on Go's engine, through the wrapper and from Go's peer, are the golden
 //! replay's.
 
+mod programs;
+
 use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
@@ -15,12 +17,12 @@ use std::sync::Arc;
 use bytes::Bytes;
 use chrono::Datelike;
 use http_body_util::BodyExt;
-use ninjapaws_intake::auth::{Admitted, Scheme};
+use ninjapaws_intake::auth::Admitted;
 use ninjapaws_intake::body::Part;
 use ninjapaws_intake::json;
 use ninjapaws_intake::keys::{self, Key, Store};
 use ninjapaws_intake::routers::rum::{self, EventKind};
-use ninjapaws_intake::server::{Ctx, Intake, query_value, router};
+use ninjapaws_intake::server::{Ctx, Intake, query_value};
 use ninjapaws_intake::wire::time;
 use ninjapaws_storage::rows::rum::RumRequest;
 use ninjapaws_storage::{Sink, Write as Batch};
@@ -55,9 +57,16 @@ async fn serve(allowed_origins: &[String], method: &str, url: &str, headers: &[(
     let store = Store::default();
     store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: "test".into() })]);
     let (sink, capture) = Sink::capture();
-    let intake = Intake { sink, keys: Arc::new(store), ack_unknown: false, max_body_bytes: 64 * 1024 * 1024 };
+    let intake = Intake {
+        sink,
+        keys: Arc::new(store),
+        ack_unknown: false,
+        max_body_bytes: 64 * 1024 * 1024,
+        stopping: Default::default(),
+        tasks: Default::default(),
+    };
     let gate = rum::above(
-        router(intake, Some(Scheme::Browser), rum::mount),
+        programs::router_of(programs::browser, intake),
         allowed_origins,
         rum::trusted_proxies("192.0.2.1").unwrap(),
     );
@@ -91,7 +100,17 @@ fn request_of(url: &str, headers: &[(&str, &str)]) -> Ctx {
     parts.extensions.insert(Admitted(Key { id: "test".into(), name: "test".into(), tenant_id: "t".into() }));
     parts.extensions.insert(ConnInfo::tcp(PEER.parse().unwrap()));
     let (sink, _) = Sink::capture();
-    Ctx { parts, intake: Arc::new(Intake { sink, keys: Arc::default(), ack_unknown: false, max_body_bytes: 0 }) }
+    Ctx {
+        parts,
+        intake: Arc::new(Intake {
+            sink,
+            keys: Arc::default(),
+            ack_unknown: false,
+            max_body_bytes: 0,
+            stopping: Default::default(),
+            tasks: Default::default(),
+        }),
+    }
 }
 
 fn sender() -> RumRequest {
@@ -543,9 +562,9 @@ fn a_forwarded_path_and_query_become_the_request() {
     ));
 
     assert_eq!(uri.path(), "/api/v2/rum");
-    assert_eq!(query_value(&uri, "ddsource"), "browser");
-    assert_eq!(query_value(&uri, "dd-api-key"), "k");
-    assert_eq!(query_value(&uri, "dd-request-id"), "r1");
+    assert_eq!(query_value(&uri, "ddsource").as_deref(), Some("browser"));
+    assert_eq!(query_value(&uri, "dd-api-key").as_deref(), Some("k"));
+    assert_eq!(query_value(&uri, "dd-request-id").as_deref(), Some("r1"));
     // Left in, it would be stored as an unknown parameter.
     assert!(!uri.query().unwrap().contains("ddforward"));
 }
@@ -558,8 +577,8 @@ fn an_outer_parameter_the_proxy_added_survives_the_merge_and_the_forwarded_one_w
     ));
 
     assert_eq!(uri.path(), "/api/v2/logs");
-    assert_eq!(query_value(&uri, "tenant"), "acme");
-    assert_eq!(query_value(&uri, "ddsource"), "browser");
+    assert_eq!(query_value(&uri, "tenant").as_deref(), Some("acme"));
+    assert_eq!(query_value(&uri, "ddsource").as_deref(), Some("browser"));
 }
 
 #[test]
@@ -940,8 +959,7 @@ fn a_replay_row_puts_the_bytes_in_the_column_that_says_what_they_are() {
 }
 
 fn real(name: &str) -> Vec<u8> {
-    std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real").join(name))
-        .unwrap()
+    std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real").join(name)).unwrap()
 }
 
 fn tally<'a>(names: impl Iterator<Item = &'a str>) -> String {

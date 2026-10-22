@@ -43,7 +43,7 @@ use tokio_util::sync::CancellationToken;
 use crate::json;
 use crate::keys::Store;
 use crate::routers::logs::{self, BatchDefaults};
-use crate::server::{Process, listen_on, var_or};
+use crate::server::{Intake, listen_on, var_or};
 use crate::wire::{tags, text, time};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -285,10 +285,10 @@ pub fn tls_acceptor(cert_file: &str, key_file: &str) -> Result<TlsAcceptor, BoxE
 }
 
 /// Accepts connections on `listener` until the process stops, each served as a task of its own.
-pub fn serve(listener: TcpListener, tls: Option<TlsAcceptor>, process: &Process) {
+pub fn serve(listener: TcpListener, tls: Option<TlsAcceptor>, intake: &Intake) {
     let (keys, sink, stopping, tasks) =
-        (process.keys.clone(), process.sink.clone(), process.stopping.clone(), process.tasks.clone());
-    process.tasks.spawn(async move {
+        (intake.keys.clone(), intake.sink.clone(), intake.stopping.clone(), intake.tasks.clone());
+    intake.tasks.spawn(async move {
         loop {
             let (stream, peer) = tokio::select! {
                 _ = stopping.cancelled() => return,
@@ -317,7 +317,7 @@ pub fn serve(listener: TcpListener, tls: Option<TlsAcceptor>, process: &Process)
 
 /// The listener as the environment configures it, started beside the HTTP one; nothing when
 /// `NINJACAT_LOGS_TCP_ADDR` is `off`. Called inside the runtime.
-pub fn listen(process: &Process) -> Result<(), BoxError> {
+pub fn listen(intake: &Intake) -> Result<(), BoxError> {
     let addr = var_or("NINJACAT_LOGS_TCP_ADDR", ":10516");
     if addr == "off" {
         return Ok(());
@@ -329,6 +329,6 @@ pub fn listen(process: &Process) -> Result<(), BoxError> {
     listener.set_nonblocking(true)?;
     let listener = TcpListener::from_std(listener)?;
     tracing::info!("logs over TCP listening on {addr}{}", if tls.is_some() { " (TLS)" } else { "" });
-    serve(listener, tls, process);
+    serve(listener, tls, intake);
     Ok(())
 }
