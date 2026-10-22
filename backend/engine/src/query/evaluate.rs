@@ -471,17 +471,6 @@ pub fn eval_from(fetched: &Fetched, from_ms: i64, node: &Node) -> Vec<Series> {
     eval_shifted(fetched, 0, from_ms, node)
 }
 
-/// Evaluates with every point the queries returned; for tests of single functions, where there is
-/// no window to trim to.
-pub fn eval(series: HashMap<usize, Vec<Series>>, node: &Node) -> Vec<Series> {
-    let fetched = Fetched {
-        step_ms: series.keys().map(|&i| (i, 20_000)).collect(),
-        series: series.into_iter().map(|(i, s)| ((i, 0), s)).collect(),
-        to_ms: i64::MAX,
-    };
-    eval_from(&fetched, i64::MIN, node)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -500,6 +489,16 @@ mod tests {
     fn one(series: Vec<Series>) -> Series {
         assert_eq!(series.len(), 1, "{series:?}");
         series.into_iter().next().unwrap()
+    }
+
+    /// Evaluates with every point the queries returned: there is no window to trim to.
+    fn eval(series: HashMap<usize, Vec<Series>>, node: &Node) -> Vec<Series> {
+        let fetched = Fetched {
+            step_ms: series.keys().map(|&i| (i, 20_000)).collect(),
+            series: series.into_iter().map(|(i, s)| ((i, 0), s)).collect(),
+            to_ms: i64::MAX,
+        };
+        eval_from(&fetched, i64::MIN, node)
     }
 
     fn only(i: usize, series: Vec<Series>) -> HashMap<usize, Vec<Series>> {

@@ -14,14 +14,11 @@ pub enum Outliers {
 
 /// Which of `series` are outliers among them. Each series is `(time, value)` points, oldest
 /// first; they are lined up on the times any of them has. Fewer than three series have none.
-pub fn outliers<S: AsRef<[(i64, f64)]>>(algorithm: Outliers, tolerance: f64, series: &[S]) -> Vec<bool> {
-    let times: BTreeSet<i64> = series.iter().flat_map(|s| s.as_ref().iter().map(|p| p.0)).collect();
+pub fn outliers(algorithm: Outliers, tolerance: f64, series: &[Vec<(i64, f64)>]) -> Vec<bool> {
+    let times: BTreeSet<i64> = series.iter().flat_map(|s| s.iter().map(|p| p.0)).collect();
     let rows: Vec<Vec<Option<f64>>> = series
         .iter()
-        .map(|s| {
-            let s = s.as_ref();
-            times.iter().map(|t| s.binary_search_by_key(t, |p| p.0).ok().map(|i| s[i].1)).collect()
-        })
+        .map(|s| times.iter().map(|t| s.binary_search_by_key(t, |p| p.0).ok().map(|i| s[i].1)).collect())
         .collect();
 
     match algorithm {

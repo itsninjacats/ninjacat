@@ -12,7 +12,7 @@
 
 use crate::metric_query::filter;
 use crate::metrics::{LIFTED_TAGS, raw_window};
-use crate::query::plan::{Aggregation, Fill, Plan, QueryPlan, Table, TimeAggregation, earliest_offset_ms};
+use crate::query::plan::{Aggregation, Fill, Plan, QueryPlan, Table, TimeAggregation, earliest_offset_ms, table_for};
 use crate::sql::{Sql, SqlParams, SqlValue, TenantId};
 
 /// One row of a compiled query: `g0 … gN-1` (Nullable(String), one per `by` key, NULL where the
@@ -23,7 +23,7 @@ use crate::sql::{Sql, SqlParams, SqlValue, TenantId};
 pub struct Row {
     /// None: the series has no value for that `by` key, Datadog's N/A group.
     pub groups: Vec<Option<String>>,
-    /// Set when the query returns series one by one (see `compile_on`), for the engine to fill
+    /// Set when the query returns series one by one (see `compile`), for the engine to fill
     /// and combine them; None when ClickHouse already combined them.
     pub series_id: Option<u64>,
     pub bucket_ms: i64,
@@ -115,8 +115,8 @@ pub fn keep_from_ms(plan: &Plan, query: &QueryPlan) -> i64 {
     plan.from - query.lookback as i64 * query.step.num_milliseconds()
 }
 
-/// `compile` with the table given rather than chosen by the step.
-pub fn compile_on(table: Table, tenant: &TenantId, plan: &Plan, query: &QueryPlan) -> Sql {
+pub fn compile(tenant: &TenantId, plan: &Plan, query: &QueryPlan) -> Sql {
+    let table = table_for(query.step);
     let mut p = SqlParams::new();
 
     // The rollup's groups are read from the union's `tags`, which has no lifted columns.
@@ -213,10 +213,6 @@ ORDER BY {group_list}bucket",
     };
 
     Sql { text, parameters: p.into_parameters() }
-}
-
-pub fn compile(tenant: &TenantId, plan: &Plan, query: &QueryPlan) -> Sql {
-    compile_on(crate::query::plan::table_for(query.step), tenant, plan, query)
 }
 
 #[cfg(test)]
