@@ -102,7 +102,7 @@ DD_API_KEY=<key> docker compose -f compose.yaml -f compose.lab.yaml up
 ## Architecture
 
 ```
-Datadog Agent ──:8080──▶ ingress ──host──▶ ninjapaws_<host> ──▶ one writer per table ──▶ ClickHouse
+Datadog Agent ──:8080──▶ ingress ──host──▶ ninjapaws_<host> ──▶ one insert per table ──▶ ClickHouse
                                                                                             ▲
 SvelteKit panel ──:8081──▶ ninjapaws_internal (panel and query API) ───────────────────────┤
        │                                                                                    │
@@ -116,9 +116,9 @@ every product on its own hostname, which is what lets a single `DD_SITE` reconfi
 entire agent; here each of those hosts is a program of its own, deployed, scaled and stopped
 on its own, and the ingress in front sends each name to its program. The panel's API and
 Datadog's query API are served by `ninjapaws_internal`, on a port of its own;
-`ninjapaws_monitors` evaluates the monitors and writes what they went through. The agent gets
-its answer before anything is written — rows are buffered per table and inserted in batches,
-so a burst of logs cannot delay metrics.
+`ninjapaws_monitors` evaluates the monitors and writes what they went through. A handler
+inserts its rows before it answers, and ClickHouse's asynchronous inserts batch the many small
+inserts on its side; when ClickHouse refuses one, the agent is told to send again.
 
 See [CLAUDE.md](CLAUDE.md) for the full architecture notes, the commands, and the
 reasoning behind the load-bearing decisions.

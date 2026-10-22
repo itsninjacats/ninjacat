@@ -162,7 +162,7 @@ backend/proto     agent protobuf schemas → generated Rust (prost, prost-reflec
 backend/engine    query language → SQL text + typed parameters; the panel's queries;
                   monitor/: what a monitor means (parse, validate, evaluate, the group state machine)
 backend/anomaly   anomaly, forecast and outlier algorithms
-backend/storage   rows, one writer per table, the sink, migrations
+backend/storage   rows, `storage::insert`, migrations
 backend/intake    what every intake host shares: keys, auth, bodies, JSON, raw_payloads, the
                   server (server.rs); one router per Datadog product (routers/)
 backend/api       the programs: ninjapaws_<host>, ninjapaws_internal, ninjapaws_monitors,
@@ -172,8 +172,8 @@ backend/api       the programs: ninjapaws_<host>, ninjapaws_internal, ninjapaws_
 - **An intake program per host, :8080** (`NINJACAT_ADDR`) — reachable from agent machines; every
   route but the probes asks for an API key. `backend/api/src/bin/ninjapaws_<host>.rs` lists every
   route of its host in `main`, on a plain tako `Router`, then the probes, the 404, `with_state` and
-  `server::serve`, line by line.
-  Every write of what agents send goes through the table writers of its own process.
+  `server::serve`, line by line. Its state is three plain values: the ClickHouse client, the API
+  keys and `server::Settings`.
 - **`ninjapaws_internal`, :8081** (`NINJACAT_INTERNAL_ADDR`) — `/internal/*` for the panel and
   Datadog's query API (`/api/v1/metrics`, `/api/v2/query/*`). It only reads. Every route but the
   probes asks for the panel's JWT (`token.rs`); its `tenant` claim is the only source of the
@@ -225,37 +225,36 @@ binary cannot be imported).
 own. Where tako's behaviour differs from the old servers' (case, trailing slashes, 405), tako's stands.
 
 **Handlers take the request and its body.** Each is `async fn(Ctx, Body) -> Response`, both tako
-extractors from `intake/src/server.rs`: `Body` is the body read whole with its Content-Encoding
-undone. A handler reads the request from `Ctx` (`tenant`, `header`, `query`, `path`) and answers
+extractors from `intake/src/server.rs`, plus tako's `State<clickhouse::Client>` between them when
+it stores something: `Body` is the body read whole with its Content-Encoding undone. A handler
+reads the request from `Ctx` (`tenant`, `header`, `query`, `path`), which only reads, and answers
 with `server::json`, `status`, `accepted`. There is no other request or response type; do not add one.
 
 **One helper of each kind.** JSON is parsed, read and written through `intake/src/json.rs`
 (`json::raw` for the text a value was sent as, `json::proto` for protobuf as JSON); an object is
 read field by field with `fields::Fields` (exact names, the last of a repeated name, null the
 same as absent, mismatches noted). `body::try_parts`, `wire::time`, `wire::enum_name`,
-`server::accepted` and `Ctx::write` (writes nothing without a tenant) are the others. A router
+`server::accepted`, `server::storage_failed` and `storage::insert` are the others. A router
 does not grow a private copy of any of them, and `raw::store` alone logs a kept payload.
 
 **Numbers and text are kept as sent.** serde_json runs with `arbitrary_precision` in the whole
-workspace, so a parsed number keeps its digits. Where a column holds a JSON value as it arrived,
-it holds the text that was sent (`json::raw`, RawValue), not a re-printed copy; the golden
+workspace, so a parsed number keeps its digits. Where a String column holds a JSON value as it
+arrived, it holds the text that was sent (`json::raw`, RawValue), not a re-printed copy; the golden
 comparison compares JSON by meaning and would not notice, so such a column has a test of its own.
+A `JSON`-type column normalises what it is given: `{"x":1,"y":null}` is stored as `{"x":1}`.
 
 **The API key is a route middleware.** `intake/src/auth.rs`: `auth::agent`, `browser`,
 `ci_webhook`, `lineage`, one per place a host's clients put the key; a known key goes on in the
 request's extensions (`Admitted`), anything else is a 403. An unknown path is answered before any key is asked for.
 
-**Writes are asynchronous, reads are not** *(0.1 design, being replaced: handlers will insert
-directly through the ClickHouse client, and ClickHouse's `async_insert` will do the batching).*
-A handler turns the Datadog wire format into the
-plain rows in `storage/src/rows/*.rs` and hands them to the sink — the agent gets its 202
-immediately. `storage` knows nothing about HTTP or Datadog; that is what lets a second source
-(OTLP) be added without touching the write path.
-
-**One writer per table, never a pool** *(0.1 design, goes with the rule above).* Separate buffers stop a burst of logs from
-delaying metrics; a pool for the *same* table would shrink batches and recreate ClickHouse's
-"Too many parts" problem. A slow flush is handled by flushing in the background (up to
-`max_in_flight`), not by adding writers. The rule holds per process.
+**A handler inserts its rows itself.** It turns the Datadog wire format into the plain rows in
+`storage/src/rows/*.rs` (in a function of its own) and awaits `storage::insert` for each table,
+one insert per table per request, before it answers. There is no buffer of our own: ClickHouse's
+`async_insert` (set on every client, with `wait_for_async_insert`) batches the many small inserts
+into parts on its side. When ClickHouse refuses an insert the handler answers 503
+(`server::storage_failed`), so the sender keeps the payload and sends it again. `storage` knows
+nothing about HTTP or Datadog; that is what lets a second source (OTLP) be added without touching
+the write path.
 
 **API key lookup takes no lock.** `intake/src/keys.rs` publishes an immutable snapshot
 (ArcSwap); its keeper alone replaces it, every 30s and when the panel asks.
@@ -288,9 +287,15 @@ through the router of the program that serves its host and compares field by fie
 `fixtures/overrides.json` lists the accepted differences, each with a reason, and is not a place
 to hide a change in behaviour (an ignore of `/sends` marks a deliberate one, pinned by a test of
 its own). A deliberate change to what a route stores means updating its fixture by hand and
-saying why in an `edited` key inside it. The second test of `golden.rs` inserts every fixture's
-rows through the real writers into a scratch database built from the migrations (skipped when
-ClickHouse is not running).
+saying why in an `edited` key inside it. The fixtures go through the real handlers into a scratch
+ClickHouse database, and what is compared is what the tables hold.
+
+Tests that store need a running ClickHouse and skip, with one "skipped:" line, when it is down.
+`intake/tests/db/mod.rs` gives each test binary one scratch database built from the migrations
+(every TTL removed, as ClickHouse drops an expired row already on insert) and each test a tenant
+of its own; `db::tables` and `db::rows` read back what a tenant has. Rows come back in sort-key
+order, not insert order, and times as the column keeps them (`DateTime64(3)`: milliseconds,
+`DateTime`: seconds). The dev database `ninjacat` is never touched by a test.
 
 `fixtures/real/` are payloads recorded from **real senders** against this server: the browser
 SDK, the agent's DBM integrations (seven databases), its network checks, its data security
