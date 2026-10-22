@@ -101,7 +101,7 @@ fn sent_text(sent: &Sent, name: &str) -> String {
 /// For an `extra` column of a document kept as it came: the members not in `skip`, each as the
 /// text it was sent as.
 fn extra_sent(skip: &[&str], text: &str) -> Extra {
-    json::raw::other_members(&skip.iter().copied().collect(), text)
+    json::raw::other_members(skip, text)
 }
 
 /// Folds a nested object's extras into the outer ones under a prefix, so two levels of one

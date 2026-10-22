@@ -16,8 +16,7 @@
 // the node row counts them.
 #![allow(deprecated)]
 
-use std::collections::{BTreeMap, BTreeSet};
-use std::sync::LazyLock;
+use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
 use ninjapaws_proto::cyclonedx::v1_4::{
@@ -48,8 +47,7 @@ use crate::server::{Body, Ctx, accepted};
 use crate::wire::{enum_name, tags, text, time};
 
 /// Header keys with a column of their own; the rest go to header_extra.
-static KNOWN_HEADER_KEYS: LazyLock<BTreeSet<&str>> =
-    LazyLock::new(|| BTreeSet::from(["host", "service", "ddsource", "ddtags", "dns_names"]));
+const KNOWN_HEADER_KEYS: &[&str] = &["host", "service", "ddsource", "ddtags", "dns_names"];
 
 /// The "dump" part as a SecDump. None when the bytes do not decode, or decode to nothing: protobuf
 /// reads almost any bytes as some message.
@@ -119,7 +117,7 @@ pub fn dump_row(
         if json::field("dns_names", h).is_some() {
             row.dns_names = json::raw::member("dns_names", text).unwrap_or_default().into();
         }
-        row.header_extra = json::raw::other_members(&KNOWN_HEADER_KEYS, text);
+        row.header_extra = json::raw::other_members(KNOWN_HEADER_KEYS, text);
     }
 
     if let Some(d) = dump {
@@ -256,8 +254,7 @@ pub async fn handle_sec_dump(ctx: Ctx, body: Body) -> Response {
 }
 
 /// Envelope keys with a column of their own; the rest go to extra.
-static KNOWN_ENVELOPE_KEYS: LazyLock<BTreeSet<&str>> =
-    LazyLock::new(|| BTreeSet::from(["message", "status", "timestamp", "hostname", "service", "ddsource", "ddtags"]));
+const KNOWN_ENVELOPE_KEYS: &[&str] = &["message", "status", "timestamp", "hostname", "service", "ddsource", "ddtags"];
 
 /// The envelope's timestamp: a millisecond epoch as a number or as text, or RFC 3339 text,
 /// depending on the producer. None when absent or unreadable.
@@ -318,7 +315,7 @@ pub fn event_rows(tenant: &str, received_at: DateTime<Utc>, track: &str, envelop
                 ddsource: json::lenient_string(json::field("ddsource", envelope)),
                 status: json::lenient_string(json::field("status", envelope)),
                 ddtags: tags::to_multi_map(json::tag_list(json::field("ddtags", envelope))),
-                extra: json::raw::other_members(&KNOWN_ENVELOPE_KEYS, text),
+                extra: json::raw::other_members(KNOWN_ENVELOPE_KEYS, text),
                 message_raw: match message {
                     Some(_) => json::raw::member("message", text).unwrap_or_default().into(),
                     None => String::new(),

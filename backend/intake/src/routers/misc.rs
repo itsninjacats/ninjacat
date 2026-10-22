@@ -6,7 +6,7 @@
 //!   config: none for resources (an event platform track); telemetry is switched off wholesale
 //!           with DD_TELEMETRY_ENABLED.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use chrono::{DateTime, TimeDelta, Utc};
 use ninjapaws_storage::rows::Extra;
@@ -112,12 +112,11 @@ pub struct Host {
 /// sent, which its other keys are kept from.
 pub fn host(value: Option<&Value>, text: Option<&str>) -> Option<Host> {
     let fields = block(value)?;
-    let known = BTreeSet::from(["hostname", "os", "architecture"]);
     Some(Host {
         hostname: json::text(fields.get("hostname")),
         os: json::text(fields.get("os")),
         architecture: json::text(fields.get("architecture")),
-        extra: text.map(|t| json::raw::other_members(&known, t)).unwrap_or_default(),
+        extra: text.map(|t| json::raw::other_members(&["hostname", "os", "architecture"], t)).unwrap_or_default(),
     })
 }
 
@@ -138,7 +137,7 @@ const ENVELOPE_KEYS: [&str; 11] = [
 
 /// The envelope's keys without a column of their own, each as the text it was sent as.
 pub fn extra_keys(text: &str) -> Extra {
-    json::raw::other_members(&BTreeSet::from(ENVELOPE_KEYS), text)
+    json::raw::other_members(&ENVELOPE_KEYS, text)
 }
 
 /// Names the producer from request_type, falling back to the envelope keys that only one producer

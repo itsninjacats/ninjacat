@@ -13,7 +13,7 @@
 //! comp/netflow/payload, pkg/networkpath/payload, pkg/networkdevice/metadata,
 //! pkg/networkconfigmanagement/report and comp/snmptraps/formatter.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv6Addr};
 use std::sync::LazyLock;
 
@@ -46,23 +46,21 @@ fn first_problem(bad: &Mismatches) -> Option<String> {
 }
 
 /// The payload's root keys: metadata.NetworkDevicesMetadata.
-static METADATA_KEYS: LazyLock<BTreeSet<&str>> = LazyLock::new(|| {
-    BTreeSet::from([
-        "subnet",
-        "namespace",
-        "integration",
-        "devices",
-        "interfaces",
-        "ip_addresses",
-        "links",
-        "vpn_tunnels",
-        "netflow_exporters",
-        "diagnoses",
-        "device_oids",
-        "scan_status",
-        "collect_timestamp",
-    ])
-});
+const METADATA_KEYS: &[&str] = &[
+    "subnet",
+    "namespace",
+    "integration",
+    "devices",
+    "interfaces",
+    "ip_addresses",
+    "links",
+    "vpn_tunnels",
+    "netflow_exporters",
+    "diagnoses",
+    "device_oids",
+    "scan_status",
+    "collect_timestamp",
+];
 
 /// The wire sends 1 for reachable and 2 for unreachable. Anything else, an absent field included,
 /// is "unknown" rather than a guess.
@@ -93,7 +91,7 @@ pub fn metadata_rows(tenant: &str, entry: &str) -> Result<MetadataRows, String> 
     let integration = p.string("integration");
     // Whole seconds: the agent fills it from time.Unix().
     let collected = time::from_unix_seconds(p.int64("collect_timestamp"));
-    let extra = json::raw::other_members(&METADATA_KEYS, entry);
+    let extra = json::raw::other_members(METADATA_KEYS, entry);
 
     let device_row = |d: Fields| NdmDevice {
         tenant_id: tenant.into(),
@@ -242,8 +240,7 @@ pub async fn handle_metadata(ctx: Ctx, body: Body) -> Response {
 
 /// report.NCMPayload, plus agent_hostname and inventories: both are on the wire though the agent's
 /// struct does not document them.
-static CONFIG_KEYS: LazyLock<BTreeSet<&str>> =
-    LazyLock::new(|| BTreeSet::from(["namespace", "configs", "collect_timestamp", "agent_hostname", "inventories"]));
+const CONFIG_KEYS: &[&str] = &["namespace", "configs", "collect_timestamp", "agent_hostname", "inventories"];
 
 /// The rows of one NCMPayload, from its text, or what did not fit.
 pub fn config_rows(tenant: &str, entry: &str) -> Result<Vec<NdmDeviceConfig>, String> {
@@ -256,7 +253,7 @@ pub fn config_rows(tenant: &str, entry: &str) -> Result<Vec<NdmDeviceConfig>, St
     let collected = time::from_unix_seconds(p.int64("collect_timestamp"));
     let agent_hostname = p.string("agent_hostname");
     let inventories = json::raw::member("inventories", entry).unwrap_or_default().to_string();
-    let extra = json::raw::other_members(&CONFIG_KEYS, entry);
+    let extra = json::raw::other_members(CONFIG_KEYS, entry);
 
     let rows = p
         .objects("configs")
@@ -303,21 +300,19 @@ pub async fn handle_config(ctx: Ctx, body: Body) -> Response {
 
 /// What the formatter writes under "trap" for every trap. Any other key is an enrichment: a
 /// variable the MIB resolved to a name.
-static TRAP_KEYS: LazyLock<BTreeSet<&str>> = LazyLock::new(|| {
-    BTreeSet::from([
-        "ddsource",
-        "ddtags",
-        "timestamp",
-        "uptime",
-        "snmpTrapOID",
-        "snmpTrapName",
-        "snmpTrapMIB",
-        "enterpriseOID",
-        "genericTrap",
-        "specificTrap",
-        "variables",
-    ])
-});
+const TRAP_KEYS: &[&str] = &[
+    "ddsource",
+    "ddtags",
+    "timestamp",
+    "uptime",
+    "snmpTrapOID",
+    "snmpTrapName",
+    "snmpTrapMIB",
+    "enterpriseOID",
+    "genericTrap",
+    "specificTrap",
+    "variables",
+];
 
 /// The row of one trap (the object under "trap"), from its text, or what did not fit.
 pub fn trap_row(tenant: &str, trap: &str) -> Result<SnmpTrap, String> {
@@ -350,7 +345,7 @@ pub fn trap_row(tenant: &str, trap: &str) -> Result<SnmpTrap, String> {
             .iter()
             .map(|variable| json::raw::member("value", variable).unwrap_or_default().to_string())
             .collect(),
-        enriched: json::raw::other_members(&TRAP_KEYS, trap),
+        enriched: json::raw::other_members(TRAP_KEYS, trap),
         raw: trap.into(),
     };
     match first_problem(&bad) {
@@ -387,32 +382,30 @@ pub async fn handle_traps(ctx: Ctx, body: Body) -> Response {
 
 /// The root keys the agent's FlowPayload writes for its own fields. Every other root key is one
 /// of the flow's additional fields.
-pub static FLOW_KEYS: LazyLock<BTreeSet<&str>> = LazyLock::new(|| {
-    BTreeSet::from([
-        "flush_timestamp",
-        "type",
-        "sampling_rate",
-        "direction",
-        "start",
-        "end",
-        "bytes",
-        "packets",
-        "ether_type",
-        "ip_protocol",
-        "tos",
-        "dscp",
-        "dscp_name",
-        "device",
-        "exporter",
-        "source",
-        "destination",
-        "ingress",
-        "egress",
-        "host",
-        "tcp_flags",
-        "next_hop",
-    ])
-});
+pub const FLOW_KEYS: &[&str] = &[
+    "flush_timestamp",
+    "type",
+    "sampling_rate",
+    "direction",
+    "start",
+    "end",
+    "bytes",
+    "packets",
+    "ether_type",
+    "ip_protocol",
+    "tos",
+    "dscp",
+    "dscp_name",
+    "device",
+    "exporter",
+    "source",
+    "destination",
+    "ingress",
+    "egress",
+    "host",
+    "tcp_flags",
+    "next_hop",
+];
 
 /// The agent never writes an "additional_fields" key: its marshaller spreads the configured extra
 /// fields over the root object, next to "bytes" and "source". They are collected back here, each
@@ -423,12 +416,12 @@ fn additional_fields(flow: &Value) -> BTreeMap<String, String> {
         for (name, value) in object {
             if name == "additional_fields" {
                 found.extend(json::members(value));
-            } else if !FLOW_KEYS.contains(name.as_str()) {
+            } else if !FLOW_KEYS.contains(&name.as_str()) {
                 found.insert(name.clone(), value.clone());
             }
         }
     }
-    json::member_texts(json::compact_sorted, &found)
+    found.iter().map(|(name, value)| (name.clone(), json::compact_sorted(value))).collect()
 }
 
 fn flow_row(bad: &Mismatches, tenant: &str, index: usize, flow: &Value) -> NetflowFlow {
@@ -715,9 +708,9 @@ mod tests {
     #[test]
     fn the_structs_keys_are_known_additional_fields_is_not_one_of_them() {
         for key in ["flush_timestamp", "type", "bytes", "source", "next_hop", "tcp_flags", "device", "exporter"] {
-            assert!(FLOW_KEYS.contains(key));
+            assert!(FLOW_KEYS.contains(&key));
         }
-        assert!(!FLOW_KEYS.contains("additional_fields"));
+        assert!(!FLOW_KEYS.contains(&"additional_fields"));
     }
 
     #[test]
