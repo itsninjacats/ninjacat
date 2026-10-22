@@ -11,6 +11,8 @@ import * as schema from './schema';
 // stack's Postgres unless DATABASE_URL names another.
 const url = process.env.DATABASE_URL ?? 'postgres://root:mysecretpassword@localhost:5433/local';
 
+export const migrations = fileURLToPath(new URL('../../../../drizzle', import.meta.url));
+
 export async function reachable(): Promise<boolean> {
 	const probe = postgres(url, { max: 1, connect_timeout: 2, onnotice: () => {} });
 	try {
@@ -24,7 +26,8 @@ export async function reachable(): Promise<boolean> {
 }
 
 // Nothing connects until `create`; `drop` cleans up after a failed one too.
-export function scratchDatabase() {
+// A test of a migration passes a folder holding only the ones before it.
+export function scratchDatabase(migrationsFolder = migrations) {
 	const name = `ninjacat_test_${randomBytes(6).toString('hex')}`;
 	const admin = postgres(url, { max: 1, onnotice: () => {} });
 	const scratch = new URL(url);
@@ -37,9 +40,7 @@ export function scratchDatabase() {
 		db,
 		async create() {
 			await admin.unsafe(`create database ${name}`);
-			await migrate(db, {
-				migrationsFolder: fileURLToPath(new URL('../../../../drizzle', import.meta.url))
-			});
+			await migrate(db, { migrationsFolder });
 		},
 		async drop() {
 			await sql.end();

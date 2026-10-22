@@ -22,6 +22,13 @@
       "when": 1791922506342,
       "tag": "0002_monitor",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792702987260,
+      "tag": "0003_user_id_uuid",
+      "breakpoints": true
     }
   ]
 }

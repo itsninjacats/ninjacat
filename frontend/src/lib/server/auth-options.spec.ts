@@ -44,6 +44,19 @@ describe('auth options', () => {
 		expect(await allowed(['impersonate-admins'])).toBe(false);
 	});
 
+	// A user id is a UUID for Datadog's API; an organization's id is a tenant_id
+	// and keeps Better Auth's own shape, as does every other row's.
+	it('gives users a UUID and every other model a Better Auth id', () => {
+		const { generateId } = auth.options.advanced.database;
+
+		expect(generateId({ model: 'user' })).toMatch(
+			/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+		);
+		for (const model of ['organization', 'session']) {
+			expect(generateId({ model }), model).toMatch(/^[A-Za-z0-9]{32}$/);
+		}
+	});
+
 	it('reads the instance admin out of a list of roles', () => {
 		expect(isInstanceAdmin('admin')).toBe(true);
 		expect(isInstanceAdmin('user,admin')).toBe(true);
