@@ -3,12 +3,12 @@
 
 use ninjapaws_engine::monitor::evaluate::Period;
 use ninjapaws_engine::monitor::state::{Reason, Status, Transition};
+use ninjapaws_storage::Sink;
 
 use super::Scratch;
 use crate::definitions::MonitorKey;
 use crate::rows::EvaluationRow;
 use crate::store::{self, History};
-use crate::writer;
 
 fn key() -> MonitorKey {
     MonitorKey { tenant: "acme".into(), id: 7 }
@@ -41,9 +41,9 @@ fn transition(group: &str, at: i64, from: Option<Status>, to: Status, reason: Re
     }
 }
 
-async fn stored(writes: &clickhouse::Client, hash: &str, t: Transition) {
+async fn stored(sink: &Sink, hash: &str, t: Transition) {
     let row = store::transition_row(&key(), 1, hash, None, None, &t);
-    writer::insert(writes, "monitor_transitions", &[row]).await.unwrap();
+    sink.insert(vec![row]).await.unwrap();
 }
 
 fn evaluated(group: &str, at: i64) -> EvaluationRow {
@@ -62,34 +62,34 @@ fn evaluated(group: &str, at: i64) -> EvaluationRow {
 #[tokio::test]
 async fn open_groups_load_with_their_latest_transition_closed_ones_do_not() {
     let Some(scratch) = Scratch::new().await else { return };
-    let writes = scratch.writes();
+    let sink = scratch.sink();
     use Status::*;
 
-    stored(&writes, "old", transition("host:a", minutes_ago(30), None, Alert, Reason::New)).await;
-    stored(&writes, "new", transition("host:a", minutes_ago(20), Some(Alert), Warn, Reason::Threshold)).await;
+    stored(&sink, "old", transition("host:a", minutes_ago(30), None, Alert, Reason::New)).await;
+    stored(&sink, "new", transition("host:a", minutes_ago(20), Some(Alert), Warn, Reason::Threshold)).await;
     // Stored twice, as a retried insert would.
-    stored(&writes, "old", transition("host:b", minutes_ago(25), None, Ok, Reason::New)).await;
-    stored(&writes, "old", transition("host:b", minutes_ago(25), None, Ok, Reason::New)).await;
-    stored(&writes, "old", transition("host:c", minutes_ago(30), None, Alert, Reason::New)).await;
-    stored(&writes, "old", transition("host:c", minutes_ago(10), Some(Alert), Ok, Reason::Expired)).await;
+    stored(&sink, "old", transition("host:b", minutes_ago(25), None, Ok, Reason::New)).await;
+    stored(&sink, "old", transition("host:b", minutes_ago(25), None, Ok, Reason::New)).await;
+    stored(&sink, "old", transition("host:c", minutes_ago(30), None, Alert, Reason::New)).await;
+    stored(&sink, "old", transition("host:c", minutes_ago(10), Some(Alert), Ok, Reason::Expired)).await;
     // The latest row has no trigger times; an older one has.
-    stored(&writes, "new", transition("host:d", minutes_ago(30), None, Alert, Reason::New)).await;
-    stored(&writes, "new", transition("host:d", minutes_ago(15), Some(Alert), NoData, Reason::NoData)).await;
+    stored(&sink, "new", transition("host:d", minutes_ago(30), None, Alert, Reason::New)).await;
+    stored(&sink, "new", transition("host:d", minutes_ago(15), Some(Alert), NoData, Reason::NoData)).await;
     // A No Data not notified remembers what it interrupted.
-    stored(&writes, "new", transition("host:e", minutes_ago(30), None, Warn, Reason::New)).await;
-    stored(&writes, "new", transition("host:e", minutes_ago(15), Some(Warn), NoData, Reason::NoDataShown)).await;
+    stored(&sink, "new", transition("host:e", minutes_ago(30), None, Warn, Reason::New)).await;
+    stored(&sink, "new", transition("host:e", minutes_ago(15), Some(Warn), NoData, Reason::NoDataShown)).await;
 
     // Another monitor's group is not this one's.
     let mut other =
         store::transition_row(&key(), 1, "x", None, None, &transition("host:z", now(), None, Alert, Reason::New));
     other.monitor_id = 8;
-    writer::insert(&writes, "monitor_transitions", &[other]).await.unwrap();
+    sink.insert(vec![other]).await.unwrap();
 
     let mut monitor_level = evaluated("", now());
     monitor_level.outcome = "error".into();
     // A monitor-level row is no group's sighting.
-    let evaluations = [evaluated("host:a", minutes_ago(2)), evaluated("host:a", minutes_ago(1)), monitor_level];
-    writer::insert(&writes, "monitor_evaluations", &evaluations).await.unwrap();
+    let evaluations = vec![evaluated("host:a", minutes_ago(2)), evaluated("host:a", minutes_ago(1)), monitor_level];
+    sink.insert(evaluations).await.unwrap();
 
     let history = store::history(&scratch.reader(), &key(), now()).await.unwrap();
 

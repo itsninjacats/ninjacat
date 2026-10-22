@@ -16,6 +16,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use api::reads::ClickHouse;
+use ninjapaws_storage::Sink;
 use tokio::sync::mpsc::UnboundedReceiver;
 
 pub const WAIT: Duration = Duration::from_secs(5);
@@ -126,8 +127,8 @@ impl Scratch {
         ClickHouse::new(DEV_CLICKHOUSE, &self.database, "ninjacat", "ninjacat", crate::QUERY_LIMIT_SECONDS)
     }
 
-    pub fn writes(&self) -> clickhouse::Client {
-        crate::writer::client(DEV_CLICKHOUSE, &self.database, "ninjacat", "ninjacat")
+    pub fn sink(&self) -> Sink {
+        Sink::clickhouse(crate::write_client(DEV_CLICKHOUSE, &self.database, "ninjacat", "ninjacat"))
     }
 }
 

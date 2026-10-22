@@ -12,7 +12,6 @@ mod store;
 mod telemetry;
 #[cfg(test)]
 mod tests;
-mod writer;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -26,6 +25,7 @@ use ninjapaws_engine::Sql;
 use ninjapaws_engine::query::compile::Row;
 use ninjapaws_engine::query::execute::Executor;
 use ninjapaws_engine::query::plan::Retention;
+use ninjapaws_storage::Sink;
 use tako::Server;
 use tako::StatusCode;
 use tako::extractors::state::State;
@@ -38,12 +38,11 @@ use crate::definitions::{MonitorKey, MonitorRow};
 use crate::entity::Services;
 use crate::manager::{Entities, Manager, Postgres};
 use crate::notifier::{Notifier, Polled};
-use crate::rows::{EvaluationRow, MetricPoint, NotificationRow, TransitionRow};
+use crate::rows::{EvaluationRow, NotificationRow, TransitionRow};
 use crate::selfmon::SelfMonitor;
 use crate::shards::{APPLICATION_NAME, Balancer, LOCK_CLASS};
 use crate::store::History;
 use crate::telemetry::Counters;
-use crate::writer::{DEFAULT_LIMITS, METRICS_LIMITS, TableWriter};
 
 const RESYNC_INTERVAL: Duration = Duration::from_secs(30);
 const NOTIFY_INTERVAL: Duration = Duration::from_secs(5);
@@ -123,6 +122,19 @@ fn machine_name() -> String {
         .unwrap_or_else(|| var_or("HOSTNAME", "localhost"))
 }
 
+/// The client the write path uses. Kept apart from the read client so no query can ever write,
+/// and so a slow query and a slow insert do not share a timeout. Inserts are synchronous:
+/// ClickHouse buffers them on its side by default (async_insert=1) and makes parts of its own
+/// choosing, while the writers' batches are what the part counts are tuned for.
+fn write_client(addr: &str, database: &str, user: &str, password: &str) -> clickhouse::Client {
+    clickhouse::Client::default()
+        .with_url(format!("http://{addr}"))
+        .with_database(database)
+        .with_user(user)
+        .with_password(password)
+        .with_setting("async_insert", "0")
+}
+
 fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
@@ -131,8 +143,7 @@ fn now_ms() -> i64 {
 struct Live {
     pool: deadpool_postgres::Pool,
     reader: ClickHouse,
-    writes: clickhouse::Client,
-    evaluations: Arc<TableWriter<EvaluationRow>>,
+    sink: Sink,
 }
 
 impl Executor for Live {
@@ -151,11 +162,11 @@ impl entity::Backend for Live {
     }
 
     async fn insert(&self, rows: Vec<TransitionRow>) -> Result<(), String> {
-        writer::insert(&self.writes, "monitor_transitions", &rows).await
+        self.sink.insert(rows).await
     }
 
     fn record(&self, rows: Vec<EvaluationRow>) {
-        self.evaluations.add(rows);
+        self.sink.write(rows);
     }
 
     fn now(&self) -> i64 {
@@ -169,7 +180,7 @@ impl entity::Backend for Live {
 
 struct LiveNotifier {
     reader: ClickHouse,
-    writes: clickhouse::Client,
+    sink: Sink,
 }
 
 impl notifier::Backend for LiveNotifier {
@@ -182,7 +193,7 @@ impl notifier::Backend for LiveNotifier {
     }
 
     async fn write(&self, rows: Vec<NotificationRow>) -> Result<(), String> {
-        writer::insert(&self.writes, "monitor_notifications", &rows).await
+        self.sink.insert(rows).await
     }
 
     fn now(&self) -> i64 {
@@ -216,6 +227,13 @@ async fn terminated() {
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
+    // Storage's writers report a full buffer or a failed insert through tracing.
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .init();
     let s = settings()?;
     let mut postgres: tokio_postgres::Config = s.database_url.parse()?;
     // A connection gives up after 15 s, and an idle one is probed, so a dead
@@ -232,18 +250,16 @@ async fn main() -> Result<(), BoxError> {
         &s.clickhouse_password,
         QUERY_LIMIT_SECONDS,
     );
-    let writes = writer::client(&s.clickhouse_addr, &s.clickhouse_db, &s.clickhouse_user, &s.clickhouse_password);
-    let evaluations = TableWriter::start(writes.clone(), "monitor_evaluations", DEFAULT_LIMITS);
-    let metrics: Arc<TableWriter<MetricPoint>> = TableWriter::start(writes.clone(), "metrics", METRICS_LIMITS);
+    let sink = Sink::clickhouse(write_client(
+        &s.clickhouse_addr,
+        &s.clickhouse_db,
+        &s.clickhouse_user,
+        &s.clickhouse_password,
+    ));
     let counts = Arc::new(Counters::default());
 
     let services = Arc::new(Services {
-        backend: Arc::new(Live {
-            pool: pool.clone(),
-            reader: reader.clone(),
-            writes: writes.clone(),
-            evaluations: evaluations.clone(),
-        }),
+        backend: Arc::new(Live { pool: pool.clone(), reader: reader.clone(), sink: sink.clone() }),
         gate: Arc::new(Semaphore::new(s.concurrency)),
         retention: s.retention,
         max_groups: s.max_groups,
@@ -260,7 +276,7 @@ async fn main() -> Result<(), BoxError> {
     };
     let manager = tokio::spawn(manager.run(received));
 
-    let notify = Arc::new(LiveNotifier { reader, writes });
+    let notify = Arc::new(LiveNotifier { reader, sink: sink.clone() });
     let notifier_counts = counts.clone();
     let is_ready = Arc::new(AtomicBool::new(false));
     let balancer = Balancer {
@@ -286,8 +302,7 @@ async fn main() -> Result<(), BoxError> {
         host: s.selfmon_host.clone(),
         interval: s.selfmon_interval,
         counts,
-        writers: vec![evaluations.clone(), metrics.clone()],
-        metrics: metrics.clone(),
+        sink: sink.clone(),
     };
     let selfmon = tokio::spawn(selfmon.run());
 
@@ -306,8 +321,7 @@ async fn main() -> Result<(), BoxError> {
     let _ = manager.await;
     selfmon.abort();
     // The entities' last evaluations, and the last sample.
-    evaluations.stop().await;
-    metrics.stop().await;
+    sink.stop().await;
     health.shutdown(Duration::from_secs(1)).await;
     Ok(())
 }

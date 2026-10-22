@@ -10,9 +10,11 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::rows::MetricPoint;
+use chrono::{DateTime, Utc};
+use ninjapaws_storage::rows::metrics::MetricPoint;
+use ninjapaws_storage::{Sink, WriterStats};
+
 use crate::telemetry::{self, Counters, Kind};
-use crate::writer::{Stated, Stats, TableWriter};
 
 /// The clock ticks per second of /proc's CPU times, fixed by the kernel's ABI.
 const USER_HZ: f64 = 100.0;
@@ -22,15 +24,15 @@ pub struct SelfMonitor {
     pub host: String,
     pub interval: Duration,
     pub counts: Arc<Counters>,
-    pub writers: Vec<Arc<dyn Stated>>,
-    pub metrics: Arc<TableWriter<MetricPoint>>,
+    /// Its writers are sampled, and the points written through it.
+    pub sink: Sink,
 }
 
 /// What the last sample read, so counters are sent as what was added since.
 #[derive(Default)]
 pub struct Previous {
     cpu: Option<(f64, f64)>,
-    writers: BTreeMap<String, Stats>,
+    writers: BTreeMap<&'static str, WriterStats>,
     totals: BTreeMap<String, f64>,
 }
 
@@ -61,15 +63,14 @@ impl SelfMonitor {
         every.tick().await;
         loop {
             every.tick().await;
-            let now = chrono::Utc::now().timestamp_millis();
-            let points = self.sample(now, started.elapsed(), &mut previous);
-            self.metrics.add(points);
+            let points = self.sample(Utc::now(), started.elapsed(), &mut previous);
+            self.sink.write(points);
         }
     }
 
     fn point(
         &self,
-        now: i64,
+        now: DateTime<Utc>,
         metric_type: &str,
         name: &str,
         unit: &str,
@@ -91,15 +92,11 @@ impl SelfMonitor {
             interval: self.interval.as_secs() as u32,
             value,
             tags,
-            origin_product: 0,
-            origin_category: 0,
-            origin_service: 0,
-            resources: BTreeMap::new(),
-            extra: BTreeMap::new(),
+            ..Default::default()
         }
     }
 
-    pub fn sample(&self, now: i64, uptime: Duration, previous: &mut Previous) -> Vec<MetricPoint> {
+    pub fn sample(&self, now: DateTime<Utc>, uptime: Duration, previous: &mut Previous) -> Vec<MetricPoint> {
         let gauge = |name: &str, unit: &str, value: f64| self.point(now, "GAUGE", name, unit, value, None);
         let count = |name: &str, unit: &str, value: f64| self.point(now, "COUNT", name, unit, value.max(0.0), None);
         let mut points = vec![gauge("ninjacat.node.uptime", "second", uptime.as_secs_f64())];
@@ -117,11 +114,11 @@ impl SelfMonitor {
         }
         previous.cpu = cpu;
 
-        for writer in &self.writers {
-            let w = writer.stats();
-            let table = Some(w.table.as_str());
+        // A writer is made with its table's first write, so it shows from the sample after.
+        for w in self.sink.stats() {
+            let table = Some(w.table);
             points.push(self.point(now, "GAUGE", "ninjacat.storage.rows.buffered", "", w.buffered as f64, table));
-            if let Some(last) = previous.writers.get(&w.table) {
+            if let Some(last) = previous.writers.get(w.table) {
                 let added = |now: u64, last: u64| now.saturating_sub(last) as f64;
                 points.push(self.point(
                     now,
@@ -148,7 +145,7 @@ impl SelfMonitor {
                     table,
                 ));
             }
-            previous.writers.insert(w.table.clone(), w);
+            previous.writers.insert(w.table, w);
         }
 
         for r in telemetry::readings(&self.counts) {

@@ -44,9 +44,7 @@ impl Sink {
     /// drops a failed batch.
     pub async fn insert<T: Table>(&self, rows: Vec<T>) -> Result<(), String> {
         match self {
-            Sink::ClickHouse(writers) if !rows.is_empty() => {
-                writer::insert(&writers.client, &rows).await.map_err(|e| e.to_string())
-            }
+            Sink::ClickHouse(writers) if !rows.is_empty() => writer::insert(&writers.client, &rows).await,
             Sink::ClickHouse(_) => Ok(()),
             Sink::Capture(capture) => {
                 capture.record(rows);
