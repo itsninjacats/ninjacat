@@ -150,9 +150,9 @@ fn message<T: Message + Default + prost::Name>(encoding: u8, body: &[u8]) -> Res
     match encoding {
         0 => T::decode(body).map_err(|e| e.to_string()),
         1 => json::proto::try_parse(body),
-        // 2 is Zstandard 0.5, the legacy format the stock agent image still sends (7.83.2 does;
-        // its frames start with the v0.5 magic 25 B5 2F FD). The zstd crate reads it as well,
-        // through libzstd's legacy decoders, which its default features build.
+        // 2 is Zstandard 0.5 (magic 25 B5 2F FD). Agents up to 7.83 send it for every type but
+        // connections (pkg/process/util/api/payload.go); 7.84 moved them all to 4. The zstd crate
+        // reads it through libzstd's legacy decoders, which its default features build.
         2 | 4 | 5 => {
             let inflated =
                 zstd::stream::read::Decoder::new(body).and_then(body::read_inflated).map_err(|e| e.to_string())?;
