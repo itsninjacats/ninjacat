@@ -56,8 +56,10 @@ pub enum Framing {
 /// How long a connection's first bytes are waited for before its framing is taken for the default.
 const FRAMING_WAIT: Duration = Duration::from_secs(1);
 
-/// What one read asks for at least: a busy agent's frames are inserted a read at a time.
-const READ_SIZE: usize = 64 * 1024;
+/// What one read asks for at least. Frames are inserted a read at a time and the socket is not
+/// read while an insert waits for ClickHouse's flush, so a read takes everything that arrived
+/// meanwhile: a smaller one would cap a busy connection at one read per flush.
+const READ_SIZE: usize = 1024 * 1024;
 
 /// A Datadog API key is 32 hex characters.
 const KEY_LENGTH: usize = 32;

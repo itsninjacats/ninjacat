@@ -51,6 +51,24 @@ async fn without_clickhouse_a_write_is_answered_503_and_a_request_that_stores_no
     assert_eq!(serde_json::from_slice::<serde_json::Value>(&body).unwrap(), json!({"errors": ["storage unavailable"]}));
     assert_eq!(send("POST", "/api/v2/logs", "[]").await.status(), 202);
     assert_eq!(send("GET", "/ping", "").await.status(), 200);
+    // What could only be kept raw is refused as well: a 202 would tell the agent it was stored.
+    assert_eq!(send("POST", "/api/v2/logs", "not json").await.status(), 503);
+    assert_eq!(send("POST", "/api/v2/logs", r#"[{"message":"m"},{"service":7}]"#).await.status(), 503);
+}
+
+/// A JSON column refuses an object with both {"a":{"b":…}} and "a.b"; a refusal on every resend
+/// would stall the agent's logs behind that one line.
+#[tokio::test]
+async fn a_log_with_a_nested_and_a_dotted_spelling_of_one_attribute_is_stored() {
+    let Some(client) = db::scratch_client().await else { return };
+    let tenant = db::tenant();
+    let body = br#"[{"message":"fine","service":"s"},{"message":"x","http":{"url":"/a"},"http.url":"/b"}]"#;
+    assert_eq!(post(&client, &tenant, "/api/v2/logs", body).await, 202);
+    let rows = db::rows(&client, "logs", &tenant).await;
+    assert_eq!(rows.len(), 2);
+    let both = rows.iter().find(|row| row["message"] == "x").unwrap();
+    // The first spelling is kept.
+    assert_eq!(both["attributes"], json!({"http": {"url": "/a"}}));
 }
 
 #[tokio::test]

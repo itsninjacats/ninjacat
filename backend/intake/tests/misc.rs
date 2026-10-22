@@ -184,3 +184,51 @@ async fn genresources_quotes_the_origin_headers_in_the_note() {
         r#"DD-EVP-ORIGIN="a\"b\\c" DD-EVP-ORIGIN-VERSION="" Content-Type="application/x-protobuf""#
     );
 }
+
+/// A handler stores under the tenant of the key that admitted the request, and nothing else
+/// checks for one: the route's middleware is the only guard. Every route of every intake program,
+/// in its `main` and in the tests' copy, therefore names its key's middleware, but the probes and
+/// the install host's anonymous registry, which store nothing.
+#[test]
+fn every_route_that_can_store_asks_for_a_key() {
+    const ANONYMOUS: [&str; 6] = [
+        "server::health",
+        "server::ping",
+        "install::handle_version_check",
+        "install::handle_manifest",
+        "install::handle_blob",
+        "install::handle_btf",
+    ];
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut files = vec![root.join("tests/programs/mod.rs")];
+    for entry in std::fs::read_dir(root.join("../api/src/bin")).unwrap() {
+        let path = entry.unwrap().path();
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        // The query process and the monitor service are directories, and neither they nor the
+        // migrations serve an intake.
+        if name.starts_with("ninjapaws_") && name.ends_with(".rs") && name != "ninjapaws_migrate.rs" {
+            files.push(path);
+        }
+    }
+    let methods = [".get(", ".post(", ".put(", ".patch(", ".delete(", ".route("];
+    let mut routes = 0;
+    let mut unguarded = Vec::new();
+    for file in &files {
+        let text = std::fs::read_to_string(file).unwrap();
+        let code: String =
+            text.lines().filter(|line| !line.trim_start().starts_with("//")).collect::<Vec<_>>().join("\n");
+        for (at, _) in code.match_indices("router") {
+            let statement = code[at + "router".len()..].split(';').next().unwrap_or_default();
+            let rest: String = statement.split_whitespace().collect();
+            if !methods.iter().any(|method| rest.starts_with(method)) {
+                continue;
+            }
+            routes += 1;
+            if !rest.contains(".middleware(auth::") && !ANONYMOUS.iter().any(|handler| rest.contains(handler)) {
+                unguarded.push(format!("{}: router{rest}", file.display()));
+            }
+        }
+    }
+    assert!(routes > 200, "found only {routes} routes: the registrations are spelled differently now");
+    assert!(unguarded.is_empty(), "routes without a key's middleware:\n{}", unguarded.join("\n"));
+}

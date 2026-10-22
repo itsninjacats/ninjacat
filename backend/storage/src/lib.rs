@@ -28,6 +28,10 @@ pub fn client_from_env() -> clickhouse::Client {
         .with_password(var("CLICKHOUSE_PASSWORD", "ninjacat"))
         // A `JSON` column takes its object as the text it is in the row.
         .with_setting("input_format_binary_read_json_as_string", "1")
+        // A sender may write both {"a":{"b":1}} and "a.b" in one object, which a `JSON` column
+        // refuses: the row would be refused on every resend, and the sender's queue would stall
+        // behind it. The first of the two paths is kept.
+        .with_setting("type_json_skip_duplicated_paths", "1")
         // ClickHouse batches the many small inserts itself, and answers once the rows are stored.
         // Both are 26.8's defaults, but a server profile can change them.
         .with_setting("async_insert", "1")

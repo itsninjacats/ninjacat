@@ -287,17 +287,17 @@ pub fn image_rows(
 /// object_kind.
 pub async fn handle_lifecycle(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     match EventsPayload::decode(body.as_ref()) {
-        Err(e) => raw::store(&clickhouse, &ctx, "contlcycle", "decode_error", &e.to_string(), &body).await,
+        Err(e) => {
+            if let Err(error) = raw::store(&clickhouse, &ctx, "contlcycle", "decode_error", &e.to_string(), &body).await
+            {
+                return storage_failed(error);
+            }
+        }
         Ok(payload) if payload.events.is_empty() => {
-            raw::store(
-                &clickhouse,
-                &ctx,
-                "contlcycle",
-                "unexpected_shape",
-                "EventsPayload decoded with no events",
-                &body,
-            )
-            .await
+            let note = "EventsPayload decoded with no events";
+            if let Err(e) = raw::store(&clickhouse, &ctx, "contlcycle", "unexpected_shape", note, &body).await {
+                return storage_failed(e);
+            }
         }
         Ok(payload) => {
             if let Err(e) = storage::insert(&clickhouse, &event_rows(&payload, ctx.tenant(), Utc::now())).await {
@@ -311,20 +311,24 @@ pub async fn handle_lifecycle(ctx: Ctx, State(clickhouse): State<clickhouse::Cli
 /// The container image inventory.
 pub async fn handle_images(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     match ContainerImagePayload::decode(body.as_ref()) {
-        Err(e) => raw::store(&clickhouse, &ctx, "contimage", "decode_error", &e.to_string(), &body).await,
+        Err(e) => {
+            if let Err(error) = raw::store(&clickhouse, &ctx, "contimage", "decode_error", &e.to_string(), &body).await
+            {
+                return storage_failed(error);
+            }
+        }
         Ok(payload) if payload.images.is_empty() => {
-            raw::store(
-                &clickhouse,
-                &ctx,
-                "contimage",
-                "unexpected_shape",
-                "ContainerImagePayload decoded with no images",
-                &body,
-            )
-            .await
+            let note = "ContainerImagePayload decoded with no images";
+            if let Err(e) = raw::store(&clickhouse, &ctx, "contimage", "unexpected_shape", note, &body).await {
+                return storage_failed(e);
+            }
         }
         Ok(payload) => {
             let (rows, skipped) = image_rows(&payload, ctx.tenant(), Utc::now());
+            // The inventory before the counter derived from it.
+            if let Err(e) = storage::insert(&clickhouse, &rows).await {
+                return storage_failed(e);
+            }
             if skipped > 0 {
                 tracing::warn!(
                     "[contimage] {skipped} of {} images skipped: neither digest nor image id, so nothing to key on",
@@ -343,9 +347,6 @@ pub async fn handle_images(ctx: Ctx, State(clickhouse): State<clickhouse::Client
                 if let Err(e) = storage::insert(&clickhouse, &[row]).await {
                     return storage_failed(e);
                 }
-            }
-            if let Err(e) = storage::insert(&clickhouse, &rows).await {
-                return storage_failed(e);
             }
         }
     }

@@ -1342,7 +1342,13 @@ pub async fn handle_frame(
 ) -> Response {
     let tenant = ctx.tenant();
     match process_frame::decode(&body) {
-        Err(e) => raw::store(&clickhouse, &ctx, "orchestrator", "decode_error", &format!("{label}: {e}"), &body).await,
+        Err(e) => {
+            if let Err(error) =
+                raw::store(&clickhouse, &ctx, "orchestrator", "decode_error", &format!("{label}: {e}"), &body).await
+            {
+                return storage_failed(error);
+            }
+        }
         Ok(decoded) => {
             if std::env::var("NINJACAT_DUMP_K8S").is_ok_and(|v| v == "true") {
                 // The whole message: how to find out what a real cluster sends.
@@ -1400,7 +1406,7 @@ pub async fn handle_frame(
                 | Body::ContainerRealTime(_)
                 | Body::ProcDiscovery(_)
                 | Body::ProcEvent(_)) => {
-                    raw::store(
+                    if let Err(e) = raw::store(
                         &clickhouse,
                         &ctx,
                         "orchestrator",
@@ -1409,6 +1415,9 @@ pub async fn handle_frame(
                         &body,
                     )
                     .await
+                    {
+                        return storage_failed(e);
+                    }
                 }
                 collection => {
                     if let Err(e) = storage::insert(&clickhouse, &resource_rows(tenant, now, &frame, collection)).await
@@ -1522,29 +1531,33 @@ pub fn decode_action(tenant: &str, arrival: DateTime<Utc>, path: &str, raw: &Val
 /// "kubeactions": a JSON array of events.
 pub async fn handle_actions(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: server::Body) -> Response {
     match json::try_parse_array(&body) {
-        Err(e) => raw::store(&clickhouse, &ctx, "kubeactions", "decode_error", &e, &body).await,
+        Err(e) => {
+            if let Err(error) = raw::store(&clickhouse, &ctx, "kubeactions", "decode_error", &e, &body).await {
+                return storage_failed(error);
+            }
+        }
         Ok(items) => {
             let text = json::raw::text(&body);
             let sent = json::raw::elements(&text);
             let arrival = Utc::now();
             let mut rows = Vec::new();
+            let mut kept = Vec::new();
             for (i, raw) in items.iter().enumerate() {
                 match decode_action(ctx.tenant(), arrival, &format!("[{i}]"), raw) {
                     Ok(row) => rows.push(row),
                     // One bad element must not cost the batch, nor itself: its own JSON is kept,
                     // as it was sent, while the rest become rows.
-                    Err(e) => {
-                        raw::store(
-                            &clickhouse,
-                            &ctx,
-                            "kubeactions",
-                            "decode_error",
-                            &e,
-                            sent.get(i).copied().unwrap_or_default().as_bytes(),
-                        )
-                        .await
-                    }
+                    Err(e) => kept.extend(raw::row(
+                        &ctx,
+                        "kubeactions",
+                        "decode_error",
+                        &e,
+                        sent.get(i).copied().unwrap_or_default().as_bytes(),
+                    )),
                 }
+            }
+            if let Err(e) = raw::keep(&clickhouse, &kept).await {
+                return storage_failed(e);
             }
             if let Err(e) = storage::insert(&clickhouse, &rows).await {
                 return storage_failed(e);

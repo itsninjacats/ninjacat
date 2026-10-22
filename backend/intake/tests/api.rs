@@ -129,3 +129,57 @@ async fn an_action_connection_keeps_its_credentials_as_sent() {
     };
     assert_eq!(row(&found, "action_connections").await["credentials"], r#"{ "token" : "s", "n": 1.50 }"#);
 }
+
+/// What did not fit a batch is kept in one insert however many elements it was: an insert per
+/// element would hold the request for one of ClickHouse's flushes each, past the agent's timeout.
+#[tokio::test]
+async fn a_batchs_rejected_points_are_kept_in_one_insert() {
+    let Some(client) = db::scratch_client().await else { return };
+    let tenant = db::tenant();
+    let comment = format!("one raw insert {tenant} {}", std::process::id());
+    let router =
+        programs::router_for(programs::api, &client.clone().with_setting("log_comment", &comment), KEY, &tenant);
+    let bad: Vec<String> = (0..20).map(|i| format!("[{}, null]", 1790151330 + i)).collect();
+    let body = format!(r#"{{"series":[{{"metric":"m","points":[[1790151330, 1.5],{}]}}]}}"#, bad.join(","));
+    let request = http::Request::builder()
+        .method("POST")
+        .uri("/api/v1/series")
+        .header("dd-api-key", KEY)
+        .body(body.into())
+        .unwrap();
+    assert_eq!(router.dispatch(request).await.status(), 202);
+    assert_eq!(db::rows(&client, "metrics", &tenant).await.len(), 1);
+    assert_eq!(db::rows(&client, "raw_payloads", &tenant).await.len(), 20);
+    client.query("SYSTEM FLUSH LOGS").execute().await.unwrap();
+    let inserts: u64 = client
+        .query(
+            "SELECT count() FROM system.query_log WHERE log_comment = ? AND type = 'QueryFinish' \
+             AND query_kind = 'Insert' AND query LIKE '%raw_payloads%'",
+        )
+        .bind(&comment)
+        .fetch_one()
+        .await
+        .unwrap();
+    assert_eq!(inserts, 1);
+}
+
+/// A payload that could only be kept raw is refused when it cannot be kept, so the sender sends
+/// it again; an answer the protocol needs and storage does not decide is given all the same.
+#[tokio::test]
+async fn without_clickhouse_a_payload_to_keep_is_refused_and_an_answer_only_endpoint_still_answers() {
+    let router = programs::router_for(programs::api, &db::unconnected(), KEY, "test");
+    let send = |path: &str, body: &str| {
+        let request = http::Request::builder().method("POST").uri(path).header("dd-api-key", KEY);
+        router.dispatch(request.body(body.to_string().into()).unwrap())
+    };
+    assert_eq!(send("/api/v1/series", "junk").await.status(), 503);
+    assert_eq!(send("/intake/", "junk").await.status(), 503);
+    let symbols = r#"{"data":{"type":"symbols","attributes":{"arch":"x86_64","buildIds":["abc"]}}}"#;
+    assert_eq!(send("/api/v2/profiles/symbols/query", symbols).await.status(), 200);
+    assert_eq!(send("/api/v2/profiles/symbols/query", "junk").await.status(), 200);
+    let heartbeat = r#"{"data":{"type":"heartbeat","attributes":{"task_id":"t"}}}"#;
+    assert_eq!(send("/api/v2/on-prem-management-service/workflow-tasks/heartbeat", heartbeat).await.status(), 200);
+    assert_eq!(send("/api/v2/intake-key", "").await.status(), 200);
+    assert_eq!(send("/api/v2/git/repository/search_commits", "junk").await.status(), 200);
+    assert_eq!(send("/api/v2/libraries/tests/services/setting", "junk").await.status(), 200);
+}

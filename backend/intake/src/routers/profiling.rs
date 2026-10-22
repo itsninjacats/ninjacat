@@ -177,7 +177,9 @@ pub async fn handle_profile(
     match read_parts(&ctx, &body, label).await {
         Err(problem) => {
             let note = format!("not multipart, content-type {}: {problem}", or_unknown(ctx.header("content-type")));
-            raw::store(&clickhouse, &ctx, "profiling", "decode_error", &note, &body).await;
+            if let Err(e) = raw::store(&clickhouse, &ctx, "profiling", "decode_error", &note, &body).await {
+                return storage_failed(e);
+            }
         }
         Ok(parts) => {
             // The event part carries the submission: which attachments follow, the interval they
@@ -407,7 +409,9 @@ pub async fn handle_debugger(ctx: Ctx, State(clickhouse): State<clickhouse::Clie
             None => {
                 let note =
                     format!("logs variant: not a JSON array or NDJSON, content-type {}", or_unknown(content_type));
-                raw::store(&clickhouse, &ctx, "debugger", "decode_error", &note, &body).await;
+                if let Err(e) = raw::store(&clickhouse, &ctx, "debugger", "decode_error", &note, &body).await {
+                    return storage_failed(e);
+                }
             }
             Some(entries) => {
                 if let Err(e) = storage::insert(&clickhouse, &log_rows(&ctx, &ddtags, entries)).await {
@@ -421,7 +425,9 @@ pub async fn handle_debugger(ctx: Ctx, State(clickhouse): State<clickhouse::Clie
         Ok(parts) => parts,
         Err(problem) => {
             let note = format!("multipart, content-type {}: {problem}", or_unknown(content_type));
-            raw::store(&clickhouse, &ctx, "debugger", "decode_error", &note, &body).await;
+            if let Err(e) = raw::store(&clickhouse, &ctx, "debugger", "decode_error", &note, &body).await {
+                return storage_failed(e);
+            }
             return accepted();
         }
     };
@@ -444,7 +450,7 @@ pub async fn handle_debugger(ctx: Ctx, State(clickhouse): State<clickhouse::Clie
         (None, Some(event)) => match json::try_parse_element_bytes(event) {
             // Not an array at all, unlike an empty batch: `[]` stores nothing and is not an error.
             Err(_) => {
-                raw::store(
+                if let Err(e) = raw::store(
                     &clickhouse,
                     &ctx,
                     "debugger",
@@ -453,6 +459,9 @@ pub async fn handle_debugger(ctx: Ctx, State(clickhouse): State<clickhouse::Clie
                     &body,
                 )
                 .await
+                {
+                    return storage_failed(e);
+                }
             }
             Ok(messages) => {
                 if let Err(e) = storage::insert(&clickhouse, &diagnostic_rows(&ctx, &ddtags, messages)).await {
@@ -463,7 +472,9 @@ pub async fn handle_debugger(ctx: Ctx, State(clickhouse): State<clickhouse::Clie
         _ => {
             let names = parts.keys().map(String::as_str).collect::<Vec<_>>().join(",");
             let note = format!("multipart with neither file nor event parts: {names}");
-            raw::store(&clickhouse, &ctx, "debugger", "unexpected_shape", &note, &body).await;
+            if let Err(e) = raw::store(&clickhouse, &ctx, "debugger", "unexpected_shape", &note, &body).await {
+                return storage_failed(e);
+            }
         }
     }
     accepted()
@@ -528,7 +539,9 @@ pub async fn handle_sourcemap(ctx: Ctx, State(clickhouse): State<clickhouse::Cli
     match read_parts(&ctx, &body, "srcmap").await {
         Err(problem) => {
             let note = format!("multipart, content-type {}: {problem}", or_unknown(ctx.header("content-type")));
-            raw::store(&clickhouse, &ctx, "srcmap", "decode_error", &note, &body).await;
+            if let Err(e) = raw::store(&clickhouse, &ctx, "srcmap", "decode_error", &note, &body).await {
+                return storage_failed(e);
+            }
         }
         Ok(parts) => {
             let meta = parts.get("event").and_then(|data| decode_object("srcmap event", data));

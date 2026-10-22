@@ -212,7 +212,9 @@ pub async fn handle(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body
     let items = match parse_items(&body) {
         Ok(items) => items,
         Err(e) => {
-            raw::store(&clickhouse, &ctx, "logs", "decode_error", &e, &body).await;
+            if let Err(e) = raw::store(&clickhouse, &ctx, "logs", "decode_error", &e, &body).await {
+                return storage_failed(e);
+            }
             return accepted();
         }
     };
@@ -226,6 +228,7 @@ pub async fn handle(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body
     };
     let arrival = Utc::now();
     let mut rows = Vec::new();
+    let mut kept = Vec::new();
     for (i, raw) in items.iter().enumerate() {
         let raw_bytes = raw.get().as_bytes();
         let decoded = serde_json::from_str::<Value>(raw.get())
@@ -233,11 +236,10 @@ pub async fn handle(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body
             .and_then(|item| decode_item(&item));
         match decoded {
             Err(ItemProblem::NotALog(problem)) => {
-                raw::store(&clickhouse, &ctx, "logs", "unexpected_shape", &format!("item #{i}: {problem}"), raw_bytes)
-                    .await
+                kept.extend(raw::row(&ctx, "logs", "unexpected_shape", &format!("item #{i}: {problem}"), raw_bytes))
             }
             Err(ItemProblem::Undecodable(error)) => {
-                raw::store(&clickhouse, &ctx, "logs", "decode_error", &format!("item #{i}: {error}"), raw_bytes).await
+                kept.extend(raw::row(&ctx, "logs", "decode_error", &format!("item #{i}: {error}"), raw_bytes))
             }
             // `{}` says nothing: a probe, not a log.
             Ok(item)
@@ -247,6 +249,11 @@ pub async fn handle(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body
                     && item.service.is_empty() => {}
             Ok(item) => rows.push(to_row(ctx.tenant(), item, arrival, &defaults)),
         }
+    }
+    // The kept payloads first: if they cannot be stored, nothing is, and the resend duplicates
+    // nothing.
+    if let Err(e) = raw::keep(&clickhouse, &kept).await {
+        return storage_failed(e);
     }
     if let Err(e) = storage::insert(&clickhouse, &rows).await {
         return storage_failed(e);

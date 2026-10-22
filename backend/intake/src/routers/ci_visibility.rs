@@ -28,6 +28,7 @@ use ninjapaws_storage::rows::Extra;
 use ninjapaws_storage::rows::ci::{
     CiCoverage, CiPipelineEvent, CiSettingsRequest, CiTestEvent, GitCommit, GitPackfile,
 };
+use ninjapaws_storage::rows::raw::RawPayload;
 use rmp::decode::ValueReadError;
 use serde_json::value::RawValue;
 use sha2::{Digest, Sha256};
@@ -547,27 +548,25 @@ pub fn test_event_row(
     }
 }
 
-/// The payload's rows. What does not decode is kept raw, so the client is needed here.
-async fn test_cycle_rows(clickhouse: &clickhouse::Client, ctx: &Ctx, body: &[u8]) -> Vec<CiTestEvent> {
+/// The payload's rows. What does not decode is kept raw, into `kept`.
+fn test_cycle_rows(ctx: &Ctx, body: &[u8], kept: &mut Vec<RawPayload>) -> Vec<CiTestEvent> {
     let content_type = ctx.header("content-type");
     let (format, decoded) = decode_any(content_type, body);
     let envelope = match decoded {
         Err(e) => {
             let note = format!("{format} envelope, content-type {}: {e}", or_unknown(content_type));
-            raw::store(clickhouse, ctx, "citestcycle", "decode_error", &note, body).await;
+            kept.extend(raw::row(ctx, "citestcycle", "decode_error", &note, body));
             return Vec::new();
         }
         Ok(envelope @ Value::Object(_)) => envelope,
         Ok(_) => {
-            raw::store(
-                clickhouse,
+            kept.extend(raw::row(
                 ctx,
                 "citestcycle",
                 "unexpected_shape",
                 &format!("payload is not a {format} map"),
                 body,
-            )
-            .await;
+            ));
             return Vec::new();
         }
     };
@@ -575,7 +574,7 @@ async fn test_cycle_rows(clickhouse: &clickhouse::Client, ctx: &Ctx, body: &[u8]
     if events.is_empty() {
         // Not an error — the encoder emits one when a flush finds nothing — but not a shape with
         // a published meaning either, so it is kept.
-        raw::store(clickhouse, ctx, "citestcycle", "unexpected_shape", "envelope carries no events", body).await;
+        kept.extend(raw::row(ctx, "citestcycle", "unexpected_shape", "envelope carries no events", body));
         return Vec::new();
     }
     let payload_version = envelope.field("version").to_i64() as i32;
@@ -597,7 +596,7 @@ async fn test_cycle_rows(clickhouse: &clickhouse::Client, ctx: &Ctx, body: &[u8]
         let places: Vec<String> = not_maps.iter().take(8).map(usize::to_string).collect();
         let more = if not_maps.len() > 8 { ", …" } else { "" };
         let note = format!("{} of {} events are not maps: {}{more}", not_maps.len(), events.len(), places.join(", "));
-        raw::store(clickhouse, ctx, "citestcycle", "decode_error", &note, body).await;
+        kept.extend(raw::row(ctx, "citestcycle", "decode_error", &note, body));
     }
     rows
 }
@@ -612,7 +611,11 @@ pub async fn handle_test_cycle(ctx: Ctx, State(clickhouse): State<clickhouse::Cl
     if body.is_empty() {
         return accepted();
     }
-    let rows = test_cycle_rows(&clickhouse, &ctx, &body).await;
+    let mut kept = Vec::new();
+    let rows = test_cycle_rows(&ctx, &body, &mut kept);
+    if let Err(e) = raw::keep(&clickhouse, &kept).await {
+        return storage_failed(e);
+    }
     if let Err(e) = storage::insert(&clickhouse, &rows).await {
         return storage_failed(e);
     }
@@ -781,14 +784,14 @@ fn part_names(parts: &[body::Part]) -> String {
     if parts.is_empty() { "none".into() } else { parts.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ") }
 }
 
-/// The upload's rows. What does not decode is kept raw, so the client is needed here.
-async fn coverage_rows(clickhouse: &clickhouse::Client, ctx: &Ctx, body: Bytes) -> Vec<CiCoverage> {
+/// The upload's rows. What does not decode is kept raw, into `kept`.
+async fn coverage_rows(ctx: &Ctx, body: Bytes, kept: &mut Vec<RawPayload>) -> Vec<CiCoverage> {
     let content_type = ctx.header("content-type");
     let parts = match body::try_parts(content_type, body.clone()).await {
         Ok(parts) => parts,
         Err(e) => {
             let note = format!("multipart, content-type {}: {e}", or_unknown(content_type));
-            raw::store(clickhouse, ctx, "citestcov", "decode_error", &note, &body).await;
+            kept.extend(raw::row(ctx, "citestcov", "decode_error", &note, &body));
             return Vec::new();
         }
     };
@@ -796,7 +799,7 @@ async fn coverage_rows(clickhouse: &clickhouse::Client, ctx: &Ctx, body: Bytes) 
     // be found by name: it is the first part that is not the event.
     let Some(coverage) = parts.iter().find(|p| p.name != "event") else {
         let note = format!("multipart carries no coverage part (only {})", part_names(&parts));
-        raw::store(clickhouse, ctx, "citestcov", "unexpected_shape", &note, &body).await;
+        kept.extend(raw::row(ctx, "citestcov", "unexpected_shape", &note, &body));
         return Vec::new();
     };
     let (format, entries) = coverage_entries(&coverage.content_type, &coverage.data);
@@ -804,7 +807,7 @@ async fn coverage_rows(clickhouse: &clickhouse::Client, ctx: &Ctx, body: Bytes) 
         Ok(found) => found,
         Err(e) => {
             let note = format!("coverage part ({}): {e}", or_unknown(&coverage.content_type));
-            raw::store(clickhouse, ctx, "citestcov", "decode_error", &note, &body).await;
+            kept.extend(raw::row(ctx, "citestcov", "decode_error", &note, &body));
             return Vec::new();
         }
     };
@@ -826,7 +829,11 @@ pub async fn handle_test_cov(ctx: Ctx, State(clickhouse): State<clickhouse::Clie
     if body.is_empty() {
         return accepted();
     }
-    let rows = coverage_rows(&clickhouse, &ctx, body.0).await;
+    let mut kept = Vec::new();
+    let rows = coverage_rows(&ctx, body.0, &mut kept).await;
+    if let Err(e) = raw::keep(&clickhouse, &kept).await {
+        return storage_failed(e);
+    }
     if let Err(e) = storage::insert(&clickhouse, &rows).await {
         return storage_failed(e);
     }
@@ -893,7 +900,9 @@ pub fn read_config_request(body: &[u8]) -> (ConfigRequest, Option<(&'static str,
 
 /// Answers a configuration question and keeps both the question and the answer. A body that does
 /// not parse still gets a row and a well-formed answer: "a tracer sends something we cannot read"
-/// is what the table is for, and a 4xx here is terminal for the client.
+/// is what the table is for, and a 4xx here is terminal for the client. The rows are best-effort
+/// for the same reason: the answer does not depend on storage, so a ClickHouse outage does not
+/// cost the tracer its configuration.
 pub async fn answer_config(
     endpoint: &'static str,
     answer: fn(&ConfigRequest) -> String,
@@ -903,8 +912,9 @@ pub async fn answer_config(
 ) -> Response {
     let (request, problem) = read_config_request(&body);
     if let Some((part, error)) = problem {
-        raw::store(&clickhouse, &ctx, "cisettings", "decode_error", &format!("{endpoint} {part}: {error}"), &body)
-            .await;
+        // raw::keep has logged a failure.
+        let note = format!("{endpoint} {part}: {error}");
+        _ = raw::store(&clickhouse, &ctx, "cisettings", "decode_error", &note, &body).await;
     }
     let response = answer(&request);
     let row = CiSettingsRequest {
@@ -927,7 +937,7 @@ pub async fn answer_config(
         response_body: response.clone(),
     };
     if let Err(e) = storage::insert(&clickhouse, &[row]).await {
-        return storage_failed(e);
+        tracing::warn!("{e}");
     }
     // The answer was built as JSON text, so that the row keeps exactly what was sent.
     let mut reply = http::Response::new(TakoBody::from(response));
@@ -1018,11 +1028,13 @@ fn commits_answer(repository: &str) -> Response {
 /// objects can come from.
 ///
 /// The answer is JSON even for a request that does not decode: the client retries a 200 of any
-/// other content type, and a 4xx is terminal.
+/// other content type, and a 4xx is terminal. The rows are best-effort: the answer does not
+/// depend on them, so a ClickHouse outage does not stop the upload.
 pub async fn handle_search_commits(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     match read_search_commits(&body) {
         Err(e) => {
-            raw::store(&clickhouse, &ctx, "gitmeta", "decode_error", &format!("search_commits: {e}"), &body).await;
+            // raw::keep has logged a failure.
+            _ = raw::store(&clickhouse, &ctx, "gitmeta", "decode_error", &format!("search_commits: {e}"), &body).await;
             commits_answer("")
         }
         Ok((repository, shas)) => {
@@ -1042,7 +1054,7 @@ pub async fn handle_search_commits(ctx: Ctx, State(clickhouse): State<clickhouse
                 })
                 .collect();
             if let Err(e) = storage::insert(&clickhouse, &rows).await {
-                return storage_failed(e);
+                tracing::warn!("{e}");
             }
             commits_answer(&repository)
         }
@@ -1082,7 +1094,9 @@ pub async fn handle_packfile(ctx: Ctx, State(clickhouse): State<clickhouse::Clie
         Ok(parts) => parts,
         Err(e) => {
             let note = format!("packfile multipart, content-type {}: {e}", or_unknown(content_type));
-            raw::store(&clickhouse, &ctx, "gitmeta", "decode_error", &note, &body).await;
+            if let Err(e) = raw::store(&clickhouse, &ctx, "gitmeta", "decode_error", &note, &body).await {
+                return storage_failed(e);
+            }
             return status(StatusCode::NO_CONTENT);
         }
     };
@@ -1113,8 +1127,18 @@ pub async fn handle_packfile(ctx: Ctx, State(clickhouse): State<clickhouse::Clie
         }
     }
     let Some(pack) = pack else {
-        raw::store(&clickhouse, &ctx, "gitmeta", "unexpected_shape", "packfile upload without a packfile part", &body)
-            .await;
+        if let Err(e) = raw::store(
+            &clickhouse,
+            &ctx,
+            "gitmeta",
+            "unexpected_shape",
+            "packfile upload without a packfile part",
+            &body,
+        )
+        .await
+        {
+            return storage_failed(e);
+        }
         return status(StatusCode::NO_CONTENT);
     };
     let packfile_id: String = Sha256::digest(&pack).iter().map(|b| format!("{b:02x}")).collect();
@@ -1155,21 +1179,15 @@ pub async fn handle_packfile(ctx: Ctx, State(clickhouse): State<clickhouse::Clie
 const PIPELINE_KNOWN_KEYS: [&str; 9] =
     ["ci_env", "ci_level", "provider", "tags", "metrics", "measures", "name", "start_time", "end_time"];
 
-/// The call's row. What does not decode is kept raw, so the client is needed here.
-async fn pipeline_event_row(
-    clickhouse: &clickhouse::Client,
-    kind: &str,
-    ctx: &Ctx,
-    body: &[u8],
-) -> Option<CiPipelineEvent> {
+/// The call's row. What does not decode is kept raw, into `kept`.
+fn pipeline_event_row(kind: &str, ctx: &Ctx, body: &[u8], kept: &mut Vec<RawPayload>) -> Option<CiPipelineEvent> {
     let root = match json::try_parse(body) {
         Ok(root) => root,
         Err(e) => {
-            raw::store(clickhouse, ctx, "cipipeline", "decode_error", &format!("{kind} envelope: {e}"), body).await;
+            kept.extend(raw::row(ctx, "cipipeline", "decode_error", &format!("{kind} envelope: {e}"), body));
             return None;
         }
     };
-    // The fields are read before anything is awaited: they borrow a RefCell.
     let (data_type, attributes, problem) = {
         let problems = Mismatches::default();
         let data = fields::fields(&problems, "", &root).object("data");
@@ -1179,7 +1197,7 @@ async fn pipeline_event_row(
         (data_type, attributes, problem)
     };
     if let Some(problem) = problem {
-        raw::store(clickhouse, ctx, "cipipeline", "decode_error", &format!("{kind} envelope: {problem}"), body).await;
+        kept.extend(raw::row(ctx, "cipipeline", "decode_error", &format!("{kind} envelope: {problem}"), body));
         return None;
     }
     let repaired = json::repair(body);
@@ -1220,9 +1238,12 @@ pub async fn handle_pipeline_event(
     if body.is_empty() {
         return accepted();
     }
-    if let Some(row) = pipeline_event_row(&clickhouse, kind, &ctx, &body).await
-        && let Err(e) = storage::insert(&clickhouse, &[row]).await
-    {
+    let mut kept = Vec::new();
+    let row = pipeline_event_row(kind, &ctx, &body, &mut kept);
+    if let Err(e) = raw::keep(&clickhouse, &kept).await {
+        return storage_failed(e);
+    }
+    if let Err(e) = storage::insert(&clickhouse, &Vec::from_iter(row)).await {
         return storage_failed(e);
     }
     accepted()

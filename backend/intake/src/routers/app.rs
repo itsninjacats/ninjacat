@@ -600,7 +600,9 @@ pub fn decode(tenant: &str, payload: &Payload) -> Decoded {
 pub async fn handle(label: &str, ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     let payload = match Payload::decode(&body[..]) {
         Err(message) => {
-            raw::store(&clickhouse, &ctx, label, "decode_error", &message.to_string(), &body).await;
+            if let Err(e) = raw::store(&clickhouse, &ctx, label, "decode_error", &message.to_string(), &body).await {
+                return storage_failed(e);
+            }
             return accepted();
         }
         Ok(payload) => payload,
@@ -616,7 +618,7 @@ pub async fn handle(label: &str, ctx: Ctx, State(clickhouse): State<clickhouse::
             "[{label}] decoded to zero series ({} bytes): wrong payload type or still compressed?",
             body.len()
         );
-        raw::store(
+        if let Err(e) = raw::store(
             &clickhouse,
             &ctx,
             label,
@@ -624,36 +626,37 @@ pub async fn handle(label: &str, ctx: Ctx, State(clickhouse): State<clickhouse::
             &format!("protobuf decoded but MetricData carries no series; metadata tags={tags} resources={resources}"),
             &body,
         )
-        .await;
+        .await
+        {
+            return storage_failed(e);
+        }
         return accepted();
     }
 
     let decoded = decode(ctx.tenant(), &payload);
-    if let Err(e) = storage::insert(&clickhouse, &decoded.points).await {
-        return storage_failed(e);
-    }
-    if let Err(e) = storage::insert(&clickhouse, &decoded.sketches).await {
-        return storage_failed(e);
-    }
-
-    // The rows above are what the walk could read; the two notes below keep what it could not. A
-    // payload that decodes cleanly is never mirrored into raw_payloads.
+    // The rows are what the walk could read; the two notes keep what it could not. A payload that
+    // decodes cleanly is never mirrored into raw_payloads.
+    let mut kept = Vec::new();
     if let Some(problem) = &decoded.problem {
-        raw::store(&clickhouse, &ctx, label, "unexpected_shape", problem, &body).await;
+        kept.extend(raw::row(&ctx, label, "unexpected_shape", problem, &body));
     }
     if decoded.wide_ints > 0 {
         // The row is still written (a rounded value beats no value) and the payload is kept, so
         // the exact integer stays recoverable.
         tracing::warn!("[{label}] {} sint64 values beyond 2^53: stored rounded, payload kept raw", decoded.wide_ints);
-        raw::store(
-            &clickhouse,
-            &ctx,
-            label,
-            "int64_precision",
-            &format!("{} sint64 values beyond 2^53 widened to Float64", decoded.wide_ints),
-            &body,
-        )
-        .await;
+        let note = format!("{} sint64 values beyond 2^53 widened to Float64", decoded.wide_ints);
+        kept.extend(raw::row(&ctx, label, "int64_precision", &note, &body));
+    }
+    // The kept payloads first: if they cannot be stored, nothing is, and the resend duplicates
+    // nothing.
+    if let Err(e) = raw::keep(&clickhouse, &kept).await {
+        return storage_failed(e);
+    }
+    if let Err(e) = storage::insert(&clickhouse, &decoded.points).await {
+        return storage_failed(e);
+    }
+    if let Err(e) = storage::insert(&clickhouse, &decoded.sketches).await {
+        return storage_failed(e);
     }
     accepted()
 }

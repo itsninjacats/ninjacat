@@ -51,6 +51,10 @@ const BALANCE_INTERVAL: Duration = Duration::from_secs(10);
 const RETRY: Duration = Duration::from_secs(30);
 /// ClickHouse's limit for one query: a model's history read can pass the query process's 7 s.
 const QUERY_LIMIT_SECONDS: u64 = 30;
+/// Evaluation-row inserts under way at once. An awaited async insert takes about one flush
+/// (50-200 ms), so this passes some hundreds of evaluations a second and holds at most this many
+/// connections while ClickHouse hangs.
+const MAX_RECORD_INSERTS: usize = 64;
 
 struct Settings {
     clickhouse_addr: String,
@@ -148,6 +152,9 @@ struct Live {
     /// synchronous, and an insert awaited there would hold up its mailbox, the hand-off's Stop
     /// included, for as long as ClickHouse takes. The program waits for them before it exits.
     records: TaskTracker,
+    /// How many of those inserts may be under way at once. A slow ClickHouse must not get a new
+    /// connection per evaluation: past the limit the rows are dropped with a warning.
+    inserts: Arc<Semaphore>,
 }
 
 impl Executor for Live {
@@ -170,11 +177,16 @@ impl entity::Backend for Live {
     }
 
     fn record(&self, rows: Vec<EvaluationRow>) {
+        let Ok(slot) = self.inserts.clone().try_acquire_owned() else {
+            eprintln!("warning: {} evaluation rows not stored: ClickHouse is behind", rows.len());
+            return;
+        };
         let writer = self.writer.clone();
         self.records.spawn(async move {
             if let Err(e) = ninjapaws_storage::insert(&writer, &rows).await {
                 eprintln!("warning: {} evaluation rows not stored: {e}", rows.len());
             }
+            drop(slot);
         });
     }
 
@@ -269,6 +281,7 @@ async fn main() -> Result<(), BoxError> {
             reader: reader.clone(),
             writer: writer.clone(),
             records: records.clone(),
+            inserts: Arc::new(Semaphore::new(MAX_RECORD_INSERTS)),
         }),
         gate: Arc::new(Semaphore::new(s.concurrency)),
         retention: s.retention,
@@ -314,7 +327,7 @@ async fn main() -> Result<(), BoxError> {
         counts,
         clickhouse: writer,
     };
-    let selfmon = tokio::spawn(selfmon.run());
+    let selfmon = tokio::spawn(selfmon.run(stop.subscribe()));
 
     let mut router = Router::new();
     router.with_state(Ready(is_ready));
@@ -329,7 +342,7 @@ async fn main() -> Result<(), BoxError> {
     let _ = stop.send(true);
     let _ = balancer.await;
     let _ = manager.await;
-    selfmon.abort();
+    let _ = selfmon.await;
     // The entities' last evaluations.
     records.close();
     records.wait().await;

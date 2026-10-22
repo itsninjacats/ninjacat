@@ -217,22 +217,19 @@ pub fn metadata_rows(tenant: &str, entry: &str) -> Result<MetadataRows, String> 
 
 pub async fn handle_metadata(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     match json::try_parse_list(&body) {
-        Err(e) => raw::store(&clickhouse, &ctx, "ndm", "decode_error", &e, &body).await,
+        Err(e) => {
+            if let Err(error) = raw::store(&clickhouse, &ctx, "ndm", "decode_error", &e, &body).await {
+                return storage_failed(error);
+            }
+        }
         Ok(_) => {
             let text = json::raw::text(&body);
             let mut all = MetadataRows::default();
+            let mut kept = Vec::new();
             for (i, entry) in json::raw::list(&text).into_iter().enumerate() {
                 match metadata_rows(ctx.tenant(), entry) {
                     Err(e) => {
-                        raw::store(
-                            &clickhouse,
-                            &ctx,
-                            "ndm",
-                            "decode_error",
-                            &format!("entry {i}: {e}"),
-                            entry.as_bytes(),
-                        )
-                        .await
+                        kept.extend(raw::row(&ctx, "ndm", "decode_error", &format!("entry {i}: {e}"), entry.as_bytes()))
                     }
                     Ok(rows) => {
                         all.devices.extend(rows.devices);
@@ -241,6 +238,9 @@ pub async fn handle_metadata(ctx: Ctx, State(clickhouse): State<clickhouse::Clie
                         all.objects.extend(rows.objects);
                     }
                 }
+            }
+            if let Err(e) = raw::keep(&clickhouse, &kept).await {
+                return storage_failed(e);
             }
             if let Err(e) = storage::insert(&clickhouse, &all.devices).await {
                 return storage_failed(e);
@@ -303,25 +303,29 @@ pub fn config_rows(tenant: &str, entry: &str) -> Result<Vec<NdmDeviceConfig>, St
 
 pub async fn handle_config(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     match json::try_parse_list(&body) {
-        Err(e) => raw::store(&clickhouse, &ctx, "ndmconfig", "decode_error", &e, &body).await,
+        Err(e) => {
+            if let Err(error) = raw::store(&clickhouse, &ctx, "ndmconfig", "decode_error", &e, &body).await {
+                return storage_failed(error);
+            }
+        }
         Ok(_) => {
             let text = json::raw::text(&body);
             let mut rows = Vec::new();
+            let mut kept = Vec::new();
             for (i, entry) in json::raw::list(&text).into_iter().enumerate() {
                 match config_rows(ctx.tenant(), entry) {
-                    Err(e) => {
-                        raw::store(
-                            &clickhouse,
-                            &ctx,
-                            "ndmconfig",
-                            "decode_error",
-                            &format!("entry {i}: {e}"),
-                            entry.as_bytes(),
-                        )
-                        .await
-                    }
+                    Err(e) => kept.extend(raw::row(
+                        &ctx,
+                        "ndmconfig",
+                        "decode_error",
+                        &format!("entry {i}: {e}"),
+                        entry.as_bytes(),
+                    )),
                     Ok(configs) => rows.extend(configs),
                 }
+            }
+            if let Err(e) = raw::keep(&clickhouse, &kept).await {
+                return storage_failed(e);
             }
             if let Err(e) = storage::insert(&clickhouse, &rows).await {
                 return storage_failed(e);
@@ -389,10 +393,15 @@ pub fn trap_row(tenant: &str, trap: &str) -> Result<SnmpTrap, String> {
 
 pub async fn handle_traps(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     match json::try_parse_list(&body) {
-        Err(e) => raw::store(&clickhouse, &ctx, "ndmtraps", "decode_error", &e, &body).await,
+        Err(e) => {
+            if let Err(error) = raw::store(&clickhouse, &ctx, "ndmtraps", "decode_error", &e, &body).await {
+                return storage_failed(error);
+            }
+        }
         Ok(batch) => {
             let text = json::raw::text(&body);
             let mut rows = Vec::new();
+            let mut kept = Vec::new();
             for (i, (entry, entry_text)) in batch.iter().zip(json::raw::list(&text)).enumerate() {
                 let problem = if !entry.is_object() && !entry.is_null() {
                     Some(("decode_error", format!("entry {i}: expected an object, got {}", json::kind(entry))))
@@ -409,8 +418,11 @@ pub async fn handle_traps(ctx: Ctx, State(clickhouse): State<clickhouse::Client>
                     }
                 };
                 if let Some((reason, note)) = problem {
-                    raw::store(&clickhouse, &ctx, "ndmtraps", reason, &note, entry_text.as_bytes()).await;
+                    kept.extend(raw::row(&ctx, "ndmtraps", reason, &note, entry_text.as_bytes()));
                 }
+            }
+            if let Err(e) = raw::keep(&clickhouse, &kept).await {
+                return storage_failed(e);
             }
             if let Err(e) = storage::insert(&clickhouse, &rows).await {
                 return storage_failed(e);
@@ -522,7 +534,11 @@ pub fn decode_flows(tenant: &str, body: &[u8]) -> Result<Vec<NetflowFlow>, Strin
 
 pub async fn handle_flow(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     match decode_flows(ctx.tenant(), &body) {
-        Err(e) => raw::store(&clickhouse, &ctx, "ndmflow", "decode_error", &e, &body).await,
+        Err(e) => {
+            if let Err(error) = raw::store(&clickhouse, &ctx, "ndmflow", "decode_error", &e, &body).await {
+                return storage_failed(error);
+            }
+        }
         Ok(rows) => {
             if let Err(e) = storage::insert(&clickhouse, &rows).await {
                 return storage_failed(e);
@@ -693,7 +709,11 @@ pub fn decode_paths(tenant: &str, body: &[u8]) -> Result<Vec<NetworkPath>, Strin
 
 pub async fn handle_netpath(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     match decode_paths(ctx.tenant(), &body) {
-        Err(e) => raw::store(&clickhouse, &ctx, "netpath", "decode_error", &e, &body).await,
+        Err(e) => {
+            if let Err(error) = raw::store(&clickhouse, &ctx, "netpath", "decode_error", &e, &body).await {
+                return storage_failed(error);
+            }
+        }
         Ok(rows) => {
             if let Err(e) = storage::insert(&clickhouse, &rows).await {
                 return storage_failed(e);

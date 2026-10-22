@@ -93,6 +93,10 @@ impl Scratch {
         let database =
             format!("ninjacat_test_internal_{}_{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
         if let Err(e) = admin.query(&format!("CREATE DATABASE {database}")).execute().await {
+            // CI sets it: there a missing database is a broken job, not a test to skip.
+            if std::env::var_os("NINJACAT_TEST_REQUIRE_DATABASES").is_some() {
+                panic!("ClickHouse is not reachable at {DEV_CLICKHOUSE}: {e}");
+            }
             eprintln!("skipped: ClickHouse is not reachable at {DEV_CLICKHOUSE}: {e}");
             return None;
         }

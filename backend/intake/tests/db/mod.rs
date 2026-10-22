@@ -1,5 +1,6 @@
 //! The scratch ClickHouse database a test binary inserts into, and the rows read back from it.
-//! Every test returns early, after one "skipped:" line, when ClickHouse is not running.
+//! Every test returns early, after one "skipped:" line, when ClickHouse is not running, and fails
+//! instead when NINJACAT_TEST_REQUIRE_DATABASES is set (as CI sets it).
 
 #![allow(dead_code)]
 
@@ -54,6 +55,10 @@ pub async fn scratch_client() -> Option<clickhouse::Client> {
 async fn build() -> Option<String> {
     let server = ninjapaws_storage::client_from_env().with_database("default");
     if let Err(e) = server.query("SELECT 1").execute().await {
+        // CI sets it: there a missing database is a broken job, not a test to skip.
+        if std::env::var_os("NINJACAT_TEST_REQUIRE_DATABASES").is_some() {
+            panic!("ClickHouse is not running: {e}");
+        }
         eprintln!("skipped: ClickHouse is not running: {e}");
         return None;
     }

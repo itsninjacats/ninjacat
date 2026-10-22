@@ -906,30 +906,32 @@ fn reply() -> Response {
     response
 }
 
-/// The frame of a request. One that cannot be read is kept whole: it is exactly the payload that
+/// The answer to a frame that cannot be read. It is kept whole: it is exactly the payload that
 /// would explain why, and it arrives once.
-async fn decode(clickhouse: &clickhouse::Client, body: &[u8], ctx: &Ctx, label: &str) -> Option<Frame> {
-    match process_frame::decode(body) {
-        Ok(frame) => Some(frame),
-        Err(error) => {
-            raw::store(clickhouse, ctx, "process", "decode_error", &format!("{label}: {error}"), body).await;
-            None
-        }
+async fn undecodable(clickhouse: &clickhouse::Client, body: &[u8], ctx: &Ctx, label: &str, error: String) -> Response {
+    let note = format!("{label}: {error}");
+    match raw::store(clickhouse, ctx, "process", "decode_error", &note, body).await {
+        Ok(()) => reply(),
+        Err(e) => storage_failed(e),
     }
 }
 
-/// The frame's type byte decides the body, not the path, so the two can disagree: a
-/// misconfigured agent, or a type not met before.
-async fn unexpected(clickhouse: &clickhouse::Client, body: &[u8], ctx: &Ctx, label: &str, frame: &Frame) {
+/// The answer to a frame whose type byte names another body than the path: a misconfigured agent,
+/// or a type not met before. The type byte decides the body, not the path; the payload is kept.
+async fn unexpected(clickhouse: &clickhouse::Client, body: &[u8], ctx: &Ctx, label: &str, frame: &Frame) -> Response {
     let note = format!("/api/v1/{label} decoded to {} (frame type {})", frame.body.name(), frame.header.message_type);
-    raw::store(clickhouse, ctx, "process", "unexpected_shape", &note, body).await;
+    match raw::store(clickhouse, ctx, "process", "unexpected_shape", &note, body).await {
+        Ok(()) => reply(),
+        Err(e) => storage_failed(e),
+    }
 }
 
 /// The process check. One path, two message types: 12 (CollectorProc, the full snapshot every
 /// 10 s) and 27 (CollectorRealTime, stats only, every 2 s).
 pub async fn handle_collector(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: server::Body) -> Response {
-    let Some(frame) = decode(&clickhouse, &body, &ctx, "collector").await else {
-        return reply();
+    let frame = match process_frame::decode(&body) {
+        Ok(frame) => frame,
+        Err(error) => return undecodable(&clickhouse, &body, &ctx, "collector", error).await,
     };
     let info = frame_info(&body, &ctx);
     match &frame.body {
@@ -957,7 +959,7 @@ pub async fn handle_collector(ctx: Ctx, State(clickhouse): State<clickhouse::Cli
                 return storage_failed(e);
             }
         }
-        _ => unexpected(&clickhouse, &body, &ctx, "collector", &frame).await,
+        _ => return unexpected(&clickhouse, &body, &ctx, "collector", &frame).await,
     }
     reply()
 }
@@ -965,8 +967,9 @@ pub async fn handle_collector(ctx: Ctx, State(clickhouse): State<clickhouse::Cli
 /// The container check. One path, two message types: 39 (CollectorContainer, the full inventory
 /// every 10 s) and 40 (CollectorContainerRealTime, stats only, every 2 s).
 pub async fn handle_container(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: server::Body) -> Response {
-    let Some(frame) = decode(&clickhouse, &body, &ctx, "container").await else {
-        return reply();
+    let frame = match process_frame::decode(&body) {
+        Ok(frame) => frame,
+        Err(error) => return undecodable(&clickhouse, &body, &ctx, "container", error).await,
     };
     let info = frame_info(&body, &ctx);
     match &frame.body {
@@ -986,7 +989,7 @@ pub async fn handle_container(ctx: Ctx, State(clickhouse): State<clickhouse::Cli
                 return storage_failed(e);
             }
         }
-        _ => unexpected(&clickhouse, &body, &ctx, "container", &frame).await,
+        _ => return unexpected(&clickhouse, &body, &ctx, "container", &frame).await,
     }
     reply()
 }
@@ -1038,12 +1041,12 @@ pub async fn handle_connections(
     State(clickhouse): State<clickhouse::Client>,
     body: server::Body,
 ) -> Response {
-    let Some(frame) = decode(&clickhouse, &body, &ctx, "connections").await else {
-        return reply();
+    let frame = match process_frame::decode(&body) {
+        Ok(frame) => frame,
+        Err(error) => return undecodable(&clickhouse, &body, &ctx, "connections", error).await,
     };
     let Body::Connections(conns) = &frame.body else {
-        unexpected(&clickhouse, &body, &ctx, "connections", &frame).await;
-        return reply();
+        return unexpected(&clickhouse, &body, &ctx, "connections", &frame).await;
     };
     let info = frame_info(&body, &ctx);
     let dns_names = dns_buffer::names(&conns.encoded_dns, &conns.encoded_domain_database).unwrap_or_else(|error| {
@@ -1083,12 +1086,12 @@ pub async fn handle_connections(
 /// The lightweight process discovery check (type 53): pid, command and user only, no resource
 /// usage.
 pub async fn handle_discovery(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: server::Body) -> Response {
-    let Some(frame) = decode(&clickhouse, &body, &ctx, "discovery").await else {
-        return reply();
+    let frame = match process_frame::decode(&body) {
+        Ok(frame) => frame,
+        Err(error) => return undecodable(&clickhouse, &body, &ctx, "discovery", error).await,
     };
     let Body::ProcDiscovery(discoveries) = &frame.body else {
-        unexpected(&clickhouse, &body, &ctx, "discovery", &frame).await;
-        return reply();
+        return unexpected(&clickhouse, &body, &ctx, "discovery", &frame).await;
     };
     let info = frame_info(&body, &ctx);
     let rows: Vec<_> = discoveries.process_discoveries.iter().map(|d| discovery_row(&info, discoveries, d)).collect();

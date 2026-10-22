@@ -29,7 +29,8 @@ cli       a command line for the engine
 
 A handler decodes what it was sent and inserts the rows itself, one insert per table, before it
 answers; ClickHouse's `async_insert` batches the many small inserts on its side. When ClickHouse
-refuses one the sender gets a 503 and sends again.
+refuses one the sender gets a 503 and sends again, so delivery is at least once: a refusal after
+the first table, or an insert that timed out and landed anyway, gives the resend duplicates.
 
 `intake/tests/golden.rs` replays the golden fixtures (`intake/tests/fixtures`, their README says
 what they are) through the router of the host each was sent to, into a scratch ClickHouse built

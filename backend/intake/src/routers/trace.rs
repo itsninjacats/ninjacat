@@ -477,13 +477,18 @@ pub async fn handle_traces(ctx: Ctx, State(clickhouse): State<clickhouse::Client
     }
     match AgentPayload::decode(&body[..]) {
         Err(e) => {
-            raw::store(&clickhouse, &ctx, INTAKE, "decode_error", &format!("protobuf AgentPayload: {e}"), &body).await
+            if let Err(e) =
+                raw::store(&clickhouse, &ctx, INTAKE, "decode_error", &format!("protobuf AgentPayload: {e}"), &body)
+                    .await
+            {
+                return storage_failed(e);
+            }
         }
         // Protobuf carries no type marker and skips unknown fields, so a body meant for another
         // endpoint decodes "successfully" into an empty payload. Neither list being filled is the
         // one signal.
         Ok(payload) if payload.tracer_payloads.is_empty() && payload.idx_tracer_payloads.is_empty() => {
-            raw::store(
+            if let Err(e) = raw::store(
                 &clickhouse,
                 &ctx,
                 INTAKE,
@@ -492,6 +497,9 @@ pub async fn handle_traces(ctx: Ctx, State(clickhouse): State<clickhouse::Client
                 &body,
             )
             .await
+            {
+                return storage_failed(e);
+            }
         }
         Ok(payload) => {
             if let Err(e) = storage::insert(&clickhouse, &span_rows(ctx.tenant(), Utc::now(), &payload)).await {
@@ -688,7 +696,7 @@ pub async fn handle_stats(ctx: Ctx, State(clickhouse): State<clickhouse::Client>
     if !ctx.is_sweep() {
         match decode_stats_payload(&body) {
             Err(problem) => {
-                raw::store(
+                if let Err(e) = raw::store(
                     &clickhouse,
                     &ctx,
                     INTAKE,
@@ -697,6 +705,9 @@ pub async fn handle_stats(ctx: Ctx, State(clickhouse): State<clickhouse::Client>
                     &body,
                 )
                 .await
+                {
+                    return storage_failed(e);
+                }
             }
             Ok(payload) => {
                 if let Err(e) = storage::insert(&clickhouse, &stat_rows(ctx.tenant(), Utc::now(), &payload)).await {
@@ -980,7 +991,7 @@ pub async fn handle_pipeline_stats(ctx: Ctx, State(clickhouse): State<clickhouse
     if !ctx.is_sweep() {
         match decode_dsm_payload(&body) {
             Err(problem) => {
-                raw::store(
+                if let Err(e) = raw::store(
                     &clickhouse,
                     &ctx,
                     INTAKE,
@@ -989,6 +1000,9 @@ pub async fn handle_pipeline_stats(ctx: Ctx, State(clickhouse): State<clickhouse
                     &body,
                 )
                 .await
+                {
+                    return storage_failed(e);
+                }
             }
             Ok(payload) => {
                 let headers = DsmHeaders {
@@ -1064,7 +1078,7 @@ pub async fn handle_data_streams_messages(
 ) -> Response {
     match json::try_parse_element_bytes(&body) {
         Err(problem) => {
-            raw::store(
+            if let Err(e) = raw::store(
                 &clickhouse,
                 &ctx,
                 INTAKE,
@@ -1073,6 +1087,9 @@ pub async fn handle_data_streams_messages(
                 &body,
             )
             .await
+            {
+                return storage_failed(e);
+            }
         }
         Ok(messages) => {
             let found = dsm_message_rows(

@@ -22,6 +22,7 @@ use chrono::{DateTime, Utc};
 use http::StatusCode;
 use ninjapaws_storage as storage;
 use ninjapaws_storage::rows::ci::CiWebhookEvent;
+use ninjapaws_storage::rows::raw::RawPayload;
 use serde_json::value::RawValue;
 use tako::extractors::state::State;
 use tako::types::Response;
@@ -217,12 +218,12 @@ fn elements<'a>(root: &'a serde_json::Value, written: &'a RawValue) -> Vec<(&'a 
     }
 }
 
-/// The batch's rows. What does not decode is kept raw, so the client is needed here.
-async fn webhook_rows(clickhouse: &clickhouse::Client, ctx: &Ctx, body: &[u8]) -> Vec<CiWebhookEvent> {
+/// The batch's rows. What does not decode is kept raw, into `kept`.
+fn webhook_rows(ctx: &Ctx, body: &[u8], kept: &mut Vec<RawPayload>) -> Vec<CiWebhookEvent> {
     let root = match json::try_parse(body) {
         Ok(root) => root,
         Err(e) => {
-            raw::store(clickhouse, ctx, "webhook", "decode_error", &format!("batch: {e}"), body).await;
+            kept.extend(raw::row(ctx, "webhook", "decode_error", &format!("batch: {e}"), body));
             return Vec::new();
         }
     };
@@ -254,17 +255,13 @@ async fn webhook_rows(clickhouse: &clickhouse::Client, ctx: &Ctx, body: &[u8]) -
         let body = written.get().trim();
         match Value::of_json(element) {
             element @ Value::Object(_) => rows.push(webhook_row(ctx.tenant(), now, &delivery, body, &element)),
-            _ => {
-                raw::store(
-                    clickhouse,
-                    ctx,
-                    "webhook",
-                    "unexpected_shape",
-                    "element is not a JSON object",
-                    body.as_bytes(),
-                )
-                .await
-            }
+            _ => kept.extend(raw::row(
+                ctx,
+                "webhook",
+                "unexpected_shape",
+                "element is not a JSON object",
+                body.as_bytes(),
+            )),
         }
     }
     rows
@@ -278,7 +275,11 @@ pub async fn handle(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body
     if body.is_empty() {
         return accepted();
     }
-    let rows = webhook_rows(&clickhouse, &ctx, &body).await;
+    let mut kept = Vec::new();
+    let rows = webhook_rows(&ctx, &body, &mut kept);
+    if let Err(e) = raw::keep(&clickhouse, &kept).await {
+        return storage_failed(e);
+    }
     if let Err(e) = storage::insert(&clickhouse, &rows).await {
         return storage_failed(e);
     }

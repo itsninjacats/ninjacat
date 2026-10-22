@@ -5,9 +5,10 @@
 //! lists the accepted differences, each with its reason.
 //!
 //! Equal means equal in meaning: object key order does not matter, a number is a number however
-//! it is written, a timestamp may lose digits past 100 ns or past what its column keeps, and a
-//! string that is itself JSON is compared as JSON. A table's rows are matched in any order: a
-//! table keeps them in its sort order, and which batch carried a row is not stored.
+//! it is written, a timestamp may lose digits past 100 ns (and a DateTime column's past what the
+//! column keeps), and a string that is itself JSON is compared as JSON. A table's rows are matched
+//! in any order: a table keeps them in its sort order, and which batch carried a row is not
+//! stored. Each table's INSERT names exactly Go's columns, read back from the query log.
 
 mod db;
 mod programs;
@@ -354,6 +355,20 @@ fn same_stored_time(expected: &str, stored: &str) -> bool {
     (expected < earliest && stored == earliest) || (expected > latest && stored == latest)
 }
 
+/// Go's time in a DateTime cell, or each of an Array(DateTime) cell's, replaced by the stored one
+/// when that is the same time as the column keeps it.
+fn as_stored_time(expected: &mut Value, stored: &Value) {
+    match (expected, stored) {
+        (Value::String(e), Value::String(s)) if same_stored_time(e, s) => *e = s.clone(),
+        (Value::Array(e), Value::Array(s)) => {
+            for (e, s) in e.iter_mut().zip(s) {
+                as_stored_time(e, s);
+            }
+        }
+        _ => {}
+    }
+}
+
 fn same_number(expected: &Value, actual: &Value) -> bool {
     if expected == actual {
         return true;
@@ -418,7 +433,6 @@ fn differences(ignored: &HashSet<String>, path: &str, expected: &Value, actual: 
         }
         (Value::String(e), Value::String(a)) if e != a => match (timestamp_to_100ns(e), timestamp_to_100ns(a)) {
             (Some(et), Some(at)) if et == at => {}
-            _ if same_stored_time(e, a) => {}
             _ => match (json_container(e), json_container(a)) {
                 (Some(ej), Some(aj)) => differences(ignored, &format!("{path}~json"), &ej, &aj, found),
                 _ => found.push(format!("{path}: Go {}, Rust {}", show(expected), show(actual))),
@@ -503,7 +517,8 @@ fn float_map_as_go(map: &mut Value) {
     }
 }
 
-/// Runs the fixture's request; returns the differences from what Go did.
+/// Runs the fixture's request; returns the differences from what Go did, and the columns Go's
+/// INSERT named for each table, which the query log is compared with once every fixture has run.
 async fn run(
     id: &str,
     fixture: &Value,
@@ -511,14 +526,15 @@ async fn run(
     overrides: &Value,
     clickhouse: &clickhouse::Client,
     types: &HashMap<(String, String), String>,
-) -> Vec<String> {
+) -> (Vec<String>, BTreeMap<String, Vec<String>>) {
     // Each fixture starts from empty tables, so what is read back is what its request stored.
     for table in tables_with_rows(clickhouse).await.keys() {
         if table != "schema_migrations" {
             clickhouse.query(&format!("TRUNCATE TABLE `{table}`")).execute().await.unwrap();
         }
     }
-    let response = send(fixture, process, clickhouse).await;
+    // The fixture's id goes with each of its inserts into the query log.
+    let response = send(fixture, process, &clickhouse.clone().with_setting("log_comment", id)).await;
     let mut ignored: HashSet<String> = strings(&fixture["volatile"]).into_iter().collect();
     ignored.extend(strings(&overrides[id]["ignore"]));
     let mut found = Vec::new();
@@ -562,10 +578,10 @@ async fn run(
     // ignores "/sends" says this intake stores something else on purpose; a test of its own pins
     // what.
     let Some(sends) = fixture["sends"].as_array() else {
-        return found;
+        return (found, BTreeMap::new());
     };
     if ignored.contains("/sends") {
-        return found;
+        return (found, BTreeMap::new());
     }
     // Go's rows by table, each with its own path in the fixture, so the overrides apply to it.
     let mut columns_of: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -595,6 +611,10 @@ async fn run(
         }
         let mut unused: Vec<Option<Value>> =
             stored_rows(clickhouse, types, table, &columns_of[table]).await.into_iter().map(Some).collect();
+        let kinds: Vec<&str> = columns_of[table]
+            .iter()
+            .map(|c| types.get(&(table.clone(), c.clone())).map_or("", String::as_str))
+            .collect();
         let n = unused.len();
         for (position, (path, want)) in rows.iter().enumerate() {
             // The first unused stored row equal to Go's, looked for from its own position on; else
@@ -602,8 +622,17 @@ async fn run(
             let mut best: Option<(usize, Vec<String>)> = None;
             for k in (0..n).map(|k| (k + position) % n) {
                 let Some(candidate) = &unused[k] else { continue };
+                // Go's time as a DateTime column keeps it; a String column keeps every digit.
+                let mut want = (*want).clone();
+                if let (Some(cells), Some(stored)) = (want.as_array_mut(), candidate.as_array()) {
+                    for ((cell, stored), kind) in cells.iter_mut().zip(stored).zip(&kinds) {
+                        if kind.contains("DateTime") {
+                            as_stored_time(cell, stored);
+                        }
+                    }
+                }
                 let mut diffs = Vec::new();
-                differences(&ignored, path, want, candidate, &mut diffs);
+                differences(&ignored, path, &want, candidate, &mut diffs);
                 let equal = diffs.is_empty();
                 if best.as_ref().is_none_or(|(_, b)| diffs.len() < b.len()) {
                     best = Some((k, diffs));
@@ -621,6 +650,18 @@ async fn run(
             }
         }
     }
+    (found, columns_of)
+}
+
+/// The columns each fixture's inserts named, by fixture and table, from the query log.
+async fn logged_columns(clickhouse: &clickhouse::Client) -> BTreeMap<String, BTreeMap<String, Vec<Vec<String>>>> {
+    clickhouse.query("SYSTEM FLUSH LOGS").execute().await.unwrap();
+    let sql = "SELECT log_comment, query FROM system.query_log WHERE current_database = currentDatabase() \
+               AND query_kind = 'Insert' AND type = 'QueryFinish' AND log_comment != '' ORDER BY event_time_microseconds";
+    let mut found: BTreeMap<String, BTreeMap<String, Vec<Vec<String>>>> = BTreeMap::new();
+    for (id, insert) in clickhouse.query(sql).fetch_all::<(String, String)>().await.unwrap() {
+        found.entry(id).or_default().entry(insert_table(&insert)).or_default().push(insert_columns(&insert));
+    }
     found
 }
 
@@ -634,7 +675,8 @@ async fn every_fixture_of_a_ported_host_is_answered_and_stored_as_it_says() {
     paths.sort();
 
     let mut replayed = 0;
-    let mut failures = Vec::new();
+    let mut differ: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut go_columns: BTreeMap<String, BTreeMap<String, Vec<String>>> = BTreeMap::new();
     for path in paths {
         let id = format!(
             "{}/{}",
@@ -646,11 +688,28 @@ async fn every_fixture_of_a_ported_host_is_answered_and_stored_as_it_says() {
             continue;
         };
         replayed += 1;
-        let found = run(&id, &fixture, &process, &overrides, &clickhouse, &types).await;
-        if !found.is_empty() {
-            failures.push(format!("{id}\n  {}", found.join("\n  ")));
+        let (found, columns) = run(&id, &fixture, &process, &overrides, &clickhouse, &types).await;
+        differ.insert(id.clone(), found);
+        go_columns.insert(id, columns);
+    }
+    // A column a Row stopped writing would come back as its default, which Go's value may equal;
+    // one Go never wrote would not be read back at all. So each INSERT is compared as it was sent.
+    let logged = logged_columns(&clickhouse).await;
+    for (id, tables) in &go_columns {
+        for (table, go) in tables {
+            for rust in logged.get(id).and_then(|t| t.get(table)).into_iter().flatten() {
+                if rust != go {
+                    differ.get_mut(id).unwrap().push(format!("/sends: into {table} Go wrote {go:?}, Rust {rust:?}"));
+                }
+            }
         }
     }
+    let failures: Vec<String> = differ
+        .iter()
+        .filter(|(_, found)| !found.is_empty())
+        .map(|(id, found)| format!("{id}\n  {}", found.join("\n  ")))
+        .collect();
     assert!(replayed > 0, "no fixture found under {}", root.display());
+    assert!(!logged.is_empty(), "the query log holds none of the fixtures' inserts");
     assert!(failures.is_empty(), "{} of {replayed} fixtures differ:\n{}", failures.len(), failures.join("\n"));
 }

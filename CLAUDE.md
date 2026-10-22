@@ -235,7 +235,7 @@ with `server::json`, `status`, `accepted`. There is no other request or response
 read field by field with `fields::Fields` (exact names, the last of a repeated name, null the
 same as absent, mismatches noted). `body::try_parts`, `wire::time`, `wire::enum_name`,
 `server::accepted`, `server::storage_failed` and `storage::insert` are the others. A router
-does not grow a private copy of any of them, and `raw::store` alone logs a kept payload.
+does not grow a private copy of any of them, and `raw::keep` alone logs a kept payload.
 
 **Numbers and text are kept as sent.** serde_json runs with `arbitrary_precision` in the whole
 workspace, so a parsed number keeps its digits. Where a String column holds a JSON value as it
@@ -256,11 +256,21 @@ into parts on its side. When ClickHouse refuses an insert the handler answers 50
 nothing about HTTP or Datadog; that is what lets a second source (OTLP) be added without touching
 the write path.
 
+Delivery is therefore at least once: the tables are written one after another, so a refusal after
+the first leaves the earlier tables written and the resend writes them again (MergeTree, no
+deduplication), and an insert that timed out may still land. Readers tolerate a duplicate; a
+handler writes its kept payloads (`raw_payloads`) before its rows, so a refused keep stores nothing.
+The exception is an endpoint whose answer the client needs and storage does not decide (the CI
+tracers' configuration and search_commits, the intake key, the symbols query, the runner's dequeue
+and heartbeat): its rows are best-effort, logged when refused, and the answer is given anyway.
+
 **API key lookup takes no lock.** `intake/src/keys.rs` publishes an immutable snapshot
 (ArcSwap); its keeper alone replaces it, every 30s and when the panel asks.
 
 **What cannot be decoded is kept, not dropped.** `raw::store` puts the whole payload in
-`raw_payloads` with a reason, so an unhandled endpoint loses nothing.
+`raw_payloads` with a reason, so an unhandled endpoint loses nothing; a refused keep is a 503 like
+any other insert. A batch's rejected elements are collected with `raw::row` and kept with one
+`raw::keep`, never one insert per element.
 
 **Multi-tenancy is in from day one.** `tenant_id` is the first `ORDER BY` column everywhere;
 it is cheap to carry and expensive to add later. A tenant is a Better Auth organization, and
@@ -290,7 +300,8 @@ its own). A deliberate change to what a route stores means updating its fixture 
 saying why in an `edited` key inside it. The fixtures go through the real handlers into a scratch
 ClickHouse database, and what is compared is what the tables hold.
 
-Tests that store need a running ClickHouse and skip, with one "skipped:" line, when it is down.
+Tests that store need a running ClickHouse and skip, with one "skipped:" line, when it is down
+(and fail instead when `NINJACAT_TEST_REQUIRE_DATABASES` is set, as CI sets it).
 `intake/tests/db/mod.rs` gives each test binary one scratch database built from the migrations
 (every TTL removed, as ClickHouse drops an expired row already on insert) and each test a tenant
 of its own; `db::tables` and `db::rows` read back what a tenant has. Rows come back in sort-key

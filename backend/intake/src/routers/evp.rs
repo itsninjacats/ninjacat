@@ -74,27 +74,31 @@ async fn handle_batch<T: Table>(
     if !body.is_empty() {
         match json::try_parse_list(body) {
             Err(_) => {
-                raw::store(clickhouse, ctx, intake, "unexpected_shape", "body is not a JSON array or object", body)
-                    .await
+                let note = "body is not a JSON array or object";
+                if let Err(e) = raw::store(clickhouse, ctx, intake, "unexpected_shape", note, body).await {
+                    return storage_failed(e);
+                }
             }
             Ok(items) => {
                 let now = Utc::now();
                 let text = json::raw::text(body);
                 let mut rows = Vec::new();
+                let mut kept = Vec::new();
                 for (item, item_text) in items.iter().zip(json::raw::list(&text)) {
                     if is_object_or_null(item) {
                         rows.extend(to_rows(now, item));
                     } else {
-                        raw::store(
-                            clickhouse,
+                        kept.extend(raw::row(
                             ctx,
                             intake,
                             "decode_error",
                             "item is not a JSON object",
                             item_text.as_bytes(),
-                        )
-                        .await;
+                        ));
                     }
+                }
+                if let Err(e) = raw::keep(clickhouse, &kept).await {
+                    return storage_failed(e);
                 }
                 if let Err(e) = storage::insert(clickhouse, &rows).await {
                     return storage_failed(e);
@@ -142,7 +146,13 @@ pub fn agent_discovery_rows(
 pub async fn handle_agent_discovery(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     if !body.is_empty() {
         match AgentDiscoveryPayloadBatch::decode(&body[..]) {
-            Err(e) => raw::store(&clickhouse, &ctx, "agentdiscovery", "decode_error", &e.to_string(), &body).await,
+            Err(e) => {
+                if let Err(error) =
+                    raw::store(&clickhouse, &ctx, "agentdiscovery", "decode_error", &e.to_string(), &body).await
+                {
+                    return storage_failed(error);
+                }
+            }
             // Protobuf skips fields it does not know, so a payload meant for another endpoint
             // decodes into an empty batch. Not a decode error, so it is not kept raw.
             Ok(batch) if batch.payloads.is_empty() => {
@@ -298,7 +308,11 @@ pub fn health_report_rows(
 pub async fn handle_agent_health(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     if !body.is_empty() {
         match decode_health_report(&body) {
-            Err(e) => raw::store(&clickhouse, &ctx, "agenthealth", "decode_error", &e, &body).await,
+            Err(e) => {
+                if let Err(error) = raw::store(&clickhouse, &ctx, "agenthealth", "decode_error", &e, &body).await {
+                    return storage_failed(error);
+                }
+            }
             Ok(report) => {
                 // The wire has no report id; this one joins the two tables.
                 let raw_issues = health_issues_raw(&body);
@@ -391,7 +405,7 @@ pub async fn handle_event_management(ctx: Ctx, State(clickhouse): State<clickhou
     if !body.is_empty() {
         match parse_object(&body) {
             None => {
-                raw::store(
+                if let Err(e) = raw::store(
                     &clickhouse,
                     &ctx,
                     EVENT_MANAGEMENT_INTAKE,
@@ -400,10 +414,13 @@ pub async fn handle_event_management(ctx: Ctx, State(clickhouse): State<clickhou
                     &body,
                 )
                 .await
+                {
+                    return storage_failed(e);
+                }
             }
             Some(envelope) => match event_management_row(ctx.tenant(), Utc::now(), &envelope) {
                 None => {
-                    raw::store(
+                    if let Err(e) = raw::store(
                         &clickhouse,
                         &ctx,
                         EVENT_MANAGEMENT_INTAKE,
@@ -412,6 +429,9 @@ pub async fn handle_event_management(ctx: Ctx, State(clickhouse): State<clickhou
                         &body,
                     )
                     .await
+                    {
+                        return storage_failed(e);
+                    }
                 }
                 Some(row) => {
                     if let Err(e) = storage::insert(&clickhouse, &[row]).await {

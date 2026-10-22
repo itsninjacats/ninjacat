@@ -12,6 +12,8 @@ use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use ninjapaws_storage::rows::metrics::MetricPoint;
+use tokio::sync::watch;
+use tokio::time::MissedTickBehavior;
 
 use crate::telemetry::{self, Counters, Kind};
 
@@ -53,14 +55,20 @@ fn status_field(name: &str) -> Option<f64> {
 }
 
 impl SelfMonitor {
-    /// Samples every interval until the task is aborted.
-    pub async fn run(self) {
+    /// Samples every interval until `stopping` turns true. The stop is looked at only between
+    /// samples, so an insert under way is finished, not cut off.
+    pub async fn run(self, mut stopping: watch::Receiver<bool>) {
         let started = Instant::now();
         let mut previous = Previous::default();
         let mut every = tokio::time::interval(self.interval);
+        // An insert that outlasts the interval leaves a gap, not a burst of samples taken at once.
+        every.set_missed_tick_behavior(MissedTickBehavior::Skip);
         every.tick().await;
         loop {
-            every.tick().await;
+            tokio::select! {
+                _ = every.tick() => {}
+                _ = stopping.wait_for(|stop| *stop) => return,
+            }
             let points = self.sample(Utc::now(), started.elapsed(), &mut previous);
             if let Err(e) = ninjapaws_storage::insert(&self.clickhouse, &points).await {
                 eprintln!("warning: self-monitoring points not stored: {e}");

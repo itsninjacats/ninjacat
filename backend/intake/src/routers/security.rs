@@ -212,8 +212,12 @@ fn walk(
 /// way round.
 pub async fn handle_sec_dump(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     let Some(boundary) = body::boundary(ctx.header("content-type")) else {
-        raw::store(&clickhouse, &ctx, "secdump", "decode_error", "content-type is not multipart/form-data", &body)
-            .await;
+        if let Err(e) =
+            raw::store(&clickhouse, &ctx, "secdump", "decode_error", "content-type is not multipart/form-data", &body)
+                .await
+        {
+            return storage_failed(e);
+        }
         return accepted();
     };
     let parts = body::parts(&boundary, body.clone()).await;
@@ -236,7 +240,11 @@ pub async fn handle_sec_dump(ctx: Ctx, State(clickhouse): State<clickhouse::Clie
     }
 
     if header.is_none() && dump.is_none() {
-        raw::store(&clickhouse, &ctx, "secdump", "decode_error", "neither multipart part decoded", &body).await;
+        if let Err(e) =
+            raw::store(&clickhouse, &ctx, "secdump", "decode_error", "neither multipart part decoded", &body).await
+        {
+            return storage_failed(e);
+        }
         return accepted();
     }
     let received_at = Utc::now();
@@ -350,7 +358,7 @@ pub async fn handle_track(
 ) -> Response {
     match decode_envelopes(&body) {
         Err(problem) => {
-            raw::store(
+            if let Err(e) = raw::store(
                 &clickhouse,
                 &ctx,
                 track,
@@ -359,6 +367,9 @@ pub async fn handle_track(
                 &body,
             )
             .await
+            {
+                return storage_failed(e);
+            }
         }
         Ok(envelopes) => {
             if let Err(e) = storage::insert(&clickhouse, &event_rows(ctx.tenant(), Utc::now(), track, &envelopes)).await
@@ -555,10 +566,18 @@ pub fn sbom_rows(
 /// POST /api/v2/sbom: one SBOMPayload per request, protobuf.
 pub async fn handle_sbom(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     match SbomPayload::decode(&body[..]) {
-        Err(problem) => raw::store(&clickhouse, &ctx, "sbom", "decode_error", &problem.to_string(), &body).await,
+        Err(problem) => {
+            if let Err(e) = raw::store(&clickhouse, &ctx, "sbom", "decode_error", &problem.to_string(), &body).await {
+                return storage_failed(e);
+            }
+        }
         // Protobuf reads almost any bytes as some message.
         Ok(payload) if payload.entities.is_empty() => {
-            raw::store(&clickhouse, &ctx, "sbom", "unexpected_shape", "decoded to zero entities", &body).await
+            if let Err(e) =
+                raw::store(&clickhouse, &ctx, "sbom", "unexpected_shape", "decoded to zero entities", &body).await
+            {
+                return storage_failed(e);
+            }
         }
         Ok(payload) => {
             let (entities, components, vulnerabilities) = sbom_rows(ctx.tenant(), Utc::now(), &payload);
@@ -895,7 +914,7 @@ pub async fn handle_sds_result(ctx: Ctx, State(clickhouse): State<clickhouse::Cl
     };
     match SdsResultPayload::decode(&body[..]) {
         Err(problem) => {
-            raw::store(
+            if let Err(e) = raw::store(
                 &clickhouse,
                 &ctx,
                 "sds",
@@ -904,9 +923,12 @@ pub async fn handle_sds_result(ctx: Ctx, State(clickhouse): State<clickhouse::Cl
                 &body,
             )
             .await
+            {
+                return storage_failed(e);
+            }
         }
         Ok(payload) if sds_is_blank(&payload) => {
-            raw::store(
+            if let Err(e) = raw::store(
                 &clickhouse,
                 &ctx,
                 "sds",
@@ -915,6 +937,9 @@ pub async fn handle_sds_result(ctx: Ctx, State(clickhouse): State<clickhouse::Cl
                 &body,
             )
             .await
+            {
+                return storage_failed(e);
+            }
         }
         Ok(payload) => {
             let rows = sds_rows(ctx.tenant(), Utc::now(), Uuid::new_v4(), &payload);

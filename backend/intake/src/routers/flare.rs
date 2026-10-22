@@ -45,7 +45,12 @@ pub async fn handle(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body
     let Some(boundary) = body::boundary(ctx.header("content-type")) else {
         // Refusing would only make the agent retry the same upload, so the answer keeps its
         // shape and carries the error.
-        raw::store(&clickhouse, &ctx, INTAKE, "decode_error", "content-type is not multipart/form-data", &body).await;
+        if let Err(e) =
+            raw::store(&clickhouse, &ctx, INTAKE, "decode_error", "content-type is not multipart/form-data", &body)
+                .await
+        {
+            return storage_failed(e);
+        }
         return answer(0, "content-type is not multipart/form-data");
     };
     let parts = body::parts(&boundary, body.clone()).await;
@@ -53,7 +58,12 @@ pub async fn handle(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body
     // The agent writes agent_version and hostname AFTER the archive, so nothing here may depend
     // on the order of parts.
     let Some(archive) = parts.iter().rev().find(|p| p.name == "flare_file") else {
-        raw::store(&clickhouse, &ctx, INTAKE, "decode_error", "no flare_file part in the multipart body", &body).await;
+        if let Err(e) =
+            raw::store(&clickhouse, &ctx, INTAKE, "decode_error", "no flare_file part in the multipart body", &body)
+                .await
+        {
+            return storage_failed(e);
+        }
         return answer(0, "no flare archive in the request");
     };
     let field =

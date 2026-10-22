@@ -69,3 +69,21 @@ async fn self_monitoring_samples_the_process_and_the_monitors_into_metrics() {
     assert_eq!(count(&scratch, "SELECT count() FROM metrics").await, stored);
     assert_eq!(count(&scratch, "SELECT count() FROM metrics WHERE env = [] AND series_id != 0").await, stored);
 }
+
+#[tokio::test]
+async fn self_monitoring_samples_until_it_is_told_to_stop() {
+    let monitor = SelfMonitor {
+        tenant: "default".into(),
+        host: "replica-1".into(),
+        interval: Duration::from_millis(10),
+        counts: Arc::new(Counters::default()),
+        // No server: each insert fails at once, so the loop runs through its samples.
+        clickhouse: clickhouse::Client::default().with_url("http://127.0.0.1:1"),
+    };
+    let (stop, stopping) = tokio::sync::watch::channel(false);
+    let running = tokio::spawn(monitor.run(stopping));
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(!running.is_finished(), "it samples until it is told to stop");
+    stop.send(true).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), running).await.expect("it stops").unwrap();
+}

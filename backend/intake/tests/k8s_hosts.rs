@@ -112,7 +112,8 @@ async fn the_org_and_status_lookups_are_answered_404() {
 
 #[tokio::test]
 async fn remote_configuration_needs_an_api_key() {
-    let Some(client) = db::scratch_client().await else { return };
+    // No database: a refusal reads nothing and stores nothing.
+    let client = db::unconnected();
     assert_eq!(send(&client, programs::remote_config, "GET", "/api/v0.1/org", None, Vec::new()).await.status, 403);
 }
 

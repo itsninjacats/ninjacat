@@ -25,7 +25,9 @@ use crate::wire::time;
 /// it bytes, and no schema for them is published anywhere. So the bytes are kept as they are, with
 /// the sender's identity, which the event platform carries in headers, in the note.
 pub async fn handle_gen_resources(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
-    raw::store(&clickhouse, &ctx, "genresources", "no_schema", &raw::origin_note(&ctx), &body).await;
+    if let Err(e) = raw::store(&clickhouse, &ctx, "genresources", "no_schema", &raw::origin_note(&ctx), &body).await {
+        return storage_failed(e);
+    }
     accepted()
 }
 
@@ -243,10 +245,16 @@ fn batch_entries(payload: Option<&Value>) -> Option<Vec<BTreeMap<String, Value>>
 /// batch.
 pub async fn handle_telemetry(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     match json::try_parse(&body) {
-        Err(e) => raw::store(&clickhouse, &ctx, "apmtelemetry", "decode_error", &e, &body).await,
+        Err(e) => {
+            if let Err(error) = raw::store(&clickhouse, &ctx, "apmtelemetry", "decode_error", &e, &body).await {
+                return storage_failed(error);
+            }
+        }
         Ok(root) if !root.is_object() && !root.is_null() => {
             let note = format!("expected an object, got {}", json::kind(&root));
-            raw::store(&clickhouse, &ctx, "apmtelemetry", "decode_error", &note, &body).await
+            if let Err(e) = raw::store(&clickhouse, &ctx, "apmtelemetry", "decode_error", &note, &body).await {
+                return storage_failed(e);
+            }
         }
         Ok(root) => {
             let envelope = json::members(&root);

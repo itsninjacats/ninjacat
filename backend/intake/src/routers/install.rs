@@ -13,7 +13,7 @@ use tako::extractors::state::State;
 use tako::types::Response;
 
 use crate::raw;
-use crate::server::{Body, Ctx, accepted, json, status};
+use crate::server::{Body, Ctx, accepted, json, status, storage_failed};
 
 /// Marks an answer as coming from a Distribution API v2 registry.
 fn from_registry(mut response: Response) -> Response {
@@ -65,7 +65,9 @@ pub async fn handle_btf(_: Ctx, _: Body) -> Response {
 /// checks for a 2xx. The producer is not in datadog-agent and publishes no schema, so the body is
 /// kept as it arrived.
 pub async fn handle_ai_usage(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
-    raw::store(&clickhouse, &ctx, "aiusage", "no_schema", &raw::origin_note(&ctx), &body).await;
+    if let Err(e) = raw::store(&clickhouse, &ctx, "aiusage", "no_schema", &raw::origin_note(&ctx), &body).await {
+        return storage_failed(e);
+    }
     accepted()
 }
 
@@ -74,7 +76,9 @@ pub async fn handle_ai_usage(ctx: Ctx, State(clickhouse): State<clickhouse::Clie
 pub async fn handle_llm_obs(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body) -> Response {
     if !body.is_empty() && !ctx.is_sweep() {
         let note = format!("unexpected payload — the agent only probes this host; {}", raw::origin_note(&ctx));
-        raw::store(&clickhouse, &ctx, "llmobs", "no_schema", &note, &body).await;
+        if let Err(e) = raw::store(&clickhouse, &ctx, "llmobs", "no_schema", &note, &body).await {
+            return storage_failed(e);
+        }
     }
     accepted()
 }

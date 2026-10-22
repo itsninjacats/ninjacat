@@ -279,34 +279,29 @@ pub async fn handle(
     }
     match split_events(&body) {
         Err(e) => {
-            raw::store(
-                &clickhouse,
-                &ctx,
-                "dbm",
-                "decode_error",
-                &format!("[{track}] not a JSON array or object: {e}"),
-                &body,
-            )
-            .await
+            let note = format!("[{track}] not a JSON array or object: {e}");
+            if let Err(e) = raw::store(&clickhouse, &ctx, "dbm", "decode_error", &note, &body).await {
+                return storage_failed(e);
+            }
         }
         Ok(events) => {
             let received_at = Utc::now();
             let mut rows = Vec::new();
+            let mut kept = Vec::new();
             for (i, event) in events.into_iter().enumerate() {
                 match decode_envelope(&event.json) {
-                    Err(e) => {
-                        raw::store(
-                            &clickhouse,
-                            &ctx,
-                            "dbm",
-                            "decode_error",
-                            &format!("[{track}] event {i}: {e}"),
-                            event.text.as_bytes(),
-                        )
-                        .await
-                    }
+                    Err(e) => kept.extend(raw::row(
+                        &ctx,
+                        "dbm",
+                        "decode_error",
+                        &format!("[{track}] event {i}: {e}"),
+                        event.text.as_bytes(),
+                    )),
                     Ok(envelope) => rows.push(to_row(ctx.tenant(), track, received_at, &event.text, envelope)),
                 }
+            }
+            if let Err(e) = raw::keep(&clickhouse, &kept).await {
+                return storage_failed(e);
             }
             if let Err(e) = storage::insert(&clickhouse, &rows).await {
                 return storage_failed(e);

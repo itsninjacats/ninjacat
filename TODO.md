@@ -139,10 +139,11 @@ the rows stored are compared with the ones recorded.
       F# intake's `no intake for host "<name>"`, which told an operator what DD_SITE built.
 - [ ] **The hosts are listed three times**: `helm/ninjacat/values.yaml` (`intake.programs`),
       `dev/intake-routes.yml` and `host_process` in `intake/tests/golden.rs`. One list.
-- [ ] **Database tests skip silently, in CI too.** A test that finds no ClickHouse or Postgres
-      prints `skipped:` and passes, and cargo hides that output for passing tests. Make a
-      missing database a failure in CI; consider starting ClickHouse as a side container for
-      local runs, as CI does.
+- [x] **Database tests skip silently in CI.** CI sets `NINJACAT_TEST_REQUIRE_DATABASES`, and a
+      test that finds no ClickHouse or Postgres then fails instead of printing `skipped:`.
+- [ ] **Database tests skip silently locally.** Without that variable a missing database is a
+      `skipped:` line cargo hides for passing tests; consider starting ClickHouse as a side
+      container for local runs, as CI does.
 - [ ] serde_json nests at most 128 deep, System.Text.Json allowed 512: a body between the two
       is kept raw now.
 - [ ] `docs/protocol/**` describe Go files that no longer exist; say what the Rust equivalent

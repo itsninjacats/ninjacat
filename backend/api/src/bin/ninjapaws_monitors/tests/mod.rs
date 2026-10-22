@@ -101,6 +101,10 @@ impl Scratch {
         // The intake tests' prefix, so their sweep drops what a killed run left behind.
         let database = unique("ninjacat_test_monitors");
         if let Err(e) = admin.query(&format!("CREATE DATABASE {database}")).execute().await {
+            // CI sets it: there a missing database is a broken job, not a test to skip.
+            if std::env::var_os("NINJACAT_TEST_REQUIRE_DATABASES").is_some() {
+                panic!("ClickHouse is not reachable at {DEV_CLICKHOUSE}: {e}");
+            }
             eprintln!("skipped: ClickHouse is not reachable at {DEV_CLICKHOUSE}: {e}");
             return None;
         }
@@ -178,6 +182,10 @@ impl ScratchPostgres {
         let client = match connect(&config).await {
             Ok(client) => client,
             Err(e) => {
+                // CI sets it: there a missing database is a broken job, not a test to skip.
+                if std::env::var_os("NINJACAT_TEST_REQUIRE_DATABASES").is_some() {
+                    panic!("Postgres is not reachable at {url}: {e}");
+                }
                 eprintln!("skipped: Postgres is not reachable at {url}: {e}");
                 return None;
             }
@@ -189,6 +197,10 @@ impl ScratchPostgres {
             ))
             .await;
         if let Err(e) = made {
+            // CI sets it: there a missing database is a broken job, not a test to skip.
+            if std::env::var_os("NINJACAT_TEST_REQUIRE_DATABASES").is_some() {
+                panic!("the dev Postgres has no migrated monitor table: {e}");
+            }
             eprintln!("skipped: the dev Postgres has no migrated monitor table: {e}");
             let _ = client.batch_execute(&format!("DROP SCHEMA IF EXISTS {schema} CASCADE")).await;
             return None;

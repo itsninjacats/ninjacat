@@ -648,14 +648,14 @@ pub async fn handle_rum(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, 
     }
     let request = request_info(&ctx);
     let (mut views, mut events, mut telemetry, mut series) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let mut kept = Vec::new();
     for line in ndjson_lines(&body) {
         match json::try_parse(line) {
             Err(problem) => {
-                raw::store(&clickhouse, &ctx, INTAKE, "decode_error", &format!("not a JSON object: {problem}"), line)
-                    .await
+                kept.extend(raw::row(&ctx, INTAKE, "decode_error", &format!("not a JSON object: {problem}"), line))
             }
             Ok(event) if !event.is_object() => {
-                raw::store(&clickhouse, &ctx, INTAKE, "decode_error", "not a JSON object", line).await
+                kept.extend(raw::row(&ctx, INTAKE, "decode_error", "not a JSON object", line))
             }
             Ok(event) => {
                 let raw = text::utf8(line);
@@ -663,9 +663,7 @@ pub async fn handle_rum(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, 
                     // SDKs ship on schema snapshots months apart, so a newer one sends event types
                     // this build has never seen. That line is kept raw and the rest of the batch is
                     // stored.
-                    Err(unknown_type) => {
-                        raw::store(&clickhouse, &ctx, INTAKE, "unknown_event", &unknown_type, line).await
-                    }
+                    Err(unknown_type) => kept.extend(raw::row(&ctx, INTAKE, "unknown_event", &unknown_type, line)),
                     Ok(EventKind::View(event_type)) => views.push(view_row(&request, &event_type, &event, &raw)),
                     Ok(EventKind::Plain(event_type)) => events.push(event_row(&request, &event_type, &event, &raw)),
                     Ok(EventKind::Telemetry) => telemetry.push(telemetry_row(&request, &event, &raw)),
@@ -673,6 +671,11 @@ pub async fn handle_rum(ctx: Ctx, State(clickhouse): State<clickhouse::Client>, 
                 }
             }
         }
+    }
+    // The kept payloads first: if they cannot be stored, nothing is, and the resend duplicates
+    // nothing.
+    if let Err(e) = raw::keep(&clickhouse, &kept).await {
+        return storage_failed(e);
     }
     if let Err(e) = storage::insert(&clickhouse, &views).await {
         return storage_failed(e);
@@ -797,36 +800,28 @@ pub async fn handle_replay(ctx: Ctx, State(clickhouse): State<clickhouse::Client
     let parts = match body::try_parts(ctx.header("content-type"), body.clone()).await {
         Ok(parts) => parts,
         Err(problem) => {
-            raw::store(
-                &clickhouse,
-                &ctx,
-                INTAKE,
-                "unexpected_shape",
-                &format!("replay body is not multipart: {problem}"),
-                &body,
-            )
-            .await;
+            let note = format!("replay body is not multipart: {problem}");
+            if let Err(e) = raw::store(&clickhouse, &ctx, INTAKE, "unexpected_shape", &note, &body).await {
+                return storage_failed(e);
+            }
             return accepted();
         }
     };
     let request = request_info(&ctx);
     let mut metadata = Vec::new();
+    let mut kept = Vec::new();
     for part in parts.iter().filter(|part| part.name == "event") {
         metadata = match replay_metadata(&part.data) {
             Some(found) => found,
             None => {
-                raw::store(
-                    &clickhouse,
-                    &ctx,
-                    INTAKE,
-                    "decode_error",
-                    "replay event part is neither an object nor an array",
-                    &part.data,
-                )
-                .await;
+                let note = "replay event part is neither an object nor an array";
+                kept.extend(raw::row(&ctx, INTAKE, "decode_error", note, &part.data));
                 Vec::new()
             }
         };
+    }
+    if let Err(e) = raw::keep(&clickhouse, &kept).await {
+        return storage_failed(e);
     }
     // Entry i describes blob i, in wire order.
     let rows: Vec<RumReplaySegment> = parts
@@ -946,14 +941,15 @@ pub async fn handle_spans(ctx: Ctx, State(clickhouse): State<clickhouse::Client>
     }
     let request = request_info(&ctx);
     let mut rows = Vec::new();
+    let mut kept = Vec::new();
     for line in ndjson_lines(&body) {
         let envelope = match json::try_parse(line) {
             Err(problem) => {
-                raw::store(&clickhouse, &ctx, INTAKE, "decode_error", &problem, line).await;
+                kept.extend(raw::row(&ctx, INTAKE, "decode_error", &problem, line));
                 continue;
             }
             Ok(envelope) if !envelope.is_object() && !envelope.is_null() => {
-                raw::store(&clickhouse, &ctx, INTAKE, "decode_error", "span envelope is not an object", line).await;
+                kept.extend(raw::row(&ctx, INTAKE, "decode_error", "span envelope is not an object", line));
                 continue;
             }
             // A `null` envelope, a `null` spans array and a `null` span are each read as empty.
@@ -962,12 +958,11 @@ pub async fn handle_spans(ctx: Ctx, State(clickhouse): State<clickhouse::Client>
         };
         match envelope.get("spans") {
             None => {
-                raw::store(&clickhouse, &ctx, INTAKE, "unexpected_shape", "span envelope without a spans array", line)
-                    .await
+                kept.extend(raw::row(&ctx, INTAKE, "unexpected_shape", "span envelope without a spans array", line))
             }
             Some(Value::Null) => {}
             Some(spans) if !spans.is_array() => {
-                raw::store(&clickhouse, &ctx, INTAKE, "decode_error", "spans is not an array", line).await
+                kept.extend(raw::row(&ctx, INTAKE, "decode_error", "spans is not an array", line))
             }
             Some(_) => {
                 let env = json::lenient_string(json::field("env", &envelope));
@@ -981,20 +976,15 @@ pub async fn handle_spans(ctx: Ctx, State(clickhouse): State<clickhouse::Client>
                         Value::Object(_) => rows.push(span_row(&request, &env, &extra, &span, &raw)),
                         Value::Null => rows.push(span_row(&request, &env, &extra, &EMPTY_OBJECT, &raw)),
                         _ => {
-                            raw::store(
-                                &clickhouse,
-                                &ctx,
-                                INTAKE,
-                                "decode_error",
-                                "span is not an object",
-                                raw.as_bytes(),
-                            )
-                            .await
+                            kept.extend(raw::row(&ctx, INTAKE, "decode_error", "span is not an object", raw.as_bytes()))
                         }
                     }
                 }
             }
         }
+    }
+    if let Err(e) = raw::keep(&clickhouse, &kept).await {
+        return storage_failed(e);
     }
     if let Err(e) = storage::insert(&clickhouse, &rows).await {
         return storage_failed(e);

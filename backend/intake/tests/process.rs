@@ -139,7 +139,7 @@ async fn without_a_tenant_a_payload_is_not_kept_and_the_sender_still_gets_its_an
     // No route stores without a key; this one, made for the test, would.
     let unguarded = |router: &mut Router| {
         router.post("/unguarded", |ctx: Ctx, State(clickhouse): State<clickhouse::Client>, body: Body| async move {
-            raw::store(&clickhouse, &ctx, "process", "decode_error", "test", &body).await;
+            raw::store(&clickhouse, &ctx, "process", "decode_error", "test", &body).await.unwrap();
             accepted()
         });
     };
