@@ -1,6 +1,7 @@
 //! Tests of routers/ci_visibility.rs, ci_webhook.rs and install.rs beyond the golden fixtures: the
 //! decoders' edge cases, and the columns that keep a JSON value as the text it arrived in.
 
+mod db;
 mod programs;
 
 use std::collections::BTreeMap;
@@ -14,27 +15,34 @@ use ninjapaws_intake::keys::{self, Key, Store};
 use ninjapaws_intake::routers::ci_visibility::{
     AgentHeaders, Value, coverage_entries_msgpack, decode_any, read_config_request, test_event_row,
 };
-use ninjapaws_intake::server::Intake;
-use ninjapaws_storage::{Sink, Write as Batch};
+use ninjapaws_intake::server::Settings;
 use serde_json::{Value as Json, json};
 use tako::router::Router;
 
 const KEY: &str = "00000000000000000000000000000001";
 const BOUNDARY: &str = "frontier";
 
+/// What one request answered, and the rows it stored, read back per table. The request has a
+/// tenant of its own, so these are only its rows; they come in the table's order, not the order
+/// they were written in.
 struct Answer {
     status: u16,
     headers: http::HeaderMap,
     body: Vec<u8>,
-    writes: Vec<Batch>,
+    stored: BTreeMap<String, Vec<Json>>,
 }
 
 impl Answer {
-    fn rows(&self, table: &str) -> Vec<&Json> {
-        self.writes.iter().filter(|w| w.table == table).flat_map(|w| &w.rows).collect()
+    /// The tables the request stored rows in.
+    fn tables(&self) -> Vec<&str> {
+        self.stored.keys().map(String::as_str).collect()
     }
 
-    /// The one row written to `table`.
+    fn rows(&self, table: &str) -> Vec<&Json> {
+        self.stored.get(table).map(|rows| rows.iter().collect()).unwrap_or_default()
+    }
+
+    /// The one row stored in `table`.
     fn row(&self, table: &str) -> &Json {
         let rows = self.rows(table);
         assert_eq!(rows.len(), 1, "{table}: {rows:?}");
@@ -46,19 +54,24 @@ impl Answer {
     }
 }
 
-async fn serve(mount: fn(&mut Router), method: &str, url: &str, headers: &[(&str, &str)], body: &[u8]) -> Answer {
+/// The client of this binary's scratch database. None when ClickHouse is not running.
+async fn scratch() -> Option<clickhouse::Client> {
+    Some(db::client(&db::scratch().await?))
+}
+
+async fn serve(
+    client: &clickhouse::Client,
+    mount: fn(&mut Router),
+    method: &str,
+    url: &str,
+    headers: &[(&str, &str)],
+    body: &[u8],
+) -> Answer {
+    let tenant = db::tenant();
     let store = Store::default();
-    store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: "test".into() })]);
-    let (sink, capture) = Sink::capture();
-    let intake = Intake {
-        sink,
-        keys: Arc::new(store),
-        ack_unknown: false,
-        max_body_bytes: 64 * 1024 * 1024,
-        stopping: Default::default(),
-        tasks: Default::default(),
-    };
-    let router = programs::router_of(mount, intake);
+    store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: tenant.clone() })]);
+    let settings = Settings { ack_unknown: false, max_body_bytes: 64 * 1024 * 1024 };
+    let router = programs::router_of(mount, client.clone(), Arc::new(store), settings);
     let mut request = http::Request::builder().method(method).uri(url);
     for (name, value) in headers {
         request = request.header(*name, *value);
@@ -67,18 +80,29 @@ async fn serve(mount: fn(&mut Router), method: &str, url: &str, headers: &[(&str
     let status = response.status().as_u16();
     let headers = response.headers().clone();
     let body = response.into_body().collect().await.unwrap().to_bytes().to_vec();
-    Answer { status, headers, body, writes: capture.writes() }
+    let mut stored = BTreeMap::new();
+    for table in db::tables(client, &tenant).await.into_keys() {
+        let rows = db::rows(client, &table, &tenant).await;
+        stored.insert(table, rows);
+    }
+    Answer { status, headers, body, stored }
 }
 
 /// A POST with the test key to a host that asks for the agent's key.
-async fn post(mount: fn(&mut Router), url: &str, headers: &[(&str, &str)], body: &[u8]) -> Answer {
+async fn post(
+    client: &clickhouse::Client,
+    mount: fn(&mut Router),
+    url: &str,
+    headers: &[(&str, &str)],
+    body: &[u8],
+) -> Answer {
     let mut with_key = vec![("dd-api-key", KEY)];
     with_key.extend_from_slice(headers);
-    serve(mount, "POST", url, &with_key, body).await
+    serve(client, mount, "POST", url, &with_key, body).await
 }
 
-async fn post_json(mount: fn(&mut Router), url: &str, body: &str) -> Answer {
-    post(mount, url, &[("content-type", "application/json")], body.as_bytes()).await
+async fn post_json(client: &clickhouse::Client, mount: fn(&mut Router), url: &str, body: &str) -> Answer {
+    post(client, mount, url, &[("content-type", "application/json")], body.as_bytes()).await
 }
 
 /// A multipart body of (name, content type, data).
@@ -100,9 +124,9 @@ fn multipart(parts: &[(&str, &str, &[u8])]) -> (String, Vec<u8>) {
     (format!("multipart/form-data; boundary={BOUNDARY}"), body)
 }
 
-async fn coverage(parts: &[(&str, &str, &[u8])]) -> Answer {
+async fn coverage(client: &clickhouse::Client, parts: &[(&str, &str, &[u8])]) -> Answer {
     let (content_type, body) = multipart(parts);
-    post(programs::ci_test_coverage, "/api/v2/citestcov", &[("content-type", &content_type)], &body).await
+    post(client, programs::ci_test_coverage, "/api/v2/citestcov", &[("content-type", &content_type)], &body).await
 }
 
 fn value(text: &str) -> Value {
@@ -374,21 +398,23 @@ fn deep(depth: usize, around: &str) -> String {
 /// of times, not once per level, so a sender cannot buy seconds of CPU with nesting.
 #[tokio::test]
 async fn a_deeply_nested_body_is_decoded_in_linear_time() {
+    let Some(client) = scratch().await else { return };
     // serde_json takes 127 levels and refuses the 128th.
     const DEEPEST: usize = 127;
     let cycle = r#"{"events":[{"type":"test","content":{"meta":{"x":{}}}}]}"#;
     assert!(json::try_parse(deep(DEEPEST + 1, cycle).as_bytes()).is_err());
 
     let started = std::time::Instant::now();
-    let answer = post_json(programs::ci_test_cycle, "/api/v2/citestcycle", &deep(DEEPEST, cycle)).await;
+    let answer = post_json(&client, programs::ci_test_cycle, "/api/v2/citestcycle", &deep(DEEPEST, cycle)).await;
     assert_eq!(answer.rows("ci_test_events").len(), 1);
-    let answer = webhook("/api/v2/webhook", &[], &deep(DEEPEST, r#"[{"level":"job","parameters":{"x":{}}}]"#)).await;
+    let answer =
+        webhook(&client, "/api/v2/webhook", &[], &deep(DEEPEST, r#"[{"level":"job","parameters":{"x":{}}}]"#)).await;
     assert_eq!(answer.rows("ci_webhook_events").len(), 1);
     let settings = deep(DEEPEST, r#"{"data":{"attributes":{"configurations":{}}}}"#);
-    let answer = post_json(programs::api, "/api/v2/libraries/tests/services/setting", &settings).await;
+    let answer = post_json(&client, programs::api, "/api/v2/libraries/tests/services/setting", &settings).await;
     assert_eq!(answer.rows("ci_settings_requests").len(), 1);
     let tags = deep(DEEPEST, r#"{"data":{"type":"t","attributes":{"tags":{}}}}"#);
-    let answer = post_json(programs::api, "/api/v2/ci/pipeline/tags", &tags).await;
+    let answer = post_json(&client, programs::api, "/api/v2/ci/pipeline/tags", &tags).await;
     assert_eq!(answer.rows("ci_pipeline_events").len(), 1);
     // Read once per level, each 4 MB body would be over a hundred passes.
     assert!(started.elapsed() < std::time::Duration::from_secs(10), "{:?}", started.elapsed());
@@ -438,13 +464,15 @@ fn a_coverage_envelope_whose_key_is_not_a_string_does_not_decode() {
 
 #[tokio::test]
 async fn a_truncated_coverage_upload_is_kept_raw_not_stored_in_part() {
+    let Some(client) = scratch().await else { return };
     let (content_type, body) = multipart(&[
         ("event", "application/json", br#"{"dummy": true}"#),
         ("coveragex", "application/json", br#"{"version":2,"coverages":[{"test_suite_id":9}]}"#),
     ]);
     // Cut inside the closing boundary: both parts are whole, the body is not.
     let cut = &body[..body.len() - 9];
-    let answer = post(programs::ci_test_coverage, "/api/v2/citestcov", &[("content-type", &content_type)], cut).await;
+    let answer =
+        post(&client, programs::ci_test_coverage, "/api/v2/citestcov", &[("content-type", &content_type)], cut).await;
     assert_eq!(answer.status, 202);
     assert!(answer.rows("ci_coverage").is_empty());
     let raw = answer.row("raw_payloads");
@@ -455,8 +483,9 @@ async fn a_truncated_coverage_upload_is_kept_raw_not_stored_in_part() {
 
 #[tokio::test]
 async fn a_json_coverage_payload_of_the_wrong_shape_is_kept_raw() {
+    let Some(client) = scratch().await else { return };
     for payload in ["[1,2]", r#"{"version":2,"coverages":{"not":"an array"}}"#] {
-        let answer = coverage(&[("coverage1", "application/json", payload.as_bytes())]).await;
+        let answer = coverage(&client, &[("coverage1", "application/json", payload.as_bytes())]).await;
         assert_eq!(answer.status, 202);
         assert!(answer.rows("ci_coverage").is_empty(), "{payload}");
         assert_eq!(answer.row("raw_payloads")["reason"], "decode_error");
@@ -465,9 +494,10 @@ async fn a_json_coverage_payload_of_the_wrong_shape_is_kept_raw() {
 
 #[tokio::test]
 async fn a_json_coverage_version_that_cannot_be_read_is_0_and_costs_no_coverage() {
+    let Some(client) = scratch().await else { return };
     for (version, expected) in [("2", 2), ("\"2\"", 2), ("2.0", 0), ("99999999999999999999", 0), ("\"two\"", 0)] {
         let payload = format!(r#"{{"version":{version},"coverages":[{{}}]}}"#);
-        let answer = coverage(&[("c", "application/json", payload.as_bytes())]).await;
+        let answer = coverage(&client, &[("c", "application/json", payload.as_bytes())]).await;
         assert!(answer.rows("raw_payloads").is_empty(), "{version}");
         assert_eq!(answer.row("ci_coverage")["payload_version"], expected, "{version}");
     }
@@ -475,8 +505,9 @@ async fn a_json_coverage_version_that_cannot_be_read_is_0_and_costs_no_coverage(
 
 #[tokio::test]
 async fn a_json_coverage_entry_keeps_the_base64_text_of_its_bitmap_and_its_unknown_keys() {
+    let Some(client) = scratch().await else { return };
     let payload = br#"{"version":2,"coverages":[{"test_session_id":1,"span_id":0,"files":[{"filename":"a.go","bitmap":"AQID"}],"later":[1]}]}"#;
-    let answer = coverage(&[("coverage1", "", payload)]).await;
+    let answer = coverage(&client, &[("coverage1", "", payload)]).await;
     let row = answer.row("ci_coverage");
     assert_eq!(row["payload_version"], 2);
     assert_eq!(row["raw_format"], "json");
@@ -489,35 +520,42 @@ async fn a_json_coverage_entry_keeps_the_base64_text_of_its_bitmap_and_its_unkno
 
 #[tokio::test]
 async fn a_json_coverage_entry_is_stored_as_the_text_it_arrived_in() {
+    let Some(client) = scratch().await else { return };
     let entry = r#"{ "test_suite_id" : 9,  "files": [ {"filename": "a.go", "weight": 1.50} ] }"#;
     let payload = format!(r#"{{"version":2,"coverages":[ {entry} , {{"span_id":1}}]}}"#);
-    let answer =
-        coverage(&[("event", "application/json", b"{}"), ("coverage1", "application/json", payload.as_bytes())]).await;
+    let answer = coverage(
+        &client,
+        &[("event", "application/json", b"{}"), ("coverage1", "application/json", payload.as_bytes())],
+    )
+    .await;
     let rows = answer.rows("ci_coverage");
     assert_eq!(rows.len(), 2);
-    assert_eq!(blob(&rows[0]["raw"]), entry.as_bytes());
-    assert_eq!(blob(&rows[1]["raw"]), br#"{"span_id":1}"#);
-    assert_eq!(rows[0]["suite_id"], 9);
-    assert_eq!(rows[0]["event"], "{}");
+    let first = rows.iter().find(|row| row["suite_id"] == 9).unwrap();
+    let second = rows.iter().find(|row| row["span_id"] == 1).unwrap();
+    assert_eq!(blob(&first["raw"]), entry.as_bytes());
+    assert_eq!(blob(&second["raw"]), br#"{"span_id":1}"#);
+    assert_eq!(first["event"], "{}");
 }
 
 // ---- citestcycle ----
 
 #[tokio::test]
 async fn an_empty_test_cycle_body_is_answered_and_nothing_is_stored() {
+    let Some(client) = scratch().await else { return };
     let answer =
-        post(programs::ci_test_cycle, "/api/v2/citestcycle", &[("content-type", "application/msgpack")], b"").await;
+        post(&client, programs::ci_test_cycle, "/api/v2/citestcycle", &[("content-type", "application/msgpack")], b"")
+            .await;
     assert_eq!(answer.status, 202);
-    assert!(answer.writes.is_empty());
+    assert!(answer.stored.is_empty());
 }
 
 #[tokio::test]
 async fn events_that_are_not_maps_keep_the_body_raw_once_the_others_become_rows() {
+    let Some(client) = scratch().await else { return };
     let body = r#"{"version":3,"events":[5,{"type":"test","version":2,"content":{"service":"s","meta":{"test.is_new":" YES "}}},"x"]}"#;
-    let answer = post_json(programs::ci_test_cycle, "/api/v2/citestcycle", body).await;
+    let answer = post_json(&client, programs::ci_test_cycle, "/api/v2/citestcycle", body).await;
     assert_eq!(answer.status, 202);
-    let writers: Vec<&str> = answer.writes.iter().map(|w| w.writer).collect();
-    assert_eq!(writers, vec!["storage_raw_payloads", "storage_ci_test_events"]);
+    assert_eq!(answer.tables(), ["ci_test_events", "raw_payloads"]);
     assert_eq!(answer.row("raw_payloads")["note"], "2 of 3 events are not maps: 0, 2");
     let row = answer.row("ci_test_events");
     assert_eq!(row["payload_version"], 3);
@@ -529,9 +567,10 @@ async fn events_that_are_not_maps_keep_the_body_raw_once_the_others_become_rows(
 
 #[tokio::test]
 async fn an_events_content_keeps_each_number_as_it_was_written() {
+    let Some(client) = scratch().await else { return };
     let body =
         r#"{"events":[{"type":"test","content":{ "span_id" : 12345678901234567890, "metrics": {"cpu": 1.50} }}]}"#;
-    let answer = post_json(programs::ci_test_cycle, "/api/v2/citestcycle", body).await;
+    let answer = post_json(&client, programs::ci_test_cycle, "/api/v2/citestcycle", body).await;
     let row = answer.row("ci_test_events");
     assert_eq!(row["span_id"], 12345678901234567890u64);
     // Re-written with sorted keys and no spaces; the literals stay.
@@ -552,8 +591,10 @@ fn a_source_line_is_taken_from_metrics_first_then_from_meta() {
 
 #[tokio::test]
 async fn the_agents_own_headers_win_over_the_fallbacks() {
+    let Some(client) = scratch().await else { return };
     let body = br#"{"events":[{"type":"test","content":{}}]}"#;
     let answer = post(
+        &client,
         programs::ci_test_cycle,
         "/api/v2/citestcycle",
         &[
@@ -570,6 +611,7 @@ async fn the_agents_own_headers_win_over_the_fallbacks() {
     assert_eq!(row["agent_version"], "7.90.0");
 
     let via_other = post(
+        &client,
         programs::ci_test_cycle,
         "/api/v2/citestcycle",
         &[("content-type", "application/json"), ("via", "1.1 varnish")],
@@ -652,9 +694,10 @@ fn of_a_repeated_key_the_last_one_counts() {
 
 #[tokio::test]
 async fn the_configurations_are_stored_as_the_text_they_arrived_in() {
+    let Some(client) = scratch().await else { return };
     let configurations = r#"{ "os.platform" : "linux",  "weight": 1.50 }"#;
     let body = format!(r#"{{"data":{{"id":"a","attributes":{{"service":"s","configurations":{configurations}}}}}}}"#);
-    let answer = post_json(programs::api, "/api/v2/libraries/tests/services/setting", &body).await;
+    let answer = post_json(&client, programs::api, "/api/v2/libraries/tests/services/setting", &body).await;
     let row = answer.row("ci_settings_requests");
     assert_eq!(row["configurations"], configurations);
     assert_eq!(row["request_body"], body.as_str());
@@ -662,7 +705,8 @@ async fn the_configurations_are_stored_as_the_text_they_arrived_in() {
 
 #[tokio::test]
 async fn an_id_that_needs_escaping_is_echoed_as_valid_json() {
-    let answer = post_json(programs::api, "/api/v2/ci/libraries/tests", r#"{"data":{"id":"a\"b\\c"}}"#).await;
+    let Some(client) = scratch().await else { return };
+    let answer = post_json(&client, programs::api, "/api/v2/ci/libraries/tests", r#"{"data":{"id":"a\"b\\c"}}"#).await;
     let answer_json: Json = serde_json::from_slice(&answer.body).unwrap();
     assert_eq!(answer_json["data"]["id"], "a\"b\\c");
     assert_eq!(answer.row("ci_settings_requests")["response_body"], answer.text());
@@ -670,9 +714,10 @@ async fn an_id_that_needs_escaping_is_echoed_as_valid_json() {
 
 #[tokio::test]
 async fn a_commit_search_that_does_not_decode_still_gets_an_empty_json_answer() {
+    let Some(client) = scratch().await else { return };
     for body in [r#"{"data":"#, r#"{"data":{"id":"a"}}"#, r#"{"data":[5]}"#, r#"{"data":[{"id":7}]}"#, r#"{"meta":[]}"#]
     {
-        let answer = post_json(programs::api, "/api/v2/git/repository/search_commits", body).await;
+        let answer = post_json(&client, programs::api, "/api/v2/git/repository/search_commits", body).await;
         assert_eq!(answer.status, 200);
         assert_eq!(answer.headers["content-type"], "application/json; charset=utf-8");
         assert_eq!(answer.text(), r#"{"data":[],"meta":{"repository_url":""}}"#);
@@ -683,8 +728,9 @@ async fn a_commit_search_that_does_not_decode_still_gets_an_empty_json_answer() 
 
 #[tokio::test]
 async fn a_commit_without_an_id_is_not_stored() {
+    let Some(client) = scratch().await else { return };
     let body = r#"{"data":[{"id":"aaa"},null,{"type":"commit"},{"id":""}],"meta":{"repository_url":"r"}}"#;
-    let answer = post_json(programs::api, "/api/v2/git/repository/search_commits", body).await;
+    let answer = post_json(&client, programs::api, "/api/v2/git/repository/search_commits", body).await;
     assert_eq!(answer.status, 200);
     assert_eq!(answer.row("git_commits")["sha"], "aaa");
     assert!(answer.rows("raw_payloads").is_empty());
@@ -692,7 +738,9 @@ async fn a_commit_without_an_id_is_not_stored() {
 
 #[tokio::test]
 async fn a_packfile_upload_that_is_not_multipart_is_kept_raw_and_still_answered_204() {
+    let Some(client) = scratch().await else { return };
     let answer = post(
+        &client,
         programs::api,
         "/api/v2/git/repository/packfile",
         &[("content-type", "application/octet-stream")],
@@ -710,14 +758,15 @@ async fn a_packfile_upload_that_is_not_multipart_is_kept_raw_and_still_answered_
     assert!(answer.rows("git_packfiles").is_empty());
 }
 
-async fn packfile(parts: &[(&str, &str, &[u8])]) -> Answer {
+async fn packfile(client: &clickhouse::Client, parts: &[(&str, &str, &[u8])]) -> Answer {
     let (content_type, body) = multipart(parts);
-    post(programs::api, "/api/v2/git/repository/packfile", &[("content-type", &content_type)], &body).await
+    post(client, programs::api, "/api/v2/git/repository/packfile", &[("content-type", &content_type)], &body).await
 }
 
 #[tokio::test]
 async fn a_packfile_upload_without_a_packfile_part_is_kept_raw_and_stores_no_pack() {
-    let answer = packfile(&[("pushedSha", "application/json", br#"{"data":{"id":"abc"}}"#)]).await;
+    let Some(client) = scratch().await else { return };
+    let answer = packfile(&client, &[("pushedSha", "application/json", br#"{"data":{"id":"abc"}}"#)]).await;
     assert_eq!(answer.status, 204);
     let raw = answer.row("raw_payloads");
     assert_eq!(
@@ -730,12 +779,16 @@ async fn a_packfile_upload_without_a_packfile_part_is_kept_raw_and_stores_no_pac
 
 #[tokio::test]
 async fn a_pushed_sha_part_that_does_not_decode_is_kept_beside_the_pack() {
+    let Some(client) = scratch().await else { return };
     let pushed_sha = br#"{"data":{"id":"abc"},"meta":5}"#;
-    let answer = packfile(&[
-        ("pushedSha", "application/json", pushed_sha),
-        ("packfile", "application/octet-stream", &[0xff, 0x00]),
-        ("note", "", b"hello"),
-    ])
+    let answer = packfile(
+        &client,
+        &[
+            ("pushedSha", "application/json", pushed_sha),
+            ("packfile", "application/octet-stream", &[0xff, 0x00]),
+            ("note", "", b"hello"),
+        ],
+    )
     .await;
     assert_eq!(answer.status, 204);
     let pack = answer.row("git_packfiles");
@@ -753,11 +806,15 @@ async fn a_pushed_sha_part_that_does_not_decode_is_kept_beside_the_pack() {
 
 #[tokio::test]
 async fn a_repeated_pushed_sha_part_changes_only_what_it_sets() {
-    let answer = packfile(&[
-        ("pushedSha", "application/json", br#"{"data":{"id":"one"},"meta":{"repository_url":"r1"}}"#),
-        ("pushedSha", "application/json", br#"{"data":{"type":"commit"}}"#),
-        ("packfile", "application/octet-stream", b"PACK"),
-    ])
+    let Some(client) = scratch().await else { return };
+    let answer = packfile(
+        &client,
+        &[
+            ("pushedSha", "application/json", br#"{"data":{"id":"one"},"meta":{"repository_url":"r1"}}"#),
+            ("pushedSha", "application/json", br#"{"data":{"type":"commit"}}"#),
+            ("packfile", "application/octet-stream", b"PACK"),
+        ],
+    )
     .await;
     let pack = answer.row("git_packfiles");
     assert_eq!(pack["pushed_sha"], "one");
@@ -770,10 +827,11 @@ async fn a_repeated_pushed_sha_part_changes_only_what_it_sets() {
 
 #[tokio::test]
 async fn measures_fill_the_metrics_column_only_when_metrics_are_absent() {
+    let Some(client) = scratch().await else { return };
     let body = r#"{"data":{"type":"t","attributes":{"metrics":{"a":1},"measures":{"b":2},"ci_level":"2"}}}"#;
-    let answer = post_json(programs::api, "/api/intake/ci/custom_spans", body).await;
+    let answer = post_json(&client, programs::api, "/api/intake/ci/custom_spans", body).await;
     let row = answer.row("ci_pipeline_events");
-    assert_eq!(row["metrics"], json!({ "a": 1.0 }));
+    assert_eq!(row["metrics"], json!({ "a": 1 }));
     assert_eq!(row["ci_level"], 2);
     // "measures" is a named key, so it is not repeated in extra.
     assert_eq!(row["extra"], json!({}));
@@ -781,8 +839,9 @@ async fn measures_fill_the_metrics_column_only_when_metrics_are_absent() {
 
 #[tokio::test]
 async fn a_datadog_ci_call_whose_attributes_are_not_an_object_is_still_a_row() {
+    let Some(client) = scratch().await else { return };
     for body in [r#"{"data":{"type":"t","attributes":[1,2]}}"#, "null", r#"{"data":null}"#] {
-        let answer = post_json(programs::api, "/api/v2/ci/pipeline/tags", body).await;
+        let answer = post_json(&client, programs::api, "/api/v2/ci/pipeline/tags", body).await;
         assert_eq!(answer.status, 202);
         let row = answer.row("ci_pipeline_events");
         assert_eq!(row["kind"], "tag");
@@ -794,8 +853,9 @@ async fn a_datadog_ci_call_whose_attributes_are_not_an_object_is_still_a_row() {
 
 #[tokio::test]
 async fn a_datadog_ci_envelope_of_the_wrong_shape_is_kept_raw() {
+    let Some(client) = scratch().await else { return };
     for body in ["[1]", r#"{"data":5}"#, r#"{"data":{"type":7}}"#] {
-        let answer = post_json(programs::api, "/api/v2/ci/pipeline/metrics", body).await;
+        let answer = post_json(&client, programs::api, "/api/v2/ci/pipeline/metrics", body).await;
         assert_eq!(answer.status, 202);
         assert!(answer.rows("ci_pipeline_events").is_empty());
         assert_eq!(answer.row("raw_payloads")["intake"], "cipipeline");
@@ -804,9 +864,10 @@ async fn a_datadog_ci_envelope_of_the_wrong_shape_is_kept_raw() {
 
 #[tokio::test]
 async fn a_datadog_ci_calls_attributes_are_stored_as_the_text_they_arrived_in() {
+    let Some(client) = scratch().await else { return };
     let attributes = r#"{ "tags" : {"team": "ci"},  "metrics": {"binary.size": 1.50} }"#;
     let body = format!(r#"{{"data":{{"type":"ci_custom_metric","attributes":{attributes}}}}}"#);
-    let answer = post_json(programs::api, "/api/v2/ci/pipeline/metrics", &body).await;
+    let answer = post_json(&client, programs::api, "/api/v2/ci/pipeline/metrics", &body).await;
     let row = answer.row("ci_pipeline_events");
     assert_eq!(row["attributes"], attributes);
     assert_eq!(row["metrics"], json!({ "binary.size": 1.5 }));
@@ -814,72 +875,84 @@ async fn a_datadog_ci_calls_attributes_are_stored_as_the_text_they_arrived_in() 
 
 // ---- webhook-intake ----
 
-async fn webhook(url: &str, headers: &[(&str, &str)], body: &str) -> Answer {
+/// The text of one column of the rows, in text order: rows come back in the table's order.
+fn sorted<'a>(rows: &[&'a Json], column: &str) -> Vec<&'a str> {
+    let mut found: Vec<&str> = rows.iter().map(|row| row[column].as_str().unwrap()).collect();
+    found.sort();
+    found
+}
+
+async fn webhook(client: &clickhouse::Client, url: &str, headers: &[(&str, &str)], body: &str) -> Answer {
     let mut with_key = vec![("dd-api-key", KEY), ("content-type", "application/json")];
     with_key.extend_from_slice(headers);
-    serve(programs::ci_webhook, "POST", url, &with_key, body.as_bytes()).await
+    serve(client, programs::ci_webhook, "POST", url, &with_key, body.as_bytes()).await
 }
 
 #[tokio::test]
 async fn a_bare_null_is_an_empty_batch() {
-    let answer = webhook("/api/v2/webhook", &[], "null").await;
+    let Some(client) = scratch().await else { return };
+    let answer = webhook(&client, "/api/v2/webhook", &[], "null").await;
     assert_eq!(answer.status, 202);
-    assert!(answer.writes.is_empty());
+    assert!(answer.stored.is_empty());
 }
 
 #[tokio::test]
 async fn an_empty_webhook_body_is_answered_and_nothing_is_stored() {
-    let answer = webhook("/api/v2/webhook/", &[], "").await;
+    let Some(client) = scratch().await else { return };
+    let answer = webhook(&client, "/api/v2/webhook/", &[], "").await;
     assert_eq!(answer.status, 202);
-    assert!(answer.writes.is_empty());
+    assert!(answer.stored.is_empty());
 }
 
 #[tokio::test]
 async fn an_element_that_is_not_an_object_goes_raw_the_others_become_rows() {
-    let answer = webhook("/api/v2/webhook", &[], r#"[null, 7, {"level":"job","name":"x"}]"#).await;
+    let Some(client) = scratch().await else { return };
+    let answer = webhook(&client, "/api/v2/webhook", &[], r#"[null, 7, {"level":"job","name":"x"}]"#).await;
     assert_eq!(answer.status, 202);
-    let raw = answer.rows("raw_payloads");
-    assert_eq!(raw.iter().map(|row| row["body"].as_str().unwrap()).collect::<Vec<_>>(), vec!["null", "7"]);
+    let mut raw = answer.rows("raw_payloads");
+    raw.sort_by_key(|row| row["body"].as_str().unwrap());
+    assert_eq!(raw.iter().map(|row| row["body"].as_str().unwrap()).collect::<Vec<_>>(), vec!["7", "null"]);
     for row in raw {
         assert_eq!(row["intake"], "webhook");
         assert_eq!(row["reason"], "unexpected_shape");
         assert_eq!(row["note"], "element is not a JSON object");
     }
     assert_eq!(answer.row("ci_webhook_events")["level"], "job");
-    // Raw elements are written as they are met, the rows after the loop.
-    assert_eq!(answer.writes.last().unwrap().writer, "storage_ci_webhook_events");
 }
 
 #[tokio::test]
 async fn a_bare_string_or_number_is_a_batch_of_one_element_that_is_not_an_object() {
-    let answer = webhook("/api/v2/webhook", &[], "\"pipeline\"").await;
+    let Some(client) = scratch().await else { return };
+    let answer = webhook(&client, "/api/v2/webhook", &[], "\"pipeline\"").await;
     assert!(answer.rows("ci_webhook_events").is_empty());
     assert_eq!(answer.row("raw_payloads")["reason"], "unexpected_shape");
 }
 
 #[tokio::test]
 async fn the_elements_own_provider_wins_over_the_header_the_header_over_the_shape() {
+    let Some(client) = scratch().await else { return };
     let answer = webhook(
+        &client,
         "/api/v2/webhook",
         &[("dd-ci-provider-name", "  Jenkins ")],
         r#"[{"provider":"GitLab","object_kind":"build"},{"object_kind":"build"}]"#,
     )
     .await;
     let rows = answer.rows("ci_webhook_events");
-    assert_eq!(rows.iter().map(|r| r["provider"].as_str().unwrap()).collect::<Vec<_>>(), vec!["gitlab", "jenkins"]);
+    assert_eq!(sorted(&rows, "provider"), vec!["gitlab", "jenkins"]);
     // No "level", so GitLab's object_kind is the level.
-    assert_eq!(rows.iter().map(|r| r["level"].as_str().unwrap()).collect::<Vec<_>>(), vec!["build", "build"]);
+    assert_eq!(sorted(&rows, "level"), vec!["build", "build"]);
 
-    let answer = webhook("/api/v2/webhook", &[], r#"[{"object_kind":null},{"provider":""}]"#).await;
-    let rows = answer.rows("ci_webhook_events");
-    assert_eq!(rows.iter().map(|r| r["provider"].as_str().unwrap()).collect::<Vec<_>>(), vec!["gitlab", "unknown"]);
+    let answer = webhook(&client, "/api/v2/webhook", &[], r#"[{"object_kind":null},{"provider":""}]"#).await;
+    assert_eq!(sorted(&answer.rows("ci_webhook_events"), "provider"), vec!["gitlab", "unknown"]);
 }
 
 #[tokio::test]
 async fn a_numeric_id_keeps_every_digit_and_absent_is_not_false() {
+    let Some(client) = scratch().await else { return };
     let body = r#"{"level":"pipeline","trace_id":5678901234567890123,"span_id":1.50,"payload_version":"2",
             "queue_time":1500,"partial_retry":"false","is_manual":false,"unique_id":true}"#;
-    let answer = webhook("/api/v2/webhook", &[], body).await;
+    let answer = webhook(&client, "/api/v2/webhook", &[], body).await;
     let row = answer.row("ci_webhook_events");
     assert_eq!(row["trace_id"], "5678901234567890123");
     assert_eq!(row["span_id"], "1.50");
@@ -895,18 +968,24 @@ async fn a_numeric_id_keeps_every_digit_and_absent_is_not_false() {
 
 #[tokio::test]
 async fn each_element_of_a_batch_is_stored_as_the_text_it_arrived_in() {
+    let Some(client) = scratch().await else { return };
     let first = r#"{ "level" : "job",  "queue_time": 1.50 }"#;
-    let answer = webhook("/api/v2/webhook", &[], &format!("[ {first} ,\n {{\"level\":\"stage\"}} ]")).await;
-    let rows = answer.rows("ci_webhook_events");
-    assert_eq!(rows[0]["body"], first);
-    assert_eq!(rows[1]["body"], r#"{"level":"stage"}"#);
+    let answer = webhook(&client, "/api/v2/webhook", &[], &format!("[ {first} ,\n {{\"level\":\"stage\"}} ]")).await;
+    let mut expected = [first, r#"{"level":"stage"}"#];
+    expected.sort();
+    assert_eq!(sorted(&answer.rows("ci_webhook_events"), "body"), expected);
 }
 
 #[tokio::test]
 async fn a_time_that_is_not_rfc_3339_keeps_its_text_and_has_no_parse() {
-    let answer =
-        webhook("/api/v2/webhook", &[], r#"{"start":"2026-09-23 10:00:00","end":"2026-09-23T10:06:30.250+02:00"}"#)
-            .await;
+    let Some(client) = scratch().await else { return };
+    let answer = webhook(
+        &client,
+        "/api/v2/webhook",
+        &[],
+        r#"{"start":"2026-09-23 10:00:00","end":"2026-09-23T10:06:30.250+02:00"}"#,
+    )
+    .await;
     let row = answer.row("ci_webhook_events");
     assert_eq!(row["start_raw"], "2026-09-23 10:00:00");
     assert_eq!(row["start_parsed"], Json::Null);
@@ -915,7 +994,9 @@ async fn a_time_that_is_not_rfc_3339_keeps_its_text_and_has_no_parse() {
 
 #[tokio::test]
 async fn a_single_label_or_tag_sent_unwrapped_still_counts() {
+    let Some(client) = scratch().await else { return };
     let answer = webhook(
+        &client,
         "/api/v2/webhook",
         &[],
         r#"{"node":{"labels":"linux"},"tags":"team:ci","parameters":{"N":3,"deep":{"a":1}}}"#,
@@ -929,22 +1010,25 @@ async fn a_single_label_or_tag_sent_unwrapped_still_counts() {
 
 #[tokio::test]
 async fn the_delivery_id_falls_back_from_gitlab_to_github_to_datadogs_request_id() {
-    async fn delivery(headers: &[(&str, &str)]) -> String {
-        let answer = webhook("/api/v2/webhook", headers, r#"{"level":"job"}"#).await;
+    let Some(client) = scratch().await else { return };
+    async fn delivery(client: &clickhouse::Client, headers: &[(&str, &str)]) -> String {
+        let answer = webhook(client, "/api/v2/webhook", headers, r#"{"level":"job"}"#).await;
         answer.row("ci_webhook_events")["delivery_id"].as_str().unwrap().to_string()
     }
-    assert_eq!(delivery(&[]).await, "");
-    assert_eq!(delivery(&[("dd-request-id", "dd")]).await, "dd");
-    assert_eq!(delivery(&[("dd-request-id", "dd"), ("x-github-delivery", "gh")]).await, "gh");
+    assert_eq!(delivery(&client, &[]).await, "");
+    assert_eq!(delivery(&client, &[("dd-request-id", "dd")]).await, "dd");
+    assert_eq!(delivery(&client, &[("dd-request-id", "dd"), ("x-github-delivery", "gh")]).await, "gh");
     assert_eq!(
-        delivery(&[("dd-request-id", "dd"), ("x-github-delivery", "gh"), ("x-gitlab-event-uuid", "gl")]).await,
+        delivery(&client, &[("dd-request-id", "dd"), ("x-github-delivery", "gh"), ("x-gitlab-event-uuid", "gl")]).await,
         "gl"
     );
 }
 
 #[tokio::test]
 async fn the_synthetics_pollers_answer_does_not_depend_on_its_query() {
+    let Some(client) = scratch().await else { return };
     let answer = serve(
+        &client,
         programs::synthetics_poller,
         "GET",
         "/api/unstable/synthetics/agents/tests?agent_hostname=h",
@@ -954,18 +1038,19 @@ async fn the_synthetics_pollers_answer_does_not_depend_on_its_query() {
     .await;
     assert_eq!(answer.status, 200);
     assert_eq!(answer.text(), r#"{"tests":[]}"#);
-    assert!(answer.writes.is_empty());
+    assert!(answer.stored.is_empty());
 }
 
 // ---- install, eudm-intake, llmobs-intake ----
 
-async fn install(method: &str, url: &str) -> Answer {
-    serve(programs::install, method, url, &[], b"x").await
+async fn install(client: &clickhouse::Client, method: &str, url: &str) -> Answer {
+    serve(client, programs::install, method, url, &[], b"x").await
 }
 
 #[tokio::test]
 async fn an_unhosted_blob_is_the_registrys_own_blob_unknown_with_no_api_key_asked() {
-    let answer = install("GET", "/v2/datadog-agent/blobs/sha256:abc").await;
+    let Some(client) = scratch().await else { return };
+    let answer = install(&client, "GET", "/v2/datadog-agent/blobs/sha256:abc").await;
     assert_eq!(answer.status, 404);
     assert_eq!(answer.headers["docker-distribution-api-version"], "registry/2.0");
     let body: Json = serde_json::from_slice(&answer.body).unwrap();
@@ -974,41 +1059,51 @@ async fn an_unhosted_blob_is_the_registrys_own_blob_unknown_with_no_api_key_aske
         body,
         json!({ "errors": [{ "code": "BLOB_UNKNOWN", "message": "ninjacat does not host packages: datadog-agent@sha256:abc" }] })
     );
-    assert!(answer.writes.is_empty());
+    assert!(answer.stored.is_empty());
 }
 
 #[tokio::test]
 async fn a_host_that_asks_for_no_key_takes_no_upload_and_answers_no_key_check() {
+    let Some(client) = scratch().await else { return };
     // What every keyed host also serves (a flare, /api/v1/validate) is not served here: it would
     // be a body anyone could make the intake read.
-    let flare = install("POST", "/support/flare").await;
+    let flare = install(&client, "POST", "/support/flare").await;
     // 405, not 404: the path exists here only as the HEAD probe.
     assert_eq!(flare.status, 405);
-    assert!(flare.writes.is_empty());
-    assert_eq!(install("GET", "/api/v1/validate").await.status, 404);
+    assert!(flare.stored.is_empty());
+    assert_eq!(install(&client, "GET", "/api/v1/validate").await.status, 404);
 }
 
 #[tokio::test]
 async fn a_btf_archive_is_not_hosted_so_system_probe_falls_back_to_its_next_source() {
-    let answer = install("GET", "/btfs/ubuntu/22.04/x86_64/5.15.0-91-generic.btf.tar.xz").await;
+    let Some(client) = scratch().await else { return };
+    let answer = install(&client, "GET", "/btfs/ubuntu/22.04/x86_64/5.15.0-91-generic.btf.tar.xz").await;
     assert_eq!(answer.status, 404);
     assert_eq!(answer.text(), r#"{"errors":["BTF archives are not hosted here"]}"#);
     assert!(!answer.headers.contains_key("docker-distribution-api-version"));
-    assert!(answer.writes.is_empty());
+    assert!(answer.stored.is_empty());
 }
 
 #[tokio::test]
 async fn an_llmobs_body_sent_by_the_diagnose_sweep_is_a_probe_not_a_payload() {
-    let answer =
-        post(programs::llm_obs, "/api/v2/llmobs", &[("x-requested-with", "datadog-agent-diagnose")], br#"{"span":{}}"#)
-            .await;
+    let Some(client) = scratch().await else { return };
+    let answer = post(
+        &client,
+        programs::llm_obs,
+        "/api/v2/llmobs",
+        &[("x-requested-with", "datadog-agent-diagnose")],
+        br#"{"span":{}}"#,
+    )
+    .await;
     assert_eq!(answer.status, 202);
-    assert!(answer.writes.is_empty());
+    assert!(answer.stored.is_empty());
 }
 
 #[tokio::test]
 async fn the_note_of_an_aiusage_payload_quotes_the_proxys_origin_headers() {
+    let Some(client) = scratch().await else { return };
     let answer = post(
+        &client,
         programs::ai_usage,
         "/api/v2/aiusage",
         &[

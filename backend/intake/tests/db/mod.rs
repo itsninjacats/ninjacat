@@ -14,7 +14,15 @@ use tokio::sync::OnceCell;
 const PREFIX: &str = "ninjacat_test";
 
 /// Tables a materialized view fills, and the migrations' ledger: no handler inserts into them.
-pub const DERIVED: &[&str] = &["metrics_1m", "metric_tag_keys", "k8s_resources_current", "schema_migrations"];
+pub const DERIVED: &[&str] = &[
+    "metrics_1m",
+    "metrics_1m_mv",
+    "metric_tag_keys",
+    "metric_tag_keys_mv",
+    "k8s_resources_current",
+    "k8s_resources_current_mv",
+    "schema_migrations",
+];
 
 /// What a test inserts with: async inserts as in production, each flushed at once, so the next
 /// SELECT sees it.

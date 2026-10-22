@@ -2,38 +2,42 @@
 //! the golden fixtures do not cover, and the payloads recorded from real senders
 //! (`backend/intake/tests/fixtures/real`).
 
+mod db;
 mod programs;
 
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
 use http_body_util::BodyExt;
 use ninjapaws_intake::keys::{self, Key, Store};
-use ninjapaws_intake::server::Intake;
+use ninjapaws_intake::server::Settings;
 use ninjapaws_proto::datadog::agentdiscovery::{AgentDiscoveryPayload, AgentDiscoveryPayloadBatch};
 use ninjapaws_proto::datadog::sbom::{SbomEntity, SbomPayload};
-use ninjapaws_storage::{Sink, Write};
 use prost::Message;
 use serde_json::Value;
 use tako::router::Router;
 
 const KEY: &str = "00000000000000000000000000000001";
-const TENANT: &str = "test";
 
+/// What one request answered, and the rows it stored, read back per table. The request has a
+/// tenant of its own, so these are only its rows; they come in the table's order, not the order
+/// they were written in.
 struct Answer {
     status: u16,
     body: String,
-    writes: Vec<Write>,
+    tenant: String,
+    stored: BTreeMap<String, Vec<Value>>,
 }
 
 impl Answer {
-    fn writers(&self) -> Vec<&str> {
-        self.writes.iter().map(|w| w.writer).collect()
+    /// The tables the request stored rows in.
+    fn tables(&self) -> Vec<&str> {
+        self.stored.keys().map(String::as_str).collect()
     }
 
-    /// Every row written to the table, in order.
     fn rows(&self, table: &str) -> Vec<&Value> {
-        self.writes.iter().filter(|w| w.table == table).flat_map(|w| &w.rows).collect()
+        self.stored.get(table).map(|rows| rows.iter().collect()).unwrap_or_default()
     }
 
     fn raw(&self) -> Vec<&Value> {
@@ -41,19 +45,23 @@ impl Answer {
     }
 }
 
-async fn send(mount: fn(&mut Router), path: &str, headers: &[(&str, &str)], body: Vec<u8>) -> Answer {
+/// The client of this binary's scratch database. None when ClickHouse is not running.
+async fn scratch() -> Option<clickhouse::Client> {
+    Some(db::client(&db::scratch().await?))
+}
+
+async fn send(
+    client: &clickhouse::Client,
+    mount: fn(&mut Router),
+    path: &str,
+    headers: &[(&str, &str)],
+    body: Vec<u8>,
+) -> Answer {
+    let tenant = db::tenant();
     let store = Store::default();
-    store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: TENANT.into() })]);
-    let (sink, capture) = Sink::capture();
-    let intake = Intake {
-        sink,
-        keys: Arc::new(store),
-        ack_unknown: false,
-        max_body_bytes: 64 * 1024 * 1024,
-        stopping: Default::default(),
-        tasks: Default::default(),
-    };
-    let router = programs::router_of(mount, intake);
+    store.publish([(keys::hash(KEY), Key { id: "test".into(), name: "test".into(), tenant_id: tenant.clone() })]);
+    let settings = Settings { ack_unknown: false, max_body_bytes: 64 * 1024 * 1024 };
+    let router = programs::router_of(mount, client.clone(), Arc::new(store), settings);
     let mut request = http::Request::builder().method("POST").uri(path);
     for (name, value) in headers {
         request = request.header(*name, *value);
@@ -61,12 +69,17 @@ async fn send(mount: fn(&mut Router), path: &str, headers: &[(&str, &str)], body
     let response = router.dispatch(request.body(body.into()).unwrap()).await;
     let status = response.status().as_u16();
     let body = response.into_body().collect().await.unwrap().to_bytes();
-    Answer { status, body: String::from_utf8_lossy(&body).into(), writes: capture.writes() }
+    let mut stored = BTreeMap::new();
+    for table in db::tables(client, &tenant).await.into_keys() {
+        let rows = db::rows(client, &table, &tenant).await;
+        stored.insert(table, rows);
+    }
+    Answer { status, body: String::from_utf8_lossy(&body).into(), tenant, stored }
 }
 
 /// A POST with the test key, answered 202 and `{}`.
-async fn post(mount: fn(&mut Router), path: &str, body: impl Into<Vec<u8>>) -> Answer {
-    let answer = send(mount, path, &[("dd-api-key", KEY)], body.into()).await;
+async fn post(client: &clickhouse::Client, mount: fn(&mut Router), path: &str, body: impl Into<Vec<u8>>) -> Answer {
+    let answer = send(client, mount, path, &[("dd-api-key", KEY)], body.into()).await;
     assert_eq!((answer.status, answer.body.as_str()), (202, "{}"), "{path}");
     answer
 }
@@ -84,6 +97,7 @@ fn text(value: &Value) -> &str {
 
 #[tokio::test]
 async fn what_a_real_dbm_integration_sends_is_stored_event_for_event_with_no_key_left_undecoded() {
+    let Some(client) = scratch().await else { return };
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real");
     let tracks = ["databasequery", "dbmactivity", "dbmhealth", "dbmmetadata", "dbmmetrics", "dbmcolumnstatistics"];
     let mut files: Vec<String> =
@@ -95,12 +109,16 @@ async fn what_a_real_dbm_integration_sends_is_stored_event_for_event_with_no_key
             continue;
         };
         let body = real(&file);
-        let answer = post(programs::dbm, &format!("/api/v2/{track}"), body.clone()).await;
+        let answer = post(&client, programs::dbm, &format!("/api/v2/{track}"), body.clone()).await;
         assert!(answer.raw().is_empty(), "{file}");
         let rows = answer.rows("dbm_events");
         let sent: Vec<Value> = serde_json::from_slice(&body).unwrap();
         assert_eq!(rows.len(), sent.len(), "{file}");
-        for (event, row) in sent.iter().zip(&rows) {
+        let mut unused = rows.clone();
+        for event in &sent {
+            let found =
+                unused.iter().position(|row| serde_json::from_str::<Value>(text(&row["event"])).unwrap() == *event);
+            let row = unused.remove(found.unwrap_or_else(|| panic!("{file}: an event has no row")));
             assert_eq!(text(&row["track"]), *track, "{file}");
             assert_eq!(row["undecoded_keys"], Value::Array(Vec::new()), "{file}");
             // A plan is always recognised as one: its signature is read whenever the check
@@ -119,9 +137,14 @@ async fn what_a_real_dbm_integration_sends_is_stored_event_for_event_with_no_key
 
 #[tokio::test]
 async fn an_oracle_plan_is_a_list_of_steps_and_they_are_counted() {
-    let answer =
-        post(programs::dbm, "/api/v2/databasequery", real("oracle-check-agent-7.84.0-oracle-23-databasequery.json"))
-            .await;
+    let Some(client) = scratch().await else { return };
+    let answer = post(
+        &client,
+        programs::dbm,
+        "/api/v2/databasequery",
+        real("oracle-check-agent-7.84.0-oracle-23-databasequery.json"),
+    )
+    .await;
     let rows = answer.rows("dbm_events");
     let plan = rows.iter().find(|row| row["dbm_type"] == "plan").unwrap();
     assert_eq!(plan["plan_definition_steps"], 2);
@@ -130,7 +153,9 @@ async fn an_oracle_plan_is_a_list_of_steps_and_they_are_counted() {
 
 #[tokio::test]
 async fn a_postgres_plan_is_explain_output_in_a_string_or_null_when_none_could_be_collected() {
-    let answer = post(programs::dbm, "/api/v2/databasequery", real("postgres-check-23.12.0-databasequery.json")).await;
+    let Some(client) = scratch().await else { return };
+    let answer =
+        post(&client, programs::dbm, "/api/v2/databasequery", real("postgres-check-23.12.0-databasequery.json")).await;
     let mut shown: Vec<(String, bool)> = answer
         .rows("dbm_events")
         .iter()
@@ -142,26 +167,29 @@ async fn a_postgres_plan_is_explain_output_in_a_string_or_null_when_none_could_b
 
 #[tokio::test]
 async fn the_agents_empty_dbm_probe_stores_nothing() {
+    let Some(client) = scratch().await else { return };
     for body in ["{}", "[]", ""] {
-        assert!(post(programs::dbm, "/api/v2/dbmmetrics", body).await.writes.is_empty(), "{body}");
+        assert!(post(&client, programs::dbm, "/api/v2/dbmmetrics", body).await.tables().is_empty(), "{body}");
     }
 }
 
 #[tokio::test]
 async fn a_bare_dbm_object_is_a_batch_of_one_stored_with_its_text_as_sent() {
+    let Some(client) = scratch().await else { return };
     let body = " {\"host\": \"db1\",\n  \"status\": \"ok\"}\n";
-    let answer = post(programs::dbm, "/api/v2/dbmhealth", body).await;
+    let answer = post(&client, programs::dbm, "/api/v2/dbmhealth", body).await;
     let rows = answer.rows("dbm_events");
     assert_eq!(rows.len(), 1);
     assert_eq!(text(&rows[0]["event"]), body.trim());
-    assert_eq!(text(&rows[0]["tenant_id"]), TENANT);
+    assert_eq!(text(&rows[0]["tenant_id"]), answer.tenant.as_str());
 }
 
 // --- network devices ---
 
 #[tokio::test]
 async fn what_the_agents_snmp_check_learns_about_a_device_becomes_devices_interfaces_and_addresses() {
-    let answer = post(programs::ndm, "/api/v2/ndm", real("agent-7.84.0-ndm.json")).await;
+    let Some(client) = scratch().await else { return };
+    let answer = post(&client, programs::ndm, "/api/v2/ndm", real("agent-7.84.0-ndm.json")).await;
     assert!(answer.raw().is_empty());
     let devices = answer.rows("ndm_devices");
     assert_eq!(devices.len(), 1);
@@ -188,7 +216,8 @@ async fn what_the_agents_snmp_check_learns_about_a_device_becomes_devices_interf
 
 #[tokio::test]
 async fn traps_arrive_with_the_names_the_agents_own_trap_database_gave_them_or_as_bare_oids() {
-    let answer = post(programs::ndm, "/api/v2/ndmtraps", real("agent-7.84.0-ndmtraps.json")).await;
+    let Some(client) = scratch().await else { return };
+    let answer = post(&client, programs::ndm, "/api/v2/ndmtraps", real("agent-7.84.0-ndmtraps.json")).await;
     assert!(answer.raw().is_empty());
     let traps = answer.rows("snmp_traps");
     let mut shown: Vec<[&str; 3]> = traps
@@ -216,7 +245,8 @@ async fn traps_arrive_with_the_names_the_agents_own_trap_database_gave_them_or_a
 
 #[tokio::test]
 async fn netflow_v5_records_the_agent_aggregated_become_flows() {
-    let answer = post(programs::ndm, "/api/v2/ndmflow", real("agent-7.84.0-ndmflow.json")).await;
+    let Some(client) = scratch().await else { return };
+    let answer = post(&client, programs::ndm, "/api/v2/ndmflow", real("agent-7.84.0-ndmflow.json")).await;
     assert!(answer.raw().is_empty());
     let flows = answer.rows("netflow_flows");
     assert_eq!(flows.len(), 4);
@@ -230,7 +260,8 @@ async fn netflow_v5_records_the_agent_aggregated_become_flows() {
 
 #[tokio::test]
 async fn a_traceroute_the_agent_ran_becomes_one_network_path_with_its_hops() {
-    let answer = post(programs::ndm, "/api/v2/netpath", real("agent-7.84.0-netpath.json")).await;
+    let Some(client) = scratch().await else { return };
+    let answer = post(&client, programs::ndm, "/api/v2/netpath", real("agent-7.84.0-netpath.json")).await;
     assert!(answer.raw().is_empty());
     let paths = answer.rows("network_paths");
     assert_eq!(paths.len(), 1);
@@ -244,8 +275,9 @@ async fn a_traceroute_the_agent_ran_becomes_one_network_path_with_its_hops() {
 
 #[tokio::test]
 async fn one_value_of_the_wrong_type_refuses_the_whole_batch_of_flows_and_the_body_is_kept_raw() {
+    let Some(client) = scratch().await else { return };
     let body = r#"[{"type":"netflow9","bytes":1},{"type":"netflow9","bytes":"many"}]"#;
-    let answer = post(programs::ndm, "/api/v2/ndmflow", body).await;
+    let answer = post(&client, programs::ndm, "/api/v2/ndmflow", body).await;
     assert!(answer.rows("netflow_flows").is_empty());
     let raw = answer.raw();
     assert_eq!(raw.len(), 1);
@@ -257,9 +289,10 @@ async fn one_value_of_the_wrong_type_refuses_the_whole_batch_of_flows_and_the_bo
 
 #[tokio::test]
 async fn an_ndm_entry_with_a_value_of_the_wrong_type_is_kept_raw_and_the_entries_beside_it_are_stored() {
+    let Some(client) = scratch().await else { return };
     let good = r#"{"namespace":"default","devices":[{"id":"default:10.0.0.1","status":1}]}"#;
     let bad = r#"{"namespace":"default","devices":[{"id":17}]}"#;
-    let answer = post(programs::ndm, "/api/v2/ndm", format!("[{good},{bad}]")).await;
+    let answer = post(&client, programs::ndm, "/api/v2/ndm", format!("[{good},{bad}]")).await;
     let devices = answer.rows("ndm_devices");
     assert_eq!(devices.len(), 1);
     assert_eq!((text(&devices[0]["device_id"]), text(&devices[0]["status"])), ("default:10.0.0.1", "reachable"));
@@ -272,7 +305,9 @@ async fn an_ndm_entry_with_a_value_of_the_wrong_type_is_kept_raw_and_the_entries
 
 #[tokio::test]
 async fn an_entry_without_a_trap_is_an_unexpected_shape_a_broken_trap_a_decode_error() {
+    let Some(client) = scratch().await else { return };
     let answer = post(
+        &client,
         programs::ndm,
         "/api/v2/ndmtraps",
         r#"[{"other":1},{"trap":{"timestamp":"soon"}},{"trap":{"snmpTrapOID":"1.3"}},7]"#,
@@ -281,7 +316,8 @@ async fn an_entry_without_a_trap_is_an_unexpected_shape_a_broken_trap_a_decode_e
     let traps = answer.rows("snmp_traps");
     assert_eq!(traps.len(), 1);
     assert_eq!(traps[0]["snmp_trap_oid"], "1.3");
-    let raw = answer.raw();
+    let mut raw = answer.raw();
+    raw.sort_by_key(|r| text(&r["note"]));
     let reasons: Vec<&str> = raw.iter().map(|r| text(&r["reason"])).collect();
     assert_eq!(reasons, ["unexpected_shape", "decode_error", "decode_error"]);
     assert_eq!(text(&raw[0]["note"]), "entry 0: no trap object");
@@ -293,27 +329,34 @@ async fn an_entry_without_a_trap_is_an_unexpected_shape_a_broken_trap_a_decode_e
 /// A batch entry kept raw is the text that was sent, numbers and spacing included.
 #[tokio::test]
 async fn an_entry_kept_raw_is_the_text_as_sent() {
+    let Some(client) = scratch().await else { return };
     let bad = r#"{"namespace" : "x", "n": 1.50, "devices":[{"id":17}]}"#;
-    let answer = post(programs::ndm, "/api/v2/ndm", format!("[ {bad} ]")).await;
+    let answer = post(&client, programs::ndm, "/api/v2/ndm", format!("[ {bad} ]")).await;
     assert_eq!(text(&answer.raw()[0]["body"]), bad);
 
     let bad = r#"{"n": 1.50, "configs": 7}"#;
-    let answer = post(programs::ndm, "/api/v2/ndmconfig", format!("[ {bad} ]")).await;
+    let answer = post(&client, programs::ndm, "/api/v2/ndmconfig", format!("[ {bad} ]")).await;
     assert_eq!(text(&answer.raw()[0]["body"]), bad);
 
     let bad = r#"{"other" : 1E3}"#;
-    let answer = post(programs::ndm, "/api/v2/ndmtraps", format!("[ {bad} ]")).await;
+    let answer = post(&client, programs::ndm, "/api/v2/ndmtraps", format!("[ {bad} ]")).await;
     assert_eq!(text(&answer.raw()[0]["body"]), bad);
 
-    let answer = post(programs::synthetics_results, "/api/v2/synthetics", r#"[ {"test":{"id":"t"}} , 1.50 ]"#).await;
+    let answer =
+        post(&client, programs::synthetics_results, "/api/v2/synthetics", r#"[ {"test":{"id":"t"}} , 1.50 ]"#).await;
     assert_eq!(text(&answer.raw()[0]["body"]), "1.50");
 }
 
 #[tokio::test]
 async fn an_address_that_is_not_one_refuses_the_batch_of_paths() {
-    let answer =
-        post(programs::ndm, "/api/v2/netpath", r#"[{"traceroute":{"runs":[{"hops":[{"ip_address":"nowhere"}]}]}}]"#)
-            .await;
+    let Some(client) = scratch().await else { return };
+    let answer = post(
+        &client,
+        programs::ndm,
+        "/api/v2/netpath",
+        r#"[{"traceroute":{"runs":[{"hops":[{"ip_address":"nowhere"}]}]}}]"#,
+    )
+    .await;
     assert!(answer.rows("network_paths").is_empty());
     let raw = answer.raw();
     assert_eq!((text(&raw[0]["intake"]), text(&raw[0]["reason"])), ("netpath", "decode_error"));
@@ -335,26 +378,28 @@ fn multipart(parts: &[(&str, &[u8])]) -> Vec<u8> {
     body
 }
 
-async fn post_dump(content_type: &str, body: Vec<u8>) -> Answer {
+async fn post_dump(client: &clickhouse::Client, content_type: &str, body: Vec<u8>) -> Answer {
     let mut headers = vec![("dd-api-key", KEY)];
     if !content_type.is_empty() {
         headers.push(("content-type", content_type));
     }
-    let answer = send(programs::cws, "/api/v2/secdump", &headers, body).await;
+    let answer = send(client, programs::cws, "/api/v2/secdump", &headers, body).await;
     assert_eq!((answer.status, answer.body.as_str()), (202, "{}"));
     answer
 }
 
 #[tokio::test]
 async fn a_dump_with_a_header_only_is_stored_without_nodes() {
+    let Some(client) = scratch().await else { return };
     let content_type = format!("multipart/form-data; boundary={BOUNDARY}");
-    let answer = post_dump(&content_type, multipart(&[("event", br#"{"host":"h1"}"#)])).await;
-    assert_eq!(answer.writers(), ["storage_cws_activity_dumps"]);
+    let answer = post_dump(&client, &content_type, multipart(&[("event", br#"{"host":"h1"}"#)])).await;
+    assert_eq!(answer.tables(), ["cws_activity_dumps"]);
     assert_eq!(answer.rows("cws_activity_dumps")[0]["header_host"], "h1");
 }
 
 #[tokio::test]
 async fn a_dump_request_with_nothing_to_decode_is_kept_raw() {
+    let Some(client) = scratch().await else { return };
     let body = multipart(&[("event", b"[1]"), ("dump", b""), ("other", b"x")]);
     for (content_type, note) in [
         ("application/json".to_string(), "content-type is not multipart/form-data"),
@@ -362,8 +407,8 @@ async fn a_dump_request_with_nothing_to_decode_is_kept_raw() {
         ("multipart/form-data".to_string(), "content-type is not multipart/form-data"),
         (format!("multipart/form-data; boundary={BOUNDARY}"), "neither multipart part decoded"),
     ] {
-        let answer = post_dump(&content_type, body.clone()).await;
-        assert_eq!(answer.writers(), ["storage_raw_payloads"], "{content_type}");
+        let answer = post_dump(&client, &content_type, body.clone()).await;
+        assert_eq!(answer.tables(), ["raw_payloads"], "{content_type}");
         let raw = answer.raw();
         assert_eq!(
             [text(&raw[0]["intake"]), text(&raw[0]["reason"]), text(&raw[0]["note"])],
@@ -375,37 +420,39 @@ async fn a_dump_request_with_nothing_to_decode_is_kept_raw() {
 
 #[tokio::test]
 async fn each_track_stores_its_envelopes_under_its_own_name() {
+    let Some(client) = scratch().await else { return };
     let body = r#"[{"hostname":"h1","message":"{\"kind\":\"remediation\"}"}]"#;
     for (mount, path, track) in [
         (programs::runtime_security as fn(&mut Router), "/api/v2/secruntime", "secruntime"),
         (programs::runtime_security, "/api/v2/secinfo", "secinfo"),
         (programs::cspm, "/api/v2/compliance", "compliance"),
     ] {
-        let answer = post(mount, path, body).await;
+        let answer = post(&client, mount, path, body).await;
         let rows = answer.rows("security_events");
         assert_eq!(
             [text(&rows[0]["track"]), text(&rows[0]["tenant_id"]), text(&rows[0]["event_kind"])],
-            [track, TENANT, "remediation"]
+            [track, answer.tenant.as_str(), "remediation"]
         );
     }
 }
 
 #[tokio::test]
 async fn a_batch_that_is_not_a_list_of_envelopes_is_kept_raw_under_its_track() {
+    let Some(client) = scratch().await else { return };
     for (body, note) in [
         (r#"{"hostname":"h1"}"#, "the body is not a list of envelopes: expected a list, got object"),
         ("\"text\"", "the body is not a list of envelopes: expected a list, got string"),
         (r#"[{"hostname":"h1"}, 7]"#, "the body is not a list of envelopes: entry 1 is not a JSON object"),
     ] {
-        let answer = post(programs::cspm, "/api/v2/compliance", body).await;
-        assert_eq!(answer.writers(), ["storage_raw_payloads"]);
+        let answer = post(&client, programs::cspm, "/api/v2/compliance", body).await;
+        assert_eq!(answer.tables(), ["raw_payloads"]);
         let raw = answer.raw();
         assert_eq!(
             [text(&raw[0]["intake"]), text(&raw[0]["reason"]), text(&raw[0]["note"])],
             ["compliance", "unexpected_shape", note]
         );
     }
-    let answer = post(programs::runtime_security, "/api/v2/secinfo", "not json").await;
+    let answer = post(&client, programs::runtime_security, "/api/v2/secinfo", "not json").await;
     let raw = answer.raw();
     assert_eq!((text(&raw[0]["intake"]), text(&raw[0]["reason"])), ("secinfo", "unexpected_shape"));
     assert!(text(&raw[0]["note"]).starts_with("the body is not a list of envelopes: "));
@@ -413,14 +460,19 @@ async fn a_batch_that_is_not_a_list_of_envelopes_is_kept_raw_under_its_track() {
 
 #[tokio::test]
 async fn an_empty_batch_or_a_probe_stores_nothing() {
+    let Some(client) = scratch().await else { return };
     for body in ["null", "[]", "", "{}"] {
-        assert!(post(programs::runtime_security, "/api/v2/secruntime", body).await.writes.is_empty(), "{body}");
+        assert!(
+            post(&client, programs::runtime_security, "/api/v2/secruntime", body).await.tables().is_empty(),
+            "{body}"
+        );
     }
 }
 
 /// Go's decoder puts U+FFFD where a string is not text and carries on.
 #[tokio::test]
 async fn an_envelope_with_text_that_is_not_valid_unicode_keeps_its_row() {
+    let Some(client) = scratch().await else { return };
     let body = [
         &b"[{\"hostname\":\"h"[..],
         &[0xff],
@@ -428,7 +480,7 @@ async fn an_envelope_with_text_that_is_not_valid_unicode_keeps_its_row() {
         br#""message":{"title":"t\ud800","k\udc00":2,"agent":{"rule_id":"r\ud800"}}}]"#,
     ]
     .concat();
-    let answer = post(programs::runtime_security, "/api/v2/secruntime", body).await;
+    let answer = post(&client, programs::runtime_security, "/api/v2/secruntime", body).await;
     let rows = answer.rows("security_events");
     let row = rows[0];
     assert_eq!(
@@ -443,22 +495,24 @@ async fn an_envelope_with_text_that_is_not_valid_unicode_keeps_its_row() {
 
 #[tokio::test]
 async fn an_sbom_that_is_not_protobuf_or_has_no_entities_is_kept_raw() {
-    let answer = post(programs::sbom, "/api/v2/sbom", "definitely not protobuf").await;
+    let Some(client) = scratch().await else { return };
+    let answer = post(&client, programs::sbom, "/api/v2/sbom", "definitely not protobuf").await;
     let raw = answer.raw();
-    assert_eq!(answer.writers(), ["storage_raw_payloads"]);
+    assert_eq!(answer.tables(), ["raw_payloads"]);
     assert_eq!((text(&raw[0]["intake"]), text(&raw[0]["reason"])), ("sbom", "decode_error"));
     assert_ne!(text(&raw[0]["note"]), "");
 
     // Protobuf reads almost any bytes as some message: a payload without entities is taken for
     // another type's.
     let body = SbomPayload { version: 1, host: "h3".into(), ..Default::default() }.encode_to_vec();
-    let answer = post(programs::sbom, "/api/v2/sbom", body).await;
+    let answer = post(&client, programs::sbom, "/api/v2/sbom", body).await;
     let raw = answer.raw();
     assert_eq!((text(&raw[0]["reason"]), text(&raw[0]["note"])), ("unexpected_shape", "decoded to zero entities"));
 }
 
 #[tokio::test]
 async fn an_entity_without_components_writes_only_the_entity() {
+    let Some(client) = scratch().await else { return };
     let body = SbomPayload {
         version: 1,
         host: "h1".into(),
@@ -466,7 +520,7 @@ async fn an_entity_without_components_writes_only_the_entity() {
         ..Default::default()
     }
     .encode_to_vec();
-    assert_eq!(post(programs::sbom, "/api/v2/sbom", body).await.writers(), ["storage_sbom_entities"]);
+    assert_eq!(post(&client, programs::sbom, "/api/v2/sbom", body).await.tables(), ["sbom_entities"]);
 }
 
 fn hex(text: &str) -> Vec<u8> {
@@ -475,6 +529,7 @@ fn hex(text: &str) -> Vec<u8> {
 
 #[tokio::test]
 async fn bytes_that_are_not_a_scanner_result_are_kept_raw_the_note_saying_what_was_there() {
+    let Some(client) = scratch().await else { return };
     for (body, reason, note) in [
         ("08010802", "unexpected_shape", "not an SdsResultPayload: no resource and no results; 1:varintx2"),
         // A known field in another wire type (2, the timestamp, as bytes): prost refuses the
@@ -487,8 +542,8 @@ async fn bytes_that_are_not_a_scanner_result_are_kept_raw_the_note_saying_what_w
         ("08", "decode_error", ""),
         ("706c61696e2074657874", "decode_error", ""),
     ] {
-        let answer = post(programs::sds, "/api/v2/sdsresult", hex(body)).await;
-        assert_eq!(answer.writers(), ["storage_raw_payloads"], "{body}");
+        let answer = post(&client, programs::sds, "/api/v2/sdsresult", hex(body)).await;
+        assert_eq!(answer.tables(), ["raw_payloads"], "{body}");
         let raw = answer.raw();
         assert_eq!((text(&raw[0]["intake"]), text(&raw[0]["reason"])), ("sds", reason), "{body}");
         if note.is_empty() {
@@ -497,13 +552,13 @@ async fn bytes_that_are_not_a_scanner_result_are_kept_raw_the_note_saying_what_w
             assert_eq!(text(&raw[0]["note"]), note);
         }
     }
-    assert!(post(programs::sds, "/api/v2/sdsresult", Vec::new()).await.writes.is_empty());
+    assert!(post(&client, programs::sds, "/api/v2/sdsresult", Vec::new()).await.tables().is_empty());
 }
 
 /// What the agent's data security check sent after scanning three tables of a Postgres: one with
 /// planted e-mail addresses and a card number, one with nothing to find, one that does not exist.
-async fn scanned(file: &str) -> Answer {
-    let answer = post(programs::sds, "/api/v2/sdsresult", real(file)).await;
+async fn scanned(client: &clickhouse::Client, file: &str) -> Answer {
+    let answer = post(client, programs::sds, "/api/v2/sdsresult", real(file)).await;
     assert!(answer.raw().is_empty());
     assert_eq!((answer.rows("sds_scans").len(), answer.rows("sds_results").len()), (1, 1));
     answer
@@ -511,7 +566,8 @@ async fn scanned(file: &str) -> Answer {
 
 #[tokio::test]
 async fn a_real_scan_that_found_sensitive_data_says_which_rule_matched_in_which_column() {
-    let answer = scanned("agent-7.84.0-sdsresult-matches.bin").await;
+    let Some(client) = scratch().await else { return };
+    let answer = scanned(&client, "agent-7.84.0-sdsresult-matches.bin").await;
     let scan = answer.rows("sds_scans")[0];
     assert_eq!(
         [text(&scan["resource_type"]), text(&scan["resource_name"]), text(&scan["scanning_source"])],
@@ -564,7 +620,8 @@ async fn a_real_scan_that_found_sensitive_data_says_which_rule_matched_in_which_
 
 #[tokio::test]
 async fn a_real_scan_that_found_nothing_still_records_the_table_it_scanned() {
-    let answer = scanned("agent-7.84.0-sdsresult-clean.bin").await;
+    let Some(client) = scratch().await else { return };
+    let answer = scanned(&client, "agent-7.84.0-sdsresult-clean.bin").await;
     let result = answer.rows("sds_results")[0];
     assert_eq!((text(&result["table_name"]), text(&result["task_status"])), ("orders", "SUCCESS"));
     assert_eq!(result["table_match_count"], 0);
@@ -573,7 +630,8 @@ async fn a_real_scan_that_found_nothing_still_records_the_table_it_scanned() {
 
 #[tokio::test]
 async fn a_real_scan_that_failed_carries_the_scanners_reason() {
-    let answer = scanned("agent-7.84.0-sdsresult-failed.bin").await;
+    let Some(client) = scratch().await else { return };
+    let answer = scanned(&client, "agent-7.84.0-sdsresult-failed.bin").await;
     let result = answer.rows("sds_results")[0];
     assert_eq!((text(&result["table_name"]), text(&result["task_status"])), ("no_such_table", "ERROR"));
     assert!(text(&result["failure_reason"]).contains("relation \"no_such_table\" does not exist"));
@@ -584,6 +642,7 @@ async fn a_real_scan_that_failed_carries_the_scanners_reason() {
 
 #[tokio::test]
 async fn every_event_platform_route_answers_an_empty_body_with_202_and_stores_nothing() {
+    let Some(client) = scratch().await else { return };
     for (mount, path) in [
         (programs::agent_discovery as fn(&mut Router), "/api/v2/agentdiscovery"),
         (programs::agent_health, "/api/v2/agenthealth"),
@@ -591,56 +650,64 @@ async fn every_event_platform_route_answers_an_empty_body_with_202_and_stores_no
         (programs::software_inventory, "/api/v2/softinv"),
         (programs::synthetics_results, "/api/v2/synthetics"),
     ] {
-        assert!(post(mount, path, Vec::new()).await.writes.is_empty(), "{path}");
+        assert!(post(&client, mount, path, Vec::new()).await.tables().is_empty(), "{path}");
     }
     for path in ["/api/v1/lineage", "/api/v2/query-actions"] {
-        let answer = send(programs::data_obs, path, &[("dd-api-key", KEY)], Vec::new()).await;
+        let answer = send(&client, programs::data_obs, path, &[("dd-api-key", KEY)], Vec::new()).await;
         assert_eq!(answer.status, 202);
-        assert!(answer.writes.is_empty(), "{path}");
+        assert!(answer.tables().is_empty(), "{path}");
     }
 }
 
 #[tokio::test]
 async fn a_discovery_batch_is_stored_a_body_that_is_not_protobuf_kept_raw_and_an_empty_batch_dropped() {
+    let Some(client) = scratch().await else { return };
     let batch = AgentDiscoveryPayloadBatch {
         host_id: "host-1".into(),
         payloads: vec![AgentDiscoveryPayload { integration: "postgres".into(), ..Default::default() }],
     };
-    let answer = post(programs::agent_discovery, "/api/v2/agentdiscovery", batch.encode_to_vec()).await;
+    let answer = post(&client, programs::agent_discovery, "/api/v2/agentdiscovery", batch.encode_to_vec()).await;
     let rows = answer.rows("agent_discovery");
-    assert_eq!([text(&rows[0]["tenant_id"]), text(&rows[0]["host_id"])], [TENANT, "host-1"]);
+    assert_eq!([text(&rows[0]["tenant_id"]), text(&rows[0]["host_id"])], [answer.tenant.as_str(), "host-1"]);
 
-    let answer = post(programs::agent_discovery, "/api/v2/agentdiscovery", "definitely not protobuf").await;
+    let answer = post(&client, programs::agent_discovery, "/api/v2/agentdiscovery", "definitely not protobuf").await;
     let raw = answer.raw();
     assert_eq!((text(&raw[0]["intake"]), text(&raw[0]["reason"])), ("agentdiscovery", "decode_error"));
 
     // Protobuf skips unknown fields, so a payload meant for another endpoint decodes into an empty
     // batch: that is logged, not stored.
     let empty = AgentDiscoveryPayloadBatch { host_id: "host-1".into(), ..Default::default() };
-    assert!(post(programs::agent_discovery, "/api/v2/agentdiscovery", empty.encode_to_vec()).await.writes.is_empty());
+    assert!(
+        post(&client, programs::agent_discovery, "/api/v2/agentdiscovery", empty.encode_to_vec())
+            .await
+            .tables()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
-async fn a_health_report_is_stored_report_first_then_its_issues() {
+async fn a_health_report_is_stored_with_its_issues() {
+    let Some(client) = scratch().await else { return };
     let body = r#"{"schema_version": "1.0", "host": {"hostname": "web-1"},
         "issues": {"b": {"id": "b", "severity": 1, "extra": {"pid": 9007199254740993}}, "a": {"id": "a"}}}"#;
-    let answer = post(programs::agent_health, "/api/v2/agenthealth", body).await;
-    assert_eq!(answer.writers(), ["storage_agent_health_reports", "storage_agent_health_issues"]);
+    let answer = post(&client, programs::agent_health, "/api/v2/agenthealth", body).await;
+    assert_eq!(answer.tables(), ["agent_health_issues", "agent_health_reports"]);
     let report = answer.rows("agent_health_reports")[0];
-    assert_eq!((text(&report["tenant_id"]), text(&report["host"])), (TENANT, "web-1"));
+    assert_eq!((text(&report["tenant_id"]), text(&report["host"])), (answer.tenant.as_str(), "web-1"));
     assert_eq!(report["issue_count"], 2);
-    let issues = answer.rows("agent_health_issues");
+    let mut issues = answer.rows("agent_health_issues");
+    issues.sort_by_key(|i| text(&i["issue_key"]));
     let keys: Vec<&str> = issues.iter().map(|i| text(&i["issue_key"])).collect();
     assert_eq!(keys, ["a", "b"]);
     assert!(issues.iter().all(|i| i["report_id"] == report["report_id"] && i["received_at"] == report["received_at"]));
     assert_eq!(text(&issues[1]["severity"]), "ISSUE_SEVERITY_LOW");
     assert_eq!(text(&issues[1]["extra"]), r#"{"pid":9007199254740993}"#);
 
-    let answer = post(programs::agent_health, "/api/v2/agenthealth", r#"{"service": "datadog-agent"}"#).await;
-    assert_eq!(answer.writers(), ["storage_agent_health_reports"]);
+    let answer = post(&client, programs::agent_health, "/api/v2/agenthealth", r#"{"service": "datadog-agent"}"#).await;
+    assert_eq!(answer.tables(), ["agent_health_reports"]);
 
     let body = r#"{"issues": {"a": {"tags": "x"}}}"#;
-    let answer = post(programs::agent_health, "/api/v2/agenthealth", body).await;
+    let answer = post(&client, programs::agent_health, "/api/v2/agenthealth", body).await;
     let raw = answer.raw();
     assert_eq!(
         [text(&raw[0]["intake"]), text(&raw[0]["reason"]), text(&raw[0]["body"])],
@@ -651,14 +718,15 @@ async fn a_health_report_is_stored_report_first_then_its_issues() {
 
 #[tokio::test]
 async fn an_event_is_stored_and_a_body_that_is_not_one_object_kept_raw() {
+    let Some(client) = scratch().await else { return };
     let body = r#"{"data":{"attributes":{"title":"a\ud800","attributes":{}}}}"#;
-    let answer = post(programs::event_management, "/api/v2/events", body).await;
-    assert_eq!(answer.writers(), ["storage_event_management_events"]);
+    let answer = post(&client, programs::event_management, "/api/v2/events", body).await;
+    assert_eq!(answer.tables(), ["event_management_events"]);
     let rows = answer.rows("event_management_events");
-    assert_eq!((text(&rows[0]["tenant_id"]), text(&rows[0]["title"])), (TENANT, "a\u{fffd}"));
+    assert_eq!((text(&rows[0]["tenant_id"]), text(&rows[0]["title"])), (answer.tenant.as_str(), "a\u{fffd}"));
 
     for body in [r#"[{"data": {}}]"#, "\"text\" ", r#"{"data": "#] {
-        let answer = post(programs::event_management, "/api/v2/events", body).await;
+        let answer = post(&client, programs::event_management, "/api/v2/events", body).await;
         let raw = answer.raw();
         assert_eq!(
             [text(&raw[0]["intake"]), text(&raw[0]["reason"]), text(&raw[0]["note"]), text(&raw[0]["body"])],
@@ -666,7 +734,7 @@ async fn an_event_is_stored_and_a_body_that_is_not_one_object_kept_raw() {
         );
     }
 
-    let answer = post(programs::event_management, "/api/v2/events", r#"{"data": {"type": "event"}}"#).await;
+    let answer = post(&client, programs::event_management, "/api/v2/events", r#"{"data": {"type": "event"}}"#).await;
     let raw = answer.raw();
     assert_eq!(
         (text(&raw[0]["reason"]), text(&raw[0]["note"])),
@@ -676,10 +744,12 @@ async fn an_event_is_stored_and_a_body_that_is_not_one_object_kept_raw() {
 
 #[tokio::test]
 async fn synthetics_results_are_stored_and_a_bad_item_kept_raw() {
+    let Some(client) = scratch().await else { return };
     let body = r#"[{"test": {"id": "t-1"}}, 42, {"test": {"id": "t-2"}}]"#;
-    let answer = post(programs::synthetics_results, "/api/v2/synthetics", body).await;
-    assert_eq!(answer.writers(), ["storage_raw_payloads", "storage_synthetics_results"]);
-    let rows = answer.rows("synthetics_results");
+    let answer = post(&client, programs::synthetics_results, "/api/v2/synthetics", body).await;
+    assert_eq!(answer.tables(), ["raw_payloads", "synthetics_results"]);
+    let mut rows = answer.rows("synthetics_results");
+    rows.sort_by_key(|r| text(&r["test_id"]));
     let ids: Vec<&str> = rows.iter().map(|r| text(&r["test_id"])).collect();
     assert_eq!(ids, ["t-1", "t-2"]);
     assert_eq!(rows[0]["received_at"], rows[1]["received_at"]);
@@ -692,29 +762,32 @@ async fn synthetics_results_are_stored_and_a_bad_item_kept_raw() {
 
 #[tokio::test]
 async fn a_lineage_event_sent_with_a_bearer_key_is_stored_with_the_querys_api_version_and_the_via_header() {
+    let Some(client) = scratch().await else { return };
     let bearer = format!("Bearer {KEY}");
     let headers = [("authorization", bearer.as_str()), ("via", "trace-agent 7.83.0")];
     let body = br#"{"eventType": "COMPLETE", "run": {"runId": "run-1"}}"#.to_vec();
-    let answer = send(programs::data_obs, "/api/v1/lineage?api-version=2", &headers, body.clone()).await;
+    let answer = send(&client, programs::data_obs, "/api/v1/lineage?api-version=2", &headers, body.clone()).await;
     assert_eq!(answer.status, 202);
-    assert_eq!(answer.writers(), ["storage_openlineage_events"]);
+    assert_eq!(answer.tables(), ["openlineage_events"]);
     let row = answer.rows("openlineage_events")[0];
     assert_eq!(
         [text(&row["tenant_id"]), text(&row["run_id"]), text(&row["api_version"]), text(&row["via"])],
-        [TENANT, "run-1", "2", "trace-agent 7.83.0"]
+        [answer.tenant.as_str(), "run-1", "2", "trace-agent 7.83.0"]
     );
 
-    let refused = send(programs::data_obs, "/api/v1/lineage", &[], body).await;
+    let refused = send(&client, programs::data_obs, "/api/v1/lineage", &[], body).await;
     assert_eq!(refused.status, 403);
-    assert!(refused.writes.is_empty());
+    assert!(refused.tables().is_empty());
 }
 
 #[tokio::test]
 async fn a_lineage_batch_stores_every_event_and_keeps_an_item_that_is_not_an_object_raw() {
+    let Some(client) = scratch().await else { return };
     let body = br#"[{"eventType": "START"}, "text", {"eventType": "COMPLETE"}]"#.to_vec();
-    let answer = send(programs::data_obs, "/api/v1/lineage", &[("dd-api-key", KEY)], body).await;
-    let types: Vec<&str> = answer.rows("openlineage_events").iter().map(|r| text(&r["event_type"])).collect();
-    assert_eq!(types, ["START", "COMPLETE"]);
+    let answer = send(&client, programs::data_obs, "/api/v1/lineage", &[("dd-api-key", KEY)], body).await;
+    let mut types: Vec<&str> = answer.rows("openlineage_events").iter().map(|r| text(&r["event_type"])).collect();
+    types.sort();
+    assert_eq!(types, ["COMPLETE", "START"]);
     let raw = answer.raw();
     assert_eq!(
         [text(&raw[0]["intake"]), text(&raw[0]["reason"]), text(&raw[0]["body"])],
@@ -724,6 +797,7 @@ async fn a_lineage_batch_stores_every_event_and_keeps_an_item_that_is_not_an_obj
 
 #[tokio::test]
 async fn a_batched_body_that_is_not_json_is_kept_raw_and_one_of_null_holds_no_items() {
+    let Some(client) = scratch().await else { return };
     for (mount, path, intake) in [
         (programs::software_inventory as fn(&mut Router), "/api/v2/softinv", "softinv"),
         (programs::synthetics_results, "/api/v2/synthetics", "synthetics"),
@@ -731,41 +805,48 @@ async fn a_batched_body_that_is_not_json_is_kept_raw_and_one_of_null_holds_no_it
         (programs::data_obs, "/api/v2/query-actions", "query-actions"),
     ] {
         let body = br#"[{"a": 1}, "#.to_vec();
-        let answer = send(mount, path, &[("dd-api-key", KEY)], body).await;
-        assert_eq!(answer.writers(), ["storage_raw_payloads"], "{path}");
+        let answer = send(&client, mount, path, &[("dd-api-key", KEY)], body).await;
+        assert_eq!(answer.tables(), ["raw_payloads"], "{path}");
         let raw = answer.raw();
         assert_eq!(
             [text(&raw[0]["intake"]), text(&raw[0]["reason"]), text(&raw[0]["note"])],
             [intake, "unexpected_shape", "body is not a JSON array or object"]
         );
-        let answer = send(mount, path, &[("dd-api-key", KEY)], b"null".to_vec()).await;
-        assert!(answer.writes.is_empty(), "{path}");
+        let answer = send(&client, mount, path, &[("dd-api-key", KEY)], b"null".to_vec()).await;
+        assert!(answer.tables().is_empty(), "{path}");
     }
 }
 
 #[tokio::test]
 async fn a_query_action_entry_is_stored_whole_with_its_sorted_keys_and_the_senders_origin_headers() {
+    let Some(client) = scratch().await else { return };
     let headers = [("dd-api-key", KEY), ("dd-evp-origin", "python-integration"), ("dd-evp-origin-version", "1.2.3")];
     let body = br#"[{"b": 9007199254740993, "a": {"z": 15, "y": null}}, {"only": "<tag> & more"}, null]"#.to_vec();
-    let answer = send(programs::data_obs, "/api/v2/query-actions", &headers, body).await;
+    let answer = send(&client, programs::data_obs, "/api/v2/query-actions", &headers, body).await;
     let rows = answer.rows("query_action_results");
     assert_eq!(rows.len(), 3);
-    assert_eq!(text(&rows[0]["result"]), r#"{"a":{"y":null,"z":15},"b":9007199254740993}"#);
-    assert_eq!(rows[0]["keys"], serde_json::json!(["a", "b"]));
-    assert_eq!(text(&rows[1]["result"]), r#"{"only":"<tag> & more"}"#);
+    let by_result = |result: &str| rows.iter().find(|row| text(&row["result"]) == result).copied().unwrap();
+    let whole = by_result(r#"{"a":{"y":null,"z":15},"b":9007199254740993}"#);
+    assert_eq!(whole["keys"], serde_json::json!(["a", "b"]));
+    by_result(r#"{"only":"<tag> & more"}"#);
     // A null entry is stored as null with no keys.
-    assert_eq!((text(&rows[2]["result"]), &rows[2]["keys"]), ("null", &serde_json::json!([])));
+    assert_eq!(by_result("null")["keys"], serde_json::json!([]));
     for row in rows {
         assert_eq!(
             [text(&row["tenant_id"]), text(&row["dd_evp_origin"]), text(&row["dd_evp_origin_version"])],
-            [TENANT, "python-integration", "1.2.3"]
+            [answer.tenant.as_str(), "python-integration", "1.2.3"]
         );
     }
 
     // A bare object is a batch of one, and a repeated key keeps its last value.
-    let answer =
-        send(programs::data_obs, "/api/v2/query-actions", &[("dd-api-key", KEY)], br#"{"a": 1, "a": 2}"#.to_vec())
-            .await;
+    let answer = send(
+        &client,
+        programs::data_obs,
+        "/api/v2/query-actions",
+        &[("dd-api-key", KEY)],
+        br#"{"a": 1, "a": 2}"#.to_vec(),
+    )
+    .await;
     let rows = answer.rows("query_action_results");
     assert_eq!((text(&rows[0]["result"]), text(&rows[0]["dd_evp_origin"])), (r#"{"a":2}"#, ""));
 }
