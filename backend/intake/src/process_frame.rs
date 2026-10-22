@@ -150,10 +150,10 @@ fn message<T: Message + Default + prost::Name>(encoding: u8, body: &[u8]) -> Res
     match encoding {
         0 => T::decode(body).map_err(|e| e.to_string()),
         1 => json::proto::try_parse(body),
-        // Zstandard 0.x predates the format every current library reads. Agents have sent
-        // encoding 4 or 5 for years. The caller keeps such a frame in raw_payloads.
-        2 => Err("zstd 0.x frames (message encoding 2) are not supported".into()),
-        4 | 5 => {
+        // 2 is Zstandard 0.5 (magic 25 B5 2F FD). Agents up to 7.83 send it for every type but
+        // connections (pkg/process/util/api/payload.go); 7.84 moved them all to 4. The zstd crate
+        // reads it through libzstd's legacy decoders, which its default features build.
+        2 | 4 | 5 => {
             let inflated =
                 zstd::stream::read::Decoder::new(body).and_then(body::read_inflated).map_err(|e| e.to_string())?;
             T::decode(inflated.as_slice()).map_err(|e| e.to_string())
@@ -264,13 +264,20 @@ mod tests {
         assert_the_process(&frame("frame_enc5.bin"), 5);
     }
 
-    /// No current library reads it; the frame is kept raw by the caller.
     #[test]
-    fn zstd_0x_the_legacy_encoding_is_refused_by_name() {
-        assert_eq!(
-            decode(&frame("frame_enc2.bin")).map(|_| ()),
-            Err("zstd 0.x frames (message encoding 2) are not supported".into())
-        );
+    fn zstd_0x_the_legacy_encoding() {
+        assert_the_process(&frame("frame_enc2.bin"), 2);
+    }
+
+    /// POST /api/v1/collector as the stock datadog/agent:7 image (7.83.2) sent it: encoding 2.
+    #[test]
+    fn a_legacy_zstd_frame_from_a_real_agent() {
+        let decoded = decode(&frame("frame_agent_7_83_2.bin")).unwrap();
+        assert_eq!(decoded.header.encoding, 2);
+        assert_eq!(decoded.header.message_type, 12);
+        let Body::Proc(proc) = decoded.body else { panic!("not a CollectorProc") };
+        assert_eq!(proc.host_name, "nc-verify-agent-host");
+        assert!(!proc.processes.is_empty());
     }
 
     /// POST /api/v1/collector as a real datadog/agent 7.84.0 sent it (hostname "probe"): what

@@ -106,19 +106,21 @@ async fn every_route_answers_with_the_reply_frame_as_protobuf() {
     assert_eq!(stored(&client, &tenant).await, [("process_snapshots".to_string(), 1), ("processes".to_string(), 1)]);
 }
 
-/// Zstandard 0.x is the one encoding the frame codec does not read.
+/// The stock agent image (7.83.2) compresses with Zstandard 0.5, encoding 2.
 #[tokio::test]
-async fn a_zstd_0x_frame_is_kept_raw_and_the_agent_still_gets_its_reply() {
+async fn a_legacy_zstd_frame_from_a_real_agent_stores_its_processes() {
     let Some((client, tenant)) = begin().await else { return };
-    let data = frame("frame_enc2.bin");
-    let answer = post(&client, &tenant, "/api/v1/collector", data.clone()).await;
+    let answer = post(&client, &tenant, "/api/v1/collector", frame("frame_agent_7_83_2.bin")).await;
     assert_eq!(answer.status, 200);
     assert_eq!(answer.body, *REPLY_FRAME);
-    let raw = single(&client, &tenant, "raw_payloads").await;
-    assert_eq!((raw["intake"].as_str(), raw["reason"].as_str()), (Some("process"), Some("decode_error")));
-    assert_eq!(raw["note"], "collector: zstd 0.x frames (message encoding 2) are not supported");
-    assert_eq!(blob(&raw["body"]), data);
-    assert_eq!(stored(&client, &tenant).await, [("raw_payloads".to_string(), 1)]);
+    let snapshot = single(&client, &tenant, "process_snapshots").await;
+    assert_eq!(
+        (snapshot["host_name"].as_str(), snapshot["header_encoding"].as_u64()),
+        (Some("nc-verify-agent-host"), Some(2))
+    );
+    let processes = db::rows(&client, "processes", &tenant).await;
+    assert!(!processes.is_empty());
+    assert!(db::rows(&client, "raw_payloads", &tenant).await.is_empty());
 }
 
 #[tokio::test]
