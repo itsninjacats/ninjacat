@@ -191,6 +191,26 @@ port for the panel.
 
 ### The rules that shape this code
 
+**Flat first; this is not Java.** The owner reads this code and will keep reworking it, so what
+a piece of code does must be visible where it happens, top to bottom:
+
+- A program's `main` is a linear function: settings, then its routes on a plain tako `Router`,
+  then serve.
+- A handler's body does its work in the open: decode the payload (in its own function, the one
+  split that is wanted), then insert the rows.
+- State holds only what the code needs, as plain values; the handler takes it with tako's own
+  extractors. There is no app-wide object, and no "context" or request type that also writes,
+  stores or decides.
+- No trait with one implementation and no generic instantiated once. No wrapper that only
+  forwards, no factory returning closures, no registry or table of closures, no struct built to be
+  matched once. Two layers that do the same job are merged.
+- What tako, `http`, serde or the ClickHouse client already do is used as they ship it, never
+  wrapped in a layer of our own.
+- When in doubt, inline. A little repetition reads better than an indirection.
+
+Much of the server is still version 0.1, left over from the actor-era design ported from Go and
+F#. It is migration debt, not precedent: flatten it when you touch it, don't copy its shape.
+
 **A host is a program.** Datadog puts every product on its own hostname (`app.<site>`,
 `trace.agent.<site>`, `http-intake.logs.<site>`, ~40 more); here each router is a program of its
 own, and whatever is in front (the chart's Ingress, the dev stack's Traefik) sends each host name
@@ -225,12 +245,14 @@ comparison compares JSON by meaning and would not notice, so such a column has a
 `ci_webhook`, `lineage`, one per place a host's clients put the key; a known key goes on in the
 request's extensions (`Admitted`), anything else is a 403. An unknown path is answered before any key is asked for.
 
-**Writes are asynchronous, reads are not.** A handler turns the Datadog wire format into the
+**Writes are asynchronous, reads are not** *(0.1 design, being replaced: handlers will insert
+directly through the ClickHouse client, and ClickHouse's `async_insert` will do the batching).*
+A handler turns the Datadog wire format into the
 plain rows in `storage/src/rows/*.rs` and hands them to the sink — the agent gets its 202
 immediately. `storage` knows nothing about HTTP or Datadog; that is what lets a second source
 (OTLP) be added without touching the write path.
 
-**One writer per table, never a pool.** Separate buffers stop a burst of logs from
+**One writer per table, never a pool** *(0.1 design, goes with the rule above).* Separate buffers stop a burst of logs from
 delaying metrics; a pool for the *same* table would shrink batches and recreate ClickHouse's
 "Too many parts" problem. A slow flush is handled by flushing in the background (up to
 `max_in_flight`), not by adding writers. The rule holds per process.
