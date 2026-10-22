@@ -67,11 +67,6 @@ fn create_time(millis: i64) -> (DateTime<Utc>, u8) {
     if millis > 0 { (time::from_unix_millis(millis.min(LAST_CREATE_MILLIS)), 1) } else { (no_time(), 0) }
 }
 
-/// Unix seconds, or None when the runtime never reported a time: it must not become 1970-01-01.
-fn seconds_or_none(seconds: i64) -> Option<DateTime<Utc>> {
-    time::optional_seconds(true, seconds)
-}
-
 fn host_type(value: i32) -> String {
     enum_name(value, ContainerHostType::as_str_name)
 }
@@ -141,7 +136,7 @@ fn with_host(host: Option<&Host>, row: &mut rows::ProcessSnapshot) {
     row.host_num_cpus = host.num_cpus;
     row.host_total_memory = host.total_memory;
     row.host_tag_index = host.tag_index;
-    row.host_tags_modified = seconds_or_none(host.tags_modified);
+    row.host_tags_modified = time::optional_seconds(host.tags_modified);
 }
 
 fn with_system_info(info: Option<&SystemInfo>, row: &mut rows::ProcessSnapshot) {
@@ -483,8 +478,8 @@ pub fn container_row(info: &FrameInfo, envelope: &ContainerEnvelope, host: &str,
         state: enum_name(c.state, ContainerState::as_str_name),
         health: enum_name(c.health, ContainerHealth::as_str_name),
         // Unix SECONDS on the wire: the agent sends CreatedAt.Unix().
-        created: seconds_or_none(c.created),
-        started: seconds_or_none(c.started),
+        created: time::optional_seconds(c.created),
+        started: time::optional_seconds(c.started),
         rbps: c.rbps,
         wbps: c.wbps,
         net_rcvd_ps: c.net_rcvd_ps,
@@ -599,7 +594,7 @@ pub fn container_stat_row(
         state: enum_name(s.state, ContainerState::as_str_name),
         health: enum_name(s.health, ContainerHealth::as_str_name),
         key: s.key,
-        started: seconds_or_none(s.started),
+        started: time::optional_seconds(s.started),
         byte_key: Blob(s.byte_key.clone()),
         thread_count: s.thread_count,
         thread_limit: s.thread_limit,

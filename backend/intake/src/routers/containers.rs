@@ -88,7 +88,7 @@ fn with_container_transition(transition: Option<&ContainerStateTransition>, row:
 
     row.old_state = container_state_label(was);
     row.new_state = container_state_label(became);
-    row.transition_at = time::optional_seconds(true, transition.transition_timestamp);
+    row.transition_at = time::optional_seconds(transition.transition_timestamp);
     row.container_kind = enum_name(transition.container_kind, ContainerKind::as_str_name);
     row.precision = enum_name(transition.precision, Precision::as_str_name);
     row.missed_intermediate = enum_name(transition.missed_intermediate, MissedIntermediate::as_str_name);
@@ -109,7 +109,7 @@ fn with_pod_transition(transition: Option<&PodStateTransition>, row: &mut Contai
 
     row.old_state = pod_status_label(transition.last_observed_state.as_ref());
     row.new_state = pod_status_label(transition.new_state.as_ref());
-    row.transition_at = time::optional_seconds(true, transition.transition_timestamp);
+    row.transition_at = time::optional_seconds(transition.transition_timestamp);
     row.pod_status_field = enum_name(transition.field, PodStatusField::as_str_name);
     row.precision = enum_name(transition.precision, Precision::as_str_name);
     row.missed_intermediate = enum_name(transition.missed_intermediate, MissedIntermediate::as_str_name);
@@ -161,11 +161,11 @@ pub fn event_rows(payload: &EventsPayload, tenant: &str, now: DateTime<Utc>) -> 
                 // kill is 137.
                 row.exit_code = container.optional_exit_code.map(|container_event::OptionalExitCode::ExitCode(c)| c);
                 row.created_at = container.optional_creation_timestamp.and_then(
-                    |container_event::OptionalCreationTimestamp::CreationTimestamp(t)| time::optional_seconds(true, t),
+                    |container_event::OptionalCreationTimestamp::CreationTimestamp(t)| time::optional_seconds(t),
                 );
-                row.exited_at = container.optional_exit_timestamp.and_then(
-                    |container_event::OptionalExitTimestamp::ExitTimestamp(t)| time::optional_seconds(true, t),
-                );
+                row.exited_at = container
+                    .optional_exit_timestamp
+                    .and_then(|container_event::OptionalExitTimestamp::ExitTimestamp(t)| time::optional_seconds(t));
                 row.owner_type = owner.map(|o| enum_name(o.owner_type, ObjectKind::as_str_name)).unwrap_or_default();
                 row.owner_uid = owner.map(|o| o.owner_uid.clone()).unwrap_or_default();
                 with_container_transition(container.transition.as_ref(), &mut row);
@@ -174,15 +174,15 @@ pub fn event_rows(payload: &EventsPayload, tenant: &str, now: DateTime<Utc>) -> 
                 row.event_variant = "pod".into();
                 row.pod_uid = pod.pod_uid.clone();
                 row.source = pod.source.clone();
-                row.created_at = pod.creation_timestamp.and_then(|t| time::optional_seconds(true, t));
-                row.exited_at = pod.exit_timestamp.and_then(|t| time::optional_seconds(true, t));
+                row.created_at = pod.creation_timestamp.and_then(time::optional_seconds);
+                row.exited_at = pod.exit_timestamp.and_then(time::optional_seconds);
                 with_pod_transition(pod.transition.as_ref(), &mut row);
             }
             Some(event::TypedEvent::Task(task)) => {
                 row.event_variant = "task".into();
                 row.task_arn = task.task_arn.clone();
                 row.source = task.source.clone();
-                row.exited_at = task.exit_timestamp.and_then(|t| time::optional_seconds(true, t));
+                row.exited_at = task.exit_timestamp.and_then(time::optional_seconds);
             }
             // No typed detail, or a kind newer than this schema. A Delete with no detail is still
             // a Delete, so the row stands on the envelope alone.

@@ -62,7 +62,7 @@ pub fn frame_columns(header: &Header) -> FrameColumns {
 /// Unix seconds for a nullable column: 0 means the sender did not supply the time, and it must
 /// never become 1970.
 fn seconds(value: i64) -> Option<DateTime<Utc>> {
-    time::optional_seconds(true, value)
+    time::optional_seconds(value)
 }
 
 /// major.minor.patch, with the prerelease tag when set.
