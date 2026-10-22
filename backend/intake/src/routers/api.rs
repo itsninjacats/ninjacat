@@ -754,7 +754,7 @@ fn intake_agent_checks(ctx: &Ctx, envelope: &BTreeMap<String, Value>, sent: &Sen
     ctx.write(tag_rows);
 }
 
-/// The envelope keys host_row reads by name; the rest go to intake_extra. apiKey is in the list so
+/// The envelope keys intake_host reads by name; the rest go to intake_extra. apiKey is in the list so
 /// that a credential cannot reach a column by way of a catch-all.
 const HOST_KNOWN_KEYS: [&str; 20] = [
     "apiKey",
@@ -796,31 +796,32 @@ const GOHAI_KNOWN_SECTIONS: [&str; 4] = ["platform", "cpu", "memory", "filesyste
 ///                                        flat maps, each value its JSON text as sent
 ///   apiKey                               the real key: never stored
 ///   anything else                        intake_extra
-#[allow(clippy::too_many_arguments)]
-pub fn host_row(
-    tenant: &str,
-    hostname: &str,
-    agent_version: &str,
-    os_name: &str,
-    seen_at: DateTime<Utc>,
-    envelope: &BTreeMap<String, Value>,
-    envelope_text: &str,
-    gohai: &BTreeMap<String, Value>,
-    gohai_text: &str,
-    host_tags: BTreeMap<String, Vec<String>>,
-) -> Host {
+///
+/// The payload is loose and shifts between agent versions, so fields are read by name.
+fn intake_host(ctx: &Ctx, envelope: &BTreeMap<String, Value>, envelope_text: &str) {
+    let hostname = json::lenient_string(envelope.get("internalHostname"));
+    if hostname.is_empty() {
+        return;
+    }
+    // The text of gohai's own document, which the envelope carries as a string.
+    let gohai_text = json::lenient_string(envelope.get("gohai"));
+    let gohai = match gohai_text.as_str() {
+        "" => BTreeMap::new(),
+        inner => json::try_parse(inner.as_bytes()).map(|sections| json::members(&sections)).unwrap_or_default(),
+    };
+    let host_tags = json::lenient_string_lists(envelope.get("host-tags"));
     // gohai reports every value as a string, even numbers. A section that is absent or shaped
     // differently is left empty rather than failing the row.
     let section = |name: &str| gohai.get(name).and_then(json::string_map_of).unwrap_or_default();
     let sent = json::raw::members(envelope_text);
-    let gohai_sent = json::raw::members(gohai_text);
+    let gohai_sent = json::raw::members(&gohai_text);
     let object_map = |name: &str| sent.get(name).map(|t| extra_sent(&[], t)).unwrap_or_default();
-    Host {
-        tenant_id: tenant.into(),
-        host: hostname.into(),
-        seen_at,
-        agent_version: agent_version.into(),
-        os: os_name.into(),
+    let row = Host {
+        tenant_id: ctx.tenant().into(),
+        host: hostname,
+        seen_at: Utc::now(),
+        agent_version: json::lenient_string(envelope.get("agentVersion")),
+        os: json::lenient_string(envelope.get("os")),
         platform: section("platform"),
         cpu: section("cpu"),
         memory: section("memory"),
@@ -840,37 +841,10 @@ pub fn host_row(
         fips_mode: json::flag(envelope.get("fips_mode")),
         fips_proxy_enabled: json::flag(envelope.get("fips_proxy_enabled")),
         host_tags,
-        gohai_extra: extra_sent(&GOHAI_KNOWN_SECTIONS, gohai_text),
+        gohai_extra: extra_sent(&GOHAI_KNOWN_SECTIONS, &gohai_text),
         intake_extra: extra_sent(&HOST_KNOWN_KEYS, envelope_text),
         resources: sent_text(&sent, "resources"),
-    }
-}
-
-/// The host metadata variant. The payload is loose and shifts between agent versions, so fields
-/// are read by name.
-fn intake_host(ctx: &Ctx, envelope: &BTreeMap<String, Value>, envelope_text: &str) {
-    let hostname = json::lenient_string(envelope.get("internalHostname"));
-    if hostname.is_empty() {
-        return;
-    }
-    // The text of gohai's own document, which the envelope carries as a string.
-    let gohai_text = json::lenient_string(envelope.get("gohai"));
-    let gohai = match gohai_text.as_str() {
-        "" => BTreeMap::new(),
-        inner => json::try_parse(inner.as_bytes()).map(|sections| json::members(&sections)).unwrap_or_default(),
     };
-    let row = host_row(
-        ctx.tenant(),
-        &hostname,
-        &json::lenient_string(envelope.get("agentVersion")),
-        &json::lenient_string(envelope.get("os")),
-        Utc::now(),
-        envelope,
-        envelope_text,
-        &gohai,
-        &gohai_text,
-        json::lenient_string_lists(envelope.get("host-tags")),
-    );
     ctx.write(vec![row]);
 }
 
