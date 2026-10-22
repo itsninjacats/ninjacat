@@ -30,7 +30,7 @@ use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
 use http::{HeaderValue, StatusCode};
-use ninjapaws_proto::datadog::agentpayload::CommonMetadata;
+use ninjapaws_proto::datadog::agentpayload::{CommonMetadata, MetricPayload, SketchPayload};
 use ninjapaws_storage::column;
 use ninjapaws_storage::fnv;
 use ninjapaws_storage::rows::agent::{
@@ -133,11 +133,7 @@ pub async fn handle_series_v2(ctx: Ctx, body: Body) -> Response {
     if ctx.is_sweep() {
         return ack_series();
     }
-    let decoded = if body::is_json(ctx.header("content-type"), &body) {
-        parse_series_v2_json(&body)
-    } else {
-        parse_series_v2_protobuf(&body)
-    };
+    let decoded = parse_message::<MetricPayload>(body::is_json(ctx.header("content-type"), &body), &body);
     match decoded {
         Err(error) => ctx.raw("series", "decode_error", &error, &body),
         Ok(payload) => {
@@ -293,11 +289,7 @@ pub async fn handle_sketches(ctx: Ctx, body: Body) -> Response {
     if ctx.is_sweep() {
         return ack_series();
     }
-    let decoded = if body::is_json(ctx.header("content-type"), &body) {
-        parse_sketches_json(&body)
-    } else {
-        parse_sketches_protobuf(&body)
-    };
+    let decoded = parse_message::<SketchPayload>(body::is_json(ctx.header("content-type"), &body), &body);
     match decoded {
         Err(error) => ctx.raw("sketches", "decode_error", &error, &body),
         Ok(payload) => {

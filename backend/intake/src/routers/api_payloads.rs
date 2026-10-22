@@ -13,32 +13,19 @@
 
 use std::collections::BTreeMap;
 
-use ninjapaws_proto::datadog::agentpayload::{MetricPayload, SketchPayload};
-use prost::Message;
+use prost::{Message, Name};
 use serde_json::Value;
 
 use crate::fields::{Fields, Mismatches, fields};
 use crate::json;
 
-fn parse_protobuf<T: Message + Default>(name: &str, body: &[u8]) -> Result<T, String> {
-    T::decode(body).map_err(|e| format!("protobuf {name}: {e}"))
-}
-
-pub fn parse_series_v2_protobuf(body: &[u8]) -> Result<MetricPayload, String> {
-    parse_protobuf("MetricPayload", body)
-}
-
-/// What the public API's clients send: the same message as JSON.
-pub fn parse_series_v2_json(body: &[u8]) -> Result<MetricPayload, String> {
-    json::proto::try_parse(body).map_err(|e| format!("JSON MetricPayload: {e}"))
-}
-
-pub fn parse_sketches_protobuf(body: &[u8]) -> Result<SketchPayload, String> {
-    parse_protobuf("SketchPayload", body)
-}
-
-pub fn parse_sketches_json(body: &[u8]) -> Result<SketchPayload, String> {
-    json::proto::try_parse(body).map_err(|e| format!("JSON SketchPayload: {e}"))
+/// The agent sends protobuf, the public API's clients the same message as JSON.
+pub fn parse_message<T: Message + Name + Default>(is_json: bool, body: &[u8]) -> Result<T, String> {
+    if is_json {
+        json::proto::try_parse(body).map_err(|e| format!("JSON {}: {e}", T::NAME))
+    } else {
+        T::decode(body).map_err(|e| format!("protobuf {}: {e}", T::NAME))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -113,7 +100,7 @@ fn element_texts<'t>(name: &str, text: &'t str) -> Vec<&'t str> {
 }
 
 /// `text` is the item as it was sent.
-pub fn decode_series_v1(path: &str, item: &Value, text: &str) -> Result<SeriesV1, String> {
+fn decode_series_v1(path: &str, item: &Value, text: &str) -> Result<SeriesV1, String> {
     let point_texts = element_texts("points", text);
     read_item(path, item, |fields| {
         fields.require("metric");
@@ -184,7 +171,7 @@ fn distribution_points_of(list: &Value, texts: &[&str]) -> Option<Vec<Distributi
 }
 
 /// `text` is the item as it was sent.
-pub fn decode_distribution_series(path: &str, item: &Value, text: &str) -> Result<DistributionSeries, String> {
+fn decode_distribution_series(path: &str, item: &Value, text: &str) -> Result<DistributionSeries, String> {
     let point_texts = element_texts("points", text);
     read_item(path, item, |fields| {
         fields.require("metric");
