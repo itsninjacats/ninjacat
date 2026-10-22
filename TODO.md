@@ -163,8 +163,6 @@ the rows stored are compared with the ones recorded.
 - [ ] `HEAD` on OCI registry manifests (the cluster agent's admission controller).
 - [ ] `evp_proxy` with a subdomain that is not in the host table: decide between refusing by
       name (today) and keeping the payload raw.
-- [ ] Process-agent frames compressed with zstd 0.x (kept raw today). Only if an agent that
-      sends them turns up.
 
 No published schema, kept raw until a real payload shows the shape: `genresources`,
 `aiusage`, `llmobs`.
