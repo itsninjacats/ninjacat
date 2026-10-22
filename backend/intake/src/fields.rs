@@ -154,36 +154,23 @@ impl<'b, 'a> Fields<'b, 'a> {
         self.read(name, "a list", Vec::new(), |v| v.as_array().map(|items| items.iter().collect()))
     }
 
-    /// A value as an object to read: null reads as an empty one, anything but an object is noted
-    /// and reads as an empty one too.
-    fn as_object(&self, at: String, found: &'a Value) -> Fields<'b, 'a> {
-        match found {
-            Value::Object(_) => Fields::new(self.bad, at, found),
-            Value::Null => Fields::new(self.bad, at, &EMPTY),
-            other => {
-                self.bad.borrow_mut().push(format!("{at}: expected an object, got {}", json::kind(other)));
-                Fields::new(self.bad, at, &EMPTY)
-            }
-        }
-    }
-
     pub fn object(&self, name: &str) -> Fields<'b, 'a> {
         match self.find(name) {
-            Some(found) => self.as_object(self.at(name), found),
+            Some(found) => fields(self.bad, &self.at(name), found),
             None => Fields::new(self.bad, self.at(name), &EMPTY),
         }
     }
 
     /// None when the member is missing or null.
     pub fn optional_object(&self, name: &str) -> Option<Fields<'b, 'a>> {
-        self.find(name).map(|found| self.as_object(self.at(name), found))
+        self.find(name).map(|found| fields(self.bad, &self.at(name), found))
     }
 
     pub fn objects(&self, name: &str) -> Vec<Fields<'b, 'a>> {
         self.items(name)
             .into_iter()
             .enumerate()
-            .map(|(i, item)| self.as_object(format!("{}[{i}]", self.at(name)), item))
+            .map(|(i, item)| fields(self.bad, &format!("{}[{i}]", self.at(name)), item))
             .collect()
     }
 }
