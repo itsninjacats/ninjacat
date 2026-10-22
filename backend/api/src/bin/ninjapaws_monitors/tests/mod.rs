@@ -1,5 +1,5 @@
-//! The service's parts driven by hand over fakes, and against a scratch database of the dev
-//! ClickHouse and a scratch schema of the dev Postgres. Neither is the dev stack's own: the
+//! The service's parts driven by hand over fakes, and against a scratch ClickHouse database built
+//! from the migrations and a scratch schema of the dev Postgres. Neither is the dev stack's own: the
 //! monitor service running there must not see what these write. The tests that need a database
 //! pass without asserting when it is not running.
 
@@ -16,7 +16,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use api::reads::ClickHouse;
-use ninjapaws_storage::Sink;
 use tokio::sync::mpsc::UnboundedReceiver;
 
 pub const WAIT: Duration = Duration::from_secs(5);
@@ -82,10 +81,6 @@ fn on_own_runtime<F: Future + Send + 'static>(work: F) {
 
 pub const DEV_CLICKHOUSE: &str = "localhost:8123";
 
-/// What the service reads and writes, made like the dev stack's `ninjacat` tables.
-const TABLES: [&str; 5] =
-    ["monitor_transitions", "monitor_evaluations", "monitor_notifications", "check_runs", "metrics"];
-
 fn admin() -> clickhouse::Client {
     clickhouse::Client::default()
         .with_url(format!("http://{DEV_CLICKHOUSE}"))
@@ -93,8 +88,8 @@ fn admin() -> clickhouse::Client {
         .with_password("ninjacat")
 }
 
-/// A database of its own on the dev ClickHouse, dropped afterwards. None when there is no
-/// ClickHouse with the dev stack's schema.
+/// A database of its own, built from the migrations and dropped afterwards. None when ClickHouse
+/// is not running. One per test, not per binary: the notifier reads every tenant's rows.
 pub struct Scratch {
     admin: clickhouse::Client,
     pub database: String,
@@ -103,17 +98,26 @@ pub struct Scratch {
 impl Scratch {
     pub async fn new() -> Option<Scratch> {
         let admin = admin();
-        let database = unique("ninjacat_monitors");
+        // The intake tests' prefix, so their sweep drops what a killed run left behind.
+        let database = unique("ninjacat_test_monitors");
         if let Err(e) = admin.query(&format!("CREATE DATABASE {database}")).execute().await {
             eprintln!("skipped: ClickHouse is not reachable at {DEV_CLICKHOUSE}: {e}");
             return None;
         }
         let scratch = Scratch { admin, database };
-        for table in TABLES {
-            if let Err(e) = scratch.run(&format!("CREATE TABLE {{db}}.{table} AS ninjacat.{table}")).await {
-                eprintln!("skipped: the dev ClickHouse has no ninjacat.{table}: {e}");
-                return None;
-            }
+        let client = scratch.admin.clone().with_database(&scratch.database);
+        ninjapaws_storage::migrations::apply(&client).await.unwrap();
+        // ClickHouse drops a row its TTL has expired already on insert.
+        let with_ttl: Vec<String> = client
+            .query(
+                "SELECT name FROM system.tables WHERE database = currentDatabase() \
+                 AND engine LIKE '%MergeTree' AND create_table_query LIKE '% TTL %'",
+            )
+            .fetch_all()
+            .await
+            .unwrap();
+        for table in with_ttl {
+            client.query(&format!("ALTER TABLE `{table}` REMOVE TTL")).execute().await.unwrap();
         }
         Some(scratch)
     }
@@ -127,8 +131,11 @@ impl Scratch {
         ClickHouse::new(DEV_CLICKHOUSE, &self.database, "ninjacat", "ninjacat", crate::QUERY_LIMIT_SECONDS)
     }
 
-    pub fn sink(&self) -> Sink {
-        Sink::clickhouse(crate::write_client(DEV_CLICKHOUSE, &self.database, "ninjacat", "ninjacat"))
+    /// The service's write client, its inserts flushed at once so the next read sees them.
+    pub fn writer(&self) -> clickhouse::Client {
+        crate::write_client(DEV_CLICKHOUSE, &self.database, "ninjacat", "ninjacat")
+            .with_setting("async_insert_busy_timeout_min_ms", "1")
+            .with_setting("async_insert_busy_timeout_max_ms", "1")
     }
 }
 

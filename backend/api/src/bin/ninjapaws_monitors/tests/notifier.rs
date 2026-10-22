@@ -206,7 +206,7 @@ fn transition(monitor: u64, group: &str, at: i64, to: &str, reason: &str) -> Tra
 #[tokio::test]
 async fn due_leaves_out_what_is_never_notified_and_what_was_already_notified() {
     let Some(scratch) = Scratch::new().await else { return };
-    let (reader, sink) = (scratch.reader(), scratch.sink());
+    let (reader, clickhouse) = (scratch.reader(), scratch.writer());
     let started = chrono::Utc::now().timestamp_millis();
     let at = started - 10_000;
 
@@ -221,9 +221,9 @@ async fn due_leaves_out_what_is_never_notified_and_what_was_already_notified() {
         transition(1, "host:h", at, "OK", "no_data"),
         transition(2, "*", at, "OK", "recovery"),
     ];
-    sink.insert(rows.to_vec()).await.unwrap();
+    ninjapaws_storage::insert(&clickhouse, &rows).await.unwrap();
     // Retried, as after a timeout: the same key collapses.
-    sink.insert(rows[..1].to_vec()).await.unwrap();
+    ninjapaws_storage::insert(&clickhouse, &rows[..1]).await.unwrap();
 
     // A list, not a set: a duplicate FINAL failed to collapse must show.
     let keys = |p: &Polled| {
@@ -258,7 +258,7 @@ async fn due_leaves_out_what_is_never_notified_and_what_was_already_notified() {
             handled_at: chrono::Utc::now().timestamp_millis(),
         })
         .collect();
-    sink.insert(notified.clone()).await.unwrap();
+    ninjapaws_storage::insert(&clickhouse, &notified).await.unwrap();
 
     let rest = expected(&[(1, "host:c"), (1, "host:h"), (2, "*")]);
     assert_eq!(keys(&notifier::due(&reader, started - MINUTE).await.unwrap()), rest);
