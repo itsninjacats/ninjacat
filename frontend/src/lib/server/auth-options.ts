@@ -1,5 +1,6 @@
 import type { BetterAuthOptions, BetterAuthPlugin } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { generateRandomString } from 'better-auth/crypto';
 import { admin, organization } from 'better-auth/plugins';
 import { defaultAc, userAc } from 'better-auth/plugins/admin/access';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -84,6 +85,12 @@ export function authOptions(db: Database, env: Record<string, string | undefined
 					.split(',')
 					.map((proxy) => proxy.trim())
 					.filter((proxy) => proxy !== '')
+			},
+			// Datadog's API addresses a user by UUID. Every other id keeps Better
+			// Auth's default: an organization's id is the tenant_id of its telemetry.
+			database: {
+				generateId: ({ model }) =>
+					model === 'user' ? crypto.randomUUID() : generateRandomString(32, 'a-z', 'A-Z', '0-9')
 			}
 		},
 		// Invitations need e-mail, which an on-prem install may not have; members

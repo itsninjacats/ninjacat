@@ -37,7 +37,10 @@ try {
 	await migrate(drizzle(sql), { migrationsFolder });
 	console.log(`migrate: schema up to date (${Date.now() - started}ms)`);
 } catch (e) {
-	console.error('migrate: failed —', e instanceof Error ? e.message : e);
+	// drizzle's message names only the statement; Postgres's reason (a lock
+	// timeout, say) is its cause.
+	const cause = e instanceof Error && e.cause instanceof Error ? `\ncause: ${e.cause.message}` : '';
+	console.error('migrate: failed —', e instanceof Error ? e.message : e, cause);
 	process.exit(1);
 } finally {
 	await sql.end();
